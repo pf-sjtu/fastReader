@@ -25,10 +25,8 @@ interface PromptVersionConfig {
   v2: PromptConfig
 }
 
-// 单个AI服务商配置接口
+// 单个AI服务商配置接口 (简化版)
 interface AIProviderConfig {
-  id: string // 唯一标识
-  name: string // 显示名称
   provider: 'gemini' | 'openai' | 'ollama' | '302.ai' | 'custom' // 服务商类型
   apiKey: string
   apiUrl: string
@@ -37,30 +35,26 @@ interface AIProviderConfig {
   proxyUrl?: string // 代理服务器地址
   proxyEnabled?: boolean // 是否启用代理
   customFields?: Record<string, unknown> // 自定义字段，用于不同服务商的特殊配置
-  isCustom: boolean // 是否为自定义配置
-  isDefault?: boolean // 是否为默认配置
-  createdAt: string // 创建时间
-  updatedAt: string // 更新时间
 }
 
-// AI配置管理接口
+// AI配置管理接口 (简化版)
 interface AIConfigManager {
   providers: AIProviderConfig[] // 所有AI服务商配置
-  activeProviderId: string | null // 当前激活的服务商ID
-  
+  currentModelId: number // 当前激活的服务商序号 (1-based)
+
   // 管理服务商配置
-  addProvider: (config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>) => string
-  updateProvider: (id: string, config: Partial<AIProviderConfig>) => void
-  deleteProvider: (id: string) => void
-  duplicateProvider: (id: string, newName: string) => string
-  setActiveProvider: (id: string) => void
-  
+  addProvider: (config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>) => number
+  updateProvider: (index: number, config: Partial<AIProviderConfig>) => void
+  deleteProvider: (index: number) => void
+  duplicateProvider: (index: number) => number
+  setCurrentModelId: (index: number) => void
+
   // 获取当前配置
   getActiveProvider: () => AIProviderConfig | undefined
-  getProviderById: (id: string) => AIProviderConfig | undefined
-  
+  getProviderByIndex: (index: number) => AIProviderConfig | undefined
+
   // 模板管理
-  createFromTemplate: (template: 'gemini' | 'openai' | 'ollama' | '302.ai', name: string) => string
+  createFromTemplate: (template: 'gemini' | 'openai' | 'ollama' | '302.ai') => number
   getAvailableTemplates: () => Array<{ id: string; name: string; description: string }>
 }
 
@@ -125,23 +119,23 @@ export interface ConfigState {
   setProxyEnabled: (enabled: boolean) => void
   
   // 新的AI服务商管理方法
-  addAIProvider: (config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>) => string
-  updateAIProvider: (id: string, config: Partial<AIProviderConfig>) => void
-  deleteAIProvider: (id: string) => void
-  duplicateAIProvider: (id: string, newName: string) => string
-  setActiveAIProvider: (id: string) => void
+  addAIProvider: (config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>) => number
+  updateAIProvider: (index: number, config: Partial<AIProviderConfig>) => void
+  deleteAIProvider: (index: number) => void
+  duplicateAIProvider: (index: number) => number
+  setCurrentModelId: (index: number) => void
   getActiveAIProvider: () => AIProviderConfig | undefined
-  getAIProviderById: (id: string) => AIProviderConfig | undefined
-  createAIProviderFromTemplate: (template: 'gemini' | 'openai' | 'ollama' | '302.ai', name: string) => string
+  getAIProviderByIndex: (index: number) => AIProviderConfig | undefined
+  createAIProviderFromTemplate: (template: 'gemini' | 'openai' | 'ollama' | '302.ai') => number
   getAvailableAITemplates: () => Array<{ id: string; name: string; description: string }>
-  
+
   // AI配置管理器方法（直接访问）
-  addProvider: (config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>) => string
-  updateProvider: (id: string, config: Partial<AIProviderConfig>) => void
-  deleteProvider: (id: string) => void
-  duplicateProvider: (id: string, newName: string) => string
-  setActiveProvider: (id: string) => void
-  getProviderById: (id: string) => AIProviderConfig | undefined
+  addProvider: (config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>) => number
+  updateProvider: (index: number, config: Partial<AIProviderConfig>) => void
+  deleteProvider: (index: number) => void
+  duplicateProvider: (index: number) => number
+  setCurrentModelId: (index: number) => void
+  getProviderByIndex: (index: number) => AIProviderConfig | undefined
   
   // Token使用量追踪
   tokenUsage: number
@@ -197,50 +191,46 @@ export interface ConfigState {
   resetAllConfig: () => void
 }
 
-// AI服务商模板配置
-const aiProviderTemplates = {
+// AI服务商模板配置 (简化版)
+const aiProviderTemplates: Record<string, AIProviderConfig & { description: string }> = {
   gemini: {
-    name: 'Google Gemini',
     provider: 'gemini' as const,
     apiUrl: 'https://generativelanguage.googleapis.com/v1beta',
     model: 'gemini-1.5-flash',
     temperature: 0.7,
     proxyUrl: '',
     proxyEnabled: false,
-    isCustom: false,
+    customFields: {},
     description: 'Google的生成式AI服务，支持多模态输入'
   },
   openai: {
-    name: 'OpenAI GPT',
     provider: 'openai' as const,
     apiUrl: 'https://api.openai.com/v1',
     model: 'gpt-3.5-turbo',
     temperature: 0.7,
     proxyUrl: '',
     proxyEnabled: false,
-    isCustom: false,
+    customFields: {},
     description: 'OpenAI的GPT系列模型'
   },
   ollama: {
-    name: 'Ollama Local',
     provider: 'ollama' as const,
     apiUrl: 'http://localhost:11434/v1',
     model: 'llama2',
     temperature: 0.7,
     proxyUrl: '',
     proxyEnabled: false,
-    isCustom: false,
+    customFields: {},
     description: '本地部署的Ollama服务'
   },
   '302.ai': {
-    name: '302.AI',
     provider: '302.ai' as const,
     apiUrl: 'https://api.302.ai/v1',
     model: 'gpt-3.5-turbo',
     temperature: 0.7,
     proxyUrl: '',
     proxyEnabled: false,
-    isCustom: false,
+    customFields: {},
     description: '302.AI提供的OpenAI兼容接口'
   }
 }
@@ -256,11 +246,9 @@ const defaultAIConfig: AIConfig = {
   proxyEnabled: false
 }
 
-// 默认AI配置管理器
+// 默认AI配置管理器 (简化版)
 const createDefaultAIConfigManager = (): AIConfigManager => {
   const defaultProvider: AIProviderConfig = {
-    id: 'default-gemini',
-    name: 'Google Gemini',
     provider: 'gemini',
     apiKey: '',
     apiUrl: 'https://generativelanguage.googleapis.com/v1beta',
@@ -268,49 +256,45 @@ const createDefaultAIConfigManager = (): AIConfigManager => {
     temperature: 0.7,
     proxyUrl: '',
     proxyEnabled: false,
-    isCustom: false,
-    isDefault: true, // 添加默认标识字段
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    customFields: {}
   }
-  
+
   return {
     providers: [defaultProvider],
-    activeProviderId: defaultProvider.id,
-    
+    currentModelId: 1,
+
     addProvider: () => {
-      const id = `provider-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      return id
+      return 1
     },
-    
+
     updateProvider: () => {
       // 这个方法会在store中被重写
     },
-    
+
     deleteProvider: () => {
       // 这个方法会在store中被重写
     },
-    
+
     duplicateProvider: () => {
-      return `provider-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      return 1
     },
-    
-    setActiveProvider: () => {
+
+    setCurrentModelId: () => {
       // 这个方法会在store中被重写
     },
-    
+
     getActiveProvider: () => {
       return defaultProvider
     },
-    
-    getProviderById: () => {
+
+    getProviderByIndex: () => {
       return defaultProvider
     },
-    
+
     createFromTemplate: () => {
-      return `provider-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      return 1
     },
-    
+
     getAvailableTemplates: () => {
       return Object.entries(aiProviderTemplates).map(([id, template]) => ({
         id,
@@ -358,15 +342,14 @@ const defaultAIServiceOptions: AIServiceOptions = {
   baseRetryDelay: 60000 // 60秒
 }
 
-// 计算aiConfig的辅助函数
+// 计算aiConfig的辅助函数 (简化版 - 使用序号)
 const computeAIConfig = (aiConfigManager: AIConfigManager): AIConfig => {
-  const activeProvider = aiConfigManager.providers.find(p => 
-    p.id === aiConfigManager.activeProviderId
-  )
+  const index = aiConfigManager.currentModelId - 1
+  const activeProvider = aiConfigManager.providers[index]
   if (!activeProvider) {
     return defaultAIConfig
   }
-  
+
   return {
     provider: activeProvider.provider as 'gemini' | 'openai' | 'ollama' | '302.ai',
     apiKey: activeProvider.apiKey,
@@ -486,85 +469,88 @@ export const useConfigStore = create<ConfigState>()(
         // 向后兼容的设置方法（更新当前激活的提供商）
         setAiProvider: (provider) => {
           const state = get()
-          const activeProvider = state.getActiveAIProvider()
-          if (activeProvider) {
-            state.updateAIProvider(activeProvider.id, { provider })
+          const index = state.aiConfigManager.currentModelId - 1
+          if (index >= 0 && index < state.aiConfigManager.providers.length) {
+            state.updateAIProvider(index, { provider })
           }
         },
         setApiKey: (apiKey) => {
           const state = get()
-          const activeProvider = state.getActiveAIProvider()
-          if (activeProvider) {
-            state.updateAIProvider(activeProvider.id, { apiKey })
+          const index = state.aiConfigManager.currentModelId - 1
+          if (index >= 0 && index < state.aiConfigManager.providers.length) {
+            state.updateAIProvider(index, { apiKey })
           }
         },
         setApiUrl: (apiUrl) => {
           const state = get()
-          const activeProvider = state.getActiveAIProvider()
-          if (activeProvider) {
-            state.updateAIProvider(activeProvider.id, { apiUrl })
+          const index = state.aiConfigManager.currentModelId - 1
+          if (index >= 0 && index < state.aiConfigManager.providers.length) {
+            state.updateAIProvider(index, { apiUrl })
           }
         },
         setModel: (model) => {
           const state = get()
-          const activeProvider = state.getActiveAIProvider()
-          if (activeProvider) {
-            state.updateAIProvider(activeProvider.id, { model })
+          const index = state.aiConfigManager.currentModelId - 1
+          if (index >= 0 && index < state.aiConfigManager.providers.length) {
+            state.updateAIProvider(index, { model })
           }
         },
         setTemperature: (temperature) => {
           const state = get()
-          const activeProvider = state.getActiveAIProvider()
-          if (activeProvider) {
-            state.updateAIProvider(activeProvider.id, { temperature })
+          const index = state.aiConfigManager.currentModelId - 1
+          if (index >= 0 && index < state.aiConfigManager.providers.length) {
+            state.updateAIProvider(index, { temperature })
           }
         },
         setProxyUrl: (proxyUrl) => {
           const state = get()
-          const activeProvider = state.getActiveAIProvider()
-          if (activeProvider) {
-            state.updateAIProvider(activeProvider.id, { proxyUrl })
+          const index = state.aiConfigManager.currentModelId - 1
+          if (index >= 0 && index < state.aiConfigManager.providers.length) {
+            state.updateAIProvider(index, { proxyUrl })
           }
         },
         setProxyEnabled: (enabled) => {
           const state = get()
-          const activeProvider = state.getActiveAIProvider()
-          if (activeProvider) {
-            state.updateAIProvider(activeProvider.id, { proxyEnabled: enabled })
+          const index = state.aiConfigManager.currentModelId - 1
+          if (index >= 0 && index < state.aiConfigManager.providers.length) {
+            state.updateAIProvider(index, { proxyEnabled: enabled })
           }
         },
         
-        // 新的AI服务商管理方法
+        // 新的AI服务商管理方法 (简化版 - 使用序号)
         addAIProvider: (config) => {
-          const id = `provider-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
           const newProvider: AIProviderConfig = {
-            ...config,
-            id,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            ...config
           }
-          
+
           set((state) => {
+            const newIndex = state.aiConfigManager.providers.length + 1 // 1-based index
             const newAIConfigManager = {
               ...state.aiConfigManager,
-              providers: [...state.aiConfigManager.providers, newProvider]
+              providers: [...state.aiConfigManager.providers, newProvider],
+              currentModelId: newIndex
             }
             return {
               aiConfigManager: newAIConfigManager,
               aiConfig: computeAIConfig(newAIConfigManager)
             }
           })
-          
-          return id
+
+          return state.aiConfigManager.providers.length
         },
-        
-        updateAIProvider: (id, config) => {
+
+        updateAIProvider: (index, config) => {
           set((state) => {
+            const providerIndex = index - 1 // Convert to 0-based
+            if (providerIndex < 0 || providerIndex >= state.aiConfigManager.providers.length) {
+              return state
+            }
+            const newProviders = [...state.aiConfigManager.providers]
+            newProviders[providerIndex] = { ...newProviders[providerIndex], ...config }
+
             const newAIConfigManager = {
               ...state.aiConfigManager,
-              providers: state.aiConfigManager.providers.map(p => 
-                p.id === id ? { ...p, ...config, updatedAt: Date.now() } : p
-              )
+              providers: newProviders
             }
             return {
               aiConfigManager: newAIConfigManager,
@@ -572,18 +558,30 @@ export const useConfigStore = create<ConfigState>()(
             }
           })
         },
-        
-        deleteAIProvider: (id) => {
+
+        deleteAIProvider: (index) => {
           set((state) => {
-            const newProviders = state.aiConfigManager.providers.filter(p => p.id !== id)
-            const newActiveId = state.aiConfigManager.activeProviderId === id 
-              ? (newProviders.length > 0 ? newProviders[0].id : null)
-              : state.aiConfigManager.activeProviderId
-            
+            const providerIndex = index - 1 // Convert to 0-based
+            if (providerIndex < 0 || providerIndex >= state.aiConfigManager.providers.length) {
+              return state
+            }
+
+            const newProviders = state.aiConfigManager.providers.filter((_, i) => i !== providerIndex)
+
+            // Adjust currentModelId
+            let newCurrentModelId = state.aiConfigManager.currentModelId
+            if (state.aiConfigManager.currentModelId === index) {
+              // Deleted the active provider
+              newCurrentModelId = newProviders.length > 0 ? Math.min(index, newProviders.length) : 1
+            } else if (state.aiConfigManager.currentModelId > index) {
+              // Active provider was after the deleted one
+              newCurrentModelId = state.aiConfigManager.currentModelId - 1
+            }
+
             const newAIConfigManager = {
               ...state.aiConfigManager,
               providers: newProviders,
-              activeProviderId: newActiveId
+              currentModelId: newCurrentModelId
             }
             return {
               aiConfigManager: newAIConfigManager,
@@ -591,41 +589,41 @@ export const useConfigStore = create<ConfigState>()(
             }
           })
         },
-        
-        duplicateAIProvider: (id, newName) => {
+
+        duplicateAIProvider: (index) => {
           const state = get()
-          const original = state.getProviderById(id)
-          if (!original) return ''
-          
-          const newId = `provider-${Date.now()}`
-          const duplicated: AIProviderConfig = {
-            ...original,
-            id: newId,
-            name: newName,
-            isDefault: false, // 确保复制的配置不是默认配置
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+          const providerIndex = index - 1
+          if (providerIndex < 0 || providerIndex >= state.aiConfigManager.providers.length) {
+            return -1
           }
-          
+
+          const original = state.aiConfigManager.providers[providerIndex]
+          const duplicated: AIProviderConfig = { ...original }
+
           set((prevState) => {
+            const newIndex = prevState.aiConfigManager.providers.length + 1
             const newAIConfigManager = {
               ...prevState.aiConfigManager,
-              providers: [...prevState.aiConfigManager.providers, duplicated]
+              providers: [...prevState.aiConfigManager.providers, duplicated],
+              currentModelId: newIndex
             }
             return {
               aiConfigManager: newAIConfigManager,
               aiConfig: computeAIConfig(newAIConfigManager)
             }
           })
-          
-          return newId
+
+          return state.aiConfigManager.providers.length
         },
-        
-        setActiveAIProvider: (id) => {
+
+        setCurrentModelId: (index) => {
           set((state) => {
+            if (index < 1 || index > state.aiConfigManager.providers.length) {
+              return state
+            }
             const newAIConfigManager = {
               ...state.aiConfigManager,
-              activeProviderId: id
+              currentModelId: index
             }
             return {
               aiConfigManager: newAIConfigManager,
@@ -633,45 +631,56 @@ export const useConfigStore = create<ConfigState>()(
             }
           })
         },
-        
+
         getActiveAIProvider: () => {
           const state = get()
-          return state.aiConfigManager.providers.find(p => p.id === state.aiConfigManager.activeProviderId)
-        },
-        
-        getAIProviderById: (id) => {
-          const state = get()
-          return state.aiConfigManager.providers.find(p => p.id === id)
-        },
-        
-        createAIProviderFromTemplate: (template, name) => {
-          const templateConfig = aiProviderTemplates[template]
-          if (!templateConfig) return ''
-          
-          const newProvider: AIProviderConfig = {
-            ...templateConfig,
-            id: `provider-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            name,
-            apiKey: '', // 从模板创建时需要提供空的apiKey
-            isDefault: false, // 确保从模板创建的配置不是默认配置
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+          const index = state.aiConfigManager.currentModelId - 1
+          if (index >= 0 && index < state.aiConfigManager.providers.length) {
+            return state.aiConfigManager.providers[index]
           }
-          
+          return undefined
+        },
+
+        getAIProviderByIndex: (index) => {
+          const state = get()
+          const providerIndex = index - 1
+          if (providerIndex >= 0 && providerIndex < state.aiConfigManager.providers.length) {
+            return state.aiConfigManager.providers[providerIndex]
+          }
+          return undefined
+        },
+
+        createAIProviderFromTemplate: (template) => {
+          const templateConfig = aiProviderTemplates[template]
+          if (!templateConfig) return -1
+
+          const newProvider: AIProviderConfig = {
+            provider: templateConfig.provider,
+            apiKey: templateConfig.apiKey,
+            apiUrl: templateConfig.apiUrl,
+            model: templateConfig.model,
+            temperature: templateConfig.temperature,
+            proxyUrl: templateConfig.proxyUrl,
+            proxyEnabled: templateConfig.proxyEnabled,
+            customFields: templateConfig.customFields
+          }
+
           set((prevState) => {
+            const newIndex = prevState.aiConfigManager.providers.length + 1
             const newAIConfigManager = {
               ...prevState.aiConfigManager,
-              providers: [...prevState.aiConfigManager.providers, newProvider]
+              providers: [...prevState.aiConfigManager.providers, newProvider],
+              currentModelId: newIndex
             }
             return {
               aiConfigManager: newAIConfigManager,
               aiConfig: computeAIConfig(newAIConfigManager)
             }
           })
-          
-          return newProvider.id
+
+          return newProvider.model ? newProvider.model.length : -1
         },
-        
+
         getAvailableAITemplates: () => {
           return Object.entries(aiProviderTemplates).map(([id, template]) => ({
             id,
@@ -685,30 +694,30 @@ export const useConfigStore = create<ConfigState>()(
           const state = get()
           return state.addAIProvider(config)
         },
-        
-        updateProvider: (id, config) => {
+
+        updateProvider: (index, config) => {
           const state = get()
-          state.updateAIProvider(id, config)
+          state.updateAIProvider(index, config)
         },
-        
-        deleteProvider: (id) => {
+
+        deleteProvider: (index) => {
           const state = get()
-          state.deleteAIProvider(id)
+          state.deleteAIProvider(index)
         },
-        
-        duplicateProvider: (id, newName) => {
+
+        duplicateProvider: (index) => {
           const state = get()
-          return state.duplicateAIProvider(id, newName)
+          return state.duplicateAIProvider(index)
         },
-        
-        setActiveProvider: (id) => {
+
+        setCurrentModelId: (index) => {
           const state = get()
-          state.setActiveAIProvider(id)
+          state.setCurrentModelId(index)
         },
-        
-        getProviderById: (id) => {
+
+        getProviderByIndex: (index) => {
           const state = get()
-          return state.getAIProviderById(id)
+          return state.getAIProviderByIndex(index)
         },
         
         // 处理选项
@@ -770,16 +779,16 @@ export const useConfigStore = create<ConfigState>()(
         setWebDAVConnectionStatus: (connectionStatus) => set((state) => ({
           webdavConfig: { ...state.webdavConfig, connectionStatus }
         })),
-        updateWebDAVLastSyncTime: () => set((_state) => ({
-          webdavConfig: { 
-            ..._state.webdavConfig, 
+        updateWebDAVLastSyncTime: () => set((state) => ({
+          webdavConfig: {
+            ...state.webdavConfig,
             lastSyncTime: new Date().toISOString()
           }
         })),
-        resetWebDAVConfig: () => set((_state) => ({
+        resetWebDAVConfig: () => set(() => ({
           webdavConfig: defaultWebDAVConfig
         })),
-        
+
         // 提示词配置
         promptConfig: defaultPromptConfig,
         promptVersionConfig: defaultPromptVersionConfig,
@@ -903,10 +912,10 @@ export const useConfigStore = create<ConfigState>()(
             }
 
             // 应用导入的配置
-            set((_state) => {
+            set(() => {
               const currentPromptVersion = importedConfig.config.currentPromptVersion
               const promptConfig = importedConfig.config.promptVersionConfig[currentPromptVersion]
-              
+
               return {
                 aiConfigManager: importedConfig.config.aiConfigManager,
                 processingOptions: importedConfig.config.processingOptions,
@@ -929,7 +938,7 @@ export const useConfigStore = create<ConfigState>()(
         },
 
         resetAllConfig: () => {
-          set((_state) => ({
+          set(() => ({
             aiConfigManager: createDefaultAIConfigManager(),
             processingOptions: defaultProcessingOptions,
             webdavConfig: defaultWebDAVConfig,

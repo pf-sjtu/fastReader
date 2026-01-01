@@ -55,21 +55,21 @@ export class ConfigExportService {
    */
   private static filterConfigData(config: ConfigState): any {
     const filtered: any = {}
-    
-    // 过滤aiConfigManager
+
+    // 过滤aiConfigManager (简化版 - 使用 currentModelId)
     if (config.aiConfigManager) {
       filtered.aiConfigManager = {
         providers: config.aiConfigManager.providers.map((provider: any) => {
-          const { addProvider, updateProvider, deleteProvider, duplicateProvider, 
-                  setActiveProvider, getActiveProvider, getProviderById, 
+          const { addProvider, updateProvider, deleteProvider, duplicateProvider,
+                  setCurrentModelId, getActiveProvider, getProviderByIndex,
                   createFromTemplate, getAvailableTemplates, ...providerData } = provider
           // 忽略解构的方法，只保留数据
           void addProvider; void updateProvider; void deleteProvider; void duplicateProvider;
-          void setActiveProvider; void getActiveProvider; void getProviderById;
+          void setCurrentModelId; void getActiveProvider; void getProviderByIndex;
           void createFromTemplate; void getAvailableTemplates;
           return providerData
         }),
-        activeProviderId: config.aiConfigManager.activeProviderId
+        currentModelId: config.aiConfigManager.currentModelId
       }
     }
 
@@ -130,15 +130,18 @@ export class ConfigExportService {
   static validateConfig(config: FullConfigExport): { isValid: boolean; errors: string[] } {
     const errors: string[] = []
 
-    // 验证AI配置管理器
+    // 验证AI配置管理器 (简化版 - 验证 currentModelId)
     if (!config.config.aiConfigManager) {
       errors.push('缺少AI配置管理器')
     } else {
       if (!Array.isArray(config.config.aiConfigManager.providers)) {
         errors.push('AI服务商配置格式无效')
       }
-      if (!config.config.aiConfigManager.activeProviderId) {
-        errors.push('缺少激活的AI服务商ID')
+      // 验证 currentModelId 是正整数
+      if (typeof config.config.aiConfigManager.currentModelId !== 'number' ||
+          config.config.aiConfigManager.currentModelId < 1 ||
+          !Number.isInteger(config.config.aiConfigManager.currentModelId)) {
+        errors.push('currentModelId必须是正整数')
       }
     }
 

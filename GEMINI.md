@@ -1,0 +1,1 @@
+C:/Code/JS/fastReader/AGENTS.md

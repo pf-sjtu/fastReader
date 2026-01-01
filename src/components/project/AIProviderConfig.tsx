@@ -4,46 +4,64 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { 
-  Settings, 
-  Plus, 
-  Copy, 
-  Trash2, 
-  Edit, 
-  Check, 
-  X, 
-  ExternalLink, 
-  Info, 
-  Play, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Settings,
+  Plus,
+  Copy,
+  Trash2,
+  Edit,
+  Info,
+  Play,
+  CheckCircle,
+  XCircle,
   Loader2,
   Bot,
   Globe,
   Shield,
   Zap
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '../../stores/configStore'
 import type { AIProviderConfig } from '../../stores/configStore'
 import { AIService } from '../../services/aiService'
 import { toast } from 'sonner'
 
+// 从 apiUrl 和 model 派生显示名称
+function getDisplayName(apiUrl: string, model: string): string {
+  try {
+    const url = new URL(apiUrl)
+    const host = url.hostname // 只取 hostname，去掉端口
+    return `${host}/${model}`
+  } catch {
+    // 如果解析失败，直接返回 model
+    return model
+  }
+}
+
+// 获取用于去重的唯一键
+function getUniqueKey(apiUrl: string, model: string): string {
+  try {
+    const url = new URL(apiUrl)
+    // 使用规范化的 URL + model
+    return `${url.hostname}${url.pathname}/${model}`
+  } catch {
+    return `${apiUrl}/${model}`
+  }
+}
+
 interface AIProviderDialogProps {
   trigger?: React.ReactNode
   provider?: AIProviderConfig
+  index?: number // 1-based index
   mode: 'create' | 'edit'
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSave: (provider: AIProviderConfig) => void
+  onSave: (provider: AIProviderConfig, index?: number) => void
 }
 
-function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave }: AIProviderDialogProps) {
-  const { t } = useTranslation()
-  const { getAvailableAITemplates } = useConfigStore()
-  
+function AIProviderDialog({ trigger, provider, index, mode, open, onOpenChange, onSave }: AIProviderDialogProps) {
+  const { getAvailableAITemplates, aiConfigManager } = useConfigStore()
+
   const [formData, setFormData] = useState<Partial<AIProviderConfig>>({
-    name: '',
     provider: 'gemini',
     apiKey: '',
     apiUrl: '',
@@ -51,22 +69,22 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
     temperature: 0.7,
     proxyUrl: '',
     proxyEnabled: false,
-    isCustom: false,
     customFields: {}
   })
-  
+
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
   const [isTesting, setIsTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
 
   const templates = getAvailableAITemplates()
 
   useEffect(() => {
     if (mode === 'edit' && provider) {
       setFormData(provider)
+      setDuplicateError(null)
     } else if (mode === 'create') {
       setFormData({
-        name: '',
         provider: 'gemini',
         apiKey: '',
         apiUrl: '',
@@ -74,11 +92,11 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
         temperature: 0.7,
         proxyUrl: '',
         proxyEnabled: false,
-        isCustom: false,
         customFields: {}
       })
       setSelectedTemplate('')
       setTestResult(null)
+      setDuplicateError(null)
     }
   }, [mode, provider, open])
 
@@ -86,13 +104,33 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
     const template = templates.find(t => t.id === templateId)
     if (template) {
       setSelectedTemplate(templateId)
-      setFormData(prev => ({
-        ...prev,
-        provider: templateId as any,
-        name: template.name,
-        isCustom: false
-      }))
+      // 从模板获取配置（但需要手动查找）
+      const templateConfig = aiConfigManager.providers.find((_, i) =>
+        getDisplayName(aiConfigManager.providers[i].apiUrl, aiConfigManager.providers[i].model).includes(template.name.split(' ')[0])
+      )
+      if (templateConfig) {
+        setFormData(prev => ({
+          ...prev,
+          provider: templateId as any,
+          apiUrl: templateConfig.apiUrl,
+          model: templateConfig.model,
+          temperature: templateConfig.temperature
+        }))
+      }
     }
+  }
+
+  // 检查是否重复
+  const checkDuplicate = (apiUrl: string, model: string): boolean => {
+    const newKey = getUniqueKey(apiUrl, model)
+    for (const p of aiConfigManager.providers) {
+      // 跳过当前编辑的 provider
+      if (mode === 'edit' && p === provider) continue
+      if (getUniqueKey(p.apiUrl, p.model) === newKey) {
+        return true
+      }
+    }
+    return false
   }
 
   const handleTest = async () => {
@@ -103,7 +141,7 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
 
     setIsTesting(true)
     setTestResult(null)
-    
+
     try {
       const aiService = new AIService({
         provider: formData.provider as any,
@@ -114,9 +152,9 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
         proxyUrl: formData.proxyUrl,
         proxyEnabled: formData.proxyEnabled || false
       })
-      
+
       const isConnected = await aiService.testConnection()
-      
+
       if (isConnected) {
         setTestResult({ success: true, message: '连接测试成功！' })
         toast.success('AI服务连接测试成功')
@@ -134,14 +172,19 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
   }
 
   const handleSave = () => {
-    if (!formData.name || !formData.apiKey || !formData.apiUrl || !formData.model) {
+    if (!formData.apiKey || !formData.apiUrl || !formData.model) {
       toast.error('请填写完整的配置信息')
       return
     }
 
+    // 检查重复
+    if (checkDuplicate(formData.apiUrl, formData.model)) {
+      setDuplicateError('已存在相同 API 地址和模型的配置')
+      toast.error('已存在相同配置')
+      return
+    }
+
     const newProvider: AIProviderConfig = {
-      id: provider?.id || `provider-${Date.now()}`,
-      name: formData.name,
       provider: formData.provider as any,
       apiKey: formData.apiKey,
       apiUrl: formData.apiUrl,
@@ -149,14 +192,10 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
       temperature: formData.temperature || 0.7,
       proxyUrl: formData.proxyUrl || '',
       proxyEnabled: formData.proxyEnabled || false,
-      customFields: formData.customFields || {},
-      isCustom: formData.isCustom || false,
-      isDefault: false, // 新创建的配置不是默认配置
-      createdAt: provider?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      customFields: formData.customFields || {}
     }
 
-    onSave(newProvider)
+    onSave(newProvider, index)
     onOpenChange(false)
     toast.success(mode === 'create' ? 'AI服务商创建成功' : 'AI服务商更新成功')
   }
@@ -181,13 +220,13 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
             {mode === 'create' ? '创建AI服务商配置' : '编辑AI服务商配置'}
           </DialogTitle>
           <DialogDescription>
-            {mode === 'create' 
+            {mode === 'create'
               ? '基于模板创建新的AI服务商配置，或自定义配置'
               : '修改现有AI服务商配置'
             }
           </DialogDescription>
         </DialogHeader>
-        
+
         <ScrollArea className="flex-1 max-h-[60vh]">
           <div className="space-y-4 p-2 max-w-full">
             {mode === 'create' && (
@@ -226,19 +265,9 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div>
-                    <label className="text-xs font-medium">配置名称</label>
-                    <input
-                      type="text"
-                      value={formData.name || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                      placeholder="输入配置名称"
-                      className="w-full h-8 px-2 text-sm border rounded-md box-border bg-background text-foreground border-border"
-                    />
-                  </div>
-                  <div>
                     <label className="text-xs font-medium">服务商类型</label>
-                    <select 
-                      value={formData.provider} 
+                    <select
+                      value={formData.provider}
                       onChange={(e) => setFormData(prev => ({ ...prev, provider: e.target.value as any }))}
                       className="w-full h-8 px-2 text-sm border rounded-md box-border bg-background text-foreground border-border"
                     >
@@ -266,7 +295,10 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
                     <input
                       type="text"
                       value={formData.apiUrl || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, apiUrl: e.target.value }))}
+                      onChange={(e) => {
+                        setFormData(prev => ({ ...prev, apiUrl: e.target.value }))
+                        setDuplicateError(null)
+                      }}
                       placeholder="输入API地址"
                       className="w-full h-8 px-2 text-sm border rounded-md box-border bg-background text-foreground border-border"
                     />
@@ -284,7 +316,10 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
                     <input
                       type="text"
                       value={formData.model || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, model: e.target.value }))}
+                      onChange={(e) => {
+                        setFormData(prev => ({ ...prev, model: e.target.value }))
+                        setDuplicateError(null)
+                      }}
                       placeholder="输入模型名称"
                       className="w-full h-8 px-2 text-sm border rounded-md box-border bg-background text-foreground border-border"
                     />
@@ -313,7 +348,7 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
                       />
                       <label htmlFor="proxyEnabled" className="text-xs">启用代理</label>
                     </div>
-                    
+
                     {formData.proxyEnabled && (
                       <div className="mt-2">
                         <label className="text-xs font-medium">代理地址</label>
@@ -330,6 +365,17 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
                 </CardContent>
               </Card>
             </div>
+
+            {duplicateError && (
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-sm text-red-600">
+                    <XCircle className="h-4 w-4" />
+                    <span>{duplicateError}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {testResult && (
               <Card>
@@ -366,7 +412,7 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
               </>
             )}
           </Button>
-          
+
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
               取消
@@ -382,6 +428,7 @@ function AIProviderDialog({ trigger, provider, mode, open, onOpenChange, onSave 
 }
 
 interface AIProviderListItemProps {
+  index: number // 1-based
   provider: AIProviderConfig
   isActive: boolean
   onActivate: () => void
@@ -390,7 +437,9 @@ interface AIProviderListItemProps {
   onDelete: () => void
 }
 
-function AIProviderListItem({ provider, isActive, onActivate, onEdit, onDuplicate, onDelete }: AIProviderListItemProps) {
+function AIProviderListItem({ index, provider, isActive, onActivate, onEdit, onDuplicate, onDelete }: AIProviderListItemProps) {
+  const displayName = getDisplayName(provider.apiUrl, provider.model)
+
   const getProviderIcon = (provider: string) => {
     switch (provider) {
       case 'gemini': return <Bot className="h-4 w-4" />
@@ -422,12 +471,7 @@ function AIProviderListItem({ provider, isActive, onActivate, onEdit, onDuplicat
         {getProviderIcon(provider.provider)}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium truncate">{provider.name}</span>
-            {provider.isDefault && (
-              <Badge variant="outline" className="text-xs px-1.5 py-0.5 flex-shrink-0">
-                默认
-              </Badge>
-            )}
+            <span className="text-sm font-medium truncate">#{index} {displayName}</span>
             <Badge className={`${getProviderColor(provider.provider)} text-xs px-1.5 py-0.5 flex-shrink-0`}>
               {provider.provider}
             </Badge>
@@ -446,7 +490,7 @@ function AIProviderListItem({ provider, isActive, onActivate, onEdit, onDuplicat
           </div>
         </div>
       </div>
-      
+
       {/* 右侧按钮区域 */}
       <div className="flex items-center gap-2 justify-end w-full sm:w-auto">
         <Button
@@ -472,62 +516,59 @@ function AIProviderListItem({ provider, isActive, onActivate, onEdit, onDuplicat
 }
 
 export function AIProviderConfig() {
-  const { t } = useTranslation()
-  
   const {
     aiConfigManager,
-    getActiveAIProvider,
-    setActiveAIProvider,
+    setCurrentModelId,
     addAIProvider,
     updateAIProvider,
     deleteAIProvider,
-    duplicateAIProvider,
-    getAvailableAITemplates
+    duplicateAIProvider
   } = useConfigStore()
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<AIProviderConfig | null>(null)
+  const [editingIndex, setEditingIndex] = useState<number>(0)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
 
-  const activeProvider = getActiveAIProvider()
-  
   // 确保当前激活的配置存在，如果不存在则重置为第一个配置
   React.useEffect(() => {
     if (aiConfigManager.providers.length > 0) {
-      const currentActive = aiConfigManager.providers.find(p => p.id === aiConfigManager.activeProviderId)
-      if (!currentActive) {
+      const currentIndex = aiConfigManager.currentModelId - 1
+      if (currentIndex < 0 || currentIndex >= aiConfigManager.providers.length) {
         // 如果当前激活的配置不存在，设置为第一个配置
-        setActiveAIProvider(aiConfigManager.providers[0].id)
+        setCurrentModelId(1)
       }
     }
-  }, [aiConfigManager.providers, aiConfigManager.activeProviderId, setActiveAIProvider])
+  }, [aiConfigManager.providers, aiConfigManager.currentModelId, setCurrentModelId])
 
   const handleCreateProvider = (provider: AIProviderConfig) => {
     addAIProvider(provider)
   }
 
-  const handleEditProvider = (provider: AIProviderConfig) => {
+  const handleEditProvider = (provider: AIProviderConfig, index: number) => {
     setEditingProvider(provider)
+    setEditingIndex(index)
     setIsEditDialogOpen(true)
   }
 
-  const handleUpdateProvider = (provider: AIProviderConfig) => {
-    updateAIProvider(provider.id, provider)
+  const handleUpdateProvider = (provider: AIProviderConfig, index: number) => {
+    updateAIProvider(index, provider)
   }
 
-  const handleDuplicateProvider = (provider: AIProviderConfig) => {
-    const newName = `${provider.name} (副本)`
-    duplicateAIProvider(provider.id, newName)
+  const handleDuplicateProvider = (index: number) => {
+    duplicateAIProvider(index)
   }
 
-  const handleDeleteProvider = (provider: AIProviderConfig) => {
+  const handleDeleteProvider = (index: number, provider: AIProviderConfig) => {
+    const displayName = getDisplayName(provider.apiUrl, provider.model)
+
     if (aiConfigManager.providers.length <= 1) {
       toast.error('至少需要保留一个AI服务商配置')
       return
     }
-    
-    if (confirm(`确定要删除"${provider.name}"吗？`)) {
-      deleteAIProvider(provider.id)
+
+    if (confirm(`确定要删除"${displayName}"吗？`)) {
+      deleteAIProvider(index)
     }
   }
 
@@ -564,17 +605,22 @@ export function AIProviderConfig() {
 
       {/* 配置列表 */}
       <div className="space-y-2">
-        {aiConfigManager.providers.map((provider) => (
-          <AIProviderListItem
-            key={provider.id}
-            provider={provider}
-            isActive={provider.id === aiConfigManager.activeProviderId}
-            onActivate={() => setActiveAIProvider(provider.id)}
-            onEdit={() => handleEditProvider(provider)}
-            onDuplicate={() => handleDuplicateProvider(provider)}
-            onDelete={() => handleDeleteProvider(provider)}
-          />
-        ))}
+        {aiConfigManager.providers.map((provider, i) => {
+          const index = i + 1
+          const isActive = index === aiConfigManager.currentModelId
+          return (
+            <AIProviderListItem
+              key={index}
+              index={index}
+              provider={provider}
+              isActive={isActive}
+              onActivate={() => setCurrentModelId(index)}
+              onEdit={() => handleEditProvider(provider, index)}
+              onDuplicate={() => handleDuplicateProvider(index)}
+              onDelete={() => handleDeleteProvider(index, provider)}
+            />
+          )
+        })}
       </div>
 
       {/* 创建配置对话框 */}
@@ -590,6 +636,7 @@ export function AIProviderConfig() {
         <AIProviderDialog
           mode="edit"
           provider={editingProvider}
+          index={editingIndex}
           open={isEditDialogOpen}
           onOpenChange={setIsEditDialogOpen}
           onSave={handleUpdateProvider}

@@ -1,8 +1,21 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npx openspec validate:*)",
+      "Skill(openspec:apply)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite build:*)",
+      "Bash(npx eslint:*)"
+    ]
+  },
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "d:\\JS\\ebook-to-mindmap"]
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "d:\\JS\\ebook-to-mindmap"
+      ]
     }
   }
 }
