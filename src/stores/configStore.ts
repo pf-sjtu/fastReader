@@ -711,8 +711,17 @@ export const useConfigStore = create<ConfigState>()(
         },
 
         setCurrentModelId: (index) => {
-          const state = get()
-          state.setCurrentModelId(index)
+          set((state) => {
+            if (index < 1 || index > state.aiConfigManager.providers.length) {
+              return state
+            }
+            return {
+              aiConfigManager: {
+                ...state.aiConfigManager,
+                currentModelId: index
+              }
+            }
+          })
         },
 
         getProviderByIndex: (index) => {
