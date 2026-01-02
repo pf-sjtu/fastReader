@@ -85,6 +85,66 @@ npm run dev
 
 访问 `http://localhost:5173` 开始使用。
 
+### 💻 命令行工具（CLI）
+
+项目提供了命令行工具，支持批量处理电子书。
+
+**快速开始：**
+
+```bash
+# 安装 Python 依赖
+pip install -r requirements-cli.txt
+
+# 查看帮助
+python -m src.cli.main --help
+
+# 运行批量处理（需要配置文件）
+python -m src.cli.main batch -c config.yaml
+```
+
+**配置文件示例：**
+
+```yaml
+webdav:
+  serverUrl: "https://dav.jianguoyun.com/dav/"
+  username: "your-email@example.com"
+  password: "${JIANGUOYUN_PASSWORD}"  # 支持环境变量
+  syncPath: "/fastReader"
+
+ai:
+  provider: "gemini"  # 或 openai, 302.ai
+  apiKey: "${GEMINI_API_KEY}"
+  model: "gemini-1.5-pro"
+
+processing:
+  mode: "summary"        # summary, mindmap, combined-mindmap
+  bookType: "non-fiction"  # fiction, non-fiction
+  outputLanguage: "zh"
+
+batch:
+  sourcePath: "/books"
+  skipProcessed: true
+  maxFiles: 0  # 0 表示处理全部
+
+output:
+  localDir: "output/"
+  syncToWebDAV: true
+```
+
+**使用真实场景配置：**
+
+可以直接使用 Web UI 导出的配置文件：
+
+```bash
+python -m src.cli.main batch -c ebook-to-mindmap-config-v2.yaml --dry-run
+```
+
+CLI 会自动：
+- 解析嵌套的配置结构
+- 支持多 AI 提供商配置
+- 从配置获取 Prompt 模板（支持 v1/v2）
+- 正确转换 currentModelId 索引（1-based → 0-based）
+
 ## 📁 项目结构
 
 ```
@@ -93,6 +153,7 @@ ebook-to-mindmap/
 ├── 📄 index.html                 # 入口 HTML 文件
 ├── 📄 .env                       # 环境变量配置
 ├── 📄 .gitignore                 # Git 忽略规则
+├── 📄 config.example.yaml        # CLI 配置文件示例
 ├── 📁 src/                       # 源代码目录
 │   ├── 📁 components/            # React 组件
 │   │   ├── 📁 ui/               # 基础 UI 组件
@@ -107,6 +168,15 @@ ebook-to-mindmap/
 │   ├── 📁 i18n/                 # 国际化配置
 │   ├── 📁 lib/                  # 工具库
 │   └── 📄 *.tsx                 # 页面组件
+├── 📁 src/cli/                   # CLI 源代码（Python）
+│   ├── 📄 main.py               # CLI 入口
+│   ├── 📄 batch_processor.py    # 批量处理核心逻辑
+│   ├── 📄 chapter_extractor.py  # EPUB/PDF 章节提取
+│   ├── 📄 ai_client.py          # AI 客户端（多提供商支持）
+│   ├── 📄 config.py             # 配置解析
+│   ├── 📄 webdav_client.py      # WebDAV 客户端
+│   ├── 📄 formatter.py          # 结果格式化
+│   └── 📄 *.py                  # 其他工具模块
 ├── 📁 config/                    # 配置文件目录
 │   ├── 📄 vite.config.ts        # Vite 构建配置
 │   ├── 📄 tailwind.config.js    # Tailwind CSS 配置
@@ -259,6 +329,83 @@ ebook-to-mindmap/
 - **思维导图导出**：支持导出为 PNG、SVG 等格式
 - **文字总结导出**：支持导出为 Markdown、TXT 格式
 - **数据备份**：支持导出处理结果数据
+
+## 🔧 CLI 高级配置
+
+### 命令行选项
+
+```bash
+# 查看完整帮助
+python -m src.cli.main --help
+
+# 查看 batch 子命令帮助
+python -m src.cli.main batch --help
+
+# 试运行模式（预览处理队列，不实际执行）
+python -m src.cli.main batch -c config.yaml --dry-run
+```
+
+### 多 AI 提供商配置
+
+CLI 支持多提供商配置，与 Web UI 完全兼容：
+
+```yaml
+ai:
+  providers:
+    - provider: gemini
+      apiKey: "${GEMINI_API_KEY}"
+      model: gemini-1.5-pro
+      temperature: 0.7
+    - provider: openai
+      apiKey: "${OPENAI_API_KEY}"
+      model: gpt-4o
+      apiUrl: "https://api.openai.com/v1"
+    - provider: 302.ai
+      apiKey: "${302_API_KEY}"
+      model: glm-4
+      apiUrl: "http://35.208.227.162:8317/v1"
+  currentModelId: 2  # 1-based 索引，对应第二个提供商
+```
+
+### Prompt 模板配置
+
+CLI 支持从配置文件加载自定义 Prompt 模板：
+
+```yaml
+promptVersionConfig:
+  v2:
+    chapterSummary:
+      nonFiction: |
+        # 角色
+        你是...
+    connectionAnalysis: |
+      任务：分析...
+    overallSummary: |
+      任务：生成全书总结...
+currentPromptVersion: v2
+```
+
+如未配置 Prompt，CLI 会使用内置的默认模板（v1/v2）。
+
+### 环境变量支持
+
+配置文件中支持环境变量引用：
+
+```yaml
+webdav:
+  password: "${JIANGUOYUN_PASSWORD}"  # 自动替换为环境变量值
+
+ai:
+  apiKey: "${GEMINI_API_KEY}"
+```
+
+### 处理模式
+
+| 模式 | 说明 |
+|------|------|
+| `summary` | 文字总结模式：章节总结 + 章节关联 + 全书总结 |
+| `mindmap` | 章节思维导图模式：为每个章节生成思维导图 |
+| `combined-mindmap` | 综合思维导图模式：整书整合为一个思维导图 |
 
 ## 📄 许可证
 
