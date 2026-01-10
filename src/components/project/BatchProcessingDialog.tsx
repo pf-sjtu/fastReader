@@ -31,7 +31,8 @@ import {
   Book,
   ChevronDown,
   ChevronUp,
-  Settings
+  Settings,
+  Clock
 } from 'lucide-react'
 import { useWebDAVConfig, useProcessingOptions } from '../../stores/configStore'
 import { webdavService, type WebDAVFileInfo } from '../../services/webdavService'
