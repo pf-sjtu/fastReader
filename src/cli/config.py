@@ -182,9 +182,11 @@ class ConfigLoader:
 
     def _parse_webdav(self, data: dict) -> WebDAVConfig:
         """解析 WebDAV 配置"""
-        # 处理 webdavConfig 结构（如ebook-to-mindmap-config-v2.yaml）
+        # 处理嵌套或不同命名的结构
         if 'webdavConfig' in data:
             data = data['webdavConfig']
+        elif 'webdav' in data:
+            data = data['webdav']
 
         return WebDAVConfig(
             serverUrl=self._replace_env_vars(data.get('serverUrl', data.get('server_url', ''))),
@@ -195,9 +197,14 @@ class ConfigLoader:
 
     def _parse_ai(self, data: dict) -> AIConfig:
         """解析 AI 配置（支持多提供商）"""
-        # 处理 aiConfigManager 结构（如ebook-to-mindmap-config-v2.yaml）
+        # 处理嵌套或不同命名的结构
         if 'aiConfigManager' in data:
             data = data['aiConfigManager']
+        elif 'ai' in data:
+            # 如果 'ai' 键下直接就是提供商列表（多提供商模式）
+            if isinstance(data['ai'], dict) and 'providers' in data['ai']:
+                data = data['ai']
+            # 否则可能是单提供商模式，继续向下执行
 
         # 检查是否有 providers 数组（多提供商模式）
         if 'providers' in data and isinstance(data['providers'], list):
@@ -217,8 +224,12 @@ class ConfigLoader:
             return AIConfig(
                 providers=providers,
                 # currentModelId 是 1-based (Web UI 约定)，转换为 0-based (Python 约定)
-                currentProviderIndex=max(0, int(data.get('currentModelId', 1)) - 1)
+                currentProviderIndex=max(0, int(data.get('currentModelId', data.get('currentProviderIndex', 1))) - 1)
             )
+
+        # 处理单提供商模式下的 'ai' 键嵌套
+        if 'ai' in data and isinstance(data['ai'], dict):
+            data = data['ai']
 
         # 单提供商模式（兼容旧配置）
         return AIConfig(
@@ -231,9 +242,11 @@ class ConfigLoader:
 
     def _parse_processing(self, data: dict) -> ProcessingConfig:
         """解析处理选项配置"""
-        # 处理 processingOptions 结构（如ebook-to-mindmap-config-v2.yaml）
+        # 处理嵌套或不同命名的结构
         if 'processingOptions' in data:
             data = data['processingOptions']
+        elif 'processing' in data:
+            data = data['processing']
 
         return ProcessingConfig(
             mode=data.get('processingMode', data.get('mode', 'summary')),
@@ -244,18 +257,32 @@ class ConfigLoader:
 
     def _parse_batch(self, data: dict) -> BatchConfig:
         """解析批量处理配置"""
+        if 'batch' in data:
+            data = data['batch']
+
+        # 支持从环境变量覆盖配置
+        import os
         return BatchConfig(
-            sourcePath=data.get('sourcePath', ''),
-            maxFiles=int(data.get('maxFiles', 0)),
-            skipProcessed=bool(data.get('skipProcessed', True)),
-            order=data.get('order', 'sequential'),
-            concurrency=int(data.get('concurrency', 1)),
-            maxRetries=int(data.get('maxRetries', 3)),
+            # 环境变量: FASTREADER_SOURCE_PATH
+            sourcePath=os.environ.get('FASTREADER_SOURCE_PATH', data.get('sourcePath', '')),
+            # 环境变量: FASTREADER_MAX_FILES
+            maxFiles=int(os.environ.get('FASTREADER_MAX_FILES', data.get('maxFiles', 0))),
+            # 环境变量: FASTREADER_SKIP_PROCESSED
+            skipProcessed=os.environ.get('FASTREADER_SKIP_PROCESSED', str(data.get('skipProcessed', True))).lower() in ('true', '1', 'yes'),
+            # 环境变量: FASTREADER_ORDER
+            order=os.environ.get('FASTREADER_ORDER', data.get('order', 'sequential')),
+            # 环境变量: FASTREADER_CONCURRENCY
+            concurrency=int(os.environ.get('FASTREADER_CONCURRENCY', data.get('concurrency', 1))),
+            # 环境变量: FASTREADER_MAX_RETRIES
+            maxRetries=int(os.environ.get('FASTREADER_MAX_RETRIES', data.get('maxRetries', 3))),
             retryDelays=list(data.get('retryDelays', [60, 120, 240, 480]))
         )
 
     def _parse_output(self, data: dict) -> OutputConfig:
         """解析输出配置"""
+        if 'output' in data:
+            data = data['output']
+
         return OutputConfig(
             localDir=data.get('localDir', 'output/'),
             logDir=data.get('logDir', 'log/'),
@@ -264,6 +291,9 @@ class ConfigLoader:
 
     def _parse_advanced(self, data: dict) -> AdvancedConfig:
         """解析高级配置"""
+        if 'advanced' in data:
+            data = data['advanced']
+
         return AdvancedConfig(
             exchangeRate=float(data.get('exchangeRate', 7.0)),
             debug=bool(data.get('debug', False)),

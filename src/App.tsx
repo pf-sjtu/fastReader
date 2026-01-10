@@ -8,16 +8,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
-import { Upload, BookOpen, Brain, FileText, Loader2, Network, Trash2, List, ChevronUp, ArrowLeft, Download, Plus, Minus, Maximize2, Minimize2 } from 'lucide-react'
+import { Upload, BookOpen, Brain, FileText, Loader2, Network, Trash2, List, ChevronUp, ArrowLeft, Download, Plus, Minus, Maximize2, Minimize2, CheckCircle } from 'lucide-react'
 import { EpubProcessor, type ChapterData, type BookData as EpubBookData } from './services/epubProcessor'
 import { PdfProcessor, type BookData as PdfBookData } from './services/pdfProcessor'
 import { AIService } from './services/aiService'
 import { CacheService } from './services/cacheService'
+import { cloudCacheService, type ProcessingMetadata } from './services/cloudCacheService'
 import { notificationService } from './services/notificationService'
 import { webdavService } from './services/webdavService'
 import { autoSyncService } from './services/autoSyncService'
 import { ConfigDialog } from './components/project/ConfigDialog'
 import { WebDAVFileBrowser } from './components/project/WebDAVFileBrowser'
+import { BatchProcessingDialog } from './components/project/BatchProcessingDialog'
+import { BatchQueuePanel } from './components/project/BatchQueuePanel'
 import type { MindElixirData, Options } from 'mind-elixir'
 import { LanguageSwitcher } from './components/LanguageSwitcher'
 import { DarkModeToggle } from './components/DarkModeToggle'
@@ -106,6 +109,11 @@ function App() {
   const [previewFontSize, setPreviewFontSize] = useState(16)
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false)
   const previewCardRef = useRef<HTMLDivElement>(null)
+
+  // 云端缓存相关状态
+  const [cloudCacheMetadata, setCloudCacheMetadata] = useState<ProcessingMetadata | null>(null)
+  const [isCheckingCloudCache, setIsCheckingCloudCache] = useState(false)
+  const [cloudCacheContent, setCloudCacheContent] = useState<string | null>(null)
 
 
 
@@ -245,10 +253,62 @@ function App() {
     }
   }, [file, extractedChapters, bookData])
 
+  // 检查云端缓存
+  const checkCloudCache = useCallback(async (fileName: string) => {
+    // 重置云端缓存状态
+    setCloudCacheMetadata(null)
+    setCloudCacheContent(null)
+
+    // 检查 WebDAV 是否启用
+    if (!webdavConfig.enabled || !webdavService.isInitialized()) {
+      return false
+    }
+
+    setIsCheckingCloudCache(true)
+    try {
+      const result = await cloudCacheService.readCache(fileName)
+
+      if (result.success && result.content) {
+        setCloudCacheMetadata(result.metadata || null)
+        setCloudCacheContent(result.content)
+        setIsCheckingCloudCache(false)
+        return true
+      }
+
+      setIsCheckingCloudCache(false)
+      return false
+    } catch (error) {
+      console.error('[App] 检查云端缓存失败:', error)
+      setIsCheckingCloudCache(false)
+      return false
+    }
+  }, [webdavConfig.enabled])
+
+  // 使用云端缓存加载内容
+  const loadFromCloudCache = useCallback(() => {
+    if (!cloudCacheContent) return
+
+    // 解析云端内容
+    const metadata = cloudCacheService.parseMetadata(cloudCacheContent)
+    const cleanContent = cloudCacheService.stripMetadata(cloudCacheContent)
+
+    // TODO: 解析内容并设置到状态
+    // 目前只显示提示，实际渲染需要进一步解析 Markdown 结构
+    toast.info('已加载云端缓存，可直接查看处理结果')
+
+    // 提示用户可以跳过处理
+    toast.info('发现云端缓存，可跳过处理直接查看结果', {
+      description: '如需重新处理，请点击"提取章节"按钮'
+    })
+  }, [cloudCacheContent])
+
   // 当文件变化时加载缓存数据
   useEffect(() => {
     loadCachedData()
-  }, [loadCachedData])
+    if (file) {
+      checkCloudCache(file.name)
+    }
+  }, [loadCachedData, file, checkCloudCache])
 
   // 处理文件变化
   const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -937,6 +997,9 @@ function App() {
           onToggleView={() => setCurrentStepIndex(currentStepIndex === 1 ? 2 : 1)}
         />
 
+        {/* 批量处理队列面板 */}
+        <BatchQueuePanel />
+
         {currentStepIndex === 1 ? (
           <>
                         
@@ -988,6 +1051,7 @@ function App() {
                             <Network className="h-4 w-4" />
                             WebDAV
                           </Button>
+                          <BatchProcessingDialog />
                         </div>
                       </div>
                       <Input
@@ -1034,6 +1098,46 @@ function App() {
                         </Button>
                       </div>
                     </div>
+
+                    {/* 云端缓存提示 */}
+                    {isCheckingCloudCache && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        正在检查云端缓存...
+                      </div>
+                    )}
+                    {cloudCacheMetadata && !isCheckingCloudCache && (
+                      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <CheckCircle className="h-4 w-4 text-blue-600" />
+                          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                            发现云端缓存
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted-foreground space-y-1">
+                          <p>处理时间: {new Date(cloudCacheMetadata.processedAt).toLocaleString()}</p>
+                          <p>处理模型: {cloudCacheMetadata.model}</p>
+                          <p>章节数: {cloudCacheMetadata.chapterCount}</p>
+                          {cloudCacheMetadata.costUSD > 0 && (
+                            <p>费用: ${cloudCacheMetadata.costUSD} / ¥{cloudCacheMetadata.costRMB}</p>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="mt-2 w-full"
+                          onClick={loadFromCloudCache}
+                        >
+                          使用云端缓存
+                        </Button>
+                      </div>
+                    )}
+                    {cloudCacheContent === null && !isCheckingCloudCache && file && webdavConfig.enabled && webdavService.isInitialized() && (
+                      <div className="text-xs text-muted-foreground">
+                        云端暂无缓存，将进行新处理
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
                 {/* 章节信息 */}

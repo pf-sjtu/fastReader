@@ -5,7 +5,11 @@
       "Skill(openspec:apply)",
       "Bash(npx tsc:*)",
       "Bash(npx vite build:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(npx vitest run:*)",
+      "Bash(ls:*)",
+      "Bash(pip show:*)",
+      "mcp__tavily-mcp__tavily-search"
     ]
   },
   "mcpServers": {

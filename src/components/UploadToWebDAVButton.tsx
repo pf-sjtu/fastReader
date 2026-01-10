@@ -17,8 +17,9 @@ import {
   DialogTitle,
 } from './ui/dialog'
 import { Alert, AlertDescription } from './ui/alert'
-import { useWebDAVConfig } from '../stores/configStore'
+import { useWebDAVConfig, useAIConfig, useProcessingOptions } from '../stores/configStore'
 import { webdavService } from '../services/webdavService'
+import { metadataFormatter } from '../services/metadataFormatter'
 import { toast } from 'sonner'
 
 interface UploadToWebDAVButtonProps {
@@ -36,19 +37,66 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
 }) => {
   const { t } = useTranslation()
   const webdavConfig = useWebDAVConfig()
+  const aiConfig = useAIConfig()
+  const processingOptions = useProcessingOptions()
   const [isUploading, setIsUploading] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'exists' | 'uploaded' | 'error'>('idle')
   const [fileName, setFileName] = useState('')
 
+  // 生成处理元数据
+  const generateMetadata = () => {
+    if (!bookSummary || !file) return null
+
+    // 计算原始内容字符数
+    const originalCharCount = bookSummary.chapters.reduce(
+      (total: number, chapter: any) => total + (chapter.content?.length || 0),
+      0
+    )
+
+    // 计算处理后内容字符数
+    const processedCharCount = bookSummary.chapters.reduce(
+      (total: number, chapter: any) => total + (chapter.summary?.length || 0),
+      0
+    )
+
+    // 选中的章节
+    const selectedChapters = bookSummary.chapters
+      .map((_: any, index: number) => index + 1)
+      .filter((_: any, index: number) => {
+        // 如果有 summary 就算选中
+        return bookSummary.chapters[index]?.summary
+      })
+
+    return metadataFormatter.generate({
+      fileName: file.name,
+      bookTitle: bookSummary.title,
+      model: aiConfig.model,
+      chapterDetectionMode: processingOptions.chapterDetectionMode,
+      selectedChapters: selectedChapters,
+      chapterCount: bookSummary.chapters.length,
+      originalCharCount: originalCharCount,
+      processedCharCount: processedCharCount
+    })
+  }
+
   // 生成markdown内容
   const generateMarkdownContent = () => {
     if (!bookSummary || !file) return ''
-    
-    let markdownContent = `# ${bookSummary.title}\n\n`
+
+    let markdownContent = ''
+
+    // 在文件头部添加处理元数据（HTML 注释格式）
+    const metadata = generateMetadata()
+    if (metadata) {
+      markdownContent += metadataFormatter.formatAsComment(metadata)
+      markdownContent += '\n\n'
+    }
+
+    markdownContent += `# ${bookSummary.title}\n\n`
     markdownContent += `**作者**: ${bookSummary.author}\n\n`
     markdownContent += `---\n\n`
-    
+
     // 添加章节总结
     bookSummary.chapters.forEach((chapter: any, index: number) => {
       // 根据章节命名模式生成标题
@@ -58,13 +106,13 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
       } else {
         chapterTitle = chapter.title || `第${index + 1}章`
       }
-      
+
       markdownContent += `## ${chapterTitle}\n\n`
       if (chapter.summary) {
         markdownContent += `${chapter.summary}\n\n`
       }
     })
-    
+
     return markdownContent
   }
 

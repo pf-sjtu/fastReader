@@ -221,7 +221,9 @@ class PromptTemplates:
         # 2. 使用默认值
         version = 'v2'
         if prompt_type == 'chapterSummary':
-            prompt = self.DEFAULT_PROMPTS[version].get(f'{prompt_type}_{book_type}', '')
+            # 尝试多种键名格式（兼容 'non-fiction' 和 'nonFiction'）
+            prompt = self.DEFAULT_PROMPTS[version].get(f'{prompt_type}_{book_type}', '') or \
+                     self.DEFAULT_PROMPTS[version].get(f'{prompt_type}_nonFiction' if book_type in ('non-fiction', 'nonFiction') else f'{prompt_type}_fiction', '')
         else:
             prompt = self.DEFAULT_PROMPTS[version].get(prompt_type, '')
 

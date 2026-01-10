@@ -17,6 +17,16 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+# 加载 .env 文件
+try:
+    from dotenv import load_dotenv
+    env_file = project_root / '.env'
+    if env_file.exists():
+        load_dotenv(env_file)
+        print(f"✅ 已加载环境变量: {env_file}")
+except ImportError:
+    pass  # python-dotenv 未安装
+
 from .config import ConfigLoader
 from .batch_processor import BatchProcessor
 from .logger import Logger

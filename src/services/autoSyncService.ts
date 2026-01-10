@@ -1,5 +1,6 @@
 import { WebDAVService } from './webdavService'
 import { useConfigStore } from '../stores/configStore'
+import { metadataFormatter } from './metadataFormatter'
 
 // 定义本地类型（避免循环依赖）
 interface BookSummary {
@@ -177,11 +178,38 @@ export class AutoSyncService {
   }
 
   /**
-   * 格式化摘要为Markdown
+   * 格式化摘要为Markdown（带处理信息备注）
    */
   private formatSummaryAsMarkdown(bookSummary: BookSummary, chapterNamingMode: 'auto' | 'numbered' = 'auto'): string {
-    let markdown = `# ${bookSummary.title}\n\n`
-    
+    let markdown = ''
+
+    // 在文件头部添加处理元数据（HTML 注释格式）
+    try {
+      const metadata = metadataFormatter.generate({
+        fileName: '',
+        bookTitle: bookSummary.title,
+        model: '',
+        chapterDetectionMode: 'normal',
+        selectedChapters: bookSummary.chapters
+          .map((_, index) => index + 1)
+          .filter((_, idx) => bookSummary.chapters[idx]?.summary),
+        chapterCount: bookSummary.chapters.length,
+        originalCharCount: 0,
+        processedCharCount: bookSummary.chapters.reduce(
+          (total, ch) => total + (ch.summary?.length || 0),
+          0
+        )
+      })
+      if (metadata) {
+        markdown += metadataFormatter.formatAsComment(metadata)
+        markdown += '\n\n'
+      }
+    } catch (error) {
+      console.warn('生成处理元数据失败:', error)
+    }
+
+    markdown += `# ${bookSummary.title}\n\n`
+
     if (bookSummary.author) {
       markdown += `**作者**: ${bookSummary.author}\n\n`
     }
@@ -193,7 +221,7 @@ export class AutoSyncService {
     }
 
     markdown += `## 章节摘要\n\n`
-    
+
     bookSummary.chapters.forEach((chapter, index) => {
       // 根据章节命名模式生成标题
       let chapterTitle: string
@@ -202,13 +230,13 @@ export class AutoSyncService {
       } else {
         chapterTitle = chapter.title || `第${index + 1}章`
       }
-      
+
       markdown += `### ${chapterTitle}\n\n`
       markdown += `${chapter.summary}\n\n---\n\n`
     })
 
     markdown += `\n---\n*由 fastReader 自动生成于 ${new Date().toLocaleString('zh-CN')}*`
-    
+
     return markdown
   }
 
