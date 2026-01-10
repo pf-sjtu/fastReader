@@ -362,8 +362,12 @@ export const useBatchQueueStore = create<BatchProcessingState>()(
 export const useBatchQueue = () => useBatchQueueStore((state) => state.queue)
 export const useBatchStats = () => useBatchQueueStore((state) => state.stats)
 export const useBatchProcessingStatus = () =>
-  useBatchQueueStore((state) => ({
-    isProcessing: state.isProcessing,
-    isPaused: state.isPaused,
-    currentItem: state.getCurrentItem()
-  }))
+  useBatchQueueStore(
+    (state) => ({
+      isProcessing: state.isProcessing,
+      isPaused: state.isPaused,
+      currentItem: state.currentItemIndex >= 0 && state.currentItemIndex < state.queue.length 
+        ? state.queue[state.currentItemIndex] 
+        : null
+    })
+  )
