@@ -361,13 +361,23 @@ export const useBatchQueueStore = create<BatchProcessingState>()(
 // 选择器hooks
 export const useBatchQueue = () => useBatchQueueStore((state) => state.queue)
 export const useBatchStats = () => useBatchQueueStore((state) => state.stats)
-export const useBatchProcessingStatus = () =>
-  useBatchQueueStore(
-    (state) => ({
-      isProcessing: state.isProcessing,
-      isPaused: state.isPaused,
-      currentItem: state.currentItemIndex >= 0 && state.currentItemIndex < state.queue.length 
-        ? state.queue[state.currentItemIndex] 
-        : null
-    })
-  )
+export const useIsProcessing = () => useBatchQueueStore((state) => state.isProcessing)
+export const useIsPaused = () => useBatchQueueStore((state) => state.isPaused)
+export const useCurrentItem = () => useBatchQueueStore((state) => 
+  state.currentItemIndex >= 0 && state.currentItemIndex < state.queue.length 
+    ? state.queue[state.currentItemIndex] 
+    : null
+)
+
+// 组合选择器（用于需要多个状态的情况）
+export const useBatchProcessingStatus = () => {
+  const isProcessing = useIsProcessing()
+  const isPaused = useIsPaused()
+  const currentItem = useCurrentItem()
+  
+  return {
+    isProcessing,
+    isPaused,
+    currentItem
+  }
+}
