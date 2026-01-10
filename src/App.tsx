@@ -308,7 +308,7 @@ function App() {
     if (file) {
       checkCloudCache(file.name)
     }
-  }, [loadCachedData, file, checkCloudCache])
+  }, [file]) // 只依赖file，移除函数依赖
 
   // 处理文件变化
   const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
