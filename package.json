@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config config/vite.config.ts",
-    "build": "tsc --project config/tsconfig.json && vite build --config config/vite.config.ts",
+    "build": "tsc --project config/tsconfig.json && vite build",
     "lint": "eslint --config config/eslint.config.js .",
     "lint:css": "stylelint \"src/**/*.{css,scss,less}\"",
     "lint:all": "npm run lint && npm run lint:css",
-    "preview": "vite preview --config config/vite.config.ts"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
