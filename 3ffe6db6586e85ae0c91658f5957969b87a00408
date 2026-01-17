@@ -1,0 +1,4 @@
+Task: update-gitignore
+Summary: 忽略 Python __pycache__ 和 .pyc/.pyo 缓存文件。
+Files: .gitignore
+Why: 避免提交测试与运行时缓存文件。
