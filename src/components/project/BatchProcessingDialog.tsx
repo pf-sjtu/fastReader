@@ -77,6 +77,8 @@ export function BatchProcessingDialog({
   const [selectedFiles, setSelectedFiles] = useState<WebDAVFileInfo[]>([])
   const [isCheckingCache, setIsCheckingCache] = useState(false)
   const [cacheStatusMap, setCacheStatusMap] = useState<Map<string, boolean>>(new Map())
+  const [cachedFileNames, setCachedFileNames] = useState<Set<string>>(new Set())
+
 
   // Queue preview state
   const [queueExpanded, setQueueExpanded] = useState(true)
@@ -168,16 +170,19 @@ export function BatchProcessingDialog({
     setIsCheckingCache(true)
     const statusMap = new Map<string, boolean>()
 
+    const cachedNames = await cloudCacheService.fetchCacheFileNames()
+
     for (const file of filesToCheck) {
       if (file.type === 'file') {
-        const exists = await cloudCacheService.checkCacheExists(file.basename)
-        statusMap.set(file.basename, exists)
+        statusMap.set(file.basename, cloudCacheService.isCachedByFileName(file.basename, cachedNames))
       }
     }
 
+    setCachedFileNames(cachedNames)
     setCacheStatusMap(statusMap)
     setIsCheckingCache(false)
   }
+
 
   // Handle file selection
   const handleFileSelect = (file: WebDAVFileInfo) => {
@@ -208,12 +213,13 @@ export function BatchProcessingDialog({
 
     // Filter based on cache status if skipProcessed is true
     if (skipProcessed) {
-      const unprocessed = matchingFiles.filter(file => !cacheStatusMap.get(file.basename))
+      const unprocessed = matchingFiles.filter(file => !cloudCacheService.isCachedByFileName(file.basename, cachedFileNames))
       setSelectedFiles(unprocessed)
     } else {
       setSelectedFiles(matchingFiles)
     }
   }
+
 
   // Handle clear selection
   const handleClearSelection = () => {
@@ -337,9 +343,13 @@ export function BatchProcessingDialog({
   useEffect(() => {
     if (files.length > 0 && isOpen) {
       checkCacheStatus(files.filter(f => f.type === 'file'))
+    } else if (files.length === 0) {
+      setCachedFileNames(new Set())
+      setCacheStatusMap(new Map())
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files.length, isOpen])
+
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>

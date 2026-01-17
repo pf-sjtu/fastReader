@@ -72,12 +72,23 @@ export class CloudCacheService {
    * @returns 完整的缓存文件路径
    */
   getCacheFilePath(fileName: string): string {
-    const sanitizedName = this.sanitizeFileName(fileName)
+    const cacheFileName = this.getCacheFileName(fileName)
     const webdavConfig = useConfigStore.getState().webdavConfig
     const syncPath = webdavConfig.syncPath || '/fastReader'
 
-    return `${syncPath}/${sanitizedName}-完整摘要.md`
+    return `${syncPath}/${cacheFileName}`
   }
+
+  /**
+   * 生成缓存文件名
+   * @param fileName 原始文件名
+   * @returns 缓存文件名（{sanitizedName}-完整摘要.md）
+   */
+  getCacheFileName(fileName: string): string {
+    const sanitizedName = this.sanitizeFileName(fileName)
+    return `${sanitizedName}-完整摘要.md`
+  }
+
 
   /**
    * 检查缓存是否存在
@@ -97,6 +108,14 @@ export class CloudCacheService {
   }
 
   /**
+   * 基于已获取的缓存文件名集合进行本地判断
+   */
+  isCachedByFileName(fileName: string, cachedFileNames: Set<string>): boolean {
+    return cachedFileNames.has(this.getCacheFileName(fileName))
+  }
+
+
+  /**
    * 读取缓存文件内容
    * @param fileName 原始文件名
    * @returns 缓存读取结果
@@ -107,7 +126,7 @@ export class CloudCacheService {
       console.log(`[CloudCache] 读取缓存: ${cachePath}`)
 
       // 下载文件
-      const downloadResult = await this.webdavService.downloadFileAsText(cachePath)
+      const downloadResult = await this.webdavService.getFileContents(cachePath, 'text')
 
       if (!downloadResult.success || !downloadResult.data) {
         return {
@@ -116,12 +135,14 @@ export class CloudCacheService {
         }
       }
 
+      const content = downloadResult.data as string
+
       // 解析元数据
-      const metadata = this.parseMetadata(downloadResult.data)
+      const metadata = this.parseMetadata(content)
 
       return {
         success: true,
-        content: downloadResult.data,
+        content,
         metadata: metadata || undefined
       }
     } catch (error) {
@@ -132,6 +153,7 @@ export class CloudCacheService {
       }
     }
   }
+
 
   /**
    * 解析文件中的 HTML 备注
@@ -216,24 +238,44 @@ export class CloudCacheService {
   /**
    * 批量检查多个文件的缓存状态
    * @param fileNames 文件名列表
+   * @param cachedFileNames 已缓存文件名集合（可选）
    * @returns 文件名到缓存状态的映射
    */
-  async batchCheckCache(fileNames: string[]): Promise<Map<string, boolean>> {
+  async batchCheckCache(
+    fileNames: string[],
+    cachedFileNames?: Set<string>
+  ): Promise<Map<string, boolean>> {
+    const cachedFiles = cachedFileNames ?? await this.fetchCacheFileNames()
     const results = new Map<string, boolean>()
 
-    // 批量检查，但限制并发数
-    const batchSize = 5
-    for (let i = 0; i < fileNames.length; i += batchSize) {
-      const batch = fileNames.slice(i, i + batchSize)
-      const promises = batch.map(async (fileName) => {
-        const exists = await this.checkCacheExists(fileName)
-        results.set(fileName, exists)
-      })
-      await Promise.all(promises)
-    }
+    fileNames.forEach((fileName) => {
+      results.set(fileName, cachedFiles.has(this.getCacheFileName(fileName)))
+    })
 
     return results
   }
+
+  /**
+   * 获取云端缓存文件名集合（{sanitizedName}-完整摘要.md）
+   */
+  async fetchCacheFileNames(): Promise<Set<string>> {
+    const webdavConfig = useConfigStore.getState().webdavConfig
+    const syncPath = webdavConfig.syncPath || '/fastReader'
+    const result = await this.webdavService.getDirectoryContents(syncPath)
+
+    if (!result.success || !result.data) {
+      console.warn('[CloudCache] 获取缓存列表失败:', result.error)
+      return new Set()
+    }
+
+    const cacheFiles = result.data
+      .filter((file) => file.type === 'file')
+      .map((file) => file.basename)
+      .filter((name) => name.endsWith('-完整摘要.md'))
+
+    return new Set(cacheFiles)
+  }
+
 }
 
 // 导出单例

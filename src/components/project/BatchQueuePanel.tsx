@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+
 import {
   Collapsible,
   CollapsibleContent,
@@ -23,6 +24,8 @@ import {
 } from 'lucide-react'
 import { useBatchQueueStore, useBatchProcessingStatus, useBatchStats, type BatchQueueItem } from '../../stores/batchQueueStore'
 import { batchProcessingEngine, type BatchProcessingResult } from '../../services/batchProcessingEngine'
+import { cloudCacheService } from '../../services/cloudCacheService'
+
 import { useConfigStore } from '../../stores/configStore'
 import { toast } from 'sonner'
 
@@ -46,6 +49,9 @@ export function BatchQueuePanel() {
 
   // UI state
   const [isOpen, setIsOpen] = useState(false)
+
+  const cachedFilesRef = useRef<Set<string>>(new Set())
+
 
   // No queue items - don't render
   if (queue.length === 0) {
@@ -75,6 +81,10 @@ export function BatchQueuePanel() {
 
     // Get processing config from store
     const config = useConfigStore.getState().processingOptions
+    if (cachedFilesRef.current.size === 0) {
+      cachedFilesRef.current = await cloudCacheService.fetchCacheFileNames()
+    }
+
     const batchConfig = {
       sourcePath: '',
       maxFiles: 0,
@@ -88,7 +98,8 @@ export function BatchQueuePanel() {
 
     try {
       // Process the item using the engine
-      const result = await batchProcessingEngine.processItem(nextPending, batchConfig)
+      const result = await batchProcessingEngine.processItem(nextPending, batchConfig, cachedFilesRef.current)
+
 
       if (result.success && !result.error?.includes('已跳过')) {
         markItemCompleted(nextPending.id, {
@@ -169,10 +180,12 @@ export function BatchQueuePanel() {
     }
 
     startStoreProcessing()
+    cachedFilesRef.current = await cloudCacheService.fetchCacheFileNames()
     toast({
       title: '开始处理',
       description: `共 ${pendingCount} 个文件待处理`
     })
+
   }
 
   // Effect to process items when processing is active

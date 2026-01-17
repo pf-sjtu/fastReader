@@ -69,6 +69,7 @@ export class BatchProcessingEngine {
   private callbacks: BatchProcessingCallbacks = {}
   private startTime: number = 0
 
+
   constructor() {
     // 初始化 AI 服务
     this.initializeAIService()
@@ -128,12 +129,16 @@ export class BatchProcessingEngine {
     try {
       // 重新初始化 AI 服务（确保使用最新配置）
       this.initializeAIService()
+      const cachedFileNames = config.skipProcessed
+        ? await cloudCacheService.fetchCacheFileNames()
+        : undefined
 
       for (let i = 0; i < queueItems.length; i++) {
         if (this.shouldStop) {
           console.log('[BatchEngine] 用户停止处理')
           break
         }
+
 
         const item = queueItems[i]
 
@@ -149,7 +154,8 @@ export class BatchProcessingEngine {
         console.log(`[BatchEngine] 处理文件 ${i + 1}/${queueItems.length}: ${item.fileName}`)
 
         try {
-          const result = await this.processItem(item, config)
+          const result = await this.processItem(item, config, cachedFileNames)
+
           results.push(result)
 
           if (result.success) {
@@ -170,6 +176,7 @@ export class BatchProcessingEngine {
     } finally {
       this.isRunning = false
     }
+
 
     // 生成汇总
     const summary = this.generateSummary(results)
@@ -219,18 +226,22 @@ export class BatchProcessingEngine {
    */
   async processItem(
     item: BatchQueueItem,
-    config: BatchProcessingConfig
+    config: BatchProcessingConfig,
+    cachedFileNames?: Set<string>
   ): Promise<BatchProcessingResult> {
-    return this._processItem(item, config)
+    return this._processItem(item, config, cachedFileNames)
   }
+
 
   /**
    * 处理单个文件（内部方法）
    */
   private async _processItem(
     item: BatchQueueItem,
-    config: BatchProcessingConfig
+    config: BatchProcessingConfig,
+    cachedFileNames?: Set<string>
   ): Promise<BatchProcessingResult> {
+
     const startTime = new Date().toISOString()
     const processingOptions = useConfigStore.getState().processingOptions
 
@@ -239,8 +250,9 @@ export class BatchProcessingEngine {
     try {
       // 1. 检查是否需要跳过已处理的文件
       if (config.skipProcessed) {
-        const cacheExists = await cloudCacheService.checkCacheExists(item.fileName)
-        if (cacheExists) {
+        const cachedFiles = cachedFileNames
+          ?? await cloudCacheService.fetchCacheFileNames()
+        if (cloudCacheService.isCachedByFileName(item.fileName, cachedFiles)) {
           console.log(`[BatchEngine] 文件已有缓存，跳过: ${item.fileName}`)
           this.callbacks.onItemSkip?.(item, '已有缓存')
           return {
@@ -250,6 +262,7 @@ export class BatchProcessingEngine {
           }
         }
       }
+
 
       // 2. 从 WebDAV 下载文件
       this.callbacks.onItemProgress?.(item.id, 5, '下载文件中...')
@@ -433,12 +446,13 @@ export class BatchProcessingEngine {
     filePath: string
   ): Promise<{ success: boolean; data?: ArrayBuffer; error?: string }> {
     try {
-      const result = await webdavService.downloadFile(filePath)
+      const result = await webdavService.getFileContents(filePath, 'binary')
       return {
         success: result.success,
         data: result.data as ArrayBuffer | undefined,
         error: result.error
       }
+
     } catch (error) {
       return {
         success: false,
