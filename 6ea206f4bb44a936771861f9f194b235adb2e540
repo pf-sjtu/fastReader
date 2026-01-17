@@ -1,0 +1,4 @@
+Task: refactor-webdav-batch-cache
+Summary: 批量处理使用单次缓存列表并复用，减少逐文件 WebDAV 调用；CLI/前端同步调整缓存检查与列表获取；新增 OpenSpec 变更提案与任务清单。
+Files: src/services/cloudCacheService.ts, src/services/batchProcessingEngine.ts, src/components/project/BatchProcessingDialog.tsx, src/components/project/BatchQueuePanel.tsx, src/cli/webdav_client.py, src/cli/batch_processor.py, openspec/changes/refactor-webdav-batch-cache/*
+Why: 降低批量处理对 WebDAV 的请求频率并保持最终一致。
