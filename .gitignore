@@ -52,7 +52,12 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# Python
+__pycache__/
+*.py[cod]
+
 # Test files
+
 test/*.cjs
 test/*.js
 !test/*.md
