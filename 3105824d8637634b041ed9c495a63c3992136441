@@ -1,0 +1,4 @@
+Task: md-reader-build-fix
+Summary: Remove missing buildWebdavPath import and inline header path composition to satisfy md_reader tsc.
+Files: md_reader/src/services/webdavService.ts
+Why: Fix Vercel build failure (missing export).
