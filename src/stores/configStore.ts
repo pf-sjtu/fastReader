@@ -45,9 +45,10 @@ interface AIConfigManager {
   // 管理服务商配置
   addProvider: (config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>) => number
   updateProvider: (index: number, config: Partial<AIProviderConfig>) => void
-  deleteProvider: (index: number) => void
+  deleteProvider: (index: number, config?: never) => void
   duplicateProvider: (index: number) => number
   setCurrentModelId: (index: number) => void
+
 
   // 获取当前配置
   getActiveProvider: () => AIProviderConfig | undefined
@@ -134,8 +135,8 @@ export interface ConfigState {
   updateProvider: (index: number, config: Partial<AIProviderConfig>) => void
   deleteProvider: (index: number) => void
   duplicateProvider: (index: number) => number
-  setCurrentModelId: (index: number) => void
   getProviderByIndex: (index: number) => AIProviderConfig | undefined
+
   
   // Token使用量追踪
   tokenUsage: number
@@ -192,9 +193,11 @@ export interface ConfigState {
 }
 
 // AI服务商模板配置 (简化版)
-const aiProviderTemplates: Record<string, AIProviderConfig & { description: string }> = {
+const aiProviderTemplates: Record<string, AIProviderConfig & { name: string; description: string }> = {
   gemini: {
+    name: 'Gemini',
     provider: 'gemini' as const,
+    apiKey: '',
     apiUrl: 'https://generativelanguage.googleapis.com/v1beta',
     model: 'gemini-1.5-flash',
     temperature: 0.7,
@@ -204,7 +207,9 @@ const aiProviderTemplates: Record<string, AIProviderConfig & { description: stri
     description: 'Google的生成式AI服务，支持多模态输入'
   },
   openai: {
+    name: 'OpenAI',
     provider: 'openai' as const,
+    apiKey: '',
     apiUrl: 'https://api.openai.com/v1',
     model: 'gpt-3.5-turbo',
     temperature: 0.7,
@@ -214,7 +219,9 @@ const aiProviderTemplates: Record<string, AIProviderConfig & { description: stri
     description: 'OpenAI的GPT系列模型'
   },
   ollama: {
+    name: 'Ollama',
     provider: 'ollama' as const,
+    apiKey: '',
     apiUrl: 'http://localhost:11434/v1',
     model: 'llama2',
     temperature: 0.7,
@@ -224,7 +231,9 @@ const aiProviderTemplates: Record<string, AIProviderConfig & { description: stri
     description: '本地部署的Ollama服务'
   },
   '302.ai': {
+    name: '302.AI',
     provider: '302.ai' as const,
+    apiKey: '',
     apiUrl: 'https://api.302.ai/v1',
     model: 'gpt-3.5-turbo',
     temperature: 0.7,
@@ -236,6 +245,7 @@ const aiProviderTemplates: Record<string, AIProviderConfig & { description: stri
 }
 
 // 默认配置
+
 const defaultAIConfig: AIConfig = {
   provider: 'gemini',
   apiKey: '',
@@ -366,89 +376,9 @@ export const useConfigStore = create<ConfigState>()(
     (set, get) => {
       // 初始化aiConfigManager
       const initialAIConfigManager = {
-        ...createDefaultAIConfigManager(),
-        
-        // 重写方法以支持状态管理
-        addProvider: (config: any) => {
-          const id = `provider-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-          const newProvider: AIProviderConfig = {
-            ...config,
-            id,
-            isDefault: false, // 确保新配置不是默认配置
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          }
-          
-          set((prevState) => {
-            const newAIConfigManager = {
-              ...prevState.aiConfigManager,
-              providers: [...prevState.aiConfigManager.providers, newProvider]
-            }
-            return {
-              aiConfigManager: newAIConfigManager,
-              aiConfig: computeAIConfig(newAIConfigManager)
-            }
-          })
-          
-          return id
-        },
-        
-        updateProvider: (id: any, config: any) => {
-          set((prevState) => {
-            const newAIConfigManager = {
-              ...prevState.aiConfigManager,
-              providers: prevState.aiConfigManager.providers.map(p => 
-                p.id === id ? { ...p, ...config, updatedAt: new Date().toISOString() } : p
-              )
-            }
-            return {
-              aiConfigManager: newAIConfigManager,
-              aiConfig: computeAIConfig(newAIConfigManager)
-            }
-          })
-        },
-        
-        deleteProvider: (id: any) => {
-          set((prevState) => {
-            const newProviders = prevState.aiConfigManager.providers.filter(p => p.id !== id)
-            const newActiveId = prevState.aiConfigManager.activeProviderId === id 
-              ? (newProviders.length > 0 ? newProviders[0].id : null)
-              : prevState.aiConfigManager.activeProviderId
-            
-            const newAIConfigManager = {
-              ...prevState.aiConfigManager,
-              providers: newProviders,
-              activeProviderId: newActiveId
-            }
-            return {
-              aiConfigManager: newAIConfigManager,
-              aiConfig: computeAIConfig(newAIConfigManager)
-            }
-          })
-        },
-        
-        setActiveProvider: (id: any) => {
-          set((prevState) => {
-            const newAIConfigManager = {
-              ...prevState.aiConfigManager,
-              activeProviderId: id
-            }
-            return {
-              aiConfigManager: newAIConfigManager,
-              aiConfig: computeAIConfig(newAIConfigManager)
-            }
-          })
-        },
-        getActiveProvider: () => {
-          const state = get()
-          return state.aiConfigManager.providers.find(p => p.id === state.aiConfigManager.activeProviderId)
-        },
-        
-        getProviderById: (id: any) => {
-          const state = get()
-          return state.aiConfigManager.providers.find(p => p.id === id)
-        }
+        ...createDefaultAIConfigManager()
       }
+
 
       return {
         // AI配置管理
@@ -523,8 +453,9 @@ export const useConfigStore = create<ConfigState>()(
             ...config
           }
 
+          let newIndex = 1
           set((state) => {
-            const newIndex = state.aiConfigManager.providers.length + 1 // 1-based index
+            newIndex = state.aiConfigManager.providers.length + 1 // 1-based index
             const newAIConfigManager = {
               ...state.aiConfigManager,
               providers: [...state.aiConfigManager.providers, newProvider],
@@ -536,8 +467,9 @@ export const useConfigStore = create<ConfigState>()(
             }
           })
 
-          return state.aiConfigManager.providers.length
+          return newIndex
         },
+
 
         updateAIProvider: (index, config) => {
           set((state) => {
@@ -710,26 +642,11 @@ export const useConfigStore = create<ConfigState>()(
           return state.duplicateAIProvider(index)
         },
 
-        setCurrentModelId: (index) => {
-          set((state) => {
-            if (index < 1 || index > state.aiConfigManager.providers.length) {
-              return state
-            }
-            const newAIConfigManager = {
-              ...state.aiConfigManager,
-              currentModelId: index
-            }
-            return {
-              aiConfigManager: newAIConfigManager,
-              aiConfig: computeAIConfig(newAIConfigManager)
-            }
-          })
-        },
-
         getProviderByIndex: (index) => {
           const state = get()
           return state.getAIProviderByIndex(index)
         },
+
         
         // 处理选项
         processingOptions: defaultProcessingOptions,

@@ -153,7 +153,7 @@ export class WebDAVService {
         userAgent: navigator.userAgent
       })
       
-      const headerPath = buildHeaderPath(this.config!, '/')
+      const headerPath = '/'
       this.client.setHeaders({
         ...this.client.getHeaders(),
         'X-WebDAV-Path': headerPath
