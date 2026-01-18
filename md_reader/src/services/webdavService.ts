@@ -28,8 +28,10 @@ export interface WebDAVConfig {
   appName: string
   autoSync: boolean
   syncPath: string
+  browsePath: string
   lastSyncTime: string | null
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
+
 
 }
 
@@ -51,10 +53,10 @@ function getProcessedUrl(originalUrl: string): string {
 function buildHeaderPath(config: WebDAVConfig, path: string): string {
   const normalizedPath = normalizeDavPath(path)
   if (normalizedPath === '/') {
-    return normalizeDavPath(config.syncPath || '/')
+    return normalizeDavPath(config.browsePath || '/')
   }
 
-  const normalizedFolder = normalizeDavPath(config.syncPath || '/')
+  const normalizedFolder = normalizeDavPath(config.browsePath || '/')
   if (normalizedFolder === '/') {
     return normalizedPath
   }
@@ -217,13 +219,14 @@ export class WebDAVService {
     }
 
     try {
-      console.log('请求目录内容，路径:', path)
+      const rawPath = path || this.config?.browsePath || '/'
+      console.log('请求目录内容，路径:', rawPath)
       console.log('当前WebDAV客户端配置:', {
         baseURL: this.config?.serverUrl,
         processedURL: getProcessedUrl(this.config?.serverUrl || '')
       })
       
-      const normalizedPath = normalizeDavPath(path)
+      const normalizedPath = normalizeDavPath(rawPath)
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
 
       console.log('标准化后路径:', normalizedPath)
@@ -235,6 +238,7 @@ export class WebDAVService {
       })
 
       const contents = await this.client.getDirectoryContents('/', { deep })
+
       
       const fileInfos: WebDAVFileInfo[] = (contents as any[]).map(item => {
         let filename = item.filename
@@ -280,7 +284,8 @@ export class WebDAVService {
    * @param path 目录路径
    */
   async getSupportedFiles(path: string = '/'): Promise<WebDAVOperationResult<WebDAVFileInfo[]>> {
-    const result = await this.getDirectoryContents(path, true)
+    const result = await this.getDirectoryContents(path || this.config?.browsePath || '/', true)
+
     
     if (!result.success || !result.data) {
       return result

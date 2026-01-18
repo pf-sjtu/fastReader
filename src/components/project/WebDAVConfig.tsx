@@ -33,10 +33,11 @@ export function WebDAVConfig() {
     setWebDAVAppName,
     setWebDAVAutoSync,
     setWebDAVSyncPath,
+    setWebDAVBrowsePath,
     setWebDAVConnectionStatus,
-    updateWebDAVLastSyncTime,
     resetWebDAVConfig
   } = useConfigStore()
+
 
   // 组件状态
   const [isTestingConnection, setIsTestingConnection] = useState(false)
@@ -346,6 +347,19 @@ export function WebDAVConfig() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="browse-path">浏览路径</Label>
+                <Input
+                  id="browse-path"
+                  placeholder="/"
+                  value={webdavConfig.browsePath}
+                  onChange={(e) => setWebDAVBrowsePath(e.target.value)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  WebDAV 文件浏览默认从此目录开始
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="sync-path">同步路径</Label>
                 <Input
                   id="sync-path"
@@ -354,9 +368,10 @@ export function WebDAVConfig() {
                   onChange={(e) => setWebDAVSyncPath(e.target.value)}
                 />
                 <p className="text-sm text-muted-foreground">
-                  文件将同步到此路径下的相应文件夹中
+                  处理结果将输出到此路径
                 </p>
               </div>
+
 
               {webdavConfig.lastSyncTime && (
                 <div className="text-sm text-muted-foreground">

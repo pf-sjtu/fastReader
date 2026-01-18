@@ -27,6 +27,8 @@ export function WebDAVConfig() {
     setWebDAVUsername,
     setWebDAVPassword,
     setWebDAVAppName,
+    setWebDAVBrowsePath,
+    setWebDAVSyncPath,
     setWebDAVConnectionStatus,
     resetWebDAVConfig
   } = useWebDAVStore()
@@ -259,6 +261,30 @@ export function WebDAVConfig() {
                   className="h-8"
                 />
               </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="browse-path" className="text-xs">浏览路径</Label>
+                <Input
+                  id="browse-path"
+                  placeholder="/"
+                  value={webdavConfig.browsePath}
+                  onChange={(e) => setWebDAVBrowsePath(e.target.value)}
+                  className="h-8"
+                />
+                <p className="text-xs text-muted-foreground">默认从该目录浏览 WebDAV</p>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="sync-path" className="text-xs">同步路径</Label>
+                <Input
+                  id="sync-path"
+                  placeholder="/mdReader"
+                  value={webdavConfig.syncPath}
+                  onChange={(e) => setWebDAVSyncPath(e.target.value)}
+                  className="h-8"
+                />
+                <p className="text-xs text-muted-foreground">输出文件写入该目录</p>
+              </div>
             </CardContent>
           </Card>
 
@@ -285,6 +311,7 @@ export function WebDAVConfig() {
               </Alert>
             </CardContent>
           </Card>
+
 
 
           {/* 连接测试 */}

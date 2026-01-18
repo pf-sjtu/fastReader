@@ -42,14 +42,14 @@ function getProcessedUrl(originalUrl: string): string {
 function buildProxyBaseUrl(config: WebDAVConfig): string {
   return buildWebdavProxyUrl({
     baseUrl: config.serverUrl,
-    folder: config.syncPath || '/',
+    folder: config.browsePath || '/',
     path: '/'
   })
 }
 
 function buildHeaderPath(config: WebDAVConfig, path: string): string {
   return buildWebdavPath({
-    folder: config.syncPath || '/',
+    folder: config.browsePath || '/',
     path
   })
 }
@@ -228,14 +228,14 @@ export class WebDAVService {
     }
 
     try {
-      console.log('请求目录内容，路径:', path)
+      const rawPath = path || this.config?.browsePath || '/'
+      console.log('请求目录内容，路径:', rawPath)
       console.log('当前WebDAV客户端配置:', {
         baseURL: this.config?.serverUrl,
         processedURL: getProcessedUrl(this.config?.serverUrl || '')
       })
-      const normalizedPath = normalizeDavPath(path)
+      const normalizedPath = normalizeDavPath(rawPath)
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
-
 
       console.log('标准化后路径:', normalizedPath)
       console.log('即将发送WebDAV请求到基础URL:', buildProxyBaseUrl(this.config!))
@@ -246,6 +246,7 @@ export class WebDAVService {
       })
 
       const contents = await this.client.getDirectoryContents('/', { deep })
+
       
       // 转换文件信息格式
       const fileList: WebDAVFileInfo[] = (contents as any[]).map(item => {

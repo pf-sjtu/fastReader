@@ -57,6 +57,15 @@ describe('WebDAV proxy URL helpers', () => {
 
     expect(path).toBe('/Books/My File.txt')
   })
+
+  it('defaults browse path to root', () => {
+    const path = buildWebdavPath({
+      folder: '/',
+      path: ''
+    })
+
+    expect(path).toBe('/')
+  })
 })
 
 describe('Cloudflare WebDAV proxy guards', () => {

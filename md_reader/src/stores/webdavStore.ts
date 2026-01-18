@@ -13,8 +13,10 @@ interface WebDAVState {
   setWebDAVAppName: (appName: string) => void
   setWebDAVAutoSync: (autoSync: boolean) => void
   setWebDAVSyncPath: (syncPath: string) => void
+  setWebDAVBrowsePath: (browsePath: string) => void
 
   setWebDAVConnectionStatus: (status: 'disconnected' | 'connecting' | 'connected' | 'error') => void
+
   updateWebDAVLastSyncTime: () => void
   resetWebDAVConfig: () => void
 }
@@ -28,8 +30,10 @@ const defaultWebDAVConfig: WebDAVConfig = {
   appName: 'md_reader_by_PF',
   autoSync: false,
   syncPath: '/mdReader',
+  browsePath: '/',
   lastSyncTime: null,
   connectionStatus: 'disconnected',
+
 
 }
 
@@ -59,9 +63,13 @@ export const useWebDAVStore = create<WebDAVState>()(
       setWebDAVSyncPath: (syncPath) => set((state) => ({
         webdavConfig: { ...state.webdavConfig, syncPath }
       })),
+      setWebDAVBrowsePath: (browsePath) => set((state) => ({
+        webdavConfig: { ...state.webdavConfig, browsePath }
+      })),
       setWebDAVConnectionStatus: (connectionStatus) => set((state) => ({
         webdavConfig: { ...state.webdavConfig, connectionStatus }
       })),
+
 
       updateWebDAVLastSyncTime: () => set((state) => ({
         webdavConfig: { 

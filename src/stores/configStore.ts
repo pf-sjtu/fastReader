@@ -93,9 +93,11 @@ export interface WebDAVConfig {
   appName: string // 应用名称
   autoSync: boolean // 是否自动同步
   syncPath: string // 同步路径（默认为/fastReader）
+  browsePath: string // 浏览路径（默认为/）
   lastSyncTime: string | null // 最后同步时间
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error' // 连接状态
 }
+
 
 
 // AI服务选项接口
@@ -165,7 +167,9 @@ export interface ConfigState {
   setWebDAVAppName: (appName: string) => void
   setWebDAVAutoSync: (autoSync: boolean) => void
   setWebDAVSyncPath: (syncPath: string) => void
+  setWebDAVBrowsePath: (browsePath: string) => void
   setWebDAVConnectionStatus: (status: 'disconnected' | 'connecting' | 'connected' | 'error') => void
+
   updateWebDAVLastSyncTime: () => void
   resetWebDAVConfig: () => void
   
@@ -336,8 +340,10 @@ const defaultWebDAVConfig: WebDAVConfig = {
   appName: 'fastReader_by_PF',
   autoSync: false,
   syncPath: '/fastReader',
+  browsePath: '/',
   lastSyncTime: null,
   connectionStatus: 'disconnected',
+
 
 }
 
@@ -704,9 +710,13 @@ export const useConfigStore = create<ConfigState>()(
         setWebDAVSyncPath: (syncPath) => set((state) => ({
           webdavConfig: { ...state.webdavConfig, syncPath }
         })),
+        setWebDAVBrowsePath: (browsePath) => set((state) => ({
+          webdavConfig: { ...state.webdavConfig, browsePath }
+        })),
         setWebDAVConnectionStatus: (connectionStatus) => set((state) => ({
           webdavConfig: { ...state.webdavConfig, connectionStatus }
         })),
+
         updateWebDAVLastSyncTime: () => set((state) => ({
           webdavConfig: {
             ...state.webdavConfig,
