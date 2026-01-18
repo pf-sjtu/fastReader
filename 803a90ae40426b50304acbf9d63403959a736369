@@ -1,0 +1,4 @@
+Task: webdav-strip-dav-prefix
+Summary: Normalize /dav prefix in WebDAV path to avoid double /dav paths when switching directories; update tests.
+Files: src/services/webdavProxyUtils.ts; md_reader/src/services/webdavProxyUtils.ts; tests/webdavProxy.test.ts
+Why: Prevent 404 when browsing paths returned with /dav prefix.
