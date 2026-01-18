@@ -82,7 +82,21 @@ export async function onRequest(context) {
     redirect: 'manual'
   })
 
-  const response = await fetch(upstreamRequest)
+  let response = await fetch(upstreamRequest)
+
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get('location')
+    if (location) {
+      const retryRequest = new Request(location, {
+        method: request.method,
+        headers: upstreamHeaders,
+        body: request.body,
+        redirect: 'manual'
+      })
+      response = await fetch(retryRequest)
+    }
+  }
+
   const responseHeaders = new Headers(response.headers)
   Object.entries(cors).forEach(([key, value]) => {
     responseHeaders.set(key, value)
