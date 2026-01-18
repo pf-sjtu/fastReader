@@ -32,29 +32,39 @@ async function getHttpsProxyAgent() {
 
 // 代理fetch函数 - 使用 https-proxy-agent
 async function proxyFetch(url: string, options: RequestInit, proxyUrl?: string): Promise<Response> {
-  if (!proxyUrl || isBrowser) {
-    // 浏览器环境或未设置代理时，直接使用 fetch
+  if (isBrowser) {
+    const origin = window.location.origin
+    const apiBase = new URL(url)
+    const proxyUrl = new URL('/api/ai', origin)
+    proxyUrl.searchParams.set('path', apiBase.pathname.replace(/^\//, ''))
+
+    const headers = new Headers(options.headers)
+    headers.set('X-AI-Base', apiBase.origin + apiBase.pathname.replace(/\/[^/]*$/, ''))
+    headers.set('X-Request-Origin', origin)
+
+    return fetch(proxyUrl.toString(), {
+      ...options,
+      headers
+    })
+  }
+
+  if (!proxyUrl) {
     return fetch(url, options)
   }
 
   try {
-    // 动态获取 HttpsProxyAgent
     const HttpsProxyAgent = await getHttpsProxyAgent();
     if (!HttpsProxyAgent) {
       console.warn('代理模块不可用，使用直接连接');
       return fetch(url, options);
     }
     
-    // 使用 https-proxy-agent 创建代理 agent
     const agent = new HttpsProxyAgent(proxyUrl)
-    
-    // 为 Node.js 环境创建自定义 fetch
     const https = require('https')
     const { URL } = require('url')
     
     const parsedUrl = new URL(url)
     
-    // 构建请求选项
     const requestOptions: any = {
       hostname: parsedUrl.hostname,
       port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
@@ -66,10 +76,9 @@ async function proxyFetch(url: string, options: RequestInit, proxyUrl?: string):
         'User-Agent': 'ebook-to-mindmap/1.0'
       },
       agent: agent,
-      timeout: 30000 // 30秒超时
+      timeout: 30000
     }
     
-    // 如果有请求体，添加 Content-Length 和 body
     if (options.body) {
       const bodyString = typeof options.body === 'string' ? options.body : JSON.stringify(options.body)
       requestOptions.headers['Content-Length'] = Buffer.byteLength(bodyString)
@@ -86,7 +95,6 @@ async function proxyFetch(url: string, options: RequestInit, proxyUrl?: string):
         res.on('end', () => {
           const body = Buffer.concat(chunks).toString()
           
-          // 创建 Response 对象
           const response = new Response(body, {
             status: res.statusCode,
             statusText: res.statusMessage,
@@ -110,7 +118,6 @@ async function proxyFetch(url: string, options: RequestInit, proxyUrl?: string):
         reject(new Error('代理请求超时'))
       })
       
-      // 发送请求体
       if (options.body) {
         const bodyString = typeof options.body === 'string' ? options.body : JSON.stringify(options.body)
         req.write(bodyString)
@@ -118,14 +125,12 @@ async function proxyFetch(url: string, options: RequestInit, proxyUrl?: string):
       
       req.end()
     })
-    
   } catch (error) {
-    if (error instanceof Error) {
-      throw new Error(`代理连接失败: ${error.message}`)
-    }
-    throw new Error('代理连接失败: 未知错误')
+    console.error('代理请求失败:', error)
+    throw error
   }
 }
+
 
 interface Chapter {
   id: string
