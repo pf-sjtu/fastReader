@@ -1,0 +1,4 @@
+Task: add-ai-cors-proxy
+Summary: Add /api/ai proxy and route browser AI calls through same-origin with configurable upstream base via X-AI-Base.
+Files: functions/api/ai/[[path]].js; src/services/aiService.ts; openspec/changes/add-ai-cors-proxy/*
+Why: Fix CORS/Mixed Content for custom AI API endpoints.
