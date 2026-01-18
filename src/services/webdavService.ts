@@ -160,8 +160,25 @@ export class WebDAVService {
       })
       await this.client.getDirectoryContents('/')
 
+      if (this.config?.syncPath) {
+        const normalizedSyncPath = normalizeDavPath(this.config.syncPath)
+        if (normalizedSyncPath !== '/') {
+          const syncHeaderPath = buildHeaderPath(this.config, normalizedSyncPath)
+          this.client.setHeaders({
+            ...this.client.getHeaders(),
+            'X-WebDAV-Path': syncHeaderPath
+          })
+
+          const exists = await this.client.exists('/')
+          if (!exists) {
+            await this.client.createDirectory('/')
+          }
+        }
+      }
+
       console.log('WebDAV连接测试成功')
       return { success: true, data: true }
+
     } catch (error) {
       let errorMessage = '连接失败'
       
