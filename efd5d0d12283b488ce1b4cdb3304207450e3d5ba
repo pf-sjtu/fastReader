@@ -1,0 +1,4 @@
+Task: webdav-redirect-guard
+Summary: Strip Location header on 3xx responses to avoid browser following upstream redirects and triggering CORS.
+Files: functions/api/dav/[[path]].js; md_reader/api/dav.js
+Why: Prevent direct upstream navigation causing CORS failures.
