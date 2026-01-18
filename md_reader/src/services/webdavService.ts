@@ -1,5 +1,5 @@
 import { createClient, WebDAVClient } from 'webdav'
-import { buildWebdavPath, buildWebdavProxyUrl, normalizeDavPath } from './webdavProxyUtils'
+import { buildWebdavProxyUrl, normalizeDavPath } from './webdavProxyUtils'
 
 
 // WebDAV操作结果接口
@@ -49,10 +49,17 @@ function getProcessedUrl(originalUrl: string): string {
 }
 
 function buildHeaderPath(config: WebDAVConfig, path: string): string {
-  return buildWebdavPath({
-    folder: config.syncPath || '/',
-    path
-  })
+  const normalizedPath = normalizeDavPath(path)
+  if (normalizedPath === '/') {
+    return normalizeDavPath(config.syncPath || '/')
+  }
+
+  const normalizedFolder = normalizeDavPath(config.syncPath || '/')
+  if (normalizedFolder === '/') {
+    return normalizedPath
+  }
+
+  return `${normalizedFolder}/${normalizedPath.replace(/^\//, '')}`
 }
 
 
