@@ -175,7 +175,8 @@ export class WebDAVService {
         if (normalizedSyncPath !== '/') {
           this.client.setHeaders({
             ...this.client.getHeaders(),
-            'X-WebDAV-Path': encodeDavHeaderPath(normalizedSyncPath)
+            'X-WebDAV-Path': encodeDavHeaderPath(normalizedSyncPath),
+            'X-Request-Origin': window.location.origin
           })
 
           const exists = await this.client.exists('/')
@@ -234,7 +235,8 @@ export class WebDAVService {
 
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+        'X-Request-Origin': window.location.origin
       })
 
       const contents = await this.client.getDirectoryContents('/', { deep })

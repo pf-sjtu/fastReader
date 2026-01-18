@@ -156,7 +156,8 @@ export class WebDAVService {
       const headerPath = '/'
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+        'X-Request-Origin': window.location.origin
       })
       await this.client.getDirectoryContents('/')
 
@@ -165,7 +166,8 @@ export class WebDAVService {
         if (normalizedSyncPath !== '/') {
           this.client.setHeaders({
             ...this.client.getHeaders(),
-            'X-WebDAV-Path': encodeDavHeaderPath(normalizedSyncPath)
+            'X-WebDAV-Path': encodeDavHeaderPath(normalizedSyncPath),
+            'X-Request-Origin': window.location.origin
           })
 
           const exists = await this.client.exists('/')
@@ -242,7 +244,8 @@ export class WebDAVService {
       
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+        'X-Request-Origin': window.location.origin
       })
 
       const contents = await this.client.getDirectoryContents('/', { deep })
@@ -335,7 +338,8 @@ export class WebDAVService {
 
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+        'X-Request-Origin': window.location.origin
       })
 
       if (format === 'text') {
@@ -475,7 +479,8 @@ export class WebDAVService {
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+        'X-Request-Origin': window.location.origin
       })
       const result = await this.client.putFileContents('/', data as any, { overwrite })
       
@@ -519,7 +524,8 @@ export class WebDAVService {
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+        'X-Request-Origin': window.location.origin
       })
       await this.client.createDirectory('/')
       return { success: true, data: true }
@@ -546,7 +552,8 @@ export class WebDAVService {
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+        'X-Request-Origin': window.location.origin
       })
       await this.client.deleteFile('/')
       return { success: true, data: true }
@@ -573,7 +580,8 @@ export class WebDAVService {
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+        'X-Request-Origin': window.location.origin
       })
       await this.client.deleteFile('/')
       return { success: true, data: true }
@@ -601,7 +609,8 @@ export class WebDAVService {
 
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+        'X-Request-Origin': window.location.origin
       })
 
       const exists = await this.client.exists('/')
@@ -646,7 +655,8 @@ export class WebDAVService {
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+        'X-Request-Origin': window.location.origin
       })
       const stat = await this.client.stat('/')
       

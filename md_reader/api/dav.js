@@ -7,8 +7,10 @@ const ALLOWED_ORIGINS = [
   'http://127.0.0.1:5173'
 ]
 
-function corsHeaders(origin) {
-  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : 'null'
+function corsHeaders(origin, requestOrigin) {
+  const allowOrigin = origin && ALLOWED_ORIGINS.includes(origin)
+    ? origin
+    : (ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : 'null')
 
   return {
     'Access-Control-Allow-Origin': allowOrigin,
@@ -18,8 +20,11 @@ function corsHeaders(origin) {
   }
 }
 
-function isAllowedOrigin(origin) {
-  return ALLOWED_ORIGINS.includes(origin)
+function isAllowedOrigin(origin, requestOrigin) {
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    return true
+  }
+  return ALLOWED_ORIGINS.includes(requestOrigin)
 }
 
 function isAllowedMethod(method) {
@@ -46,7 +51,8 @@ function filterRequestHeaders(headers) {
 export async function onRequest(context) {
   const { request } = context
   const origin = request.headers.get('Origin') || ''
-  const cors = corsHeaders(origin)
+  const requestOrigin = request.headers.get('X-Request-Origin') || ''
+  const cors = corsHeaders(origin, requestOrigin)
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: cors })
@@ -56,7 +62,7 @@ export async function onRequest(context) {
     return new Response('Method not allowed', { status: 405, headers: cors })
   }
 
-  if (!isAllowedOrigin(origin)) {
+  if (!isAllowedOrigin(origin, requestOrigin)) {
     return new Response('Origin not allowed', { status: 403, headers: cors })
   }
 
