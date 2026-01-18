@@ -1,0 +1,4 @@
+Task: add-md-reader-webdav-proxy
+Summary: Fix md_reader JSX, switch WebDAV to same-origin /api/dav proxy with Vercel rewrite, remove legacy proxy toggle, update README and OpenSpec.
+Files: md_reader/src/components/markdown-reader-enhanced.tsx; md_reader/src/services/webdavService.ts; md_reader/src/services/webdavProxyUtils.ts; md_reader/api/dav.js; md_reader/src/components/webdav-config.tsx; md_reader/src/stores/webdavStore.ts; md_reader/vercel.json; md_reader/README.md; md_reader/package-lock.json; openspec/changes/add-md-reader-webdav-proxy/*; src/services/webdavService.ts
+Why: Restore build and provide CORS-safe WebDAV access across Cloudflare/Vercel.
