@@ -1,0 +1,4 @@
+Task: ai-proxy-base-path
+Summary: Parse API base path correctly for /v1 style endpoints when routing through /api/ai.
+Files: src/services/aiService.ts
+Why: Prevent upstream 404 by keeping base at /v1 and path at chat/completions.
