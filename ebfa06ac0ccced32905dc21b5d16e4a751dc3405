@@ -1,0 +1,4 @@
+Task: ai-proxy-base-slash
+Summary: Ensure baseUrl ends with slash before joining path to avoid dropping /v1.
+Files: functions/api/ai/[[path]].js
+Why: Fix 404 from upstream when baseUrl lacks trailing slash.
