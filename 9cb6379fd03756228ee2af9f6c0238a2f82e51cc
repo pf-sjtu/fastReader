@@ -1,0 +1,4 @@
+Task: add-webdav-cors-proxy
+Summary: Add Cloudflare Pages Functions /api/dav proxy, update WebDAV service to route via headers, normalize client paths, add docs and tests.
+Files: functions/api/dav/[[path]].js; src/services/webdavService.ts; src/services/webdavProxyUtils.ts; src/components/project/BatchProcessingDialog.tsx; src/components/project/WebDAVFileBrowser.tsx; src/components/project/WebDAVConfig.tsx; docs/webdav-proxy.md; README.md; CLAUDE.md; tests/webdavProxy.test.ts; src/stores/configStore.ts; src/services/webdavProxyService.ts; openspec/changes/add-webdav-cors-proxy/*
+Why: Resolve browser CORS (PROPFIND) by same-origin proxy while keeping user-configured WebDAV settings.
