@@ -1,0 +1,4 @@
+Task: webdav-404-build-fix
+Summary: Adjust WebDAV testConnection to probe root path and clean configStore duplicate AI config manager definitions.
+Files: src/services/webdavService.ts; src/stores/configStore.ts
+Why: Avoid 404 when sync folder missing and fix Vite build error (duplicate keys).
