@@ -11,15 +11,26 @@ export function normalizeDavPath(inputPath: string): string {
     normalized = normalized.substring(7)
   }
 
-  if (normalized === '') {
-    return '/'
-  }
-
   if (!normalized.startsWith('/')) {
     normalized = '/' + normalized
   }
 
-  return normalized
+  const segments = normalized.split('/').filter((segment) => segment !== '')
+  const resolved: string[] = []
+
+  for (const segment of segments) {
+    if (segment === '.' || segment === '') {
+      continue
+    }
+    if (segment === '..') {
+      resolved.pop()
+      continue
+    }
+    resolved.push(segment)
+  }
+
+  const rebuilt = '/' + resolved.join('/')
+  return rebuilt === '/' ? '/' : rebuilt
 }
 
 export function buildWebdavProxyUrl(params: {

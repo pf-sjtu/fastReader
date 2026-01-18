@@ -14,6 +14,11 @@ describe('WebDAV proxy URL helpers', () => {
     expect(normalizeDavPath('')).toBe('/')
   })
 
+  it('removes path traversal segments', () => {
+    expect(normalizeDavPath('/fastReader/../../')).toBe('/')
+    expect(normalizeDavPath('/fastReader/../notes')).toBe('/notes')
+  })
+
   it('builds proxy URL with base and folder', () => {
     const url = buildWebdavProxyUrl({
       baseUrl: 'https://example.com/dav/',
