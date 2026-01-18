@@ -1,0 +1,4 @@
+Task: add-webdav-cors-proxy
+Summary: Expand docs/webdav-proxy.md with step-by-step Cloudflare Pages setup, CORS whitelist configuration, and verification steps.
+Files: docs/webdav-proxy.md
+Why: Provide detailed operator instructions for configuring CORS and deploying the proxy.
