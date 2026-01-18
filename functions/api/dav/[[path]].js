@@ -88,6 +88,10 @@ export async function onRequest(context) {
     responseHeaders.set(key, value)
   })
 
+  if (response.status >= 300 && response.status < 400) {
+    responseHeaders.delete('location')
+  }
+
   return new Response(response.body, {
     status: response.status,
     headers: responseHeaders
