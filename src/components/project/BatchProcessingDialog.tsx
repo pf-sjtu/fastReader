@@ -36,6 +36,8 @@ import {
 } from 'lucide-react'
 import { useWebDAVConfig, useProcessingOptions } from '../../stores/configStore'
 import { webdavService, type WebDAVFileInfo } from '../../services/webdavService'
+import { normalizeDavPath } from '../../services/webdavProxyUtils'
+
 import { cloudCacheService } from '../../services/cloudCacheService'
 import { useBatchQueueStore, useBatchProcessingStatus, useBatchStats, type BatchQueueItem } from '../../stores/batchQueueStore'
 import { toast } from 'sonner'
@@ -144,16 +146,10 @@ export function BatchProcessingDialog({
 
   // Navigate to folder
   const navigateToFolder = (folder: WebDAVFileInfo) => {
-    let newPath = folder.filename
-    // Normalize path
-    if (newPath.startsWith('/../dav/')) {
-      newPath = newPath.replace('/../dav/', '/')
-    } else if (newPath.startsWith('/api/webdav/')) {
-      newPath = newPath.replace('/api/webdav/', '/')
-    }
-    if (!newPath.startsWith('/')) newPath = '/' + newPath
+    let newPath = normalizeDavPath(folder.filename)
     if (!newPath.endsWith('/')) newPath += '/'
     setCurrentPath(newPath)
+
   }
 
   // Navigate up

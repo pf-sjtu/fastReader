@@ -54,6 +54,8 @@
 - **多云支持**：支持坚果云、Nextcloud、ownCloud 等 WebDAV 服务
 - **覆盖保护**：智能文件存在性检查，支持覆盖确认
 - **自动同步**：处理完成后自动同步到云端存储
+- **同源代理**：通过 Cloudflare Pages Functions 代理解决浏览器 CORS（见 `docs/webdav-proxy.md`）
+
 
 ## 🚀 快速开始
 
@@ -191,7 +193,8 @@ ebook-to-mindmap/
 │   ├── 📄 CLAUDE.md              # Claude AI 使用说明
 │   ├── 📄 EPUB结构说明.md        # EPUB 格式说明
 │   ├── 📄 PDF处理流程文档.md     # PDF 处理说明
-│   └── 📄 浏览器代理解决方案.md   # 代理配置指南
+│   └── 📄 webdav-proxy.md         # WebDAV 同源代理指南
+
 ├── 📁 test/                      # 测试文件目录
 ├── 📁 node_modules/              # 依赖包
 └── 📁 dist/                      # 构建输出目录
@@ -200,7 +203,8 @@ ebook-to-mindmap/
 ### 配置文件说明
 
 - **config/**: 所有配置文件统一管理，提高项目可维护性
-- **docs/**: 项目文档集中存放，包括说明文档和技术文档
+- **docs/**: 项目文档集中存放，包括说明文档和技术文档（含 WebDAV 同源代理）
+
 - **src/**: 源代码按功能模块组织，遵循最佳实践
 
 ## 📖 使用指南

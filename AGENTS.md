@@ -62,3 +62,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - AI APIs require online access
 - Environment variables: `VITE_*` prefix (browser), `*` prefix (CLI)
 - Tests: `tests/` directory
+
+## WebDAV CORS 代理
+- 前端 WebDAV 请求走同源 `/api/dav`
+- Cloudflare Pages Functions 代理读取 `X-WebDAV-Base` 与 `X-WebDAV-Path`
+- 代理必须校验 Origin 白名单与 https base URL

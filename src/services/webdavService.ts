@@ -1,5 +1,7 @@
 import { createClient, WebDAVClient } from 'webdav'
 import type { WebDAVConfig } from '../stores/configStore'
+import { buildWebdavProxyUrl, buildWebdavPath, normalizeDavPath } from './webdavProxyUtils'
+
 
 // WebDAV文件信息接口
 export interface WebDAVFileInfo {
@@ -13,6 +15,7 @@ export interface WebDAVFileInfo {
 }
 
 // WebDAV操作结果接口
+
 export interface WebDAVOperationResult<T = any> {
   success: boolean
   data?: T
@@ -23,33 +26,34 @@ export interface WebDAVOperationResult<T = any> {
 export type UploadProgressCallback = (progress: number) => void
 
 /**
- * 获取处理后的URL - 支持Vercel部署
+ * 获取处理后的URL - 支持Cloudflare Pages Functions代理
  * @param originalUrl 原始URL
- * @param useProxy 是否使用代理
  * @returns 处理后的URL
  */
-function getProcessedUrl(originalUrl: string, useProxy: boolean = false): string {
-  // 检测是否在Vercel环境中
-  const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
-  const isDev = (import.meta as any).env.DEV
-  
-  // Vercel环境使用Serverless Function代理
-  if (isVercel && originalUrl.includes('dav.jianguoyun.com')) {
-    console.log('[getProcessedUrl] Vercel环境，使用代理:', originalUrl)
-    // 始终返回代理基础URL，让WebDAV库在此基础上构建路径
-    return '/api/webdav'
+function getProcessedUrl(originalUrl: string): string {
+  const isBrowser = typeof window !== 'undefined'
+  if (isBrowser) {
+    return '/api/dav'
   }
-  
-  // 开发环境自动使用Vite代理（避免CORS问题）
-  if (isDev && originalUrl.includes('dav.jianguoyun.com')) {
-    console.log('[getProcessedUrl] 开发环境，使用Vite代理:', originalUrl)
-    return '/webdav'
-  }
-  
-  // 其他情况返回原始URL
-  console.log('[getProcessedUrl] 直连模式:', originalUrl)
+
   return originalUrl
 }
+
+function buildProxyBaseUrl(config: WebDAVConfig): string {
+  return buildWebdavProxyUrl({
+    baseUrl: config.serverUrl,
+    folder: config.syncPath || '/',
+    path: '/'
+  })
+}
+
+function buildHeaderPath(config: WebDAVConfig, path: string): string {
+  return buildWebdavPath({
+    folder: config.syncPath || '/',
+    path
+  })
+}
+
 
 // WebDAV客户端封装类
 export class WebDAVService {
@@ -72,10 +76,8 @@ export class WebDAVService {
       }
 
       // 获取处理后的URL（根据环境自动选择代理模式）
-      const processedUrl = getProcessedUrl(config.serverUrl, config.useProxy || false)
-      const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
-      const isDev = (import.meta as any).env.DEV
-      const proxyMode = isVercel ? 'Vercel Serverless Function' : (config.useProxy || isDev ? 'Vite开发代理' : '直连')
+      const processedUrl = getProcessedUrl(config.serverUrl)
+      const proxyMode = typeof window !== 'undefined' ? 'Cloudflare Pages Functions' : '直连'
       console.log('初始化WebDAV客户端，原始URL:', config.serverUrl)
       console.log('初始化WebDAV客户端，处理后URL:', processedUrl)
       console.log('代理模式:', proxyMode)
@@ -85,34 +87,29 @@ export class WebDAVService {
         username: config.username,
         password: config.password
       }
+
       
       // 检测移动端浏览器
       const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
       console.log('移动端浏览器检测:', isMobile)
       
-      // 根据环境和浏览器类型配置请求头
-      if (!isVercel && !config.useProxy) {
-        // 直连模式的请求头
-        clientConfig.headers = {
-          'User-Agent': 'ebook-to-mindmap/1.0'
-        }
-        
-        if (isMobile) {
-          clientConfig.headers['X-Requested-With'] = 'XMLHttpRequest'
-          clientConfig.headers['Accept'] = '*/*'
-        }
-      } else if (isVercel) {
-        // Vercel代理模式下，为WebDAV客户端添加特殊配置
-        clientConfig.headers = {
-          'User-Agent': 'ebook-to-mindmap/1.0',
-          'Accept': 'application/xml, text/xml, */*'
-        }
-        
-        if (isMobile) {
-          clientConfig.headers['X-Requested-With'] = 'XMLHttpRequest'
-          clientConfig.headers['Cache-Control'] = 'no-cache'
-        }
+      // 根据浏览器类型配置请求头
+      clientConfig.headers = {
+        'User-Agent': 'ebook-to-mindmap/1.0',
+        'Accept': 'application/xml, text/xml, */*'
       }
+      
+      if (isMobile) {
+        clientConfig.headers['X-Requested-With'] = 'XMLHttpRequest'
+        clientConfig.headers['Cache-Control'] = 'no-cache'
+      }
+
+      clientConfig.headers = {
+        ...clientConfig.headers,
+        'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`),
+        'X-WebDAV-Base': config.serverUrl
+      }
+
       
       console.log('WebDAV客户端配置:', {
         url: processedUrl,
@@ -150,16 +147,19 @@ export class WebDAVService {
     try {
       // 检测移动端环境
       const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
       
       console.log('测试WebDAV连接...', {
         isMobile: isMobile,
-        isVercel: isVercel,
         userAgent: navigator.userAgent
       })
       
-      // 尝试获取根目录内容来测试连接
+      const headerPath = buildHeaderPath(this.config!, '/')
+      this.client.setHeaders({
+        ...this.client.getHeaders(),
+        'X-WebDAV-Path': headerPath
+      })
       await this.client.getDirectoryContents('/')
+
       console.log('WebDAV连接测试成功')
       return { success: true, data: true }
     } catch (error) {
@@ -215,63 +215,40 @@ export class WebDAVService {
       console.log('请求目录内容，路径:', path)
       console.log('当前WebDAV客户端配置:', {
         baseURL: this.config?.serverUrl,
-        processedURL: getProcessedUrl(this.config?.serverUrl || '', this.config?.useProxy || false)
+        processedURL: getProcessedUrl(this.config?.serverUrl || '')
       })
-      
-      // 标准化路径
-      let normalizedPath = path
-      if (normalizedPath.startsWith('../dav/')) {
-        normalizedPath = normalizedPath.replace('../dav/', '/')
-      }
-      if (!normalizedPath.startsWith('/')) {
-        normalizedPath = '/' + normalizedPath
-      }
-      
+      const normalizedPath = normalizeDavPath(path)
+      const headerPath = buildHeaderPath(this.config!, normalizedPath)
+
+
       console.log('标准化后路径:', normalizedPath)
-      console.log('即将发送WebDAV请求到基础URL:', getProcessedUrl(this.config?.serverUrl || '', this.config?.useProxy || false))
+      console.log('即将发送WebDAV请求到基础URL:', buildProxyBaseUrl(this.config!))
       
-      const contents = await this.client.getDirectoryContents(normalizedPath, { deep })
+      this.client.setHeaders({
+        ...this.client.getHeaders(),
+        'X-WebDAV-Path': headerPath
+      })
+
+      const contents = await this.client.getDirectoryContents('/', { deep })
       
       // 转换文件信息格式
       const fileList: WebDAVFileInfo[] = (contents as any[]).map(item => {
-        // 检测是否在Vercel环境中
-        const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
-        
-        // 重写filename路径，确保使用代理URL
         let filename = item.filename
         console.log('[getDirectoryContents] 原始filename:', filename)
-        
-        if (isVercel) {
-          // 处理各种可能的URL格式
-          if (filename.includes('dav.jianguoyun.com')) {
-            console.log('[getDirectoryContents] 重写URL:', filename)
-            // 提取相对路径并重写为代理路径
-            const url = new URL(filename)
-            let pathname = url.pathname
-            if (pathname.startsWith('/dav/')) {
-              pathname = pathname.substring(4) // 去掉 '/dav'
-            }
-            filename = `/api/webdav${pathname}`
-            console.log('[getDirectoryContents] 重写后:', filename)
-          } else if (filename.startsWith('/../dav/') || filename.includes('/../dav/')) {
-            console.log('[getDirectoryContents] 重写相对路径:', filename)
-            // 使用正则表达式匹配并替换
-            filename = filename.replace(/\/\.\.\/\.\.\/dav\//, '/api/webdav/')
-            console.log('[getDirectoryContents] 重写后:', filename)
-          } else if (filename.startsWith('/dav/')) {
-            console.log('[getDirectoryContents] 重写绝对路径:', filename)
-            filename = filename.replace('/dav/', '/api/webdav/')
-            console.log('[getDirectoryContents] 重写后:', filename)
+
+        try {
+          const itemUrl = new URL(filename)
+          const baseUrl = new URL(this.config!.serverUrl)
+          let relativePath = itemUrl.pathname
+          const basePath = baseUrl.pathname.endsWith('/') ? baseUrl.pathname : `${baseUrl.pathname}/`
+          if (relativePath.startsWith(basePath)) {
+            relativePath = relativePath.substring(basePath.length - 1)
           }
-        } else {
-          // 开发环境的路径处理
-          if (filename.startsWith('http://localhost:5174/dav/')) {
-            filename = filename.replace('http://localhost:5174/dav/', '/')
-          } else if (filename.startsWith('https://dav.jianguoyun.com/dav/')) {
-            filename = filename.replace('https://dav.jianguoyun.com/dav/', '/')
-          }
+          filename = normalizeDavPath(relativePath)
+        } catch {
+          filename = normalizeDavPath(filename)
         }
-        
+
         return {
           filename: filename,
           basename: item.basename,
@@ -282,6 +259,7 @@ export class WebDAVService {
           mime: item.mime
         }
       })
+
 
       console.log('返回文件列表:', fileList.map(f => ({ name: f.basename, filename: f.filename })))
       return { success: true, data: fileList }
@@ -331,230 +309,47 @@ export class WebDAVService {
     try {
       console.log('获取文件内容:', filePath, '格式:', format)
       
-      // 检测是否在Vercel环境中
-      const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
-      
-      if (isVercel) {
-        // Vercel环境使用代理下载
-        console.log('🌐 Vercel环境，使用代理下载文件')
-        return await this.downloadViaProxy(filePath)
+      if (!this.config) {
+        return { success: false, error: 'WebDAV配置未找到' }
       }
-      
-      // 标准化文件路径
-      let normalizedPath = filePath
-      if (normalizedPath.startsWith('../dav/')) {
-        normalizedPath = normalizedPath.replace('../dav/', '/')
-      }
-      if (!normalizedPath.startsWith('/')) {
-        normalizedPath = '/' + normalizedPath
-      }
-      
+
+      const normalizedPath = normalizeDavPath(filePath)
+      const headerPath = buildHeaderPath(this.config, normalizedPath)
+
+      this.client.setHeaders({
+        ...this.client.getHeaders(),
+        'X-WebDAV-Path': headerPath
+      })
+
       if (format === 'text') {
-        const content = await this.client.getFileContents(normalizedPath, { format: 'text' }) as string
+        const content = await this.client.getFileContents('/', { format: 'text' }) as string
         return { success: true, data: content }
-      } else {
-        console.log('使用 WebDAV 客户端下载二进制文件...')
-        
-        try {
-          const binaryContent = await this.client.getFileContents(normalizedPath, { format: 'binary' })
-          console.log('WebDAV客户端返回的内容类型:', typeof binaryContent, binaryContent.constructor.name)
-          
-          // 检查文件大小是否合理（EPUB 文件应该至少几KB）
-          let contentLength = 0
-          if (binaryContent instanceof ArrayBuffer) {
-            contentLength = binaryContent.byteLength
-          } else if (binaryContent instanceof Uint8Array) {
-            contentLength = binaryContent.length
-          } else if (typeof binaryContent === 'string') {
-            contentLength = new TextEncoder().encode(binaryContent).length
-          } else {
-            contentLength = (binaryContent as any).length || (binaryContent as any).byteLength || 0
-          }
-          
-          console.log('内容长度:', contentLength)
-          if (contentLength < 1024) {
-            console.warn('⚠️ 文件大小异常小（', contentLength, '字节），可能是代理问题')
-            
-            // 在开发环境下，如果文件太小，尝试使用fetch通过代理下载
-            if ((import.meta as any).env.DEV && this.config?.serverUrl.includes('dav.jianguoyun.com')) {
-              console.log('尝试通过Vite代理直接下载...')
-              return await this.downloadViaProxy(normalizedPath)
-            }
-          }
-          
-          // 转换为 ArrayBuffer
-          let arrayBuffer: ArrayBuffer
-          if (binaryContent instanceof ArrayBuffer) {
-            arrayBuffer = binaryContent
-          } else if (binaryContent instanceof Uint8Array) {
-            arrayBuffer = binaryContent.buffer.slice(binaryContent.byteOffset, binaryContent.byteOffset + binaryContent.byteLength) as ArrayBuffer
-          } else if (typeof binaryContent === 'string') {
-            arrayBuffer = this.base64ToArrayBuffer(binaryContent)
-          } else {
-            // 如果是 Buffer（Node.js 环境）或其他类型，转换为Uint8Array再获取buffer
-            const uint8Array = binaryContent instanceof Buffer ? 
-              new Uint8Array(binaryContent) : 
-              new Uint8Array(binaryContent as unknown as ArrayBufferLike)
-            arrayBuffer = uint8Array.buffer.slice(uint8Array.byteOffset, uint8Array.byteOffset + uint8Array.byteLength) as ArrayBuffer
-          }
-          
-          return { success: true, data: arrayBuffer }
-          
-        } catch (webdavError) {
-          console.error('WebDAV客户端下载失败:', webdavError)
-          
-          // 在开发环境下尝试通过代理下载
-          if ((import.meta as any).env.DEV && this.config?.serverUrl.includes('dav.jianguoyun.com')) {
-            console.log('尝试通过Vite代理下载...')
-            return await this.downloadViaProxy(normalizedPath)
-          }
-          
-          throw webdavError
-        }
       }
+
+      const binaryContent = await this.client.getFileContents('/', { format: 'binary' })
+      console.log('WebDAV客户端返回的内容类型:', typeof binaryContent, binaryContent.constructor.name)
+
+      let arrayBuffer: ArrayBuffer
+      if (binaryContent instanceof ArrayBuffer) {
+        arrayBuffer = binaryContent
+      } else if (binaryContent instanceof Uint8Array) {
+        arrayBuffer = binaryContent.buffer.slice(binaryContent.byteOffset, binaryContent.byteOffset + binaryContent.byteLength) as ArrayBuffer
+      } else if (typeof binaryContent === 'string') {
+        arrayBuffer = this.base64ToArrayBuffer(binaryContent)
+      } else {
+        const uint8Array = binaryContent instanceof Buffer ?
+          new Uint8Array(binaryContent) :
+          new Uint8Array(binaryContent as unknown as ArrayBufferLike)
+        arrayBuffer = uint8Array.buffer.slice(uint8Array.byteOffset, uint8Array.byteOffset + uint8Array.byteLength) as ArrayBuffer
+      }
+
+      return { success: true, data: arrayBuffer }
+
     } catch (error) {
       console.error('获取文件内容失败:', error)
       return {
         success: false,
         error: `下载文件失败: ${error instanceof Error ? error.message : '未知错误'}`
-      }
-    }
-  }
-
-  /**
-   * 通过代理下载文件 - 支持Vercel和Vite环境
-   * @param filePath 文件路径
-   */
-  private async downloadViaProxy(filePath: string): Promise<WebDAVOperationResult<ArrayBuffer>> {
-    if (!this.config) {
-      return { success: false, error: 'WebDAV配置未找到' }
-    }
-
-    try {
-      console.log('通过代理下载文件:', filePath)
-      
-      // 检测是否在Vercel环境中
-      const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
-      
-      // 标准化路径 - 移除各种可能的前缀
-      let normalizedPath = filePath
-      console.log('原始路径:', normalizedPath)
-      
-      // 处理各种可能的前缀
-      if (normalizedPath.startsWith('/api/webdav/')) {
-        normalizedPath = normalizedPath.substring(11) // 移除 '/api/webdav/' (11个字符)
-        console.log('移除 /api/webdav/ 后:', normalizedPath)
-      } else if (normalizedPath.startsWith('/webdav/')) {
-        normalizedPath = normalizedPath.substring(7) // 移除 '/webdav/' (7个字符)
-        console.log('移除 /webdav/ 后:', normalizedPath)
-      } else if (normalizedPath.startsWith('/../dav/')) {
-        normalizedPath = normalizedPath.substring(8) // 移除 '/../dav/' (8个字符)
-        console.log('移除 /../dav/ 后:', normalizedPath)
-      } else if (normalizedPath.startsWith('../dav/')) {
-        normalizedPath = normalizedPath.substring(7) // 移除 '../dav/' (7个字符)
-        console.log('移除 ../dav/ 后:', normalizedPath)
-      }
-      
-      // 确保路径以 / 开头
-      if (!normalizedPath.startsWith('/')) {
-        normalizedPath = '/' + normalizedPath
-        console.log('添加 / 前缀后:', normalizedPath)
-      }
-      
-      console.log('最终标准化路径:', normalizedPath)
-      
-      // 对路径进行 URL 编码，但保留 / 分隔符
-      const encodedPath = normalizedPath.split('/').map(segment => 
-        segment ? encodeURIComponent(segment) : ''
-      ).join('/')
-      
-      // 构建代理URL，根据环境选择不同的代理路径
-      const proxyUrl = isVercel ? `/api/webdav${encodedPath}` : `/webdav${encodedPath}`
-      console.log('代理下载URL:', proxyUrl)
-      
-      // 检测移动端浏览器
-      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      console.log('移动端检测:', isMobile, 'User-Agent:', navigator.userAgent)
-      
-      // 构建请求头 - 增强移动端兼容性
-      const requestHeaders: Record<string, string> = {
-        'Authorization': 'Basic ' + btoa(`${this.config.username}:${this.config.password}`),
-        'User-Agent': 'ebook-to-mindmap/1.0',
-        'Accept': '*/*',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
-      }
-      
-      // 移动端特殊处理
-      if (isMobile) {
-        requestHeaders['X-Requested-With'] = 'XMLHttpRequest'
-        console.log('检测到移动端浏览器，添加特殊请求头')
-      }
-      
-      console.log('请求头配置:', Object.keys(requestHeaders).join(', '))
-      
-      // 使用fetch下载
-      const response = await fetch(proxyUrl, {
-        method: 'GET',
-        headers: requestHeaders,
-        cache: 'no-store'
-      })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-      
-      console.log('代理下载响应状态:', response.status, response.statusText)
-      console.log('Content-Length:', response.headers.get('content-length'))
-      console.log('Content-Type:', response.headers.get('content-type'))
-      
-      // 获取文件数据 - 确保正确处理二进制数据
-      let arrayBuffer: ArrayBuffer
-      const contentType = response.headers.get('content-type')
-      
-      console.log('开始处理响应数据...')
-      
-      if (contentType?.includes('application/octet-stream') || 
-          contentType?.includes('application/epub+zip') ||
-          contentType?.includes('application/pdf') ||
-          contentType?.includes('application/zip')) {
-        // 二进制文件，直接获取ArrayBuffer
-        arrayBuffer = await response.arrayBuffer()
-        console.log('二进制文件下载成功，大小:', arrayBuffer.byteLength, '字节')
-        
-        // 验证ArrayBuffer完整性
-        if (arrayBuffer.byteLength === 0) {
-          throw new Error('下载的文件为空')
-        }
-        
-        // 检查EPUB文件头
-        if (contentType?.includes('epub') || arrayBuffer.byteLength > 1000) {
-          const header = new Uint8Array(arrayBuffer.slice(0, 4))
-          const headerStr = String.fromCharCode(...header)
-          console.log('文件头标识:', headerStr, '字节:', Array.from(header))
-          
-          // EPUB文件应该是ZIP格式，以PK开头
-          if (headerStr !== 'PK') {
-            console.warn('⚠️ 警告：EPUB文件头不是PK开头，可能损坏')
-          }
-        }
-        
-      } else {
-        // 其他类型，先获取文本再转换
-        const text = await response.text()
-        arrayBuffer = new TextEncoder().encode(text).buffer
-        console.log('文本文件转换成功，大小:', arrayBuffer.byteLength, '字节')
-      }
-      
-      console.log('代理下载完成，最终大小:', arrayBuffer.byteLength, '字节')
-      
-      return { success: true, data: arrayBuffer }
-      
-    } catch (error) {
-      console.error('代理下载失败:', error)
-      return {
-        success: false,
-        error: `代理下载失败: ${error instanceof Error ? error.message : '未知错误'}`
       }
     }
   }
@@ -611,10 +406,11 @@ export class WebDAVService {
         success: false,
         error: `直接下载失败: ${error instanceof Error ? error.message : '未知错误'}
         
-提示：在开发环境下建议使用Vite代理避免CORS问题。`
+提示：在开发环境下建议使用同源代理避免CORS问题。`
       }
     }
   }
+
 
   /**
    * 上传文件
@@ -638,30 +434,37 @@ export class WebDAVService {
       console.log('   数据大小:', typeof data === 'string' ? data.length : 'unknown')
       console.log('   覆盖模式:', overwrite)
       
-      // 检测是否在Vercel环境中
-      const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
-      
-      if (isVercel) {
-        // Vercel环境使用代理上传
-        console.log('🌐 Vercel环境，使用代理上传')
-        return await this.uploadViaProxy(filePath, data)
-      }
-      
-      // 确保目录存在
-      const dirPath = filePath.substring(0, filePath.lastIndexOf('/'))
+      const normalizedPath = normalizeDavPath(filePath)
+
+      const dirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
       if (dirPath && dirPath !== '/') {
         console.log('📁 检查目录是否存在:', dirPath)
-        const dirExists = await this.client.exists(dirPath)
+        const dirHeaderPath = buildHeaderPath(this.config!, dirPath)
+        this.client.setHeaders({
+          ...this.client.getHeaders(),
+          'X-WebDAV-Path': dirHeaderPath
+        })
+        const dirExists = await this.client.exists('/')
         if (!dirExists) {
           console.log('📁 创建目录:', dirPath)
-          await this.client.createDirectory(dirPath)
+          this.client.setHeaders({
+            ...this.client.getHeaders(),
+            'X-WebDAV-Path': dirHeaderPath
+          })
+          await this.client.createDirectory('/')
         }
       }
       
-      const result = await this.client.putFileContents(filePath, data as any, { overwrite })
+      const headerPath = buildHeaderPath(this.config!, normalizedPath)
+      this.client.setHeaders({
+        ...this.client.getHeaders(),
+        'X-WebDAV-Path': headerPath
+      })
+      const result = await this.client.putFileContents('/', data as any, { overwrite })
       
       console.log('✅ WebDAV上传成功:', result)
       return { success: true, data: result }
+
     } catch (error) {
       console.error('❌ WebDAV上传失败:', error)
       return {
@@ -695,7 +498,13 @@ export class WebDAVService {
     }
 
     try {
-      await this.client.createDirectory(path)
+      const normalizedPath = normalizeDavPath(path)
+      const headerPath = buildHeaderPath(this.config!, normalizedPath)
+      this.client.setHeaders({
+        ...this.client.getHeaders(),
+        'X-WebDAV-Path': headerPath
+      })
+      await this.client.createDirectory('/')
       return { success: true, data: true }
     } catch (error) {
       return {
@@ -704,6 +513,7 @@ export class WebDAVService {
       }
     }
   }
+
 
   /**
    * 删除文件
@@ -715,7 +525,13 @@ export class WebDAVService {
     }
 
     try {
-      await this.client.deleteFile(filePath)
+      const normalizedPath = normalizeDavPath(filePath)
+      const headerPath = buildHeaderPath(this.config!, normalizedPath)
+      this.client.setHeaders({
+        ...this.client.getHeaders(),
+        'X-WebDAV-Path': headerPath
+      })
+      await this.client.deleteFile('/')
       return { success: true, data: true }
     } catch (error) {
       return {
@@ -724,6 +540,7 @@ export class WebDAVService {
       }
     }
   }
+
 
   /**
    * 删除目录
@@ -735,8 +552,13 @@ export class WebDAVService {
     }
 
     try {
-      // WebDAV库中使用deleteFile方法删除目录
-      await this.client.deleteFile(dirPath)
+      const normalizedPath = normalizeDavPath(dirPath)
+      const headerPath = buildHeaderPath(this.config!, normalizedPath)
+      this.client.setHeaders({
+        ...this.client.getHeaders(),
+        'X-WebDAV-Path': headerPath
+      })
+      await this.client.deleteFile('/')
       return { success: true, data: true }
     } catch (error) {
       return {
@@ -745,6 +567,7 @@ export class WebDAVService {
       }
     }
   }
+
 
   /**
    * 检查文件或目录是否存在
@@ -756,24 +579,16 @@ export class WebDAVService {
     }
 
     try {
-      // 标准化路径
-      let normalizedPath = path
-      
-      // 清理路径，移除 ../dav/ 前缀
-      if (normalizedPath.startsWith('../dav/')) {
-        normalizedPath = normalizedPath.replace('../dav/', '/')
-      }
-      
-      if (!normalizedPath.startsWith('/')) {
-        normalizedPath = '/' + normalizedPath
-      }
-      
-      // 在开发环境中，如果使用代理，直接通过 HTTP 检查
-      if ((import.meta as any).env.DEV && this.config?.serverUrl.includes('dav.jianguoyun.com')) {
-        return await this.checkExistsViaProxy(normalizedPath)
-      }
-      
-      const exists = await this.client.exists(normalizedPath)
+      const normalizedPath = normalizeDavPath(path)
+      const headerPath = buildHeaderPath(this.config!, normalizedPath)
+
+      this.client.setHeaders({
+        ...this.client.getHeaders(),
+        'X-WebDAV-Path': headerPath
+      })
+
+      const exists = await this.client.exists('/')
+
       return { success: true, data: exists }
     } catch (error) {
       // 对于 404 错误，返回 false 而不是错误
@@ -788,64 +603,7 @@ export class WebDAVService {
     }
   }
 
-  /**
-   * 通过代理检查文件是否存在
-   * @param path 文件路径
-   */
-  private async checkExistsViaProxy(path: string): Promise<WebDAVOperationResult<boolean>> {
-    if (!this.config) {
-      return { success: false, error: 'WebDAV配置未找到' }
-    }
 
-    try {
-      // 对路径进行 URL 编码，但保留 / 分隔符
-      const encodedPath = path.split('/').map(segment => 
-        segment ? encodeURIComponent(segment) : ''
-      ).join('/')
-      
-      // 构建代理URL
-      const proxyUrl = `/webdav${encodedPath}`
-      
-      // 使用 HEAD 请求检查文件是否存在
-      const response = await fetch(proxyUrl, {
-        method: 'HEAD',
-        headers: {
-          'Authorization': 'Basic ' + btoa(`${this.config.username}:${this.config.password}`),
-          'User-Agent': 'ebook-to-mindmap/1.0'
-        }
-      })
-      
-      if (response.status === 200 || response.status === 204) {
-        return { success: true, data: true }
-      } else if (response.status === 404) {
-        // 404 是预期的，不需要输出错误日志
-        return { success: true, data: false }
-      } else if (response.status === 403) {
-        // 403 权限错误，可能目录不存在或无权限访问
-        console.warn(`⚠️ WebDAV 权限错误 (403): ${encodedPath}，可能目录不存在或无访问权限`)
-        return { success: true, data: false } // 假设不存在，让后续创建操作处理
-      } else {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-      
-    } catch (error) {
-      // 对于网络错误和权限错误，返回 false 而不是抛出异常
-      if (error instanceof Error && (
-        error.message.includes('404') || 
-        error.message.includes('Not Found') ||
-        error.message.includes('403') ||
-        error.message.includes('Forbidden')
-      )) {
-        console.warn(`⚠️ WebDAV 访问问题: ${error.message}`)
-        return { success: true, data: false }
-      }
-      console.error('代理检查失败:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error)
-      }
-    }
-  }
 
   /**
    * 简化的文件存在检查方法
@@ -867,11 +625,17 @@ export class WebDAVService {
     }
 
     try {
-      const stat = await this.client.stat(path)
+      const normalizedPath = normalizeDavPath(path)
+      const headerPath = buildHeaderPath(this.config!, normalizedPath)
+      this.client.setHeaders({
+        ...this.client.getHeaders(),
+        'X-WebDAV-Path': headerPath
+      })
+      const stat = await this.client.stat('/')
       
       const fileInfo: WebDAVFileInfo = {
-        filename: (stat as any).filename || path,
-        basename: (stat as any).basename || path.split('/').pop() || '',
+        filename: normalizedPath,
+        basename: (stat as any).basename || normalizedPath.split('/').pop() || '',
         lastmod: (stat as any).lastmod || new Date().toISOString(),
         size: (stat as any).size || 0,
         type: (stat as any).type || 'file',
@@ -887,6 +651,7 @@ export class WebDAVService {
       }
     }
   }
+
 
   /**
    * 确保同步目录存在
@@ -1064,20 +829,17 @@ export class WebDAVService {
     }
 
     try {
-      const originalLink = this.client.getFileDownloadLink(filePath)
-      
-      // 在开发环境中，如果使用了代理，需要转换链接
-      if ((import.meta as any).env.DEV && this.config.serverUrl.includes('dav.jianguoyun.com')) {
-        // 将原始链接转换为代理链接
-        const url = new URL(originalLink)
-        return `/webdav${url.pathname}`
-      }
-      
-      return originalLink
+      const normalizedPath = normalizeDavPath(filePath)
+      return buildWebdavProxyUrl({
+        baseUrl: this.config.serverUrl,
+        folder: this.config.syncPath || '/',
+        path: normalizedPath
+      })
     } catch (_error) {
       return ''
     }
   }
+
 
   /**
    * 获取配置信息
@@ -1093,122 +855,7 @@ export class WebDAVService {
     return this.client !== null && this.config !== null
   }
 
-  /**
-   * 通过代理上传文件 - 支持Vercel和Vite环境
-   * @param filePath 文件路径
-   * @param data 文件数据
-   */
-  private async uploadViaProxy(
-    filePath: string,
-    data: string | ArrayBuffer | Blob
-  ): Promise<WebDAVOperationResult<boolean>> {
-    if (!this.config) {
-      return { success: false, error: 'WebDAV配置未找到' }
-    }
 
-    try {
-      console.log('通过代理上传文件:', filePath)
-      
-      // 检测是否在Vercel环境中
-      const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
-      
-      // 标准化路径 - 移除各种可能的前缀
-      let normalizedPath = filePath
-      console.log('原始路径:', normalizedPath)
-      
-      // 处理各种可能的前缀
-      if (normalizedPath.startsWith('/api/webdav/')) {
-        normalizedPath = normalizedPath.substring(11) // 移除 '/api/webdav/' (11个字符)
-        console.log('移除 /api/webdav/ 后:', normalizedPath)
-      } else if (normalizedPath.startsWith('/webdav/')) {
-        normalizedPath = normalizedPath.substring(7) // 移除 '/webdav/' (7个字符)
-        console.log('移除 /webdav/ 后:', normalizedPath)
-      } else if (normalizedPath.startsWith('/../dav/')) {
-        normalizedPath = normalizedPath.substring(8) // 移除 '/../dav/' (8个字符)
-        console.log('移除 /../dav/ 后:', normalizedPath)
-      } else if (normalizedPath.startsWith('../dav/')) {
-        normalizedPath = normalizedPath.substring(7) // 移除 '../dav/' (7个字符)
-        console.log('移除 ../dav/ 后:', normalizedPath)
-      }
-      
-      // 确保路径以 / 开头
-      if (!normalizedPath.startsWith('/')) {
-        normalizedPath = '/' + normalizedPath
-        console.log('添加 / 前缀后:', normalizedPath)
-      }
-      
-      console.log('最终标准化路径:', normalizedPath)
-      
-      // 对路径进行 URL 编码，但保留 / 分隔符
-      const encodedPath = normalizedPath.split('/').map(segment => 
-        segment ? encodeURIComponent(segment) : ''
-      ).join('/')
-      
-      // 构建代理URL，根据环境选择不同的代理路径
-      const proxyUrl = isVercel ? `/api/webdav${encodedPath}` : `/webdav${encodedPath}`
-      console.log('代理上传URL:', proxyUrl)
-      
-      // 检测移动端浏览器
-      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      console.log('移动端检测:', isMobile, 'User-Agent:', navigator.userAgent)
-      
-      // 准备上传数据 - 确保格式正确
-      let body: BodyInit
-      if (typeof data === 'string') {
-        // 将字符串转换为Uint8Array，确保二进制传输
-        body = new TextEncoder().encode(data)
-        console.log('字符串数据转换为Uint8Array，长度:', (body as Uint8Array).length)
-      } else if (data instanceof ArrayBuffer) {
-        body = new Blob([data])
-      } else {
-        body = data
-      }
-      
-      // 构建请求头 - 增强移动端兼容性
-      const requestHeaders: Record<string, string> = {
-        'Authorization': 'Basic ' + btoa(`${this.config.username}:${this.config.password}`),
-        'User-Agent': 'ebook-to-mindmap/1.0',
-        'Content-Type': 'text/markdown',
-        'Accept': '*/*',
-        'Cache-Control': 'no-cache'
-      }
-      
-      // 移动端特殊处理
-      if (isMobile) {
-        requestHeaders['X-Requested-With'] = 'XMLHttpRequest'
-        requestHeaders['Pragma'] = 'no-cache'
-        console.log('检测到移动端浏览器，添加特殊请求头')
-      }
-      
-      console.log('上传请求头配置:', Object.keys(requestHeaders).join(', '))
-      
-      // 发送PUT请求
-      const response = await fetch(proxyUrl, {
-        method: 'PUT',
-        headers: requestHeaders,
-        body,
-        cache: 'no-store'
-      })
-      
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('代理上传失败:', response.status, response.statusText, errorText)
-        return {
-          success: false,
-          error: `上传失败 (${response.status}): ${response.statusText} - ${errorText}`
-        }
-      }
-      
-      console.log('✅ 代理上传成功')
-      return { success: true, data: true }
-    } catch (error) {
-      console.error('代理上传异常:', error)
-      return {
-        success: false,
-        error: `上传异常: ${error instanceof Error ? error.message : '未知错误'}`
-      }
-    }
-  }
 
   /**
    * 断开连接

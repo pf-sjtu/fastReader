@@ -26,9 +26,10 @@ export class WebDAVProxyService {
   private config: WebDAVProxyConfig | null = null
   private apiBaseUrl: string
 
-  constructor(apiBaseUrl: string = '/api/webdav') {
+  constructor(apiBaseUrl: string = '/api/dav') {
     this.apiBaseUrl = apiBaseUrl
   }
+
 
   /**
    * 设置WebDAV配置

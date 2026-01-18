@@ -31,6 +31,8 @@ import {
 import { useState, useEffect } from 'react'
 import { useWebDAVConfig } from '../../stores/configStore'
 import { webdavService, type WebDAVFileInfo } from '../../services/webdavService'
+import { normalizeDavPath } from '../../services/webdavProxyUtils'
+
 import { useTranslation } from 'react-i18next'
 
 interface WebDAVFileBrowserProps {
@@ -223,27 +225,12 @@ export function WebDAVFileBrowser({
       // 确保使用相对路径
       let newPath = directory.filename
       
-      // 处理各种可能的路径格式
-      if (newPath.startsWith('http://localhost:5174/dav/')) {
-        newPath = newPath.replace('http://localhost:5174/dav/', '/')
-      } else if (newPath.startsWith('https://dav.jianguoyun.com/dav/')) {
-        newPath = newPath.replace('https://dav.jianguoyun.com/dav/', '/')
-      } else if (newPath.startsWith('/../dav/')) {
-        newPath = newPath.replace('/../dav/', '/')
-      } else if (newPath.startsWith('/api/webdav/')) {
-        // Vercel代理路径处理
-        console.log('处理Vercel代理路径:', newPath)
-        newPath = newPath.replace('/api/webdav/', '/')
-        console.log('处理后路径:', newPath)
-      }
-      
-      // 确保路径以 / 开头和结尾
-      if (!newPath.startsWith('/')) {
-        newPath = '/' + newPath
-      }
+      newPath = normalizeDavPath(newPath)
+
       if (!newPath.endsWith('/')) {
         newPath = newPath + '/'
       }
+
       
       console.log('设置新路径:', newPath)
       

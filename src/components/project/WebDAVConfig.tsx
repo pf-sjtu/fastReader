@@ -391,9 +391,13 @@ export function WebDAVConfig() {
                     查看坚果云WebDAV设置教程
                   </a>
                 </div>
+                <p className="text-sm text-muted-foreground">
+                  当前版本通过同源 `/api/dav` 代理访问 WebDAV，请确保服务器地址为 https。
+                </p>
               </div>
             </AlertDescription>
           </Alert>
+
         </>
       )}
     </div>
