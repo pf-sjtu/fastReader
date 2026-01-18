@@ -1,0 +1,4 @@
+Task: webdav-header-encoding
+Summary: Encode X-WebDAV-Path headers to avoid non-ISO-8859-1 errors with non-ASCII filenames; update tests and sync browsePath usage.
+Files: src/services/webdavProxyUtils.ts; src/services/webdavService.ts; md_reader/src/services/webdavProxyUtils.ts; md_reader/src/services/webdavService.ts; src/components/project/WebDAVFileBrowser.tsx; tests/webdavProxy.test.ts
+Why: Fix batch download failures for non-ASCII filenames.
