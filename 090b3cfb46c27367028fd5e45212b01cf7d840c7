@@ -1,0 +1,4 @@
+Task: webdav-path-normalize
+Summary: Sanitize ../ path segments in WebDAV path normalization and add tests; update md_reader and main utils.
+Files: src/services/webdavProxyUtils.ts; md_reader/src/services/webdavProxyUtils.ts; tests/webdavProxy.test.ts
+Why: Prevent 405 due to path traversal segments in X-WebDAV-Path.
