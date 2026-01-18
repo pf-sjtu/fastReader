@@ -1,0 +1,4 @@
+Task: add-webdav-browse-path
+Summary: Add browsePath to WebDAV configs, default to root for browsing, keep syncPath for output; update UI and tests.
+Files: src/stores/configStore.ts; src/services/webdavService.ts; src/components/project/WebDAVConfig.tsx; md_reader/src/stores/webdavStore.ts; md_reader/src/services/webdavService.ts; md_reader/src/components/webdav-config.tsx; tests/webdavProxy.test.ts; openspec/changes/add-webdav-browse-path/*
+Why: Allow browsing root while writing outputs to fastReader.
