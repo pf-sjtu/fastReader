@@ -163,10 +163,9 @@ export class WebDAVService {
       if (this.config?.syncPath) {
         const normalizedSyncPath = normalizeDavPath(this.config.syncPath)
         if (normalizedSyncPath !== '/') {
-          const syncHeaderPath = buildHeaderPath(this.config, normalizedSyncPath)
           this.client.setHeaders({
             ...this.client.getHeaders(),
-            'X-WebDAV-Path': syncHeaderPath
+            'X-WebDAV-Path': normalizedSyncPath
           })
 
           const exists = await this.client.exists('/')

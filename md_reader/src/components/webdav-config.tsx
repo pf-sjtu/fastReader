@@ -28,9 +28,9 @@ export function WebDAVConfig() {
     setWebDAVPassword,
     setWebDAVAppName,
     setWebDAVConnectionStatus,
-    setWebDAVUseProxy,
     resetWebDAVConfig
   } = useWebDAVStore()
+
 
   // 组件状态
   const [isTestingConnection, setIsTestingConnection] = useState(false)
@@ -88,16 +88,10 @@ export function WebDAVConfig() {
     setConnectionTestResult(null)
 
     try {
-      // 如果不使用代理，先检查是否为坚果云URL并给出提示
-      if (!webdavConfig.useProxy && webdavConfig.serverUrl.includes('dav.jianguoyun.com')) {
-        setConnectionTestResult({
-          success: false,
-          message: '坚果云WebDAV需要使用代理模式才能在浏览器中访问。请开启"使用代理"选项并重启开发服务器。'
-        })
-        setIsTestingConnection(false)
-        setWebDAVConnectionStatus('error')
-        return
+      if (webdavConfig.serverUrl.includes('dav.jianguoyun.com')) {
+        console.info('WebDAV访问将使用同源代理')
       }
+
 
       // 初始化WebDAV服务
       const initResult = await webdavService.initialize(webdavConfig)
@@ -268,45 +262,30 @@ export function WebDAVConfig() {
             </CardContent>
           </Card>
 
-          {/* 代理设置 */}
+          {/* 代理说明 */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <Settings className="h-4 w-4" />
-                代理设置
+                代理说明
               </CardTitle>
               <CardDescription className="text-xs">
-                配置是否使用代理访问WebDAV服务器（仅开发环境）
+                WebDAV 请求默认走同源代理以避免浏览器 CORS 问题
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 pt-0">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <Label htmlFor="use-proxy" className="text-xs">使用代理</Label>
-                  <p className="text-xs text-muted-foreground">
-                    通过开发服务器代理访问WebDAV（解决CORS问题）
-                  </p>
-                </div>
-                <Switch
-                  id="use-proxy"
-                  checked={webdavConfig.useProxy || false}
-                  onCheckedChange={setWebDAVUseProxy}
-                />
-              </div>
-              {webdavConfig.useProxy && (
-                <Alert className="py-2">
-                  <Info className="h-3 w-3" />
-                  <AlertDescription className="text-xs">
-                    <div className="space-y-1">
-                      <p>代理模式已启用，需要重启开发服务器才能生效。</p>
-                      <p>重启命令：<code className="bg-muted px-1 py-0.5 rounded text-xs">npm run dev</code></p>
-                      <p>代理将自动处理跨域问题，允许浏览器访问坚果云WebDAV。</p>
-                    </div>
-                  </AlertDescription>
-                </Alert>
-              )}
+            <CardContent className="space-y-2 pt-0">
+              <Alert className="py-2">
+                <Info className="h-3 w-3" />
+                <AlertDescription className="text-xs">
+                  <div className="space-y-1">
+                    <p>无需手动开启代理，应用会自动通过同源 `/api/dav` 访问 WebDAV。</p>
+                    <p>请确保服务器地址以 <code className="bg-muted px-1 py-0.5 rounded text-xs">https://</code> 开头。</p>
+                  </div>
+                </AlertDescription>
+              </Alert>
             </CardContent>
           </Card>
+
 
           {/* 连接测试 */}
           <Card>

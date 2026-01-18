@@ -13,7 +13,7 @@ interface WebDAVState {
   setWebDAVAppName: (appName: string) => void
   setWebDAVAutoSync: (autoSync: boolean) => void
   setWebDAVSyncPath: (syncPath: string) => void
-  setWebDAVUseProxy: (useProxy: boolean) => void
+
   setWebDAVConnectionStatus: (status: 'disconnected' | 'connecting' | 'connected' | 'error') => void
   updateWebDAVLastSyncTime: () => void
   resetWebDAVConfig: () => void
@@ -30,7 +30,7 @@ const defaultWebDAVConfig: WebDAVConfig = {
   syncPath: '/mdReader',
   lastSyncTime: null,
   connectionStatus: 'disconnected',
-  useProxy: false // 默认不使用代理
+
 }
 
 export const useWebDAVStore = create<WebDAVState>()(
@@ -62,9 +62,7 @@ export const useWebDAVStore = create<WebDAVState>()(
       setWebDAVConnectionStatus: (connectionStatus) => set((state) => ({
         webdavConfig: { ...state.webdavConfig, connectionStatus }
       })),
-      setWebDAVUseProxy: (useProxy: boolean) => set((state) => ({
-        webdavConfig: { ...state.webdavConfig, useProxy }
-      })),
+
       updateWebDAVLastSyncTime: () => set((state) => ({
         webdavConfig: { 
           ...state.webdavConfig, 

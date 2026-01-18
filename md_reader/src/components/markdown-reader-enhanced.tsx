@@ -860,7 +860,7 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
                     <textarea
                       value={editContent}
                       onChange={(e) => {
-                        handleEditContentChange(e.target.value);
+                        handleEditContentChange(e.target.value)
                       }}
                       className="flex-1 w-full p-4 border rounded-md bg-background text-foreground font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                       placeholder="在此输入 Markdown 内容..."
@@ -869,16 +869,16 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
                       <Button onClick={handleSaveEdit} size="sm">
                         保存 (Ctrl+S)
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={handleCancelEdit} 
+                      <Button
+                        variant="outline"
+                        onClick={handleCancelEdit}
                         size="sm"
                       >
                         取消
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={handleUndo} 
+                      <Button
+                        variant="outline"
+                        onClick={handleUndo}
                         size="sm"
                         disabled={historyIndex <= 0}
                         className="flex items-center gap-2"
@@ -896,21 +896,14 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
                       {content}
                     </ReactMarkdown>
                   </div>
-                )} else {
-                  // ...
-                  handleSaveEdit = async () => {
-                    // ...
-                    const normalizedContent = normalizeMarkdownTypography(editContent);
-                    // ...
-                    await saveFile(normalizedContent);
-                    // ...
-                  };
-                  // ...
-                }
-            <Card 
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card
               className={`h-full flex items-center justify-center cursor-pointer transition-all ${
-                isDragging 
-                  ? 'border-primary border-2 bg-primary/5' 
+                isDragging
+                  ? 'border-primary border-2 bg-primary/5'
                   : 'border-dashed border-2'
               }`}
               onDragOver={handleDragOver}
@@ -923,8 +916,8 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
                   {isDragging ? '释放文件以打开' : '欢迎使用 Markdown 阅读器'}
                 </h3>
                 <p className="text-muted-foreground mb-4">
-                  {isDragging 
-                    ? '拖拽 Markdown 文件到这里' 
+                  {isDragging
+                    ? '拖拽 Markdown 文件到这里'
                     : '上传 Markdown 文件、拖拽文件到此处或直接编辑内容开始使用'
                   }
                 </p>
@@ -945,6 +938,7 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
             </Card>
           )}
         </div>
+
 
         {/* 悬浮底部状态栏 */}
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t shadow-lg">

@@ -58,11 +58,32 @@ npm run build
 \`\`\`
 
 ### 预览生产版本
-\`\`\`bash
+```bash
 npm run preview
-\`\`\`
+```
+
+## ☁️ WebDAV 同源代理
+
+### 使用方式
+
+- WebDAV 请求默认走同源 `/api/dav`
+- 浏览器仅配置 Server URL / Username / Password / Folder
+- 代理会转发 PROPFIND/GET/PUT 等请求并处理 CORS
+
+### Cloudflare Pages 部署
+
+1. 确保仓库内包含 `md_reader/api/dav.js`
+2. Pages 构建输出目录配置为 `md_reader/dist`
+3. 部署完成后访问 `https://<pages-domain>/api/dav` 应返回 405（表示 Functions 生效）
+
+### Vercel 兼容
+
+- Vercel 使用 `md_reader/api/dav.js`（Serverless Function）
+- `vercel.json` 已包含 `/api/dav` rewrite
+- 如需旧路径兼容，可继续访问 `/api/webdav`
 
 ## 🎨 样式特色
+
 
 ### 马克笔高亮效果
 - **粗体文本**: 黄色马克笔底色效果

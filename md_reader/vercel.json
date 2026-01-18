@@ -3,7 +3,12 @@
     {
       "source": "/api/webdav/(.*)",
       "destination": "/api/webdav"
+    },
+    {
+      "source": "/api/dav/(.*)",
+      "destination": "/api/dav"
     }
+
   ],
   "headers": [
     {
