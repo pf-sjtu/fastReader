@@ -1,0 +1,4 @@
+Task: webdav-auto-mkcol
+Summary: During testConnection, probe syncPath and auto-create it if missing.
+Files: src/services/webdavService.ts
+Why: Avoid 404 when sync folder does not exist.
