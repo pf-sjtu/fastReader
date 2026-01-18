@@ -31,15 +31,35 @@ async function getHttpsProxyAgent() {
 }
 
 // 代理fetch函数 - 使用 https-proxy-agent
+function buildAiProxyTarget(url: string): { base: string; path: string } {
+  const apiUrl = new URL(url)
+  const pathname = apiUrl.pathname
+  const match = pathname.match(/^(.*)\/(chat\/completions|api\/chat)$/)
+
+  if (match) {
+    const basePath = match[1] || ''
+    const endpoint = match[2]
+    return {
+      base: apiUrl.origin + basePath,
+      path: endpoint
+    }
+  }
+
+  return {
+    base: apiUrl.origin + pathname.replace(/\/$/, ''),
+    path: pathname.replace(/^\//, '')
+  }
+}
+
 async function proxyFetch(url: string, options: RequestInit, proxyUrl?: string): Promise<Response> {
   if (isBrowser) {
     const origin = window.location.origin
-    const apiBase = new URL(url)
+    const target = buildAiProxyTarget(url)
     const proxyUrl = new URL('/api/ai', origin)
-    proxyUrl.searchParams.set('path', apiBase.pathname.replace(/^\//, ''))
+    proxyUrl.searchParams.set('path', target.path)
 
     const headers = new Headers(options.headers)
-    headers.set('X-AI-Base', apiBase.origin + apiBase.pathname.replace(/\/[^/]*$/, ''))
+    headers.set('X-AI-Base', target.base)
     headers.set('X-Request-Origin', origin)
 
     return fetch(proxyUrl.toString(), {
