@@ -5,6 +5,10 @@ export function normalizeDavPath(inputPath: string): string {
     normalized = normalized.substring(11)
   } else if (normalized.startsWith('/webdav/')) {
     normalized = normalized.substring(7)
+  } else if (normalized.startsWith('/dav/')) {
+    normalized = normalized.substring(4)
+  } else if (normalized === '/dav') {
+    normalized = '/'
   } else if (normalized.startsWith('/../dav/')) {
     normalized = normalized.substring(8)
   } else if (normalized.startsWith('../dav/')) {

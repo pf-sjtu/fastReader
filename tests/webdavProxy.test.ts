@@ -5,6 +5,8 @@ describe('WebDAV proxy URL helpers', () => {
   it('normalizes legacy webdav prefixes', () => {
     expect(normalizeDavPath('/api/webdav/foo/bar')).toBe('/foo/bar')
     expect(normalizeDavPath('/webdav/foo')).toBe('/foo')
+    expect(normalizeDavPath('/dav/foo')).toBe('/foo')
+    expect(normalizeDavPath('/dav')).toBe('/')
     expect(normalizeDavPath('../dav/foo')).toBe('/foo')
     expect(normalizeDavPath('/../dav/foo')).toBe('/foo')
   })
