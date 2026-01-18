@@ -1,0 +1,4 @@
+Task: cloudflare-build-fix
+Summary: Update package-lock.json via npm install to align with package.json for Cloudflare Pages npm ci builds.
+Files: package-lock.json
+Why: Prevent npm ci failure due to lockfile mismatch.
