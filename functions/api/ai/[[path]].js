@@ -40,7 +40,8 @@ function isValidUpstreamBase(baseUrl) {
 
 function resolveUpstreamUrl(baseUrl, path) {
   const trimmedPath = path ? path.replace(/^\//, '') : ''
-  return new URL(trimmedPath, baseUrl).toString()
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+  return new URL(trimmedPath, normalizedBase).toString()
 }
 
 function filterRequestHeaders(headers) {
