@@ -1,0 +1,4 @@
+Task: webdav-redirect-body
+Summary: Buffer request body before redirect retry to avoid Worker exception on reused streams; resolve relative Location.
+Files: functions/api/dav/[[path]].js; md_reader/api/dav.js
+Why: Fix Cloudflare 1101 when retrying 301/302 responses.
