@@ -52,7 +52,8 @@ export function WebDAVFileBrowser({
   const webdavConfig = useWebDAVConfig()
 
   // 组件状态
-  const [currentPath, setCurrentPath] = useState('/')
+  const [currentPath, setCurrentPath] = useState(webdavConfig.browsePath || '/')
+
   const [files, setFiles] = useState<WebDAVFileInfo[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -71,8 +72,9 @@ export function WebDAVFileBrowser({
       // 如果已经初始化，直接加载根目录
       if (webdavService.isInitialized()) {
         if (isOpen && files.length === 0) {
-          loadDirectory('/')
+          loadDirectory(webdavConfig.browsePath || '/')
         }
+
         return
       }
 
@@ -91,9 +93,10 @@ export function WebDAVFileBrowser({
           if (initResult.success) {
             console.log('WebDAVFileBrowser: 初始化成功，加载根目录')
             if (isOpen) {
-              loadDirectory('/')
+              loadDirectory(webdavConfig.browsePath || '/')
             }
           } else {
+
             console.error('WebDAVFileBrowser: 初始化失败:', initResult.error)
             setError(`WebDAV初始化失败: ${initResult.error}`)
           }
@@ -119,6 +122,13 @@ export function WebDAVFileBrowser({
       loadDirectory(currentPath)
     }
   }, [currentPath, isOpen])
+
+  useEffect(() => {
+    if (webdavConfig.browsePath && webdavConfig.browsePath !== currentPath) {
+      setCurrentPath(webdavConfig.browsePath)
+    }
+  }, [webdavConfig.browsePath])
+
 
   // 文件类型图标映射
   const getFileIcon = (file: WebDAVFileInfo) => {

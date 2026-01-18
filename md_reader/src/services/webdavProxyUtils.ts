@@ -37,6 +37,14 @@ export function normalizeDavPath(inputPath: string): string {
   return rebuilt === '/' ? '/' : rebuilt
 }
 
+export function encodeDavHeaderPath(path: string): string {
+  const normalized = normalizeDavPath(path)
+  return normalized
+    .split('/')
+    .map((segment) => (segment ? encodeURIComponent(segment) : ''))
+    .join('/')
+}
+
 export function buildWebdavProxyUrl(params: {
   baseUrl: string
   folder?: string

@@ -1,5 +1,5 @@
 import { createClient, WebDAVClient } from 'webdav'
-import { buildWebdavProxyUrl, normalizeDavPath } from './webdavProxyUtils'
+import { buildWebdavProxyUrl, normalizeDavPath, encodeDavHeaderPath } from './webdavProxyUtils'
 
 
 // WebDAV操作结果接口
@@ -166,7 +166,7 @@ export class WebDAVService {
       const rootHeaderPath = '/'
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': rootHeaderPath
+        'X-WebDAV-Path': encodeDavHeaderPath(rootHeaderPath)
       })
       await this.client.getDirectoryContents('/')
 
@@ -175,7 +175,7 @@ export class WebDAVService {
         if (normalizedSyncPath !== '/') {
           this.client.setHeaders({
             ...this.client.getHeaders(),
-            'X-WebDAV-Path': normalizedSyncPath
+            'X-WebDAV-Path': encodeDavHeaderPath(normalizedSyncPath)
           })
 
           const exists = await this.client.exists('/')
@@ -234,7 +234,7 @@ export class WebDAVService {
 
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': headerPath
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
       })
 
       const contents = await this.client.getDirectoryContents('/', { deep })
@@ -321,7 +321,7 @@ export class WebDAVService {
 
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': normalizedPath
+        'X-WebDAV-Path': encodeDavHeaderPath(normalizedPath)
       })
 
       if (format === 'text') {
@@ -472,7 +472,7 @@ export class WebDAVService {
       if (dirPath && dirPath !== '/') {
         this.client.setHeaders({
           ...this.client.getHeaders(),
-          'X-WebDAV-Path': dirPath
+          'X-WebDAV-Path': encodeDavHeaderPath(dirPath)
         })
         const dirExists = await this.client.exists('/')
         if (!dirExists) {
@@ -482,7 +482,7 @@ export class WebDAVService {
 
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': normalizedPath
+        'X-WebDAV-Path': encodeDavHeaderPath(normalizedPath)
       })
 
       const result = await this.client.putFileContents('/', data as any, { overwrite })

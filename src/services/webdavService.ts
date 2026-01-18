@@ -1,6 +1,6 @@
 import { createClient, WebDAVClient } from 'webdav'
 import type { WebDAVConfig } from '../stores/configStore'
-import { buildWebdavProxyUrl, buildWebdavPath, normalizeDavPath } from './webdavProxyUtils'
+import { buildWebdavProxyUrl, buildWebdavPath, normalizeDavPath, encodeDavHeaderPath } from './webdavProxyUtils'
 
 
 // WebDAV文件信息接口
@@ -156,7 +156,7 @@ export class WebDAVService {
       const headerPath = '/'
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': headerPath
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
       })
       await this.client.getDirectoryContents('/')
 
@@ -165,7 +165,7 @@ export class WebDAVService {
         if (normalizedSyncPath !== '/') {
           this.client.setHeaders({
             ...this.client.getHeaders(),
-            'X-WebDAV-Path': normalizedSyncPath
+            'X-WebDAV-Path': encodeDavHeaderPath(normalizedSyncPath)
           })
 
           const exists = await this.client.exists('/')
@@ -242,7 +242,7 @@ export class WebDAVService {
       
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': headerPath
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
       })
 
       const contents = await this.client.getDirectoryContents('/', { deep })
@@ -335,7 +335,7 @@ export class WebDAVService {
 
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': headerPath
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
       })
 
       if (format === 'text') {
@@ -475,7 +475,7 @@ export class WebDAVService {
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': headerPath
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
       })
       const result = await this.client.putFileContents('/', data as any, { overwrite })
       
@@ -519,7 +519,7 @@ export class WebDAVService {
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': headerPath
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
       })
       await this.client.createDirectory('/')
       return { success: true, data: true }
@@ -546,7 +546,7 @@ export class WebDAVService {
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': headerPath
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
       })
       await this.client.deleteFile('/')
       return { success: true, data: true }
@@ -573,7 +573,7 @@ export class WebDAVService {
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': headerPath
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
       })
       await this.client.deleteFile('/')
       return { success: true, data: true }
@@ -601,7 +601,7 @@ export class WebDAVService {
 
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': headerPath
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
       })
 
       const exists = await this.client.exists('/')
@@ -646,7 +646,7 @@ export class WebDAVService {
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.client.setHeaders({
         ...this.client.getHeaders(),
-        'X-WebDAV-Path': headerPath
+        'X-WebDAV-Path': encodeDavHeaderPath(headerPath)
       })
       const stat = await this.client.stat('/')
       

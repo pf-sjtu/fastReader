@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildWebdavProxyUrl, buildWebdavPath, normalizeDavPath, isValidUpstreamBase } from '../src/services/webdavProxyUtils'
+import { buildWebdavProxyUrl, buildWebdavPath, normalizeDavPath, isValidUpstreamBase, encodeDavHeaderPath } from '../src/services/webdavProxyUtils'
 
 describe('WebDAV proxy URL helpers', () => {
   it('normalizes legacy webdav prefixes', () => {
@@ -67,6 +67,18 @@ describe('WebDAV proxy URL helpers', () => {
     })
 
     expect(path).toBe('/')
+  })
+
+  it('encodes header paths safely', () => {
+    const encoded = encodeDavHeaderPath('/EBooks/一个叫欧维的男人决定去死.epub')
+    expect(encoded).toContain('%')
+    expect(encoded).not.toContain('一个叫欧维')
+  })
+
+  it('encodes header paths safely', () => {
+    const encoded = encodeDavHeaderPath('/EBooks/一个叫欧维的男人决定去死.epub')
+    expect(encoded).toContain('%')
+    expect(encoded).not.toContain('一个叫欧维')
   })
 })
 
