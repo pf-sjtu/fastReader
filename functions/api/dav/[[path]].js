@@ -75,25 +75,21 @@ export async function onRequest(context) {
   upstreamHeaders.delete('X-WebDAV-Base')
   upstreamHeaders.delete('X-WebDAV-Path')
 
-  const upstreamRequest = new Request(upstreamUrl, {
+  const bodyBuffer = request.body ? await request.arrayBuffer() : null
+  const buildRequest = (url) => new Request(url, {
     method: request.method,
     headers: upstreamHeaders,
-    body: request.body,
+    body: bodyBuffer,
     redirect: 'manual'
   })
 
-  let response = await fetch(upstreamRequest)
+  let response = await fetch(buildRequest(upstreamUrl))
 
   if (response.status >= 300 && response.status < 400) {
     const location = response.headers.get('location')
     if (location) {
-      const retryRequest = new Request(location, {
-        method: request.method,
-        headers: upstreamHeaders,
-        body: request.body,
-        redirect: 'manual'
-      })
-      response = await fetch(retryRequest)
+      const resolvedUrl = new URL(location, upstreamUrl).toString()
+      response = await fetch(buildRequest(resolvedUrl))
     }
   }
 
