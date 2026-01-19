@@ -39,8 +39,10 @@ import { webdavService, type WebDAVFileInfo } from '../../services/webdavService
 import { normalizeDavPath } from '../../services/webdavProxyUtils'
 
 import { cloudCacheService } from '../../services/cloudCacheService'
+import { batchProcessingEngine } from '../../services/batchProcessingEngine'
 import { useBatchQueueStore, useBatchProcessingStatus, useBatchStats, type BatchQueueItem } from '../../stores/batchQueueStore'
 import { toast } from 'sonner'
+
 
 interface BatchProcessingDialogProps {
   children?: React.ReactNode
@@ -290,11 +292,14 @@ export function BatchProcessingDialog({
 
   // Handle clear queue
   const handleClearQueue = () => {
+    batchProcessingEngine.stop()
+    stopProcessing()
     clearQueue()
     toast('已清空队列', {
       description: '批量处理队列已清空'
     })
   }
+
 
   // Filter and sort files
   const filteredFiles = files.filter(file => {

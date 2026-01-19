@@ -340,6 +340,10 @@ export class BatchProcessingEngine {
 
       // 生成关联分析
       if (processingOptions.processingMode === 'combined-mindmap' || processingOptions.processingMode === 'mindmap') {
+        if (this.shouldStop) {
+          throw new Error('用户停止处理')
+        }
+
         this.callbacks.onItemProgress?.(item.id, 75, '生成章节关联分析...')
 
         const chapterObjects = chapters
@@ -356,14 +360,23 @@ export class BatchProcessingEngine {
             processingOptions.outputLanguage
           )
 
+          if (this.shouldStop) {
+            throw new Error('用户停止处理')
+          }
+
           if (processingOptions.processingMode === 'combined-mindmap') {
             results.push(`## 章节关联分析\n\n${connections}`)
           }
         }
       }
 
+
       // 生成全书总结
       if (processingOptions.processingMode === 'summary' || processingOptions.processingMode === 'combined-mindmap') {
+        if (this.shouldStop) {
+          throw new Error('用户停止处理')
+        }
+
         this.callbacks.onItemProgress?.(item.id, 85, '生成全书总结...')
 
         const chapterObjects = chapters
@@ -380,6 +393,11 @@ export class BatchProcessingEngine {
             chapterObjects,
             processingOptions.outputLanguage
           )
+
+          if (this.shouldStop) {
+            throw new Error('用户停止处理')
+          }
+
           const overallSummary = await this.aiService!.generateOverallSummary(
             bookTitle,
             chapterObjects,
@@ -387,9 +405,17 @@ export class BatchProcessingEngine {
             processingOptions.outputLanguage
           )
 
-          results.push(`## 全书总结\n\n${overallSummary}`)
+          if (this.shouldStop) {
+            throw new Error('用户停止处理')
+          }
+
+          if (overallSummary) {
+            results.push(`## 全书总结\n\n${overallSummary}`)
+          }
         }
+
       }
+
 
       // 5. 生成最终内容
       this.callbacks.onItemProgress?.(item.id, 95, '保存结果...')

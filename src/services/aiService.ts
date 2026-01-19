@@ -666,14 +666,18 @@ export class AIService {
       const summary = await this.generateContent(prompt, outputLanguage)
 
       if (!summary || summary.trim().length === 0) {
-        throw new Error('AI返回了空的全书总结')
+        return ''
       }
 
       return summary.trim()
     } catch (error) {
-      throw new Error(`全书总结生成失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      console.warn('[AI服务] 全书总结生成失败，已忽略', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return ''
     }
   }
+
 
   async generateChapterMindMap(content: string, outputLanguage: SupportedLanguage = 'en', customPrompt?: string): Promise<MindElixirData> {
     try {
