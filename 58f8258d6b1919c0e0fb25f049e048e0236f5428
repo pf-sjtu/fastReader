@@ -1,0 +1,1 @@
+修复批量处理 toast 黑屏：将 toast({title, description}) 改为 toast(title, {description})，避免对象被 React 直接渲染；选择文件为空时改用 toast.error 以保持一致。
