@@ -53,13 +53,9 @@ export function BatchQueuePanel() {
   const cachedFilesRef = useRef<Set<string>>(new Set())
 
 
-  // No queue items - don't render
-  if (queue.length === 0) {
-    return null
-  }
-
   // Process next item when processing is started
   const processNextItem = useCallback(async () => {
+
     const state = useBatchQueueStore.getState()
     const nextPending = state.queue.find((i) => i.status === 'pending')
 
@@ -241,7 +237,13 @@ export function BatchQueuePanel() {
   // Progress percentage
   const progressPercent = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0
 
+  // No queue items - don't render
+  if (queue.length === 0) {
+    return null
+  }
+
   return (
+
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full">
       <CollapsibleTrigger asChild>
         <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted/70 transition-colors">
