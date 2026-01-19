@@ -66,8 +66,7 @@ export function BatchQueuePanel() {
     if (!nextPending) {
       // No more pending items
       stopStoreProcessing()
-      toast({
-        title: '处理完成',
+      toast('处理完成', {
         description: `批量处理已完成，成功 ${stats.completed} 个，失败 ${stats.failed} 个`
       })
       return
@@ -135,15 +134,13 @@ export function BatchQueuePanel() {
     if (isStorePaused) {
       resumeStoreProcessing()
       batchProcessingEngine.resume()
-      toast({
-        title: '已继续处理',
+      toast('已继续处理', {
         description: '批量处理已继续'
       })
     } else {
       pauseStoreProcessing()
       batchProcessingEngine.pause()
-      toast({
-        title: '已暂停处理',
+      toast('已暂停处理', {
         description: '批量处理已暂停'
       })
     }
@@ -153,8 +150,7 @@ export function BatchQueuePanel() {
   const handleStop = () => {
     batchProcessingEngine.stop()
     stopStoreProcessing()
-    toast({
-      title: '已停止处理',
+    toast('已停止处理', {
       description: '批量处理已停止'
     })
   }
@@ -164,8 +160,7 @@ export function BatchQueuePanel() {
     batchProcessingEngine.stop()
     stopStoreProcessing()
     clearQueue()
-    toast({
-      title: '已清空队列',
+    toast('已清空队列', {
       description: '批量处理队列已清空'
     })
   }
@@ -181,8 +176,7 @@ export function BatchQueuePanel() {
 
     startStoreProcessing()
     cachedFilesRef.current = await cloudCacheService.fetchCacheFileNames()
-    toast({
-      title: '开始处理',
+    toast('开始处理', {
       description: `共 ${pendingCount} 个文件待处理`
     })
 
@@ -199,8 +193,7 @@ export function BatchQueuePanel() {
 
         if (!hasPending) {
           stopStoreProcessing()
-          toast({
-            title: '处理完成',
+          toast('处理完成', {
             description: `批量处理已完成，成功 ${stats.completed} 个，失败 ${stats.failed} 个`
           })
           break

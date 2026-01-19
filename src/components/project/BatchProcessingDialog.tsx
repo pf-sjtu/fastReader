@@ -225,10 +225,8 @@ export function BatchProcessingDialog({
   // Start batch processing
   const handleStartBatch = async () => {
     if (selectedFiles.length === 0) {
-      toast({
-        title: '请选择文件',
-        description: '请至少选择一个要处理的文件',
-        variant: 'destructive'
+      toast.error('请选择文件', {
+        description: '请至少选择一个要处理的文件'
       })
       return
     }
@@ -262,8 +260,7 @@ export function BatchProcessingDialog({
     // Start processing
     startProcessing()
 
-    toast({
-      title: '开始批量处理',
+    toast('开始批量处理', {
       description: `已将 ${items.length} 个文件添加到处理队列`
     })
   }
@@ -272,14 +269,12 @@ export function BatchProcessingDialog({
   const handleTogglePause = () => {
     if (isPaused) {
       resumeProcessing()
-      toast({
-        title: '已继续处理',
+      toast('已继续处理', {
         description: '批量处理已继续'
       })
     } else {
       pauseProcessing()
-      toast({
-        title: '已暂停处理',
+      toast('已暂停处理', {
         description: '批量处理已暂停'
       })
     }
@@ -288,8 +283,7 @@ export function BatchProcessingDialog({
   // Handle stop
   const handleStop = () => {
     stopProcessing()
-    toast({
-      title: '已停止处理',
+    toast('已停止处理', {
       description: '批量处理已停止'
     })
   }
@@ -297,8 +291,7 @@ export function BatchProcessingDialog({
   // Handle clear queue
   const handleClearQueue = () => {
     clearQueue()
-    toast({
-      title: '已清空队列',
+    toast('已清空队列', {
       description: '批量处理队列已清空'
     })
   }
