@@ -45,11 +45,15 @@ export interface ProcessResultInfo {
   model: string
   chapterDetectionMode: string
   selectedChapters: number[]
+  selectedChapterCount?: number
   chapterCount: number
   originalCharCount: number
   processedCharCount: number
+  skippedChapters?: number
+  isPartial?: boolean
   aiResponseInfo?: AIResponseInfo
 }
+
 
 /**
  * 获取汇率
@@ -110,11 +114,15 @@ export function generateMetadata(result: ProcessResultInfo): ProcessingMetadata 
     model,
     chapterDetectionMode,
     selectedChapters,
+    selectedChapterCount,
     chapterCount,
     originalCharCount,
     processedCharCount,
+    skippedChapters,
+    isPartial,
     aiResponseInfo
   } = result
+
 
   // 获取 Token 数
   const inputTokens = aiResponseInfo?.inputTokens || 0
@@ -130,6 +138,7 @@ export function generateMetadata(result: ProcessResultInfo): ProcessingMetadata 
     model: model,
     chapterDetectionMode: chapterDetectionMode,
     selectedChapters: selectedChapters.join(','),
+    selectedChapterCount: selectedChapterCount ?? selectedChapters.length,
     chapterCount: chapterCount,
     originalCharCount: originalCharCount,
     processedCharCount: processedCharCount,
@@ -138,6 +147,20 @@ export function generateMetadata(result: ProcessResultInfo): ProcessingMetadata 
     costUSD: costUSD,
     costRMB: costRMB
   }
+
+
+  if (typeof skippedChapters === 'number') {
+    ;(metadata as ProcessingMetadata & { skippedChapters: number }).skippedChapters = skippedChapters
+  }
+
+  if (typeof selectedChapterCount === 'number') {
+    ;(metadata as ProcessingMetadata & { selectedChapterCount: number }).selectedChapterCount = selectedChapterCount
+  }
+
+  if (typeof isPartial === 'boolean') {
+    ;(metadata as ProcessingMetadata & { isPartial: boolean }).isPartial = isPartial
+  }
+
 
   return metadata
 }
@@ -155,6 +178,11 @@ export function formatAsHTMLComment(metadata: ProcessingMetadata): string {
     `model: ${metadata.model}`,
     `chapterDetectionMode: ${metadata.chapterDetectionMode}`,
     `selectedChapters: ${metadata.selectedChapters}`,
+    `selectedChapterCount: ${
+      typeof (metadata as ProcessingMetadata & { selectedChapterCount?: number }).selectedChapterCount === 'number'
+        ? (metadata as ProcessingMetadata & { selectedChapterCount: number }).selectedChapterCount
+        : metadata.selectedChapters.split(',').filter(Boolean).length
+    }`,
     `chapterCount: ${metadata.chapterCount}`,
     `originalCharCount: ${metadata.originalCharCount}`,
     `processedCharCount: ${metadata.processedCharCount}`,
@@ -163,6 +191,15 @@ export function formatAsHTMLComment(metadata: ProcessingMetadata): string {
     `costUSD: ${metadata.costUSD}`,
     `costRMB: ${metadata.costRMB} (USD/CNY: ${getExchangeRate()})`
   ]
+
+  if (typeof (metadata as ProcessingMetadata & { skippedChapters?: number }).skippedChapters === 'number') {
+    lines.push(`skippedChapters: ${(metadata as ProcessingMetadata & { skippedChapters: number }).skippedChapters}`)
+  }
+
+  if (typeof (metadata as ProcessingMetadata & { isPartial?: boolean }).isPartial === 'boolean') {
+    lines.push(`isPartial: ${(metadata as ProcessingMetadata & { isPartial: boolean }).isPartial}`)
+  }
+
 
   return `<!--\n${lines.join('\n')}\n-->`
 }
@@ -258,8 +295,18 @@ export function parseMetadataFromContent(content: string): ProcessingMetadata | 
         case 'costRMB':
           metadata.costRMB = parseFloat(value) || 0
           break
+        case 'skippedChapters':
+          ;(metadata as ProcessingMetadata & { skippedChapters: number }).skippedChapters = parseInt(value, 10) || 0
+          break
+        case 'selectedChapterCount':
+          ;(metadata as ProcessingMetadata & { selectedChapterCount: number }).selectedChapterCount = parseInt(value, 10) || 0
+          break
+        case 'isPartial':
+          ;(metadata as ProcessingMetadata & { isPartial: boolean }).isPartial = value === 'true'
+          break
       }
     }
+
 
     return metadata
   } catch (error) {

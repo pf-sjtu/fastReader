@@ -36,13 +36,16 @@ export interface BatchProcessingResult {
   metadata?: {
     chapterCount: number
     processedChapters: number
+    skippedChapters: number
     costUSD: number
     costRMB: number
     startTime: string
     endTime: string
+    isPartial?: boolean
   }
   error?: string
 }
+
 
 /**
  * 批量处理汇总结果
@@ -287,6 +290,9 @@ export class BatchProcessingEngine {
       const results: string[] = []
       const totalInputTokens = 0
       const totalOutputTokens = 0
+      let skippedChapters = 0
+      let selectedChapterCount = 0
+
 
       // 生成书名（从文件名提取）
       const bookTitle = item.fileName.replace(/\.(epub|pdf|txt|mobi|azw3)$/i, '')
@@ -304,6 +310,9 @@ export class BatchProcessingEngine {
             continue
           }
 
+          selectedChapterCount += 1
+
+
           const progress = 10 + Math.floor((i / chapters.length) * 60)
           this.callbacks.onItemProgress?.(
             item.id,
@@ -316,7 +325,13 @@ export class BatchProcessingEngine {
             processingOptions.bookType,
             processingOptions.outputLanguage
           )
+
+          if (AIService.isSkippedSummary(summary)) {
+            skippedChapters++
+          }
+
           results.push(`## ${chapter.title}\n\n${summary}`)
+
 
           // 模拟 token 统计（实际由 AIService 内部记录）
           await this.sleep(100) // 避免请求过快
@@ -382,6 +397,7 @@ export class BatchProcessingEngine {
       const endTime = new Date().toISOString()
       const originalCharCount = chapters.reduce((sum, ch) => sum + ch.content.length, 0)
       const processedCharCount = results.join('\n\n').length
+      const isPartial = skippedChapters > 0
 
       // 生成元数据
       const metadata = metadataFormatter.generate({
@@ -390,20 +406,29 @@ export class BatchProcessingEngine {
         model: useConfigStore.getState().aiConfig.model,
         chapterDetectionMode: processingOptions.chapterDetectionMode,
         selectedChapters,
+        selectedChapterCount,
         chapterCount: chapters.length,
         originalCharCount,
         processedCharCount,
+        skippedChapters,
+        isPartial,
         aiResponseInfo: {
           inputTokens: totalInputTokens,
           outputTokens: totalOutputTokens
         }
       })
 
+
+      const partialNotice = isPartial
+        ? `> 注意：本次处理有 ${skippedChapters} 章因内容过滤被跳过。\n\n`
+        : ''
+
       // 添加元数据到内容
       const finalContent = metadataFormatter.addToContent(
-        `# ${bookTitle}\n\n` + results.join('\n\n---\n\n'),
+        `# ${bookTitle}\n\n${partialNotice}` + results.join('\n\n---\n\n'),
         metadata
       )
+
 
       // 6. 上传到 WebDAV
       const outputPath = cloudCacheService.getCacheFilePath(item.fileName)
@@ -422,13 +447,16 @@ export class BatchProcessingEngine {
         content: finalContent,
         metadata: {
           chapterCount: chapters.length,
-          processedChapters: selectedChapters.length,
+          processedChapters: Math.max(selectedChapterCount - skippedChapters, 0),
+          skippedChapters,
           costUSD: metadata.costUSD,
           costRMB: metadata.costRMB,
           startTime,
-          endTime
+          endTime,
+          isPartial
         }
       }
+
     } catch (error) {
       console.error(`[BatchEngine] 处理文件失败: ${item.fileName}`, error)
       return {

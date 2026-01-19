@@ -17,13 +17,16 @@ export interface BatchQueueItem {
   progress: number // 0-100
   error?: string
   metadata?: {
-    chapterCount: number
-    processedChapters: number
+    chapterCount?: number
+    processedChapters?: number
+    skippedChapters?: number
+    isPartial?: boolean
     startTime?: string
     endTime?: string
     costUSD?: number
     costRMB?: number
   }
+
   selectedChapters?: number[]
 }
 

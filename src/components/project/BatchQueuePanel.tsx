@@ -104,12 +104,22 @@ export function BatchQueuePanel() {
         markItemCompleted(nextPending.id, {
           chapterCount: result.metadata?.chapterCount || 0,
           processedChapters: result.metadata?.processedChapters || 0,
+          skippedChapters: result.metadata?.skippedChapters || 0,
           startTime: result.metadata?.startTime || new Date().toISOString(),
           endTime: result.metadata?.endTime || new Date().toISOString(),
           costUSD: result.metadata?.costUSD || 0,
-          costRMB: result.metadata?.costRMB || 0
+          costRMB: result.metadata?.costRMB || 0,
+          isPartial: result.metadata?.isPartial || false
         })
-        toast.success(`处理完成: ${nextPending.fileName}`)
+
+        if (result.metadata?.isPartial) {
+          toast.warning(`处理完成但不完整: ${nextPending.fileName}`, {
+            description: `有 ${result.metadata.skippedChapters ?? 0} 章因内容过滤被跳过`
+          })
+        } else {
+          toast.success(`处理完成: ${nextPending.fileName}`)
+        }
+
       } else if (result.error?.includes('已跳过')) {
         markItemSkipped(nextPending.id)
       } else {
@@ -292,10 +302,14 @@ export function BatchQueuePanel() {
                 >
                   <span className="w-5 text-muted-foreground">{index + 1}.</span>
                   {getStatusBadge(item.status)}
+                  {item.status === 'completed' && item.metadata?.isPartial && (
+                    <Badge variant="outline" className="text-xs">不完整</Badge>
+                  )}
                   <span className="truncate flex-1">{item.fileName}</span>
                   {item.status === 'completed' && (
                     <CheckCircle className="h-3 w-3 text-green-500" />
                   )}
+
                   {item.status === 'failed' && (
                     <XCircle className="h-3 w-3 text-red-500" />
                   )}

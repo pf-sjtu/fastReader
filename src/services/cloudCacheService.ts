@@ -38,7 +38,11 @@ export interface ProcessingMetadata {
   outputTokens: number
   costUSD: number
   costRMB: number
+  skippedChapters?: number
+  selectedChapterCount?: number
+  isPartial?: boolean
 }
+
 
 /**
  * 云端缓存服务
@@ -183,8 +187,12 @@ export class CloudCacheService {
         inputTokens: 0,
         outputTokens: 0,
         costUSD: 0,
-        costRMB: 0
+        costRMB: 0,
+        skippedChapters: 0,
+        selectedChapterCount: 0,
+        isPartial: false
       }
+
 
       // 解析各字段
       const lines = commentContent.split('\n')
@@ -215,8 +223,18 @@ export class CloudCacheService {
           case 'costRMB':
             metadata[trimmedKey] = parseFloat(value) || 0
             break
+          case 'skippedChapters':
+            metadata.skippedChapters = parseInt(value, 10) || 0
+            break
+          case 'selectedChapterCount':
+            metadata.selectedChapterCount = parseInt(value, 10) || 0
+            break
+          case 'isPartial':
+            metadata.isPartial = value === 'true'
+            break
         }
       }
+
 
       return metadata
     } catch (error) {

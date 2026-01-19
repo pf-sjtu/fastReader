@@ -184,6 +184,20 @@ interface RateLimitError extends Error {
 }
 
 export class AIService {
+  static readonly SKIPPED_SUMMARY_PREFIX = '【已跳过】'
+
+  static createSkippedSummary(reason?: string): string {
+    const details = reason?.trim()
+    if (details) {
+      return `${AIService.SKIPPED_SUMMARY_PREFIX} 触发内容过滤：${details}`
+    }
+    return `${AIService.SKIPPED_SUMMARY_PREFIX} 触发内容过滤，已跳过该章节`
+  }
+
+  static isSkippedSummary(summary: string): boolean {
+    return summary.trim().startsWith(AIService.SKIPPED_SUMMARY_PREFIX)
+  }
+
   private config: AIConfig | (() => AIConfig)
   private promptConfig: PromptConfig | (() => PromptConfig)
   private genAI?: GoogleGenerativeAI
@@ -191,6 +205,7 @@ export class AIService {
   private onTokenUsage?: (tokens: number) => void
   private maxRetries: number
   private baseRetryDelay: number
+
 
   constructor(config: AIConfig | (() => AIConfig), promptConfig?: PromptConfig | (() => PromptConfig), options?: AIServiceOptions) {
     this.config = config
@@ -385,14 +400,12 @@ export class AIService {
       prompt += `\n\n补充要求：${customPrompt.trim()}`
     }
 
-    // 特殊处理400状态码的重试逻辑
     let lastError: any = null
-    let attemptCount = 0
-    
-    while (attemptCount < 2) { // 最多尝试2次（首次+重试一次）
+
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        console.log(`[AI服务] 章节总结 - 尝试第 ${attemptCount + 1} 次，标题: ${title}`)
-        
+        console.log(`[AI服务] 章节总结 - 尝试第 ${attempt} 次，标题: ${title}`)
+
         const summary = await this.generateContentWithStatusCheck(prompt, outputLanguage)
 
         if (!summary || summary.trim().length === 0) {
@@ -402,40 +415,38 @@ export class AIService {
         return summary.trim()
       } catch (error: any) {
         lastError = error
-        attemptCount++
-        
-        // 检查是否是400状态码错误
-        if (error?.status === 400 && attemptCount < 2) {
-          console.warn(`[AI服务] 章节总结 - 检测到400状态码错误，准备重试 (第${attemptCount}次)`, {
+        const errorContent = error?.status === 400 ? this.extractErrorContent(error) : undefined
+
+        if (error?.status === 400 && attempt < this.maxRetries) {
+          console.warn(`[AI服务] 章节总结 - 检测到400状态码错误，准备重试 (第${attempt}次)`, {
             title,
             error: error?.message || error,
             status: error?.status
           })
-          // 继续下一次尝试
           continue
-        } else if (error?.status === 400 && attemptCount >= 2) {
-          // 400状态码重试失败，返回格式化的错误信息
-          const errorContent = this.extractErrorContent(error)
-          const formattedError = `错误，模型返回：${errorContent}`
-          
+        }
+
+        if (error?.status === 400 && attempt >= this.maxRetries) {
+          const skippedSummary = AIService.createSkippedSummary(errorContent)
+
           console.error(`[AI服务] 章节总结 - 400状态码重试失败，跳过章节`, {
             title,
             error: error?.message || error,
             status: error?.status,
-            formattedError
+            skippedSummary
           })
-          
-          return formattedError
-        } else {
-          // 其他错误，直接抛出
-          throw error
+
+          return skippedSummary
         }
+
+        // 其他错误，直接抛出
+        throw error
       }
     }
-    
-    // 理论上不会到达这里
+
     throw new Error(`章节总结失败: ${lastError instanceof Error ? lastError.message : '未知错误'}`)
   }
+
 
   // 提取错误内容的方法
   private extractErrorContent(error: any): string {
