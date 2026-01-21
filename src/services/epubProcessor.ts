@@ -34,13 +34,10 @@ export class EpubProcessor {
       // 检查是否正在处理相同的文件
       const fileKey = `${file.name}_${file.size}_${file.lastModified}`
       if (this.processingFiles.has(fileKey)) {
-        console.log(`⏳ [DEBUG] 文件正在处理中，跳过重复处理: ${file.name}`)
         throw new Error('文件正在处理中，请稍候')
       }
 
       this.processingFiles.add(fileKey)
-      console.log(`🔄 [DEBUG] 开始解析EPUB文件: ${file.name}`)
-
       try {
         // 将File转换为ArrayBuffer
         const arrayBuffer = await file.arrayBuffer()
@@ -56,7 +53,6 @@ export class EpubProcessor {
         const title = book.packaging?.metadata?.title || '未知标题'
         const author = book.packaging?.metadata?.creator || '未知作者'
 
-        console.log(`✅ [DEBUG] EPUB文件解析完成: ${title}`)
         return {
           book,
           title,
@@ -156,11 +152,8 @@ export class EpubProcessor {
           for (const chapterInfo of chapterInfos) {
             // 检查是否需要跳过此章节
             if (skipNonEssentialChapters && this.shouldSkipChapter(chapterInfo.title)) {
-              console.log(`⏭️ [DEBUG] 跳过无关键内容章节: "${chapterInfo.title}"`)
               continue
             }
-
-            console.log(`📄 [DEBUG] 提取章节 "${chapterInfo.title}" (href: ${chapterInfo.href})`)
 
             const chapterContent = await this.extractContentFromHref(book, chapterInfo.href, chapterInfo.subitems)
 
@@ -177,21 +170,19 @@ export class EpubProcessor {
           }
         }
       } catch (tocError) {
-        console.warn(`⚠️ [DEBUG] 无法获取EPUB目录:`, tocError)
+        console.warn('无法获取EPUB目录:', tocError)
       }
       // 应用智能章节检测
       let finalChapters = chapters
       if (chapterDetectionMode === 'smart') {
         finalChapters = this.detectChapters(chapters, true, chapterNamingMode)
-        console.log(`🧠 [DEBUG] 智能检测模式，最终提取到 ${finalChapters.length} 个章节`)
       } else {
         finalChapters = this.detectChapters(chapters, useSmartDetection, chapterNamingMode)
-        console.log(`📊 [DEBUG] 最终提取到 ${finalChapters.length} 个章节`)
       }
 
       return finalChapters
     } catch (error) {
-      console.error(`❌ [DEBUG] 提取章节失败:`, error)
+      console.error('提取章节失败:', error)
       throw new Error(`提取章节失败: ${error instanceof Error ? error.message : '未知错误'}`)
     }
   }
@@ -231,9 +222,9 @@ export class EpubProcessor {
           const subChapters = await this.extractChaptersFromToc(book, item.subitems, currentDepth + 1, maxDepth, chapterNamingMode, totalChapters, preserveAnchors)
           chapterInfos.push(...subChapters)
         }
-      } catch (error) {
-        console.warn(`⚠️ [DEBUG] 跳过章节 "${item.label}":`, error)
-      }
+    } catch (error) {
+      console.warn(`跳过章节 "${item.label}":`, error)
+    }
     }
 
     return chapterInfos
@@ -241,7 +232,7 @@ export class EpubProcessor {
 
   private async extractContentFromHref(book: Book, href: string, subitems?: NavItem[]): Promise<string> {
     try {
-      console.log(`🔍 [DEBUG] 尝试通过href获取章节内容: ${href}`)
+      
 
       // 解析href，分离文件路径和锚点
       const [cleanHref, anchor] = href.split('#')
@@ -270,11 +261,11 @@ export class EpubProcessor {
           }
         }
       }
-      console.log(`✅ [DEBUG] allContent`, allContent.length)
+      
 
       return allContent
     } catch (error) {
-      console.warn(`❌ [DEBUG] 提取章节内容失败 (href: ${href}):`, error)
+      console.warn(`提取章节内容失败 (href: ${href}):`, error)
       return ''
     }
   }
@@ -295,7 +286,7 @@ export class EpubProcessor {
       }
 
       if (!section) {
-        console.warn(`❌ [DEBUG] 无法获取章节: ${href}`)
+        console.warn(`无法获取章节: ${href}`)
         return ''
       }
 
@@ -310,7 +301,7 @@ export class EpubProcessor {
 
       return textContent
     } catch (error) {
-      console.warn(`❌ [DEBUG] 获取单个章节内容失败 (href: ${href}):`, error)
+      console.warn(`获取单个章节内容失败 (href: ${href}):`, error)
       return ''
     }
   }
@@ -325,8 +316,6 @@ export class EpubProcessor {
 
   private extractTextFromXHTML(xhtmlContent: string, anchor?: string): { textContent: string } {
     try {
-      console.log(`🔍 [DEBUG] 开始解析XHTML内容，长度: ${xhtmlContent.length}, 锚点: ${anchor || '无'}`)
-
       // 创建一个临时的DOM解析器
       const parser = new DOMParser()
       const doc = parser.parseFromString(xhtmlContent, 'application/xhtml+xml')
@@ -334,7 +323,6 @@ export class EpubProcessor {
       // 检查解析错误
       const parseError = doc.querySelector('parsererror')
       if (parseError) {
-        console.warn(`⚠️ [DEBUG] DOM解析出现错误，将使用正则表达式备选方案:`, parseError.textContent)
         throw new Error('DOM解析失败')
       }
 
@@ -358,19 +346,14 @@ export class EpubProcessor {
       // 如果锚点定位失败或没有锚点，提取全部内容
       if (!textContent.trim()) {
         textContent = body.textContent || ''
-        console.log(`🔍 [DEBUG] 锚点定位失败或无锚点，提取全部内容`)
-      } else {
-        console.log(`✅ [DEBUG] 成功通过锚点提取内容，长度: ${textContent.length}`)
       }
 
       // 清理和格式化文本内容
       textContent = this.cleanAndFormatText(textContent)
 
-      console.log(`✨ [DEBUG] 清理后文本长度: ${textContent.length}`)
-
       return { textContent }
     } catch (error) {
-      console.warn(`⚠️ [DEBUG] DOM解析失败，使用正则表达式备选方案:`, error)
+      console.warn('DOM解析失败，使用正则表达式备选方案:', error)
       // 如果DOM解析失败，使用正则表达式作为备选方案
       return this.extractTextWithRegex(xhtmlContent, anchor)
     }
@@ -398,11 +381,9 @@ export class EpubProcessor {
       // 清理多余空格
       cleaned = cleaned.replace(/\s+/g, ' ').trim()
       
-      console.log(`🧹 [DEBUG] 清理章节标题: "${title}" -> "${cleaned}"`)
-      
       return cleaned
     } catch (error) {
-      console.warn(`⚠️ [DEBUG] 章节标题清理失败:`, error)
+      console.warn('章节标题清理失败:', error)
       return title
     }
   }
@@ -436,15 +417,13 @@ export class EpubProcessor {
 
       return cleaned
     } catch (error) {
-      console.warn(`⚠️ [DEBUG] 文本清理失败:`, error)
+      console.warn('文本清理失败:', error)
       return text
     }
   }
 
   private addSmartLineBreaks(text: string): string {
     try {
-      console.log(`🔧 [DEBUG] 开始智能换行处理，文本长度: ${text.length}`)
-      
       // 首先按句子添加换行
       let withBreaks = text
         .replace(/([。！？])([^ \n])/g, '$1\n$2')  // 中文句号后换行
@@ -491,17 +470,14 @@ export class EpubProcessor {
 
       const result = formattedSentences.join('\n').trim()
       const lineCount = result.split('\n').length
-      console.log(`✅ [DEBUG] 智能换行完成，行数: ${lineCount}`)
-      
       return result
     } catch (error) {
-      console.warn(`⚠️ [DEBUG] 智能换行处理失败:`, error)
+      console.warn('智能换行处理失败:', error)
       return text
     }
   }
 
   private extractTextWithRegex(xhtmlContent: string, anchor?: string): { title: string; textContent: string } {
-    console.log(`🔧 [DEBUG] 使用正则表达式方案解析内容，长度: ${xhtmlContent.length}, 锚点: ${anchor || '无'}`)
 
     // 移除XML声明和DOCTYPE
     let cleanContent = xhtmlContent
@@ -539,24 +515,21 @@ export class EpubProcessor {
       // 使用相同的文本清理逻辑
       textContent = this.cleanAndFormatText(textContent)
 
-      console.log(`✨ [DEBUG] 正则表达式方案 - 标题: "${title}", 文本长度: ${textContent.length}`)
+      
 
       return { title, textContent }
     } else {
       // 锚点提取成功，清理文本
       textContent = this.cleanAndFormatText(textContent)
-      console.log(`✨ [DEBUG] 正则表达式锚点提取成功，文本长度: ${textContent.length}`)
+      
       return { title: '', textContent }
     }
   }
 
   private extractContentByAnchor(doc: Document, anchor: string): string {
     try {
-      console.log(`🎯 [DEBUG] 尝试通过锚点提取内容: ${anchor}`)
-
       // 转义锚点中的特殊字符
       const escapedAnchor = CSS.escape(anchor)
-      console.log(`🔧 [DEBUG] 转义后的锚点: ${escapedAnchor}`)
 
       // 查找锚点元素 - 使用属性选择器来处理以数字开头的ID
       const anchorElement = doc.querySelector(`[id="${escapedAnchor}"]`) || 
@@ -565,18 +538,18 @@ export class EpubProcessor {
 
       if (!anchorElement) {
         // 如果转义后还是找不到，尝试原始锚点
-        console.log(`❌ [DEBUG] 转义后未找到锚点元素，尝试原始锚点: ${anchor}`)
+        
         const originalAnchorElement = doc.querySelector(`[id*="${anchor}"]`) ||
                                      doc.querySelector(`[name="${anchor}"]`)
         if (originalAnchorElement) {
-          console.log(`✅ [DEBUG] 使用原始锚点找到元素: ${originalAnchorElement.tagName}, id: ${originalAnchorElement.id}`)
+          
           return this.extractContentFromElement(originalAnchorElement)
         }
-        console.log(`❌ [DEBUG] 未找到锚点元素: ${anchor}`)
+        
         return ''
       }
 
-      console.log(`✅ [DEBUG] 找到锚点元素: ${anchorElement.tagName}, id: ${anchorElement.id}`)
+      
 
       // 获取整个HTML内容用于正则表达式匹配
       const htmlContent = new XMLSerializer().serializeToString(doc)
@@ -585,21 +558,21 @@ export class EpubProcessor {
       return this.extractContentByAnchorImproved(htmlContent, anchor)
 
     } catch (error) {
-      console.warn(`⚠️ [DEBUG] 锚点内容提取失败:`, error)
+      console.warn('锚点内容提取失败:', error)
       return ''
     }
   }
 
   private extractContentByAnchorImproved(htmlContent: string, anchor: string): string {
     try {
-      console.log(`🔍 [DEBUG] 改进锚点提取: ${anchor}`)
+      
 
       // 策略1：精确匹配id属性
       const exactIdMatch = htmlContent.match(new RegExp(`<[^>]*id=["']${anchor}["'][^>]*>(.*?)</[^>]*>`, 'is'))
       if (exactIdMatch) {
         const content = exactIdMatch[1].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
         if (content.length > 10) {
-          console.log(`✅ [DEBUG] 策略1成功: 精确id匹配`)
+          
           return this.cleanAndFormatText(content)
         }
       }
@@ -609,7 +582,7 @@ export class EpubProcessor {
       if (headingMatch) {
         const content = headingMatch[2].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
         if (content.length > 10) {
-          console.log(`✅ [DEBUG] 策略2成功: 标题/段落匹配`)
+          
           return this.cleanAndFormatText(content)
         }
       }
@@ -630,7 +603,7 @@ export class EpubProcessor {
           .trim()
         
         if (content.length > 20) {
-          console.log(`✅ [DEBUG] 策略3成功: 锚点后内容提取`)
+          
           return this.cleanAndFormatText(content)
         }
       }
@@ -640,29 +613,29 @@ export class EpubProcessor {
       if (paragraphMatch) {
         const content = paragraphMatch[0].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
         if (content.length > 10) {
-          console.log(`✅ [DEBUG] 策略4成功: 段落匹配`)
+          
           return this.cleanAndFormatText(content)
         }
       }
 
-      console.log(`❌ [DEBUG] 所有锚点提取策略都失败了`)
+      
       return ''
     } catch (error) {
-      console.warn(`⚠️ [DEBUG] 改进锚点提取出错:`, error)
+      console.warn('改进锚点提取出错:', error)
       return ''
     }
   }
 
   private extractContentByAnchorRegex(htmlContent: string, anchor: string): string {
     try {
-      console.log(`🔧 [DEBUG] 使用正则表达式通过锚点提取内容: ${anchor}`)
+      
 
       // 策略1：查找带有id的标签
       const idMatch = htmlContent.match(new RegExp(`<[^>]*id=["']${anchor}["'][^>]*>(.*?)</[^>]*>`, 'is'))
       if (idMatch) {
         const content = idMatch[1].replace(/<[^>]*>/g, ' ').trim()
         if (content.length > 20) {
-          console.log(`✅ [DEBUG] 正则表达式通过id提取内容，长度: ${content.length}`)
+          
           return this.cleanAndFormatText(content)
         }
       }
@@ -672,7 +645,7 @@ export class EpubProcessor {
       if (nameMatch) {
         const content = nameMatch[1].replace(/<[^>]*>/g, ' ').trim()
         if (content.length > 20) {
-          console.log(`✅ [DEBUG] 正则表达式通过name提取内容，长度: ${content.length}`)
+          
           return this.cleanAndFormatText(content)
         }
       }
@@ -681,21 +654,21 @@ export class EpubProcessor {
       const titleMatch = htmlContent.match(new RegExp(`<h[1-6][^>]*id=["'][^"']*${anchor}[^"']*["'][^>]*>(.*?)</h[1-6]>`, 'is'))
       if (titleMatch) {
         const title = titleMatch[1].replace(/<[^>]*>/g, '').trim()
-        console.log(`✅ [DEBUG] 正则表达式通过标题提取内容: ${title}`)
+        
         return this.cleanAndFormatText(title)
       }
 
-      console.log(`❌ [DEBUG] 正则表达式锚点定位失败: ${anchor}`)
+      
       return ''
     } catch (error) {
-      console.warn(`⚠️ [DEBUG] 正则表达式锚点提取失败:`, error)
+      console.warn('正则表达式锚点提取失败:', error)
       return ''
     }
   }
 
   private extractContentFromHeading(doc: Document, headingElement: Element): string {
     try {
-      console.log(`📖 [DEBUG] 从标题提取内容: ${headingElement.textContent}`)
+      
       const headingLevel = parseInt(headingElement.tagName.charAt(1))
       const content: string[] = []
 
@@ -724,10 +697,10 @@ export class EpubProcessor {
       }
 
       const result = content.join('\n').trim()
-      console.log(`📖 [DEBUG] 从标题提取内容，长度: ${result.length}`)
+      
       return result
     } catch (error) {
-      console.warn(`⚠️ [DEBUG] 标题内容提取失败:`, error)
+      console.warn('标题内容提取失败:', error)
       return headingElement.textContent?.trim() || ''
     }
   }
@@ -736,10 +709,10 @@ export class EpubProcessor {
     try {
       // 提取section元素及其所有子元素的文本
       const textContent = sectionElement.textContent?.trim() || ''
-      console.log(`📚 [DEBUG] 从章节提取内容，长度: ${textContent.length}`)
+      
       return textContent
     } catch (error) {
-      console.warn(`⚠️ [DEBUG] 章节内容提取失败:`, error)
+      console.warn('章节内容提取失败:', error)
       return sectionElement.textContent?.trim() || ''
     }
   }
@@ -764,10 +737,10 @@ export class EpubProcessor {
       }
 
       const result = content.join('\n').trim()
-      console.log(`🔗 [DEBUG] 从通用锚点提取内容，元素数: ${collectedElements}, 长度: ${result.length}`)
+      
       return result
     } catch (error) {
-      console.warn(`⚠️ [DEBUG] 通用锚点内容提取失败:`, error)
+      console.warn('通用锚点内容提取失败:', error)
       return anchorElement.textContent?.trim() || ''
     }
   }
@@ -790,7 +763,7 @@ export class EpubProcessor {
       }
 
       if (!section) {
-        console.warn(`❌ [DEBUG] 无法获取章节HTML: ${href}`)
+        console.warn(`无法获取章节HTML: ${href}`)
         return ''
       }
 
@@ -803,11 +776,11 @@ export class EpubProcessor {
 
         return chapterHTML || ''
       } catch (renderError) {
-        console.warn(`⚠️ [DEBUG] 章节渲染失败 (href: ${href}):`, renderError)
+        console.warn(`章节渲染失败 (href: ${href}):`, renderError)
         return ''
       }
     } catch (error) {
-      console.warn(`❌ [DEBUG] 获取章节HTML失败 (href: ${href}):`, error)
+      console.warn(`获取章节HTML失败 (href: ${href}):`, error)
       return ''
     }
   }
@@ -817,7 +790,7 @@ export class EpubProcessor {
       return chapters
     }
 
-    console.log(`🧠 [DEBUG] 启用EPUB智能章节检测，原始章节数: ${chapters.length}`)
+    
 
     const chapterPatterns = [
       /^第[一二三四五六七八九十\d]+章[\s\S]*$/m,
@@ -880,7 +853,7 @@ export class EpubProcessor {
           depth: chapter.depth
         }
 
-        console.log(`📖 [DEBUG] 检测到新章节: "${chapterTitle}"`)
+        
       } else {
         // 合并到当前章节
         currentChapter.content += '\n\n' + content
@@ -899,7 +872,7 @@ export class EpubProcessor {
       })
     }
 
-    console.log(`🔍 [DEBUG] EPUB章节检测完成，找到 ${detectedChapters.length} 个章节`)
+    
 
     return detectedChapters.length > 0 ? detectedChapters : chapters
   }
