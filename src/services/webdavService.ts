@@ -254,7 +254,6 @@ export class WebDAVService {
       // 转换文件信息格式
       const fileList: WebDAVFileInfo[] = (contents as any[]).map(item => {
         let filename = item.filename
-        console.log('[getDirectoryContents] 原始filename:', filename)
 
         try {
           const itemUrl = new URL(filename)
