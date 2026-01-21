@@ -64,7 +64,12 @@ export class AutoSyncService {
       }
 
       // 初始化WebDAV服务
-      await this.webdavService.init(webdavConfig)
+      const initResult = await this.webdavService.initialize(webdavConfig)
+      if (!initResult.success) {
+        console.error('WebDAV初始化失败:', initResult.error)
+        return false
+      }
+
 
       // 检查连接
       const connectionTest = await this.webdavService.testConnection()

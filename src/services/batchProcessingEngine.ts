@@ -95,7 +95,7 @@ export class BatchProcessingEngine {
         proxyUrl: aiConfig.proxyUrl,
         proxyEnabled: aiConfig.proxyEnabled
       },
-      undefined,
+      () => useConfigStore.getState().promptConfig,
       {
         maxRetries: aiServiceOptions.maxRetries,
         baseRetryDelay: aiServiceOptions.baseRetryDelay
@@ -213,6 +213,12 @@ export class BatchProcessingEngine {
     this.isPaused = false
     console.log('[BatchEngine] 正在停止处理...')
   }
+
+  resetStopFlag(): void {
+    this.shouldStop = false
+    console.log('[BatchEngine] 停止标志已重置')
+  }
+
 
   /**
    * 获取处理状态

@@ -94,11 +94,10 @@ export class EpubProcessor {
           // 估算总章节数，用于补零格式化
           const estimatedTotal = Math.max(toc.length, book.spine.spineItems.length)
           chapterInfos = await this.extractChaptersFromToc(book, toc, 0, epubTocDepth, chapterNamingMode, estimatedTotal, true)
-          console.log(`📚 [DEBUG] EPUB目录模式 (深度${epubTocDepth}) 找到 ${chapterInfos.length} 个章节信息`, chapterInfos)
-          
+
           // 回退：如果TOC为空或提取失败，使用spineItems
           if (chapterInfos.length === 0) {
-            console.log('📚 [DEBUG] EPUB目录模式未找到章节，使用spineItems作为回退')
+
             const fallbackChapterInfos = book.spine.spineItems
               .map((spineItem: Section, idx: number) => {
                 const navItem: NavItem = {
@@ -116,7 +115,7 @@ export class EpubProcessor {
                 }
               })
             chapterInfos = fallbackChapterInfos
-            console.log(`📚 [DEBUG] 回退方案找到 ${chapterInfos.length} 个章节信息`)
+
           }
         } else {
           // 普通模式和智能模式：使用原有逻辑
@@ -124,7 +123,7 @@ export class EpubProcessor {
           // 估算总章节数，用于补零格式化
           const estimatedTotal = Math.max(toc.length, book.spine.spineItems.length)
           chapterInfos = await this.extractChaptersFromToc(book, toc, 0, maxSubChapterDepth, chapterNamingMode, estimatedTotal)
-          console.log(`📚 [DEBUG] 找到 ${chapterInfos.length} 个章节信息`, chapterInfos)
+
 
           // 回退：当 TOC 长度≤3 时，直接用 spineItems 生成章节信息
           if (toc.length <= 3) {
@@ -145,11 +144,11 @@ export class EpubProcessor {
                 }
               })
               .filter(item => !!item.href)
-            console.log('🔁 [DEBUG] TOC长度≤3，直接用 spineItems 生成章节信息，fallback 章节数:', fallbackChapterInfos.length)
 
             if (fallbackChapterInfos.length >= chapterInfos.length) {
               chapterInfos = fallbackChapterInfos
             }
+
           }
         }
         if (chapterInfos.length > 0) {
@@ -282,8 +281,9 @@ export class EpubProcessor {
 
   private async getSingleChapterContent(book: Book, href: string, anchor?: string): Promise<string> {
     try {
-      let section = null
+      let section: Section | null = null
       const spineItems = book.spine.spineItems
+
 
       for (let i = 0; i < spineItems.length; i++) {
         const spineItem = spineItems[i]
@@ -475,7 +475,7 @@ export class EpubProcessor {
           
           // 如果还是很长，按字符数强制换行
           if (broken.length > 150) {
-            const chunks = []
+            const chunks: string[] = []
             for (let i = 0; i < broken.length; i += 120) {
               chunks.push(broken.substring(i, Math.min(i + 120, broken.length)))
             }
@@ -486,6 +486,8 @@ export class EpubProcessor {
         }
         return trimmed
       })
+
+
 
       const result = formattedSentences.join('\n').trim()
       const lineCount = result.split('\n').length
@@ -695,8 +697,8 @@ export class EpubProcessor {
     try {
       console.log(`📖 [DEBUG] 从标题提取内容: ${headingElement.textContent}`)
       const headingLevel = parseInt(headingElement.tagName.charAt(1))
-      const content = []
-      
+      const content: string[] = []
+
       // 从标题开始遍历
       let currentElement: Element | null = headingElement.nextElementSibling
 
@@ -744,7 +746,8 @@ export class EpubProcessor {
 
   private extractContentFromGenericAnchor(doc: Document, anchorElement: Element): string {
     try {
-      const content = []
+      const content: string[] = []
+
       let currentElement: Element | null = anchorElement
       let collectedElements = 0
 
@@ -773,8 +776,9 @@ export class EpubProcessor {
   // 新增方法：获取章节的HTML内容（不影响原有功能）
   async getSingleChapterHTML(book: Book, href: string): Promise<string> {
     try {
-      let section = null
+      let section: Section | null = null
       const spineItems = book.spine.spineItems
+
 
       for (let i = 0; i < spineItems.length; i++) {
         const spineItem = spineItems[i]

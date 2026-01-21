@@ -326,7 +326,10 @@ export class AIService {
     
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        console.log(`[AI服务] ${operationName} - 尝试第 ${attempt} 次`)
+        if (attempt > 1) {
+          console.log(`[AI服务] ${operationName} - 尝试第 ${attempt} 次`)
+        }
+
         const result = await operation()
         
         if (attempt > 1) {
@@ -630,12 +633,13 @@ export class AIService {
 
   async analyzeConnections(chapters: Chapter[], outputLanguage: SupportedLanguage = 'en'): Promise<string> {
     try {
+      const promptConfig = this.getCurrentPromptConfig()
       // 构建章节摘要信息
       const chapterSummaries = chapters.map((chapter) => 
         `${chapter.title}:\n${chapter.summary || '无总结'}`
       ).join('\n\n')
 
-      const prompt = getChapterConnectionsAnalysisPrompt(chapterSummaries)
+      const prompt = getChapterConnectionsAnalysisPrompt(chapterSummaries, promptConfig.connectionAnalysis)
 
       const connections = await this.generateContent(prompt, outputLanguage)
 
@@ -656,12 +660,13 @@ export class AIService {
     outputLanguage: SupportedLanguage = 'en'
   ): Promise<string> {
     try {
+      const promptConfig = this.getCurrentPromptConfig()
       // 构建简化的章节信息
       const chapterInfo = chapters.map((chapter, index) => 
         `第${index + 1}章：${chapter.title}，内容：${chapter.summary || '无总结'}`
       ).join('\n')
 
-      const prompt = getOverallSummaryPrompt(bookTitle, chapterInfo, connections)
+      const prompt = getOverallSummaryPrompt(bookTitle, chapterInfo, connections, promptConfig.overallSummary)
 
       const summary = await this.generateContent(prompt, outputLanguage)
 
@@ -720,7 +725,8 @@ export class AIService {
 
   async generateMindMapArrows(combinedMindMapData: any, outputLanguage: SupportedLanguage = 'en'): Promise<any> {
     try {
-      const basePrompt = getMindMapArrowPrompt()
+      const promptConfig = this.getCurrentPromptConfig()
+      const basePrompt = getMindMapArrowPrompt(promptConfig.mindmap.arrow)
       const prompt = basePrompt + `\n\n当前思维导图数据：\n${JSON.stringify(combinedMindMapData, null, 2)}`
 
       const arrowsJson = await this.generateContent(prompt, outputLanguage)
@@ -751,7 +757,8 @@ export class AIService {
 
   async generateCombinedMindMap(bookTitle: string, chapters: Chapter[], customPrompt?: string): Promise<MindElixirData> {
     try {
-      const basePrompt = getChapterMindMapPrompt()
+      const promptConfig = this.getCurrentPromptConfig()
+      const basePrompt = getChapterMindMapPrompt(customPrompt || promptConfig.mindmap.combined)
       const chaptersContent = chapters.map(item=>item.content).join('\n\n ------------- \n\n')
       let prompt = `${basePrompt}
         请为整本书《${bookTitle}》生成一个完整的思维导图，将所有章节的内容整合在一起。
