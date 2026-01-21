@@ -32,8 +32,10 @@ import {
   ChevronDown,
   ChevronUp,
   Settings,
-  Clock
+  Clock,
+  X
 } from 'lucide-react'
+
 import { useWebDAVConfig, useProcessingOptions } from '../../stores/configStore'
 import { webdavService, type WebDAVFileInfo } from '../../services/webdavService'
 import { normalizeDavPath } from '../../services/webdavProxyUtils'
@@ -56,7 +58,8 @@ export function BatchProcessingDialog({
   triggerSize = 'sm'
 }: BatchProcessingDialogProps) {
   // Store
-  const { queue, addToQueue, clearQueue, startProcessing, pauseProcessing, resumeProcessing, stopProcessing, setConfig } = useBatchQueueStore()
+  const { queue, addToQueue, clearQueue, startProcessing, pauseProcessing, resumeProcessing, stopProcessing, removeFromQueue, setConfig } = useBatchQueueStore()
+
   const { isProcessing, isPaused, currentItem } = useBatchProcessingStatus()
   const stats = useBatchStats()
 
@@ -260,6 +263,7 @@ export function BatchProcessingDialog({
     setActiveTab('queue')
 
     // Start processing
+    batchProcessingEngine.resetStopFlag()
     startProcessing()
 
     toast('开始批量处理', {
@@ -267,8 +271,15 @@ export function BatchProcessingDialog({
     })
   }
 
+
+  const handleStartQueueProcessing = () => {
+    batchProcessingEngine.resetStopFlag()
+    startProcessing()
+  }
+
   // Handle pause/resume
   const handleTogglePause = () => {
+
     if (isPaused) {
       resumeProcessing()
       toast('已继续处理', {
@@ -284,11 +295,13 @@ export function BatchProcessingDialog({
 
   // Handle stop
   const handleStop = () => {
+    batchProcessingEngine.stop()
     stopProcessing()
     toast('已停止处理', {
       description: '批量处理已停止'
     })
   }
+
 
   // Handle clear queue
   const handleClearQueue = () => {
@@ -390,10 +403,12 @@ export function BatchProcessingDialog({
         </div>
 
         {/* Content area */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden min-h-0">
           {activeTab === 'config' ? (
-            <div className="h-full flex flex-col space-y-4 overflow-hidden">
-              {/* Folder navigation */}
+            <ScrollArea className="flex-1 min-h-0">
+              <div className="h-full flex flex-col space-y-4 pr-4">
+                {/* Folder navigation */}
+
               <div className="flex items-center gap-2 flex-shrink-0">
                 <Button variant="outline" size="sm" onClick={navigateUp} disabled={currentPath === '/'}>
                   <ChevronUp className="h-4 w-4" />
@@ -510,73 +525,76 @@ export function BatchProcessingDialog({
                 </ScrollArea>
               </div>
 
-              {/* Batch options */}
-              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg border flex-shrink-0">
-                <div className="space-y-2">
-                  <Label>处理范围</Label>
-                  <Select
-                    value={maxFiles === 0 ? 'all' : maxFiles.toString()}
-                    onValueChange={(value) => setMaxFiles(value === 'all' ? 0 : parseInt(value))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">全部文件</SelectItem>
-                      <SelectItem value="5">前 5 个</SelectItem>
-                      <SelectItem value="10">前 10 个</SelectItem>
-                      <SelectItem value="20">前 20 个</SelectItem>
-                      <SelectItem value="50">前 50 个</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    选择要处理的文件数量，0 表示处理所有选中文件
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>处理顺序</Label>
-                  <Select
-                    value={processingOrder}
-                    onValueChange={(value: 'sequential' | 'random') => setProcessingOrder(value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sequential">顺序处理</SelectItem>
-                      <SelectItem value="random">随机顺序</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    文件的处理顺序
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>跳过已处理</Label>
-                    <p className="text-xs text-muted-foreground">
-                      跳过 WebDAV 中已有缓存的文件
-                    </p>
-                  </div>
-                  <Switch checked={skipProcessed} onCheckedChange={setSkipProcessed} />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>当前选中</Label>
-                    <p className="text-xs text-muted-foreground">
-                      将要添加到队列的文件
-                    </p>
-                  </div>
-                  <Badge variant="secondary" className="text-lg px-3">
-                    {selectedFiles.length} 个文件
-                  </Badge>
-                </div>
-              </div>
-            </div>
+               {/* Batch options */}
+               <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg border flex-shrink-0">
+                 <div className="space-y-2">
+                   <Label>处理范围</Label>
+                   <Select
+                     value={maxFiles === 0 ? 'all' : maxFiles.toString()}
+                     onValueChange={(value) => setMaxFiles(value === 'all' ? 0 : parseInt(value))}
+                   >
+                     <SelectTrigger>
+                       <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">全部文件</SelectItem>
+                       <SelectItem value="5">前 5 个</SelectItem>
+                       <SelectItem value="10">前 10 个</SelectItem>
+                       <SelectItem value="20">前 20 个</SelectItem>
+                       <SelectItem value="50">前 50 个</SelectItem>
+                     </SelectContent>
+                   </Select>
+                   <p className="text-xs text-muted-foreground">
+                     选择要处理的文件数量，0 表示处理所有选中文件
+                   </p>
+                 </div>
+ 
+                 <div className="space-y-2">
+                   <Label>处理顺序</Label>
+                   <Select
+                     value={processingOrder}
+                     onValueChange={(value: 'sequential' | 'random') => setProcessingOrder(value)}
+                   >
+                     <SelectTrigger>
+                       <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="sequential">顺序处理</SelectItem>
+                       <SelectItem value="random">随机顺序</SelectItem>
+                     </SelectContent>
+                   </Select>
+                   <p className="text-xs text-muted-foreground">
+                     文件的处理顺序
+                   </p>
+                 </div>
+ 
+                 <div className="flex items-center justify-between">
+                   <div className="space-y-0.5">
+                     <Label>跳过已处理</Label>
+                     <p className="text-xs text-muted-foreground">
+                       跳过 WebDAV 中已有缓存的文件
+                     </p>
+                   </div>
+                   <Switch checked={skipProcessed} onCheckedChange={setSkipProcessed} />
+                 </div>
+ 
+                 <div className="flex items-center justify-between">
+                   <div className="space-y-0.5">
+                     <Label>当前选中</Label>
+                     <p className="text-xs text-muted-foreground">
+                       将要添加到队列的文件
+                     </p>
+                   </div>
+                   <Badge variant="secondary" className="text-lg px-3">
+                     {selectedFiles.length} 个文件
+                   </Badge>
+                 </div>
+               </div>
+             </div>
+           </ScrollArea>
           ) : (
+
+
             <div className="h-full flex flex-col space-y-4 overflow-hidden">
               {/* Stats bar */}
               <div className="grid grid-cols-5 gap-2 p-3 bg-muted/50 rounded-lg flex-shrink-0">
@@ -682,6 +700,17 @@ export function BatchProcessingDialog({
                           {item.status === 'failed' && (
                             <XCircle className="h-4 w-4 text-red-500" />
                           )}
+                          {item.status !== 'processing' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => removeFromQueue(item.id)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )}
+
                         </div>
                       ))}
                     </div>
@@ -734,10 +763,11 @@ export function BatchProcessingDialog({
                   </Button>
                 </>
               ) : (
-                <Button onClick={startProcessing} disabled={queue.length === 0}>
+                <Button onClick={handleStartQueueProcessing} disabled={queue.length === 0}>
                   <Play className="h-4 w-4 mr-2" />
                   开始处理
                 </Button>
+
               )}
             </>
           )}

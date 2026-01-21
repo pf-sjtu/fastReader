@@ -20,8 +20,10 @@ import {
   CheckCircle,
   XCircle,
   DollarSign,
-  FolderOpen
+  FolderOpen,
+  X
 } from 'lucide-react'
+
 import { useBatchQueueStore, useBatchProcessingStatus, useBatchStats, type BatchQueueItem } from '../../stores/batchQueueStore'
 import { batchProcessingEngine, type BatchProcessingResult } from '../../services/batchProcessingEngine'
 import { cloudCacheService } from '../../services/cloudCacheService'
@@ -38,12 +40,14 @@ export function BatchQueuePanel() {
     pauseProcessing: pauseStoreProcessing,
     resumeProcessing: resumeStoreProcessing,
     stopProcessing: stopStoreProcessing,
+    removeFromQueue,
     updateItem,
     markItemCompleted,
     markItemFailed,
     markItemSkipped,
     nextItem
   } = useBatchQueueStore()
+
   const { isProcessing: isStoreProcessing, isPaused: isStorePaused, currentItem } = useBatchProcessingStatus()
   const stats = useBatchStats()
 
@@ -171,6 +175,15 @@ export function BatchQueuePanel() {
     })
   }
 
+  const handleRemoveItem = (item: BatchQueueItem) => {
+    if (item.status === 'processing') {
+      return
+    }
+
+    removeFromQueue(item.id)
+  }
+
+
   // Handle start processing
   const handleStartProcessing = async () => {
     const pendingCount = queue.filter((i) => i.status === 'pending').length
@@ -180,6 +193,7 @@ export function BatchQueuePanel() {
       return
     }
 
+    batchProcessingEngine.resetStopFlag()
     startStoreProcessing()
     cachedFilesRef.current = await cloudCacheService.fetchCacheFileNames()
     toast('开始处理', {
@@ -187,6 +201,7 @@ export function BatchQueuePanel() {
     })
 
   }
+
 
   // Effect to process items when processing is active
   useEffect(() => {
@@ -318,6 +333,17 @@ export function BatchQueuePanel() {
                   {item.error && (
                     <span className="text-red-500 max-w-[100px] truncate">{item.error}</span>
                   )}
+                  {item.status !== 'processing' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => handleRemoveItem(item)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
+
                 </div>
               ))}
             </div>
