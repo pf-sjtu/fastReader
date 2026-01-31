@@ -256,6 +256,7 @@ export class EpubProcessor {
   private async getSingleChapterContent(book: Book, href: string, anchor?: string): Promise<string> {
     try {
       let section: Section | null = null
+      let spineIndex = -1
       const spineItems = book.spine.spineItems
 
       console.log(`[EPUB Debug] getSingleChapterContent: 查找 href="${href}"`)
@@ -266,6 +267,7 @@ export class EpubProcessor {
         const match = spineItem.href === href || spineItem.href.endsWith(href)
         if (match) {
           console.log(`[EPUB Debug] 匹配成功: spine[${i}]="${spineItem.href}"`)
+          spineIndex = i
           section = book.spine.get(i)
           break
         }
@@ -278,11 +280,38 @@ export class EpubProcessor {
       }
 
       console.log(`[EPUB Debug] 开始渲染章节: ${href}`)
-      const chapterHTML = await section.render(book.load.bind(book))
+      let chapterHTML = await section.render(book.load.bind(book))
       console.log(`[EPUB Debug] 章节渲染完成，HTML长度: ${chapterHTML?.length || 0}`)
       
-      const textContent = this.extractTextFromXHTML(chapterHTML, anchor)
+      let textContent = this.extractTextFromXHTML(chapterHTML, anchor)
       console.log(`[EPUB Debug] 提取文本长度: ${textContent?.length || 0}`)
+      
+      // 封面-内容自动检测：如果内容为空，检查是否有 xxx_0001.xhtml 内容文件
+      if (textContent.length < 100 && spineIndex >= 0 && spineIndex < spineItems.length - 1) {
+        const nextSpineItem = spineItems[spineIndex + 1]
+        const nextHref = nextSpineItem.href
+        
+        // 检查是否是 _0001.xhtml 格式的内容文件
+        if (nextHref.match(/_\d+\.xhtml$/)) {
+          console.log(`[EPUB Debug] 当前章节内容过少，检测到内容文件: ${nextHref}`)
+          
+          const nextSection = book.spine.get(spineIndex + 1)
+          if (nextSection) {
+            const nextHTML = await nextSection.render(book.load.bind(book))
+            console.log(`[EPUB Debug] 内容文件渲染完成，HTML长度: ${nextHTML?.length || 0}`)
+            
+            const nextText = this.extractTextFromXHTML(nextHTML, anchor)
+            console.log(`[EPUB Debug] 内容文件文本长度: ${nextText?.length || 0}`)
+            
+            if (nextText.length > textContent.length) {
+              console.log(`[EPUB Debug] 使用内容文件替代原封面文件`)
+              textContent = nextText
+            }
+            
+            nextSection.unload()
+          }
+        }
+      }
       
       section.unload()
 
