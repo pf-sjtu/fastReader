@@ -83,7 +83,7 @@ export class WebDAVService {
       if (!config.serverUrl || !config.username || !config.password) {
         return {
           success: false,
-          error: 'WebDAV配置不完整，需要服务器地址、用户名和密码'
+          error: 'WebDAV_CONFIG_INCOMPLETE'
         }
       }
 
