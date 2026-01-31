@@ -258,26 +258,37 @@ export class EpubProcessor {
       let section: Section | null = null
       const spineItems = book.spine.spineItems
 
+      console.log(`[EPUB Debug] getSingleChapterContent: 查找 href="${href}"`)
+      console.log(`[EPUB Debug] Spine 项目数: ${spineItems.length}`)
+
       for (let i = 0; i < spineItems.length; i++) {
         const spineItem = spineItems[i]
-        if (spineItem.href === href || spineItem.href.endsWith(href)) {
+        const match = spineItem.href === href || spineItem.href.endsWith(href)
+        if (match) {
+          console.log(`[EPUB Debug] 匹配成功: spine[${i}]="${spineItem.href}"`)
           section = book.spine.get(i)
           break
         }
       }
 
       if (!section) {
-        console.warn(`无法获取章节: ${href}`)
+        console.warn(`[EPUB Debug] 无法获取章节: ${href}`)
+        console.log(`[EPUB Debug] 所有 spine hrefs:`, spineItems.map(s => s.href))
         return ''
       }
 
+      console.log(`[EPUB Debug] 开始渲染章节: ${href}`)
       const chapterHTML = await section.render(book.load.bind(book))
+      console.log(`[EPUB Debug] 章节渲染完成，HTML长度: ${chapterHTML?.length || 0}`)
+      
       const textContent = this.extractTextFromXHTML(chapterHTML, anchor)
+      console.log(`[EPUB Debug] 提取文本长度: ${textContent?.length || 0}`)
+      
       section.unload()
 
       return textContent
     } catch (error) {
-      console.warn(`获取单个章节内容失败 (href: ${href}):`, error)
+      console.warn(`[EPUB Debug] 获取单个章节内容失败 (href: ${href}):`, error)
       return ''
     }
   }
