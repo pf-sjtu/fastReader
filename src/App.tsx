@@ -125,16 +125,16 @@ function App() {
   const { apiKey } = aiConfig
   const { processingMode, bookType, useSmartDetection, skipNonEssentialChapters } = processingOptions
 
-  // 创建动态获取提示词配置的函数
-  const getPromptConfig = () => useConfigStore.getState().promptConfig
+  // 使用 useMemo 缓存提示词配置获取函数，避免每次 render 创建新函数
+  const getPromptConfig = useCallback(() => useConfigStore.getState().promptConfig, [])
 
-  // WebDAV自动连接测试
+  // WebDAV自动连接测试 - 只在组件挂载时执行一次
   useEffect(() => {
     const initializeWebDAVIfNeeded = async () => {
       // 如果WebDAV已启用且配置完整但服务未初始化，自动测试连接
-      if (webdavConfig.enabled && 
-          webdavConfig.serverUrl && 
-          webdavConfig.username && 
+      if (webdavConfig.enabled &&
+          webdavConfig.serverUrl &&
+          webdavConfig.username &&
           webdavConfig.password &&
           !webdavService.isInitialized()) {
         
@@ -144,7 +144,7 @@ function App() {
           const initResult = await webdavService.initialize(webdavConfig)
           if (initResult.success) {
             console.log('App: WebDAV自动连接成功')
-            toast.success('WebDAV已自动连接')
+            toast.success(t('webdav.autoConnected'))
           } else {
             console.error('App: WebDAV自动连接失败:', initResult.error)
             // 不显示错误提示，避免与配置页面的测试提示冲突
@@ -159,7 +159,8 @@ function App() {
     // 给WebDAVConfig组件留出时间处理配置变化
     const timer = setTimeout(initializeWebDAVIfNeeded, 3000)
     return () => clearTimeout(timer)
-  }, [webdavConfig.enabled, webdavConfig.serverUrl, webdavConfig.username, webdavConfig.password])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // 只在组件挂载时执行
 
   // 请求通知权限
   useEffect(() => {
