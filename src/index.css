@@ -26,17 +26,18 @@
   background: var(--border);
 }
 
-/* 黑暗模式下的滚动条样式 */
+/* 黑暗模式下的滚动条样式 - 使用 CSS 变量 */
 .dark ::-webkit-scrollbar-track {
-  background: oklch(0.21 0.03 250);
+  background: var(--muted);
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: oklch(0.35 0.05 250);
+  background: var(--muted-foreground);
+  opacity: 0.5;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.45 0.08 250);
+  background: var(--border);
 }
 
 @theme inline {
