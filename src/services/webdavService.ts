@@ -54,11 +54,23 @@ function buildHeaderPath(config: WebDAVConfig, path: string): string {
   })
 }
 
-
 // WebDAV客户端封装类
 export class WebDAVService {
   private client: WebDAVClient | null = null
   private config: WebDAVConfig | null = null
+
+  /**
+   * 设置 WebDAV 请求头（自动编码路径）
+   * @param path 路径（会被自动编码）
+   */
+  private setDavHeader(path: string): void {
+    if (!this.client) return
+    this.client.setHeaders({
+      ...this.client.getHeaders(),
+      'X-WebDAV-Path': encodeDavHeaderPath(path),
+      'X-Request-Origin': window.location.origin
+    })
+  }
 
   /**
    * 初始化WebDAV客户端
@@ -460,27 +472,17 @@ export class WebDAVService {
       if (dirPath && dirPath !== '/') {
         console.log('📁 检查目录是否存在:', dirPath)
         const dirHeaderPath = buildHeaderPath(this.config!, dirPath)
-        this.client.setHeaders({
-          ...this.client.getHeaders(),
-          'X-WebDAV-Path': dirHeaderPath
-        })
+        this.setDavHeader(dirHeaderPath)
         const dirExists = await this.client.exists('/')
         if (!dirExists) {
           console.log('📁 创建目录:', dirPath)
-          this.client.setHeaders({
-            ...this.client.getHeaders(),
-            'X-WebDAV-Path': dirHeaderPath
-          })
+          this.setDavHeader(dirHeaderPath)
           await this.client.createDirectory('/')
         }
       }
-      
+
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
-      this.client.setHeaders({
-        ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
-        'X-Request-Origin': window.location.origin
-      })
+      this.setDavHeader(headerPath)
       const result = await this.client.putFileContents('/', data as any, { overwrite })
       
       console.log('✅ WebDAV上传成功:', result)
