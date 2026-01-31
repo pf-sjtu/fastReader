@@ -40,15 +40,21 @@ TBD - created by archiving change add-batch-processing. Update Purpose after arc
 - **THEN** 结果为 `Test Book NamePart1-完整摘要.md`
 
 ### Requirement: Cloud Cache Service
+系统 SHALL 支持获取云端缓存文件列表，并可在单次批处理内复用该列表进行本地对比。
 
-系统 SHALL 提供 `cloudCacheService.ts` 服务处理云端缓存操作。
+#### Scenario: 读取缓存文件列表
+- **WHEN** 系统请求云端缓存文件列表
+- **THEN** 返回 `syncPath` 下所有 `*-完整摘要.md` 的文件名集合
+- **AND** 支持在一次批量处理中复用该列表进行存在性判断
 
-#### Scenario: 检查缓存是否存在
-- **WHEN** 调用 `cloudCacheService.checkCacheExists(fileName)`
-- **THEN** 返回 Promise<boolean> 表示缓存是否存在
+### Requirement: AI 同源代理
+系统 MUST 提供 `/api/ai` 同源代理用于转发 AI API 请求。
 
-#### Scenario: 读取缓存内容
-- **WHEN** 调用 `cloudCacheService.readCache(fileName)`
-- **THEN** 返回 Promise<string> 表示文件内容
-- **AND** 如果读取失败，抛出异常或返回 null
+#### Scenario: 多 API Base 支持
+- **WHEN** 前端请求携带 apiUrl（如 `https://api.xiaomimimo.com/v1` 或 `http://35.208.227.162:8317/v1beta`）
+- **THEN** 代理 MUST 使用该 apiUrl 作为上游 base 并转发请求
+
+#### Scenario: CORS/Mixed Content 规避
+- **WHEN** 前端通过 `/api/ai/*` 发起请求
+- **THEN** 浏览器不应直接访问上游 API，避免 CORS 与 Mixed Content 阻断
 

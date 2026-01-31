@@ -14,34 +14,13 @@ TBD - created by archiving change add-batch-processing. Update Purpose after arc
 - **AND** 按钮图标为 ⚡（闪电）或批量处理相关图标
 
 ### Requirement: Batch Processing Dialog
+系统 SHALL 在对话框展示文件列表时使用单次目录缓存列表进行“已处理”状态标记，避免逐文件 WebDAV 存在性检查。
 
-系统 SHALL 提供批量处理配置对话框。
-
-#### Scenario: 打开批量处理对话框
-- **WHEN** 用户点击"批量处理"按钮
-- **THEN** 显示批量处理配置对话框
-
-#### Scenario: 选择文件夹
+#### Scenario: 文件列表缓存状态显示
 - **GIVEN** 批量处理对话框已打开
-- **WHEN** 用户输入或浏览选择文件夹路径
-- **THEN** 系统显示该路径下的 EPUB/PDF 文件数量
-
-#### Scenario: 配置处理参数
-- **GIVEN** 批量处理对话框已打开
-- **WHEN** 用户配置以下参数：
-  | 参数 | 选项 |
-  |------|------|
-  | 处理文件数量 | 全部 / 前 N 个 |
-  | 处理范围 | 全部范围 / 仅未处理部分 |
-  | 处理顺序 | 顺序处理 / 随机顺序
-- **THEN** 系统验证参数有效性
-- **AND** 系统显示待处理文件列表预览
-
-#### Scenario: 确认开始处理
-- **GIVEN** 用户已配置所有参数
-- **WHEN** 点击"确认开始处理"按钮
-- **THEN** 系统将选定文件加入处理队列
-- **AND** 对话框关闭，显示批量队列面板
+- **WHEN** 系统加载目录文件列表
+- **THEN** 系统只进行一次 WebDAV 缓存列表查询
+- **AND** 基于本地缓存列表标记“已缓存/未处理”状态
 
 ### Requirement: Batch Queue Panel
 

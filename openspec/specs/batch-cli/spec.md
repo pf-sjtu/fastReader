@@ -37,40 +37,22 @@ TBD - created by archiving change add-batch-processing. Update Purpose after arc
 - **AND** 如果环境变量不存在，抛出错误
 
 ### Requirement: Batch File Discovery
+系统 SHALL 在单次批量处理内缓存云端文件列表，用于过滤已处理文件，避免循环内重复调用 WebDAV。
 
-系统 SHALL 从 WebDAV 扫描并收集待处理文件。
-
-#### Scenario: 扫描文件夹
-- **GIVEN** 配置了 sourcePath = "/books"
-- **WHEN** 系统扫描该文件夹
-- **THEN** 返回所有 EPUB 和 PDF 文件列表
-- **AND** 文件按文件名排序（顺序处理）或随机排序（随机处理）
-
-#### Scenario: 过滤已处理文件
+#### Scenario: 单次批处理内缓存列表
 - **GIVEN** 配置 skipProcessed = true
-- **AND** 某文件在 WebDAV 上已存在缓存
-- **WHEN** 生成待处理队列
-- **THEN** 该文件被排除在队列之外
-
-#### Scenario: 限制文件数量
-- **GIVEN** 配置 maxFiles = 10
-- **WHEN** 扫描到 25 个匹配文件
-- **THEN** 只取前 10 个文件加入队列
+- **WHEN** 系统开始一次批量处理
+- **THEN** 系统只进行一次 WebDAV 目录/缓存列表查询
+- **AND** 后续过滤逻辑使用本地缓存列表进行对比
 
 ### Requirement: Sequential Processing
+系统 SHALL 在处理队列内使用缓存的“已处理文件”集合进行跳过判断，避免逐文件远程存在性检查。
 
-系统 SHALL 按顺序处理队列中的文件。
-
-#### Scenario: 处理单个文件
-- **WHEN** 开始处理队列中的一本书籍
-- **THEN** 系统执行与网页版相同的处理流程
-- **AND** 依次处理：提取章节 → AI 处理 → 保存结果
-
-#### Scenario: 顺序执行
-- **GIVEN** 队列中有 3 本书
-- **WHEN** 开始批量处理
-- **THEN** 第 1 本书完全处理完成后才开始第 2 本
-- **AND** 第 2 本书完全处理完成后才开始第 3 本
+#### Scenario: 处理循环内使用本地缓存
+- **GIVEN** 批量处理队列包含多本书籍
+- **AND** 已生成本次批处理的缓存列表
+- **WHEN** 处理每本书籍
+- **THEN** 使用本地缓存判断是否跳过
 
 ### Requirement: Error Handling with Retry
 
