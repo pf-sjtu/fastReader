@@ -109,11 +109,16 @@ export class EpubProcessor {
 
         if (chapterInfos.length > 0) {
           for (const chapterInfo of chapterInfos) {
+            // 调试日志：检查章节过滤
+            console.log(`[EPUB Debug] 处理章节: "${chapterInfo.title}", href: ${chapterInfo.href}`)
+            
             if (skipNonEssentialChapters && this.shouldSkipChapter(chapterInfo.title)) {
+              console.log(`[EPUB Debug] 跳过章节 "${chapterInfo.title}": 匹配跳过关键词`)
               continue
             }
 
             const chapterContent = await this.extractContentFromHref(book, chapterInfo.href, chapterInfo.subitems)
+            console.log(`[EPUB Debug] 章节 "${chapterInfo.title}" 内容长度: ${chapterContent.trim().length}`)
 
             if (chapterContent.trim().length > 100) {
               chapters.push({
@@ -124,6 +129,9 @@ export class EpubProcessor {
                 tocItem: chapterInfo.tocItem,
                 depth: chapterInfo.depth
               })
+              console.log(`[EPUB Debug] 章节 "${chapterInfo.title}" 已添加`)
+            } else {
+              console.log(`[EPUB Debug] 章节 "${chapterInfo.title}" 被过滤: 内容长度 ${chapterContent.trim().length} <= 100`)
             }
           }
         }
