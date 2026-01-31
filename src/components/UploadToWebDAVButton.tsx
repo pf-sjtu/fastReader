@@ -156,12 +156,12 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
   // 上传文件到WebDAV
   const uploadToWebDAV = async (forceOverwrite = false) => {
     if (!webdavConfig.enabled) {
-      toast.error('WebDAV未启用，请先在设置中配置WebDAV')
+      toast.error(t('webdav.notEnabled'))
       return
     }
 
     if (!bookSummary || !file) {
-      toast.error('没有可上传的内容')
+      toast.error(t('webdav.noContent'))
       return
     }
 
