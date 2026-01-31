@@ -218,6 +218,15 @@
     "title": "Configuration",
     "aiServiceConfig": "Normal",
     "description": "Configure AI services and processing options",
+    "connection": {
+      "enterApiKeyFirst": "Please configure API Key first",
+      "enterProxyFirst": "Please enable proxy and configure proxy address first",
+      "aiSuccess": "AI API connection successful",
+      "aiFailed": "AI API connection failed",
+      "testFailed": "Test failed: {{error}}",
+      "proxyTestFailed": "Proxy test failed: {{error}}",
+      "unknownError": "Unknown error"
+    },
     "aiProvider": "AI Provider",
     "selectAiProvider": "Select AI Provider",
     "openaiCompatible": "OpenAI Compatible",

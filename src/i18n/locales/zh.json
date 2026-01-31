@@ -183,6 +183,15 @@
     "title": "配置",
     "aiServiceConfig": "常规",
     "description": "配置 AI 服务和处理选项",
+    "connection": {
+      "enterApiKeyFirst": "请先配置 API Key",
+      "enterProxyFirst": "请先启用代理并配置代理地址",
+      "aiSuccess": "AI API 连接成功",
+      "aiFailed": "AI API 连接失败",
+      "testFailed": "测试失败: {{error}}",
+      "proxyTestFailed": "代理测试失败: {{error}}",
+      "unknownError": "未知错误"
+    },
     "aiProvider": "AI 提供商",
     "selectAiProvider": "选择 AI 提供商",
     "openaiCompatible": "OpenAI 兼容",

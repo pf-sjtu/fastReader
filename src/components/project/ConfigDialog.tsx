@@ -84,7 +84,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
     if (!aiConfig.apiKey) {
       setConnectionTestResult({
         success: false,
-        message: '请先配置 API Key'
+        message: t('config.connection.enterApiKeyFirst')
       })
       return
     }
@@ -100,7 +100,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
       
       setConnectionTestResult({
         success: result,
-        message: result ? 'AI API 连接成功' : 'AI API 连接失败'
+        message: result ? t('config.connection.aiSuccess') : t('config.connection.aiFailed')
       })
       
       console.log('AI 连接测试详细结果:', {
@@ -114,7 +114,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
     } catch (error) {
       setConnectionTestResult({
         success: false,
-        message: `测试失败: ${error instanceof Error ? error.message : '未知错误'}`
+        message: t('config.connection.testFailed', { error: error instanceof Error ? error.message : t('config.connection.unknownError') })
       })
       
       console.error('AI 连接测试失败:', error)
@@ -128,7 +128,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
     if (!aiConfig.proxyEnabled || !aiConfig.proxyUrl) {
       setProxyTestResult({
         success: false,
-        message: '请先启用代理并配置代理地址'
+        message: t('config.connection.enterProxyFirst')
       })
       return
     }
@@ -151,7 +151,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
     } catch (error) {
       setProxyTestResult({
         success: false,
-        message: `代理测试失败: ${error instanceof Error ? error.message : '未知错误'}`
+        message: t('config.connection.proxyTestFailed', { error: error instanceof Error ? error.message : t('config.connection.unknownError') })
       })
       
       console.error('代理测试失败:', error)
