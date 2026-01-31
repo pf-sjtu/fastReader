@@ -6,7 +6,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { 
+import { EmptyState } from '@/components/ui/empty-state'
+import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
@@ -568,12 +569,14 @@ export function WebDAVFileBrowser({
                   {isLoading ? (
                     <div className="flex items-center justify-center h-32">
                       <Loader2 className="h-6 w-6 animate-spin" />
-                      <span className="ml-2">加载中...</span>
+                      <span className="ml-2">{t('common.loading')}</span>
                     </div>
                   ) : sortedFilteredFiles.length === 0 ? (
-                    <div className="flex items-center justify-center h-32 text-muted-foreground">
-                      {searchQuery ? '没有找到匹配的文件' : '目录为空'}
-                    </div>
+                    <EmptyState
+                      icon={searchQuery ? Search : FolderOpen}
+                      title={searchQuery ? t('webdav.noSearchResults') : t('webdav.emptyDirectory')}
+                      description={searchQuery ? t('webdav.tryDifferentSearch') : t('webdav.emptyDirectoryDesc')}
+                    />
                   ) : (
                     <div className="min-w-[800px]">
                       {sortedFilteredFiles.map((file, index) => (
