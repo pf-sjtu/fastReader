@@ -25,8 +25,8 @@ interface CacheItem {
 export class CacheService {
   private cache: Map<string, CacheValue>
   private readonly STORAGE_KEY = 'ebook-processor-cache'
-  private readonly MAX_CACHE_SIZE = 999 // 最大缓存条目数
-  private readonly CACHE_EXPIRY = 999 * 24 * 60 * 60 * 1000
+  private readonly MAX_CACHE_SIZE = 100 // 最大缓存条目数
+  private readonly CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000 // 7天
 
   constructor() {
     this.cache = new Map()
