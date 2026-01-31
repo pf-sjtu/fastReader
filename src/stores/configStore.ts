@@ -59,16 +59,10 @@ interface AIConfigManager {
   getAvailableTemplates: () => Array<{ id: string; name: string; description: string }>
 }
 
-// 兼容性接口（保持向后兼容）
-interface AIConfig {
-  provider: 'gemini' | 'openai' | 'ollama' | '302.ai'
-  apiKey: string
-  apiUrl: string
-  model: string
-  temperature: number
-  proxyUrl?: string // 代理服务器地址
-  proxyEnabled?: boolean // 是否启用代理
-}
+// AIConfig 已废弃，请使用 AIProviderConfig
+// 此类型仅用于类型兼容，内部实现已迁移到 AIProviderConfig
+/** @deprecated 使用 AIProviderConfig 替代 */
+type AIConfig = AIProviderConfig
 
 // 处理选项接口
 interface ProcessingOptions {
