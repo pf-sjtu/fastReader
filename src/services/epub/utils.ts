@@ -51,8 +51,6 @@ export function cleanChapterTitle(title: string): string {
   try {
     if (!title) return title
 
-    console.log(`[EPUB Debug] cleanChapterTitle 输入长度: ${title.length}, 内容: "${title.substring(0, 100)}"`)
-
     let cleaned = title
       .replace(/&#160;/g, ' ')
       .replace(/&nbsp;/g, ' ')
@@ -69,7 +67,6 @@ export function cleanChapterTitle(title: string): string {
 
     cleaned = cleaned.replace(/\s+/g, ' ').trim()
 
-    console.log(`[EPUB Debug] cleanChapterTitle 输出长度: ${cleaned.length}`)
     return cleaned
   } catch (error) {
     console.warn('章节标题清理失败:', error)

@@ -109,16 +109,11 @@ export class EpubProcessor {
 
         if (chapterInfos.length > 0) {
           for (const chapterInfo of chapterInfos) {
-            // 调试日志：检查章节过滤
-            console.log(`[EPUB Debug] 处理章节: "${chapterInfo.title}", href: ${chapterInfo.href}`)
-            
             if (skipNonEssentialChapters && this.shouldSkipChapter(chapterInfo.title)) {
-              console.log(`[EPUB Debug] 跳过章节 "${chapterInfo.title}": 匹配跳过关键词`)
               continue
             }
 
             const chapterContent = await this.extractContentFromHref(book, chapterInfo.href, chapterInfo.subitems)
-            console.log(`[EPUB Debug] 章节 "${chapterInfo.title}" 内容长度: ${chapterContent.trim().length}`)
 
             if (chapterContent.trim().length > 100) {
               chapters.push({
@@ -129,9 +124,6 @@ export class EpubProcessor {
                 tocItem: chapterInfo.tocItem,
                 depth: chapterInfo.depth
               })
-              console.log(`[EPUB Debug] 章节 "${chapterInfo.title}" 已添加`)
-            } else {
-              console.log(`[EPUB Debug] 章节 "${chapterInfo.title}" 被过滤: 内容长度 ${chapterContent.trim().length} <= 100`)
             }
           }
         }
@@ -259,14 +251,10 @@ export class EpubProcessor {
       let spineIndex = -1
       const spineItems = book.spine.spineItems
 
-      console.log(`[EPUB Debug] getSingleChapterContent: 查找 href="${href}"`)
-      console.log(`[EPUB Debug] Spine 项目数: ${spineItems.length}`)
-
       for (let i = 0; i < spineItems.length; i++) {
         const spineItem = spineItems[i]
         const match = spineItem.href === href || spineItem.href.endsWith(href)
         if (match) {
-          console.log(`[EPUB Debug] 匹配成功: spine[${i}]="${spineItem.href}"`)
           spineIndex = i
           section = book.spine.get(i)
           break
@@ -274,17 +262,12 @@ export class EpubProcessor {
       }
 
       if (!section) {
-        console.warn(`[EPUB Debug] 无法获取章节: ${href}`)
-        console.log(`[EPUB Debug] 所有 spine hrefs:`, spineItems.map(s => s.href))
+        console.warn(`无法获取章节: ${href}`)
         return ''
       }
 
-      console.log(`[EPUB Debug] 开始渲染章节: ${href}`)
       let chapterHTML = await section.render(book.load.bind(book))
-      console.log(`[EPUB Debug] 章节渲染完成，HTML长度: ${chapterHTML?.length || 0}`)
-      
       let textContent = this.extractTextFromXHTML(chapterHTML, anchor)
-      console.log(`[EPUB Debug] 提取文本长度: ${textContent?.length || 0}`)
       
       // 封面-内容自动检测：如果内容为空，检查是否有 xxx_0001.xhtml 内容文件
       if (textContent.length < 100 && spineIndex >= 0 && spineIndex < spineItems.length - 1) {
@@ -293,18 +276,12 @@ export class EpubProcessor {
         
         // 检查是否是 _0001.xhtml 格式的内容文件
         if (nextHref.match(/_\d+\.xhtml$/)) {
-          console.log(`[EPUB Debug] 当前章节内容过少，检测到内容文件: ${nextHref}`)
-          
           const nextSection = book.spine.get(spineIndex + 1)
           if (nextSection) {
             const nextHTML = await nextSection.render(book.load.bind(book))
-            console.log(`[EPUB Debug] 内容文件渲染完成，HTML长度: ${nextHTML?.length || 0}`)
-            
             const nextText = this.extractTextFromXHTML(nextHTML, anchor)
-            console.log(`[EPUB Debug] 内容文件文本长度: ${nextText?.length || 0}`)
             
             if (nextText.length > textContent.length) {
-              console.log(`[EPUB Debug] 使用内容文件替代原封面文件`)
               textContent = nextText
             }
             
@@ -317,27 +294,23 @@ export class EpubProcessor {
 
       return textContent
     } catch (error) {
-      console.warn(`[EPUB Debug] 获取单个章节内容失败 (href: ${href}):`, error)
+      console.warn(`获取单个章节内容失败 (href: ${href}):`, error)
       return ''
     }
   }
 
   private extractTextFromXHTML(xhtmlContent: string, anchor?: string): string {
     try {
-      console.log(`[EPUB Debug] extractTextFromXHTML: HTML长度=${xhtmlContent?.length || 0}, anchor=${anchor || 'none'}`)
-      
       const parser = new DOMParser()
       const doc = parser.parseFromString(xhtmlContent, 'application/xhtml+xml')
 
       const parseError = doc.querySelector('parsererror')
       if (parseError) {
-        console.log(`[EPUB Debug] DOM解析错误:`, parseError.textContent?.substring(0, 200))
         throw new Error('DOM解析失败')
       }
 
       const body = doc.querySelector('body')
       if (!body) {
-        console.log(`[EPUB Debug] 未找到body元素，HTML前200字符:`, xhtmlContent?.substring(0, 200))
         throw new Error('未找到body元素')
       }
 
@@ -348,22 +321,15 @@ export class EpubProcessor {
 
       if (anchor) {
         textContent = this.extractContentByAnchor(doc, anchor, xhtmlContent)
-        console.log(`[EPUB Debug] 锚点提取结果: 长度=${textContent?.length || 0}`)
       }
 
       if (!textContent.trim()) {
         textContent = body.textContent || ''
-        console.log(`[EPUB Debug] body.textContent 长度: ${textContent?.length || 0}`)
       }
 
-      const result = cleanChapterTitle(textContent)
-      console.log(`[EPUB Debug] 最终文本长度: ${result?.length || 0}`)
-      return result
+      return cleanChapterTitle(textContent)
     } catch (error) {
-      console.warn('[EPUB Debug] DOM解析失败，使用正则表达式备选方案:', error)
-      const result = this.extractTextWithRegex(xhtmlContent, anchor)
-      console.log(`[EPUB Debug] 正则提取结果: 长度=${result?.length || 0}`)
-      return result
+      return this.extractTextWithRegex(xhtmlContent, anchor)
     }
   }
 
