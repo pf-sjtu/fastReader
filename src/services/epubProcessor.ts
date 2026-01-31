@@ -7,17 +7,13 @@ import ePub, { Book, type NavItem } from '@ssshooter/epubjs'
 import { SKIP_CHAPTER_KEYWORDS } from './constants'
 import type Section from '@ssshooter/epubjs/types/section'
 import {
-  ChapterData,
-  BookData,
-  ChapterInfo,
-  ChapterNamingMode,
-  ChapterDetectionMode,
   formatChapterNumber,
   cleanChapterTitle,
   extractContentByAnchorImproved
 } from './epub'
+import type { ChapterData, BookData, ChapterInfo, ChapterNamingMode, ChapterDetectionMode } from './epub/types'
 
-export { ChapterData, BookData }
+export type { ChapterData, BookData }
 
 export class EpubProcessor {
   private processingFiles = new Set<string>()
