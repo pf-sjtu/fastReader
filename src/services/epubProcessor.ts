@@ -295,16 +295,20 @@ export class EpubProcessor {
 
   private extractTextFromXHTML(xhtmlContent: string, anchor?: string): string {
     try {
+      console.log(`[EPUB Debug] extractTextFromXHTML: HTML长度=${xhtmlContent?.length || 0}, anchor=${anchor || 'none'}`)
+      
       const parser = new DOMParser()
       const doc = parser.parseFromString(xhtmlContent, 'application/xhtml+xml')
 
       const parseError = doc.querySelector('parsererror')
       if (parseError) {
+        console.log(`[EPUB Debug] DOM解析错误:`, parseError.textContent?.substring(0, 200))
         throw new Error('DOM解析失败')
       }
 
       const body = doc.querySelector('body')
       if (!body) {
+        console.log(`[EPUB Debug] 未找到body元素，HTML前200字符:`, xhtmlContent?.substring(0, 200))
         throw new Error('未找到body元素')
       }
 
@@ -315,16 +319,22 @@ export class EpubProcessor {
 
       if (anchor) {
         textContent = this.extractContentByAnchor(doc, anchor, xhtmlContent)
+        console.log(`[EPUB Debug] 锚点提取结果: 长度=${textContent?.length || 0}`)
       }
 
       if (!textContent.trim()) {
         textContent = body.textContent || ''
+        console.log(`[EPUB Debug] body.textContent 长度: ${textContent?.length || 0}`)
       }
 
-      return cleanChapterTitle(textContent)
+      const result = cleanChapterTitle(textContent)
+      console.log(`[EPUB Debug] 最终文本长度: ${result?.length || 0}`)
+      return result
     } catch (error) {
-      console.warn('DOM解析失败，使用正则表达式备选方案:', error)
-      return this.extractTextWithRegex(xhtmlContent, anchor)
+      console.warn('[EPUB Debug] DOM解析失败，使用正则表达式备选方案:', error)
+      const result = this.extractTextWithRegex(xhtmlContent, anchor)
+      console.log(`[EPUB Debug] 正则提取结果: 长度=${result?.length || 0}`)
+      return result
     }
   }
 
