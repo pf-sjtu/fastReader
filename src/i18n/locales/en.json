@@ -16,6 +16,7 @@
   "upload": {
     "title": "File Upload & Configuration",
     "description": "Select EPUB or PDF file and configure AI service",
+    "localUpload": "Local Upload",
     "selectFile": "Select EPUB or PDF file",
     "selectedFile": "Selected",
     "noFileSelected": "No file selected",

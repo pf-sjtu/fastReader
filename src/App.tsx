@@ -1039,14 +1039,14 @@ function App() {
                             className="flex items-center gap-2"
                           >
                             <Upload className="h-4 w-4" />
-                            本地上传
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={openWebDAVBrowser}
-                            disabled={processing}
+                              {t('upload.localUpload')}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={openWebDAVBrowser}
+                              disabled={processing}
                             className="flex items-center gap-2"
                           >
                             <Network className="h-4 w-4" />

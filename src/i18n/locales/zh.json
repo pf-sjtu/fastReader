@@ -16,6 +16,7 @@
   "upload": {
     "title": "文件上传与配置",
     "description": "选择 EPUB 或 PDF 文件并配置 AI 服务",
+    "localUpload": "本地上传",
     "selectFile": "选择 EPUB 或 PDF 文件",
     "selectedFile": "已选择",
     "noFileSelected": "未选择文件",
