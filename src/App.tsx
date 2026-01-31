@@ -1004,10 +1004,10 @@ function App() {
         {currentStepIndex === 1 ? (
           <>
                         
-            {/* 主内容区域：配置界面 + 右侧预览 - 响应式Grid布局 */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* 主内容区域：配置界面 + 右侧预览 */}
+            <div className="flex gap-4">
               {/* 配置界面 */}
-              <div className="lg:col-span-8 space-y-4">
+              <div className="flex-1 space-y-4">
                 {/* 步骤1: 文件上传和配置 */}
                 <Card>
                   <CardHeader>
@@ -1241,7 +1241,7 @@ function App() {
 
               {/* 右侧预览区域 */}
               {rightPanelContent && (
-                <Card ref={previewCardRef} className="lg:col-span-4 h-fit sticky top-4">
+                <Card ref={previewCardRef} className="w-80 lg:w-96 h-fit sticky top-4">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm font-medium truncate flex-1">
@@ -1359,7 +1359,7 @@ function App() {
               )}
 
               {/* 中间结果展示 */}
-              <div className="lg:col-span-8">
+              <div className="flex-1">
                 {(bookSummary || bookMindMap) && (
                   <Card>
                     <CardHeader>
@@ -1558,7 +1558,7 @@ function App() {
 
               {/* 右侧预览区域 */}
               {rightPanelContent && (
-                <Card className="lg:col-span-4 h-fit sticky top-4">
+                <Card className="w-80 lg:w-96 h-fit sticky top-4">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm font-medium truncate">
