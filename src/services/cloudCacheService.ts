@@ -254,6 +254,87 @@ export class CloudCacheService {
   }
 
   /**
+   * 解析统一格式的 Markdown 内容
+   *
+   * 统一格式规范：
+   * 1. HTML 注释格式的头部元数据
+   * 2. 书名用一级标题 `# 书名`
+   * 3. 作者信息（如有）
+   * 4. 全书总结用二级标题 `## 全书总结`
+   * 5. 章节关联用二级标题 `## 章节关联分析`
+   * 6. 章节摘要用二级标题 `## 章节摘要`
+   * 7. 各章节用三级标题 `### 第X章 章节名`
+   *
+   * @param content Markdown 内容
+   * @returns 解析后的数据对象
+   */
+  parseUnifiedContent(content: string): {
+    metadata: ProcessingMetadata | null
+    title: string
+    author: string
+    overallSummary: string
+    connections: string
+    chapters: Array<{ title: string; summary: string }>
+  } {
+    // 解析元数据
+    const metadata = this.parseMetadata(content)
+    
+    // 移除元数据，获取纯内容
+    const cleanContent = this.stripMetadata(content)
+    
+    const result = {
+      metadata,
+      title: '',
+      author: '',
+      overallSummary: '',
+      connections: '',
+      chapters: [] as Array<{ title: string; summary: string }>
+    }
+
+    // 解析书名（一级标题）
+    const titleMatch = cleanContent.match(/^#\s+(.+)$/m)
+    if (titleMatch) {
+      result.title = titleMatch[1].trim()
+    }
+
+    // 解析作者
+    const authorMatch = cleanContent.match(/\*\*作者\*\*:\s*(.+)$/m)
+    if (authorMatch) {
+      result.author = authorMatch[1].trim()
+    }
+
+    // 解析全书总结（## 全书总结 和下一个 ## 之间的内容）
+    const overallSummaryMatch = cleanContent.match(/##\s+全书总结\n\n([\s\S]*?)(?=\n##|$)/)
+    if (overallSummaryMatch) {
+      result.overallSummary = overallSummaryMatch[1].trim()
+    }
+
+    // 解析章节关联分析
+    const connectionsMatch = cleanContent.match(/##\s+章节关联分析\n\n([\s\S]*?)(?=\n##|$)/)
+    if (connectionsMatch) {
+      result.connections = connectionsMatch[1].trim()
+    }
+
+    // 解析章节摘要（从 ## 章节摘要 到文件末尾或下一个一级/二级标题）
+    const chaptersSectionMatch = cleanContent.match(/##\s+章节摘要\n\n([\s\S]*$)/)
+    if (chaptersSectionMatch) {
+      const chaptersContent = chaptersSectionMatch[1]
+      
+      // 匹配各章节（### 标题）
+      const chapterRegex = /###\s+(.+?)\n\n([\s\S]*?)(?=\n###|\n##|\n#|$)/g
+      let match
+      while ((match = chapterRegex.exec(chaptersContent)) !== null) {
+        result.chapters.push({
+          title: match[1].trim(),
+          summary: match[2].trim()
+        })
+      }
+    }
+
+    return result
+  }
+
+  /**
    * 批量检查多个文件的缓存状态
    * @param fileNames 文件名列表
    * @param cachedFileNames 已缓存文件名集合（可选）

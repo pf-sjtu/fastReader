@@ -9,7 +9,9 @@
     "lint": "eslint --config config/eslint.config.js .",
     "lint:css": "stylelint \"src/**/*.{css,scss,less}\"",
     "lint:all": "npm run lint && npm run lint:css",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@ai-sdk/cerebras": "^2.0.14",

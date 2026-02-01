@@ -183,66 +183,44 @@ export class AutoSyncService {
   }
 
   /**
-   * 格式化摘要为Markdown（带处理信息备注）
+   * 格式化摘要为Markdown（使用统一格式）
    */
   private formatSummaryAsMarkdown(bookSummary: BookSummary, chapterNamingMode: 'auto' | 'numbered' = 'auto'): string {
-    let markdown = ''
+    // 准备章节数据
+    const chapters = bookSummary.chapters.map(chapter => ({
+      id: chapter.id,
+      title: chapter.title,
+      summary: chapter.summary || ''
+    }))
 
-    // 在文件头部添加处理元数据（HTML 注释格式）
-    try {
-      const metadata = metadataFormatter.generate({
-        fileName: '',
-        bookTitle: bookSummary.title,
-        model: '',
-        chapterDetectionMode: 'normal',
-        selectedChapters: bookSummary.chapters
-          .map((_, index) => index + 1)
-          .filter((_, idx) => bookSummary.chapters[idx]?.summary),
-        chapterCount: bookSummary.chapters.length,
-        originalCharCount: 0,
-        processedCharCount: bookSummary.chapters.reduce(
-          (total, ch) => total + (ch.summary?.length || 0),
-          0
-        )
-      })
-      if (metadata) {
-        markdown += metadataFormatter.formatAsComment(metadata)
-        markdown += '\n\n'
-      }
-    } catch (error) {
-      console.warn('生成处理元数据失败:', error)
+    // 准备书籍数据
+    const bookData = {
+      title: bookSummary.title,
+      author: bookSummary.author,
+      chapters: chapters,
+      overallSummary: bookSummary.overallSummary,
+      connections: bookSummary.connections
     }
 
-    markdown += `# ${bookSummary.title}\n\n`
-
-    if (bookSummary.author) {
-      markdown += `**作者**: ${bookSummary.author}\n\n`
-    }
-
-    markdown += `## 全书总结\n\n${bookSummary.overallSummary}\n\n`
-
-    if (bookSummary.connections) {
-      markdown += `## 章节关联分析\n\n${bookSummary.connections}\n\n`
-    }
-
-    markdown += `## 章节摘要\n\n`
-
-    bookSummary.chapters.forEach((chapter, index) => {
-      // 根据章节命名模式生成标题
-      let chapterTitle: string
-      if (chapterNamingMode === 'numbered') {
-        chapterTitle = `第${String(index + 1).padStart(2, '0')}章`
-      } else {
-        chapterTitle = chapter.title || `第${index + 1}章`
-      }
-
-      markdown += `### ${chapterTitle}\n\n`
-      markdown += `${chapter.summary}\n\n---\n\n`
+    // 生成元数据
+    const metadata = metadataFormatter.generate({
+      fileName: '',
+      bookTitle: bookSummary.title,
+      model: '',
+      chapterDetectionMode: 'normal',
+      selectedChapters: bookSummary.chapters
+        .map((_, index) => index + 1)
+        .filter((_, idx) => bookSummary.chapters[idx]?.summary),
+      chapterCount: bookSummary.chapters.length,
+      originalCharCount: 0,
+      processedCharCount: bookSummary.chapters.reduce(
+        (total, ch) => total + (ch.summary?.length || 0),
+        0
+      )
     })
 
-    markdown += `\n---\n*由 fastReader 自动生成于 ${new Date().toLocaleString('zh-CN')}*`
-
-    return markdown
+    // 使用统一格式生成 Markdown
+    return metadataFormatter.formatUnified(bookData, metadata, chapterNamingMode)
   }
 
   /**

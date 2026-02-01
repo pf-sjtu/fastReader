@@ -324,6 +324,177 @@ export function stripMetadataFromContent(content: string): string {
   return content.replace(/<!--\s*\n[\s\S]*?\n-->\n*/, '')
 }
 
+// ============================================================================
+// 统一的 Markdown 格式化函数
+// ============================================================================
+
+/**
+ * 章节数据接口
+ */
+export interface ChapterSummaryData {
+  id: string
+  title: string
+  summary: string
+}
+
+/**
+ * 统一格式的书籍摘要数据
+ */
+export interface UnifiedBookSummaryData {
+  title: string
+  author?: string
+  chapters: ChapterSummaryData[]
+  overallSummary?: string
+  connections?: string
+}
+
+/**
+ * 生成统一格式的 Markdown 内容
+ *
+ * 统一格式规范：
+ * 1. HTML 注释格式的头部元数据
+ * 2. 书名用一级标题 `# 书名`
+ * 3. 作者信息（如有）
+ * 4. 全书总结用二级标题 `## 全书总结`
+ * 5. 章节关联用二级标题 `## 章节关联分析`
+ * 6. 章节摘要用二级标题 `## 章节摘要`
+ * 7. 各章节用三级标题 `### 第X章 章节名`
+ *
+ * @param data 书籍摘要数据
+ * @param metadata 处理元数据（可选）
+ * @param chapterNamingMode 章节命名模式
+ * @returns 统一格式的 Markdown 内容
+ */
+export function formatUnifiedMarkdown(
+  data: UnifiedBookSummaryData,
+  metadata?: ProcessingMetadata,
+  chapterNamingMode: 'auto' | 'numbered' = 'auto'
+): string {
+  const lines: string[] = []
+
+  // 1. 头部元数据（HTML 注释格式）
+  if (metadata) {
+    lines.push(formatAsHTMLComment(metadata))
+    lines.push('')
+  }
+
+  // 2. 书名 - 一级标题
+  lines.push(`# ${data.title}`)
+  lines.push('')
+
+  // 3. 作者信息
+  if (data.author) {
+    lines.push(`**作者**: ${data.author}`)
+    lines.push('')
+  }
+
+  // 4. 全书总结 - 二级标题
+  if (data.overallSummary) {
+    lines.push('## 全书总结')
+    lines.push('')
+    lines.push(data.overallSummary)
+    lines.push('')
+  }
+
+  // 5. 章节关联分析 - 二级标题
+  if (data.connections) {
+    lines.push('## 章节关联分析')
+    lines.push('')
+    lines.push(data.connections)
+    lines.push('')
+  }
+
+  // 6. 章节摘要 - 二级标题
+  if (data.chapters.length > 0) {
+    lines.push('## 章节摘要')
+    lines.push('')
+
+    // 7. 各章节 - 三级标题
+    data.chapters.forEach((chapter, index) => {
+      // 根据章节命名模式生成标题
+      let chapterTitle: string
+      if (chapterNamingMode === 'numbered') {
+        chapterTitle = `第${String(index + 1).padStart(2, '0')}章`
+      } else {
+        chapterTitle = chapter.title || `第${index + 1}章`
+      }
+
+      lines.push(`### ${chapterTitle}`)
+      lines.push('')
+      lines.push(chapter.summary || '（暂无总结）')
+      lines.push('')
+    })
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * 解析统一格式的 Markdown 内容
+ *
+ * @param content Markdown 内容
+ * @returns 解析后的数据对象
+ */
+export function parseUnifiedMarkdown(content: string): {
+  metadata: ProcessingMetadata | null
+  data: UnifiedBookSummaryData
+} {
+  // 解析元数据
+  const metadata = parseMetadataFromContent(content)
+  
+  // 移除元数据，获取纯内容
+  const cleanContent = stripMetadataFromContent(content)
+  
+  const data: UnifiedBookSummaryData = {
+    title: '',
+    author: '',
+    chapters: []
+  }
+
+  // 解析书名（一级标题）
+  const titleMatch = cleanContent.match(/^#\s+(.+)$/m)
+  if (titleMatch) {
+    data.title = titleMatch[1].trim()
+  }
+
+  // 解析作者
+  const authorMatch = cleanContent.match(/\*\*作者\*\*:\s*(.+)$/m)
+  if (authorMatch) {
+    data.author = authorMatch[1].trim()
+  }
+
+  // 解析全书总结（## 全书总结 和下一个 ## 之间的内容）
+  const overallSummaryMatch = cleanContent.match(/##\s+全书总结\n\n([\s\S]*?)(?=\n##|$)/)
+  if (overallSummaryMatch) {
+    data.overallSummary = overallSummaryMatch[1].trim()
+  }
+
+  // 解析章节关联分析
+  const connectionsMatch = cleanContent.match(/##\s+章节关联分析\n\n([\s\S]*?)(?=\n##|$)/)
+  if (connectionsMatch) {
+    data.connections = connectionsMatch[1].trim()
+  }
+
+  // 解析章节摘要（从 ## 章节摘要 到文件末尾或下一个一级/二级标题）
+  const chaptersSectionMatch = cleanContent.match(/##\s+章节摘要\n\n([\s\S]*$)/)
+  if (chaptersSectionMatch) {
+    const chaptersContent = chaptersSectionMatch[1]
+    
+    // 匹配各章节（### 标题）
+    const chapterRegex = /###\s+(.+?)\n\n([\s\S]*?)(?=\n###|\n##|\n#|$)/g
+    let match
+    while ((match = chapterRegex.exec(chaptersContent)) !== null) {
+      data.chapters.push({
+        id: `chapter-${data.chapters.length + 1}`,
+        title: match[1].trim(),
+        summary: match[2].trim()
+      })
+    }
+  }
+
+  return { metadata, data }
+}
+
 /**
  * 获取模型定价信息
  * @param model 模型名称
@@ -355,5 +526,8 @@ export const metadataFormatter = {
   parse: parseMetadataFromContent,
   strip: stripMetadataFromContent,
   getModelPricing,
-  registerModelPricing
+  registerModelPricing,
+  // 统一的 Markdown 格式化函数
+  formatUnified: formatUnifiedMarkdown,
+  parseUnified: parseUnifiedMarkdown
 }

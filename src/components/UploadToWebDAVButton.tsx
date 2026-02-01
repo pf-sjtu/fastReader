@@ -80,40 +80,31 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
     })
   }
 
-  // 生成markdown内容
+  // 生成markdown内容 - 使用统一格式
   const generateMarkdownContent = () => {
     if (!bookSummary || !file) return ''
 
-    let markdownContent = ''
+    // 准备章节数据
+    const chapters = bookSummary.chapters.map((chapter: any) => ({
+      id: chapter.id,
+      title: chapter.title,
+      summary: chapter.summary || ''
+    }))
 
-    // 在文件头部添加处理元数据（HTML 注释格式）
-    const metadata = generateMetadata()
-    if (metadata) {
-      markdownContent += metadataFormatter.formatAsComment(metadata)
-      markdownContent += '\n\n'
+    // 准备书籍数据
+    const bookData = {
+      title: bookSummary.title,
+      author: bookSummary.author,
+      chapters: chapters,
+      overallSummary: bookSummary.overallSummary,
+      connections: bookSummary.connections
     }
 
-    markdownContent += `# ${bookSummary.title}\n\n`
-    markdownContent += `**作者**: ${bookSummary.author}\n\n`
-    markdownContent += `---\n\n`
+    // 生成元数据
+    const metadata = generateMetadata()
 
-    // 添加章节总结
-    bookSummary.chapters.forEach((chapter: any, index: number) => {
-      // 根据章节命名模式生成标题
-      let chapterTitle: string
-      if (chapterNamingMode === 'numbered') {
-        chapterTitle = `第${String(index + 1).padStart(2, '0')}章`
-      } else {
-        chapterTitle = chapter.title || `第${index + 1}章`
-      }
-
-      markdownContent += `## ${chapterTitle}\n\n`
-      if (chapter.summary) {
-        markdownContent += `${chapter.summary}\n\n`
-      }
-    })
-
-    return markdownContent
+    // 使用统一格式生成 Markdown
+    return metadataFormatter.formatUnified(bookData, metadata || undefined, chapterNamingMode)
   }
 
   // 生成文件名

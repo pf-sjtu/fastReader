@@ -451,16 +451,46 @@ export class BatchProcessingEngine {
       })
 
 
-      const partialNotice = isPartial
-        ? `> 注意：本次处理有 ${skippedChapters} 章因内容过滤被跳过。\n\n`
-        : ''
+      // 提取全书总结和章节关联
+      let overallSummary = ''
+      let connections = ''
+      const chapterSummaries: Array<{id: string, title: string, summary: string}> = []
 
-      // 添加元数据到内容
-      const finalContent = metadataFormatter.addToContent(
-        `# ${bookTitle}\n\n${partialNotice}` + results.join('\n\n---\n\n'),
-        metadata
+      // 解析 results 数组，提取各部分内容
+      for (const result of results) {
+        if (result.startsWith('### ')) {
+          // 章节摘要
+          const lines = result.split('\n')
+          const title = lines[0].replace('### ', '').trim()
+          const summary = lines.slice(1).join('\n').trim()
+          chapterSummaries.push({ id: `chapter-${chapterSummaries.length + 1}`, title, summary })
+        } else if (result.includes('章节关联')) {
+          // 章节关联
+          const lines = result.split('\n')
+          connections = lines.slice(1).join('\n').trim()
+        } else if (!result.includes('章节') && !result.startsWith('---')) {
+          // 全书总结（假设是第一个非章节内容）
+          if (!overallSummary && result.length > 50) {
+            overallSummary = result
+          }
+        }
+      }
+
+      // 准备书籍数据
+      const bookData = {
+        title: bookTitle,
+        author: '',
+        chapters: chapterSummaries,
+        overallSummary,
+        connections
+      }
+
+      // 使用统一格式生成最终内容
+      const finalContent = metadataFormatter.formatUnified(
+        bookData,
+        metadata,
+        processingOptions.chapterNamingMode
       )
-
 
       // 6. 上传到 WebDAV
       const outputPath = cloudCacheService.getCacheFilePath(item.fileName)

@@ -26,7 +26,16 @@ class ResultFormatter:
         metadata: dict
     ) -> str:
         """
-        格式化总结结果
+        格式化总结结果 - 统一格式
+
+        统一格式规范：
+        1. HTML 注释格式的头部元数据
+        2. 书名用一级标题 `# 书名`
+        3. 作者信息（如有）
+        4. 全书总结用二级标题 `## 全书总结`
+        5. 章节关联用二级标题 `## 章节关联分析`
+        6. 章节摘要用二级标题 `## 章节摘要`
+        7. 各章节用三级标题 `### 章节名`
 
         Args:
             book_info: 书籍信息
@@ -40,57 +49,49 @@ class ResultFormatter:
         """
         lines = []
 
-        # 标题
-        lines.append(f"# {book_info.title}")
-        lines.append("")
-
-        # 作者
-        if book_info.author:
-            lines.append(f"**作者**: {book_info.author}")
-            lines.append("")
-
-        # 处理元数据（HTML 注释格式）
+        # 1. 处理元数据（HTML 注释格式）- 必须放在最前面
         metadata_comment = self._format_metadata_comment(metadata)
         if metadata_comment:
             lines.append(metadata_comment)
             lines.append("")
 
-        # 分隔线
-        lines.append("---")
+        # 2. 书名 - 一级标题
+        lines.append(f"# {book_info.title}")
         lines.append("")
 
-        # 全书总结
+        # 3. 作者
+        if book_info.author:
+            lines.append(f"**作者**: {book_info.author}")
+            lines.append("")
+
+        # 4. 全书总结 - 二级标题
         if overall_summary:
             lines.append("## 全书总结")
             lines.append("")
             lines.append(overall_summary)
             lines.append("")
 
-        # 章节关联分析
+        # 5. 章节关联分析 - 二级标题
         if connections:
             lines.append("## 章节关联分析")
             lines.append("")
             lines.append(connections)
             lines.append("")
 
-        # 章节摘要
-        lines.append("## 章节摘要")
-        lines.append("")
-
-        for i, chapter in enumerate(book_info.chapters):
-            chapter_key = str(i + 1)
-            summary = chapter_summaries.get(chapter_key, "（暂无总结）")
-
-            # 章节标题
-            lines.append(f"### {chapter.title}")
-            lines.append("")
-            lines.append(summary)
-            lines.append("")
-            lines.append("---")
+        # 6. 章节摘要 - 二级标题
+        if book_info.chapters:
+            lines.append("## 章节摘要")
             lines.append("")
 
-        # 时间戳
-        lines.append(f"*由 fastReader 自动生成于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+            # 7. 各章节 - 三级标题
+            for i, chapter in enumerate(book_info.chapters):
+                chapter_key = str(i + 1)
+                summary = chapter_summaries.get(chapter_key, "（暂无总结）")
+
+                lines.append(f"### {chapter.title}")
+                lines.append("")
+                lines.append(summary)
+                lines.append("")
 
         return "\n".join(lines)
 
