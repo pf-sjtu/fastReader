@@ -49,6 +49,26 @@ export class EpubProcessor {
           timestamp: Date.now()
         })
 
+        // 清除 epubjs 缓存以避免缓存键冲突问题
+        // @ssshooter/epubjs 使用 localforage (IndexedDB) 缓存书籍解压内容
+        // 当缓存键冲突时，会返回错误的书籍数据，导致打开新书时显示旧书内容
+        if (typeof window !== 'undefined' && window.indexedDB) {
+          try {
+            const deleteRequest = window.indexedDB.deleteDatabase('epubjs-zip')
+            deleteRequest.onsuccess = () => {
+              console.log('[DEBUG] 已清除 epubjs IndexedDB 缓存')
+            }
+            deleteRequest.onerror = () => {
+              console.warn('[DEBUG] 清除 epubjs IndexedDB 缓存失败')
+            }
+            deleteRequest.onblocked = () => {
+              console.warn('[DEBUG] 清除 epubjs IndexedDB 缓存被阻塞')
+            }
+          } catch (e) {
+            console.warn('[DEBUG] 清除缓存失败:', e)
+          }
+        }
+
         await book.open(arrayBuffer)
 
         console.log('[DEBUG] EpubProcessor.parseEpub book.open() 完成:', {
