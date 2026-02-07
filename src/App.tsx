@@ -117,29 +117,6 @@ function App() {
   const [isCheckingCloudCache, setIsCheckingCloudCache] = useState(false)
   const [cloudCacheContent, setCloudCacheContent] = useState<string | null>(null)
 
-  // DEBUG: 监听关键状态变化
-  useEffect(() => {
-    console.log('[DEBUG] bookData 状态变化:', {
-      bookData,
-      timestamp: Date.now()
-    })
-  }, [bookData])
-
-  useEffect(() => {
-    console.log('[DEBUG] extractedChapters 状态变化:', {
-      chapterCount: extractedChapters?.length,
-      firstChapterTitle: extractedChapters?.[0]?.title,
-      timestamp: Date.now()
-    })
-  }, [extractedChapters])
-
-  useEffect(() => {
-    console.log('[DEBUG] file 状态变化:', {
-      fileName: file?.name,
-      timestamp: Date.now()
-    })
-  }, [file])
-
   // 使用zustand store管理配置
   const aiConfig = useAIConfig()
   const processingOptions = useProcessingOptions()
@@ -160,13 +137,10 @@ function App() {
           webdavConfig.username &&
           webdavConfig.password &&
           !webdavService.isInitialized()) {
-        
-        console.log('App: WebDAV配置完整，自动初始化连接...')
-        
+
         try {
           const initResult = await webdavService.initialize(webdavConfig)
           if (initResult.success) {
-            console.log('App: WebDAV自动连接成功')
             toast.success(t('webdav.autoConnected'))
           } else {
             console.error('App: WebDAV自动连接失败:', initResult.error)
@@ -227,21 +201,8 @@ function App() {
   const loadCachedData = useCallback(() => {
     if (!file) return
 
-    console.log('[DEBUG] loadCachedData 开始:', {
-      fileName: file.name,
-      extractedChaptersCount: extractedChapters?.length,
-      bookDataTitle: bookData?.title,
-      timestamp: Date.now()
-    })
-
     // 加载总结缓存
     const summaryCache = cacheService.getSummary(file.name)
-    console.log('[DEBUG] loadCachedData summaryCache:', {
-      fileName: file.name,
-      hasCache: !!summaryCache,
-      chapterCount: summaryCache?.chapters?.length,
-      timestamp: Date.now()
-    })
     if (summaryCache && summaryCache.chapters.length > 0) {
       // 需要从extractedChapters获取章节的完整信息
       const chapters: Chapter[] = summaryCache.chapters.map((cachedChapter: any) => {
@@ -341,10 +302,6 @@ function App() {
 
   // 当文件变化时加载缓存数据
   useEffect(() => {
-    console.log('[DEBUG] file useEffect 触发:', {
-      fileName: file?.name,
-      timestamp: Date.now()
-    })
     loadCachedData()
     if (file) {
       checkCloudCache(file.name)
@@ -378,12 +335,6 @@ function App() {
 
   // 处理WebDAV文件选择
   const handleWebDAVFileSelect = useCallback(async (file: File) => {
-    console.log('[DEBUG] handleWebDAVFileSelect 开始:', {
-      fileName: file.name,
-      fileSize: file.size,
-      timestamp: Date.now()
-    })
-
     // 直接使用已经下载的File对象
     setFile(file)
     setExtractedChapters(null)
@@ -403,11 +354,6 @@ function App() {
     setCloudCacheMetadata(null)
     setCloudCacheContent(null)
     setCustomPrompt('')
-
-    console.log('[DEBUG] handleWebDAVFileSelect 状态清理完成:', {
-      fileName: file.name,
-      timestamp: Date.now()
-    })
 
     toast.success(`已选择文件: ${file.name}`)
   }, [])
@@ -459,14 +405,12 @@ function App() {
 
   // 章节总结导航处理（用于跳转到章节总结）
   const handleChapterSummaryNavigation = useCallback((chapterId: string) => {
-    console.log(`🎯 [DEBUG] 导航点击章节: ${chapterId}`)
-    
     // 1. 先设置当前查看的章节
     setCurrentViewingChapterSummary(chapterId)
-    
+
     // 2. 展开目标章节，折叠其他章节
     setExpandedChapters(new Set([chapterId]))
-    
+
     // 3. 多次尝试滚动，确保元素可见且展开完成
     const scrollToChapter = (attempt = 1) => {
       setTimeout(() => {
@@ -474,34 +418,29 @@ function App() {
         if (element) {
           // 检查元素是否真的展开了（内容区域可见）
           const contentElement = element.querySelector('[class*="CardContent"]')
-          const isActuallyExpanded = contentElement && 
+          const isActuallyExpanded = contentElement &&
             contentElement.getAttribute('style') !== 'display: none' &&
             !contentElement.classList.contains('hidden')
-          
+
           if (isActuallyExpanded) {
-            console.log(`📍 [DEBUG] 元素已展开，开始滚动 (尝试 ${attempt}): ${chapterId}`)
             // 使用 start 确保滚动到元素顶部，留出一些顶部空间
             const headerOffset = 80 // 导航栏高度偏移
             const elementPosition = element.getBoundingClientRect().top
             const offsetPosition = elementPosition + window.pageYOffset - headerOffset
-            
+
             window.scrollTo({
               top: offsetPosition,
               behavior: 'smooth'
             })
           } else if (attempt < 3) {
-            console.log(`⏳ [DEBUG] 元素未完全展开，重试 (尝试 ${attempt + 1}): ${chapterId}`)
             scrollToChapter(attempt + 1)
           } else {
-            console.warn(`⚠️ [DEBUG] 元素展开失败，强制滚动: ${chapterId}`)
-            element.scrollIntoView({ 
-              behavior: 'smooth', 
+            element.scrollIntoView({
+              behavior: 'smooth',
               block: 'start',
               inline: 'nearest'
             })
           }
-        } else {
-          console.warn(`❌ [DEBUG] 未找到目标元素: chapter-summary-${chapterId}`)
         }
       }, attempt * 200) // 每次尝试间隔200ms
     }
@@ -594,11 +533,6 @@ function App() {
   const extractChapters = useCallback(async () => {
     if (!file) return
 
-    console.log('[DEBUG] extractChapters 开始:', {
-      fileName: file.name,
-      timestamp: Date.now()
-    })
-
     setExtractingChapters(true)
     try {
       let bookData: EpubBookData & { chapters: ChapterData[] } | PdfBookData & { chapters: ChapterData[] }
@@ -630,14 +564,6 @@ function App() {
         throw new Error(t('upload.unsupportedFormat'))
       }
 
-      console.log('[DEBUG] extractChapters 提取完成:', {
-        fileName: file.name,
-        bookTitle: bookData.title,
-        chapterCount: chapters.length,
-        firstChapterTitle: chapters[0]?.title,
-        timestamp: Date.now()
-      })
-
       setFullBookData(bookData)
       setExtractedChapters(chapters)
       setBookData({
@@ -648,15 +574,9 @@ function App() {
       // 默认选择所有章节
       setSelectedChapters(new Set(chapters.map(ch => ch.id)))
 
-      console.log('[DEBUG] extractChapters 状态更新完成:', {
-        bookTitle: bookData.title,
-        chapterCount: chapters.length,
-        timestamp: Date.now()
-      })
-
       toast.success(t('upload.chaptersExtracted', { count: chapters.length }))
     } catch (error) {
-      console.error('[DEBUG] extractChapters 错误:', error)
+      console.error('提取章节错误:', error)
       toast.error(error instanceof Error ? error.message : t('upload.extractError'))
     } finally {
       setExtractingChapters(false)
@@ -1252,18 +1172,6 @@ function App() {
                   </CardContent>
                 </Card>
                 {/* 章节信息 */}
-                {(() => {
-                  if (extractedChapters && bookData) {
-                    console.log('[DEBUG] 渲染章节选择界面:', {
-                      bookTitle: bookData.title,
-                      bookAuthor: bookData.author,
-                      chapterCount: extractedChapters.length,
-                      firstChapterTitle: extractedChapters[0]?.title,
-                      timestamp: Date.now()
-                    })
-                  }
-                  return null
-                })()}
                 {extractedChapters && bookData && (
                   <Card>
                     <CardHeader>

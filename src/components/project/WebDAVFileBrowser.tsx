@@ -87,22 +87,17 @@ export function WebDAVFileBrowser({
           !hasAttemptedInit) {
         
         setHasAttemptedInit(true)
-        console.log('WebDAVFileBrowser: 尝试初始化WebDAV服务...')
-        
+
         try {
           const initResult = await webdavService.initialize(webdavConfig)
           if (initResult.success) {
-            console.log('WebDAVFileBrowser: 初始化成功，加载根目录')
             if (isOpen) {
               loadDirectory(webdavConfig.browsePath || '/')
             }
           } else {
-
-            console.error('WebDAVFileBrowser: 初始化失败:', initResult.error)
             setError(`WebDAV初始化失败: ${initResult.error}`)
           }
         } catch (error) {
-          console.error('WebDAVFileBrowser: 初始化异常:', error)
           setError(`WebDAV初始化异常: ${error instanceof Error ? error.message : '未知错误'}`)
         }
       } else if (!webdavConfig.enabled) {
@@ -169,8 +164,6 @@ export function WebDAVFileBrowser({
   const loadDirectory = async (path: string) => {
     // 检查WebDAV服务是否已初始化
     if (!webdavService.isInitialized()) {
-      console.log('WebDAV服务未初始化，尝试重新初始化...')
-      
       if (!webdavConfig.enabled || !webdavConfig.serverUrl || !webdavConfig.username || !webdavConfig.password) {
         setError('WebDAV配置不完整，请先完成配置')
         return
@@ -192,7 +185,6 @@ export function WebDAVFileBrowser({
     setError(null)
 
     try {
-      console.log('WebDAVFileBrowser: 加载目录:', path)
       const result = await webdavService.getDirectoryContents(path)
       
       if (result.success && result.data) {
@@ -221,7 +213,6 @@ export function WebDAVFileBrowser({
         setFiles([])
       }
     } catch (error) {
-      console.error('WebDAVFileBrowser: 加载目录异常:', error)
       setError(`加载目录异常: ${error instanceof Error ? error.message : '未知错误'}`)
       setFiles([])
     } finally {
@@ -232,7 +223,6 @@ export function WebDAVFileBrowser({
   // 处理目录点击
   const handleDirectoryClick = (directory: WebDAVFileInfo) => {
     if (directory.type === 'directory') {
-      console.log('点击目录:', directory.filename)
       // 确保使用相对路径
       let newPath = directory.filename
       
@@ -242,9 +232,6 @@ export function WebDAVFileBrowser({
         newPath = newPath + '/'
       }
 
-      
-      console.log('设置新路径:', newPath)
-      
       // 更新历史记录
       const newHistory = pathHistory.slice(0, historyIndex + 1)
       newHistory.push(newPath)
@@ -272,11 +259,10 @@ export function WebDAVFileBrowser({
         const downloadResult = await webdavService.downloadFileAsFile(selectedFile.filename, selectedFile.basename)
         
         if (!downloadResult.success || !downloadResult.data) {
-          console.error('下载文件失败:', downloadResult.error)
           setError(downloadResult.error || '下载文件失败')
           return
         }
-        
+
         // 创建下载链接
         const url = URL.createObjectURL(downloadResult.data)
         const link = document.createElement('a')
@@ -286,10 +272,7 @@ export function WebDAVFileBrowser({
         link.click()
         document.body.removeChild(link)
         URL.revokeObjectURL(url)
-        
-        console.log('文件下载成功:', selectedFile.basename)
       } catch (error) {
-        console.error('文件下载失败:', error)
         setError('文件下载失败')
       } finally {
         setIsDownloading(false)
@@ -300,34 +283,20 @@ export function WebDAVFileBrowser({
   // 处理文件选择确认
   const handleFileSelect = async () => {
     if (selectedFile) {
-      console.log('[DEBUG] WebDAVFileBrowser.handleFileSelect 开始:', {
-        fileName: selectedFile.basename,
-        filePath: selectedFile.filename,
-        timestamp: Date.now()
-      })
-
       setIsDownloading(true)
       try {
         // 下载文件内容，传递文件名以避免特殊字符问题
         const downloadResult = await webdavService.downloadFileAsFile(selectedFile.filename, selectedFile.basename)
 
         if (!downloadResult.success || !downloadResult.data) {
-          console.error('[DEBUG] WebDAVFileBrowser 下载文件失败:', downloadResult.error)
           setError(downloadResult.error || '下载文件失败')
           return
         }
-
-        console.log('[DEBUG] WebDAVFileBrowser 下载完成:', {
-          fileName: downloadResult.data.name,
-          fileSize: downloadResult.data.size,
-          timestamp: Date.now()
-        })
 
         // 传递下载的File对象给父组件
         onFileSelect(downloadResult.data)
         onClose()
       } catch (error) {
-        console.error('[DEBUG] WebDAVFileBrowser 文件选择失败:', error)
         setError('文件选择失败')
       } finally {
         setIsDownloading(false)
@@ -346,11 +315,10 @@ export function WebDAVFileBrowser({
     
     // 处理路径分割
     const pathParts = currentPath.split('/').filter(part => part !== '')
-    console.log('路径分割:', pathParts)
-    
+
     // 移除最后一部分（当前目录）
     pathParts.pop()
-    
+
     // 构建上级目录路径
     let parentPath: string
     if (pathParts.length === 0) {
@@ -358,9 +326,7 @@ export function WebDAVFileBrowser({
     } else {
       parentPath = '/' + pathParts.join('/') + '/'
     }
-    
-    console.log('上级目录路径:', parentPath)
-    
+
     // 更新历史记录
     const newHistory = pathHistory.slice(0, historyIndex + 1)
     newHistory.push(parentPath)

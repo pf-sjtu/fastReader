@@ -89,10 +89,6 @@ export class WebDAVService {
 
       // 获取处理后的URL（根据环境自动选择代理模式）
       const processedUrl = getProcessedUrl(config.serverUrl)
-      const proxyMode = typeof window !== 'undefined' ? 'Cloudflare Pages Functions' : '直连'
-      console.log('初始化WebDAV客户端，原始URL:', config.serverUrl)
-      console.log('初始化WebDAV客户端，处理后URL:', processedUrl)
-      console.log('代理模式:', proxyMode)
 
       // 创建WebDAV客户端
       const clientConfig: any = {
@@ -100,11 +96,9 @@ export class WebDAVService {
         password: config.password
       }
 
-      
       // 检测移动端浏览器
       const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      console.log('移动端浏览器检测:', isMobile)
-      
+
       // 根据浏览器类型配置请求头
       clientConfig.headers = {
         'User-Agent': 'ebook-to-mindmap/1.0',
@@ -119,14 +113,6 @@ export class WebDAVService {
         clientConfig.headers['X-Requested-With'] = 'XMLHttpRequest'
       }
 
-      
-      console.log('WebDAV客户端配置:', {
-        url: processedUrl,
-        hasHeaders: !!clientConfig.headers,
-        headerKeys: clientConfig.headers ? Object.keys(clientConfig.headers) : [],
-        isMobile: isMobile
-      })
-      
       this.client = createClient(processedUrl, clientConfig)
 
       // 测试连接
@@ -154,14 +140,6 @@ export class WebDAVService {
     }
 
     try {
-      // 检测移动端环境
-      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      
-      console.log('测试WebDAV连接...', {
-        isMobile: isMobile,
-        userAgent: navigator.userAgent
-      })
-      
       const headerPath = '/'
       this.client.setHeaders({
         ...this.client.getHeaders(),
@@ -186,18 +164,12 @@ export class WebDAVService {
         }
       }
 
-      console.log('WebDAV连接测试成功')
       return { success: true, data: true }
 
     } catch (error) {
       let errorMessage = '连接失败'
-      
+
       if (error instanceof Error) {
-        console.error('WebDAV连接测试失败:', {
-          message: error.message,
-          stack: error.stack,
-          name: error.name
-        })
         
         if (error.message.includes('401') || error.message.includes('Unauthorized')) {
           errorMessage = '认证失败，请检查用户名和密码'
@@ -240,17 +212,9 @@ export class WebDAVService {
 
     try {
       const rawPath = path || this.config?.browsePath || '/'
-      console.log('请求目录内容，路径:', rawPath)
-      console.log('当前WebDAV客户端配置:', {
-        baseURL: this.config?.serverUrl,
-        processedURL: getProcessedUrl(this.config?.serverUrl || '')
-      })
       const normalizedPath = normalizeDavPath(rawPath)
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
 
-      console.log('标准化后路径:', normalizedPath)
-      console.log('即将发送WebDAV请求到基础URL:', buildProxyBaseUrl(this.config!))
-      
       this.client.setHeaders({
         ...this.client.getHeaders(),
         'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
@@ -288,11 +252,8 @@ export class WebDAVService {
         }
       })
 
-
-      console.log('返回文件列表:', fileList.map(f => ({ name: f.basename, filename: f.filename })))
       return { success: true, data: fileList }
     } catch (error) {
-      console.error('获取目录内容失败:', error)
       return {
         success: false,
         error: `获取目录内容失败: ${error instanceof Error ? error.message : '未知错误'}`
@@ -335,8 +296,6 @@ export class WebDAVService {
     }
 
     try {
-      console.log('获取文件内容:', filePath, '格式:', format)
-      
       if (!this.config) {
         return { success: false, error: 'WebDAV配置未找到' }
       }
@@ -395,28 +354,19 @@ export class WebDAVService {
    * @deprecated 由于CORS限制，建议使用代理下载
    */
   private async directDownload(filePath: string): Promise<WebDAVOperationResult<ArrayBuffer>> {
-    console.warn('⚠️ 使用已弃用的直接下载方法，可能存在CORS问题')
-    
     if (!this.config) {
       return { success: false, error: 'WebDAV配置未找到' }
     }
 
     try {
-      console.log('创建直接 WebDAV 客户端连接...')
-      
       // 创建直接连接的客户端（不使用代理）
       const directClient = createClient(this.config.serverUrl, {
         username: this.config.username,
         password: this.config.password
       })
-      
-      console.log('使用直接客户端下载文件:', filePath)
+
       const binaryContent = await directClient.getFileContents(filePath, { format: 'binary' })
-      
-      console.log('直接下载成功，内容类型:', typeof binaryContent, binaryContent.constructor.name)
-      console.log('直接下载大小:', 
-        (binaryContent as ArrayBuffer).byteLength || (binaryContent as Uint8Array).length || (binaryContent as string).length || 0)
-      
+
       // 转换为 ArrayBuffer
       let arrayBuffer: ArrayBuffer
       if (binaryContent instanceof ArrayBuffer) {
@@ -427,20 +377,19 @@ export class WebDAVService {
         arrayBuffer = this.base64ToArrayBuffer(binaryContent)
       } else {
         // 处理Buffer或其他类型
-        const uint8Array = binaryContent instanceof Buffer ? 
-          new Uint8Array(binaryContent) : 
+        const uint8Array = binaryContent instanceof Buffer ?
+          new Uint8Array(binaryContent) :
           new Uint8Array(binaryContent as unknown as ArrayBufferLike)
         arrayBuffer = uint8Array.buffer.slice(uint8Array.byteOffset, uint8Array.byteOffset + uint8Array.byteLength) as ArrayBuffer
       }
-      
+
       return { success: true, data: arrayBuffer }
-      
+
     } catch (error) {
-      console.error('直接下载失败:', error)
       return {
         success: false,
         error: `直接下载失败: ${error instanceof Error ? error.message : '未知错误'}
-        
+
 提示：在开发环境下建议使用同源代理避免CORS问题。`
       }
     }
@@ -463,22 +412,14 @@ export class WebDAVService {
     }
 
     try {
-      console.log('🔄 WebDAV上传文件:')
-      console.log('   文件路径:', filePath)
-      console.log('   数据类型:', typeof data)
-      console.log('   数据大小:', typeof data === 'string' ? data.length : 'unknown')
-      console.log('   覆盖模式:', overwrite)
-      
       const normalizedPath = normalizeDavPath(filePath)
 
       const dirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
       if (dirPath && dirPath !== '/') {
-        console.log('📁 检查目录是否存在:', dirPath)
         const dirHeaderPath = buildHeaderPath(this.config!, dirPath)
         this.setDavHeader(dirHeaderPath)
         const dirExists = await this.client.exists('/')
         if (!dirExists) {
-          console.log('📁 创建目录:', dirPath)
           this.setDavHeader(dirHeaderPath)
           await this.client.createDirectory('/')
         }
@@ -487,12 +428,10 @@ export class WebDAVService {
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.setDavHeader(headerPath)
       const result = await this.client.putFileContents('/', data as any, { overwrite })
-      
-      console.log('✅ WebDAV上传成功:', result)
+
       return { success: true, data: result }
 
     } catch (error) {
-      console.error('❌ WebDAV上传失败:', error)
       return {
         success: false,
         error: `上传文件失败: ${error instanceof Error ? error.message : '未知错误'}`
@@ -773,8 +712,6 @@ export class WebDAVService {
     }
 
     try {
-      console.log('开始下载文件:', filePath, fileName)
-      
       // 标准化文件路径
       let normalizedPath = filePath
       if (normalizedPath.startsWith('../dav/')) {
@@ -783,33 +720,26 @@ export class WebDAVService {
       if (!normalizedPath.startsWith('/')) {
         normalizedPath = '/' + normalizedPath
       }
-      
+
       // 获取文件内容
       const contentResult = await this.getFileContents(normalizedPath, 'binary')
       if (!contentResult.success || !contentResult.data) {
-        console.error('获取文件内容失败:', contentResult.error)
         return {
           success: false,
           error: contentResult.error || '获取文件内容失败'
         }
       }
 
-      console.log('文件内容获取成功，类型:', typeof contentResult.data, '长度:', 
-        (contentResult.data as ArrayBuffer).byteLength || (contentResult.data as string).length || 'unknown')
-      
       // 使用提供的文件名或从路径中提取
       const finalFileName = fileName || normalizedPath.split('/').pop() || 'downloaded_file'
-      
+
       // 创建File对象
       const file = new File([contentResult.data], finalFileName, {
         type: this.getMimeType(finalFileName)
       })
 
-      console.log('File对象创建成功:', file.name, '大小:', file.size, '类型:', file.type)
-      
       return { success: true, data: file }
     } catch (error) {
-      console.error('下载文件异常:', error)
       return {
         success: false,
         error: `下载文件失败: ${error instanceof Error ? error.message : '未知错误'}`

@@ -97,18 +97,8 @@ export class CacheService {
 
   // 获取书籍总结缓存
   getSummary(filename: string): any | null {
-    console.log('[DEBUG] CacheService.getSummary 开始:', {
-      filename,
-      timestamp: Date.now()
-    })
-
     const stats = this.getStats()
     const cleanFilename = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')
-
-    console.log('[DEBUG] CacheService.getSummary cleanFilename:', {
-      cleanFilename,
-      cacheKeys: stats.keys
-    })
     
     // 获取所有章节总结
     const chapterKeys = stats.keys.filter(key =>
