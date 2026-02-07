@@ -3,7 +3,7 @@
  * 重构后使用模块化结构
  */
 
-import { Book, type NavItem } from '@ssshooter/epubjs'
+import ePub, { Book, type NavItem } from '@ssshooter/epubjs'
 import { SKIP_CHAPTER_KEYWORDS } from './constants'
 import type Section from '@ssshooter/epubjs/types/section'
 import {
@@ -41,20 +41,7 @@ export class EpubProcessor {
           timestamp: Date.now()
         })
 
-        console.log('[DEBUG] EpubProcessor.parseEpub 动态导入 epubjs...', {
-          fileName: file.name,
-          timestamp: Date.now()
-        })
-
-        // 使用动态导入确保新的模块实例，避免模块级缓存问题
-        const { default: ePub } = await import('@ssshooter/epubjs')
         const book = ePub()
-
-        console.log('[DEBUG] EpubProcessor.parseEpub ePub() 实例创建:', {
-          fileName: file.name,
-          bookInstanceId: Math.random().toString(36).substring(7),
-          timestamp: Date.now()
-        })
 
         await book.open(arrayBuffer)
 

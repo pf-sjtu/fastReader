@@ -108,18 +108,15 @@ export class WebDAVService {
       // 根据浏览器类型配置请求头
       clientConfig.headers = {
         'User-Agent': 'ebook-to-mindmap/1.0',
-        'Accept': 'application/xml, text/xml, */*'
-      }
-      
-      if (isMobile) {
-        clientConfig.headers['X-Requested-With'] = 'XMLHttpRequest'
-        clientConfig.headers['Cache-Control'] = 'no-cache'
-      }
-
-      clientConfig.headers = {
-        ...clientConfig.headers,
+        'Accept': 'application/xml, text/xml, */*',
+        'Cache-Control': 'no-store, no-cache',
+        'Pragma': 'no-cache',
         'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`),
         'X-WebDAV-Base': config.serverUrl
+      }
+
+      if (isMobile) {
+        clientConfig.headers['X-Requested-With'] = 'XMLHttpRequest'
       }
 
       
@@ -354,11 +351,17 @@ export class WebDAVService {
       })
 
       if (format === 'text') {
-        const content = await this.client.getFileContents('/', { format: 'text' }) as string
+        const content = await this.client.getFileContents('/', {
+          format: 'text',
+          headers: { 'Cache-Control': 'no-store, no-cache', 'Pragma': 'no-cache' }
+        }) as string
         return { success: true, data: content }
       }
 
-      const binaryContent = await this.client.getFileContents('/', { format: 'binary' })
+      const binaryContent = await this.client.getFileContents('/', {
+        format: 'binary',
+        headers: { 'Cache-Control': 'no-store, no-cache', 'Pragma': 'no-cache' }
+      })
       console.log('WebDAV客户端返回的内容类型:', typeof binaryContent, binaryContent.constructor.name)
 
       let arrayBuffer: ArrayBuffer
