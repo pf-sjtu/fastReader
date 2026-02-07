@@ -35,21 +35,40 @@ export class PdfProcessor {
 
   async parsePdf(file: File): Promise<BookData> {
     try {
+      console.log('[DEBUG] PdfProcessor.parsePdf 开始解析:', {
+        fileName: file.name,
+        fileSize: file.size,
+        timestamp: Date.now()
+      })
+
       // 将File转换为ArrayBuffer
       const arrayBuffer = await file.arrayBuffer()
+
+      console.log('[DEBUG] PdfProcessor.parsePdf arrayBuffer 读取完成:', {
+        fileName: file.name,
+        arrayBufferSize: arrayBuffer.byteLength,
+        timestamp: Date.now()
+      })
 
       // 使用PDF.js解析PDF文件
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
 
+      console.log('[DEBUG] PdfProcessor.parsePdf pdfjsLib.getDocument 完成:', {
+        fileName: file.name,
+        totalPages: pdf.numPages,
+        timestamp: Date.now()
+      })
+
       // 获取PDF元数据
       const metadata = await pdf.getMetadata()
-      console.log('metadata', metadata)
+      console.log('[DEBUG] PdfProcessor.parsePdf metadata:', metadata)
       const title = (metadata.info as any)?.Title || file.name.replace('.pdf', '') || '未知标题'
       const author = (metadata.info as any)?.Author || '未知作者'
 
-      console.log(`📚 [DEBUG] PDF解析完成:`, {
-        title,
-        author,
+      console.log(`[DEBUG] PDF解析完成:`, {
+        fileName: file.name,
+        extractedTitle: title,
+        extractedAuthor: author,
         totalPages: pdf.numPages
       })
 

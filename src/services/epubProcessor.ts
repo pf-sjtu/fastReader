@@ -27,13 +27,54 @@ export class EpubProcessor {
 
       this.processingFiles.add(fileKey)
       try {
+        console.log('[DEBUG] EpubProcessor.parseEpub 开始解析:', {
+          fileName: file.name,
+          fileSize: file.size,
+          timestamp: Date.now()
+        })
+
         const arrayBuffer = await file.arrayBuffer()
+
+        console.log('[DEBUG] EpubProcessor.parseEpub arrayBuffer 读取完成:', {
+          fileName: file.name,
+          arrayBufferSize: arrayBuffer.byteLength,
+          timestamp: Date.now()
+        })
+
         const book = ePub()
+
+        console.log('[DEBUG] EpubProcessor.parseEpub ePub() 实例创建:', {
+          fileName: file.name,
+          bookInstanceId: Math.random().toString(36).substring(7),
+          timestamp: Date.now()
+        })
+
         await book.open(arrayBuffer)
+
+        console.log('[DEBUG] EpubProcessor.parseEpub book.open() 完成:', {
+          fileName: file.name,
+          bookPackagingTitle: book.packaging?.metadata?.title,
+          timestamp: Date.now()
+        })
+
         await book.ready
+
+        console.log('[DEBUG] EpubProcessor.parseEpub book.ready 完成:', {
+          fileName: file.name,
+          bookPackagingTitle: book.packaging?.metadata?.title,
+          bookPackagingCreator: book.packaging?.metadata?.creator,
+          timestamp: Date.now()
+        })
 
         const title = book.packaging?.metadata?.title || '未知标题'
         const author = book.packaging?.metadata?.creator || '未知作者'
+
+        console.log('[DEBUG] EpubProcessor.parseEpub 返回结果:', {
+          fileName: file.name,
+          extractedTitle: title,
+          extractedAuthor: author,
+          timestamp: Date.now()
+        })
 
         return { book, title, author }
       } finally {
