@@ -65,9 +65,28 @@ export class PdfProcessor {
   }
 
   async extractBookData(file: File, useSmartDetection: boolean = false, skipNonEssentialChapters: boolean = true, maxSubChapterDepth: number = 0, chapterNamingMode: 'auto' | 'numbered' = 'auto', chapterDetectionMode: 'normal' | 'smart' | 'epub-toc' = 'normal', epubTocDepth: number = 1): Promise<BookData & { chapters: ChapterData[] }> {
+    console.log('[DEBUG] PdfProcessor.extractBookData 开始:', {
+      fileName: file.name,
+      timestamp: Date.now()
+    })
+
     const bookData = await this.parsePdf(file)
+
+    console.log('[DEBUG] PdfProcessor.parsePdf 完成:', {
+      fileName: file.name,
+      bookTitle: bookData.title,
+      timestamp: Date.now()
+    })
+
     const chapters = await this.extractChapters(file, useSmartDetection, skipNonEssentialChapters, maxSubChapterDepth, chapterNamingMode, chapterDetectionMode, epubTocDepth)
-    
+
+    console.log('[DEBUG] PdfProcessor.extractChapters 完成:', {
+      fileName: file.name,
+      bookTitle: bookData.title,
+      chapterCount: chapters.length,
+      timestamp: Date.now()
+    })
+
     return {
       ...bookData,
       chapters

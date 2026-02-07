@@ -53,7 +53,19 @@ export class EpubProcessor {
     chapterDetectionMode: ChapterDetectionMode = 'normal',
     epubTocDepth: number = 1
   ): Promise<BookData & { chapters: ChapterData[] }> {
+    console.log('[DEBUG] EpubProcessor.extractBookData 开始:', {
+      fileName: file.name,
+      timestamp: Date.now()
+    })
+
     const bookData = await this.parseEpub(file)
+
+    console.log('[DEBUG] EpubProcessor.parseEpub 完成:', {
+      fileName: file.name,
+      bookTitle: bookData.title,
+      timestamp: Date.now()
+    })
+
     const chapters = await this.extractChapters(
       bookData.book,
       useSmartDetection,
@@ -63,6 +75,13 @@ export class EpubProcessor {
       chapterDetectionMode,
       epubTocDepth
     )
+
+    console.log('[DEBUG] EpubProcessor.extractChapters 完成:', {
+      fileName: file.name,
+      bookTitle: bookData.title,
+      chapterCount: chapters.length,
+      timestamp: Date.now()
+    })
 
     return { ...bookData, chapters }
   }

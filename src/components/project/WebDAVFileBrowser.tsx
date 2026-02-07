@@ -300,22 +300,34 @@ export function WebDAVFileBrowser({
   // 处理文件选择确认
   const handleFileSelect = async () => {
     if (selectedFile) {
+      console.log('[DEBUG] WebDAVFileBrowser.handleFileSelect 开始:', {
+        fileName: selectedFile.basename,
+        filePath: selectedFile.filename,
+        timestamp: Date.now()
+      })
+
       setIsDownloading(true)
       try {
         // 下载文件内容，传递文件名以避免特殊字符问题
         const downloadResult = await webdavService.downloadFileAsFile(selectedFile.filename, selectedFile.basename)
-        
+
         if (!downloadResult.success || !downloadResult.data) {
-          console.error('下载文件失败:', downloadResult.error)
+          console.error('[DEBUG] WebDAVFileBrowser 下载文件失败:', downloadResult.error)
           setError(downloadResult.error || '下载文件失败')
           return
         }
-        
+
+        console.log('[DEBUG] WebDAVFileBrowser 下载完成:', {
+          fileName: downloadResult.data.name,
+          fileSize: downloadResult.data.size,
+          timestamp: Date.now()
+        })
+
         // 传递下载的File对象给父组件
         onFileSelect(downloadResult.data)
         onClose()
       } catch (error) {
-        console.error('文件选择失败:', error)
+        console.error('[DEBUG] WebDAVFileBrowser 文件选择失败:', error)
         setError('文件选择失败')
       } finally {
         setIsDownloading(false)
