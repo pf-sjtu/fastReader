@@ -3,7 +3,7 @@
  * 重构后使用模块化结构
  */
 
-import ePub, { Book, type NavItem } from '@ssshooter/epubjs'
+import { Book, type NavItem } from '@ssshooter/epubjs'
 import { SKIP_CHAPTER_KEYWORDS } from './constants'
 import type Section from '@ssshooter/epubjs/types/section'
 import {
@@ -41,6 +41,13 @@ export class EpubProcessor {
           timestamp: Date.now()
         })
 
+        console.log('[DEBUG] EpubProcessor.parseEpub 动态导入 epubjs...', {
+          fileName: file.name,
+          timestamp: Date.now()
+        })
+
+        // 使用动态导入确保新的模块实例，避免模块级缓存问题
+        const { default: ePub } = await import('@ssshooter/epubjs')
         const book = ePub()
 
         console.log('[DEBUG] EpubProcessor.parseEpub ePub() 实例创建:', {
@@ -48,26 +55,6 @@ export class EpubProcessor {
           bookInstanceId: Math.random().toString(36).substring(7),
           timestamp: Date.now()
         })
-
-        // 清除 epubjs 缓存以避免缓存键冲突问题
-        // @ssshooter/epubjs 使用 localforage (IndexedDB) 缓存书籍解压内容
-        // 当缓存键冲突时，会返回错误的书籍数据，导致打开新书时显示旧书内容
-        if (typeof window !== 'undefined' && window.indexedDB) {
-          try {
-            const deleteRequest = window.indexedDB.deleteDatabase('epubjs-zip')
-            deleteRequest.onsuccess = () => {
-              console.log('[DEBUG] 已清除 epubjs IndexedDB 缓存')
-            }
-            deleteRequest.onerror = () => {
-              console.warn('[DEBUG] 清除 epubjs IndexedDB 缓存失败')
-            }
-            deleteRequest.onblocked = () => {
-              console.warn('[DEBUG] 清除 epubjs IndexedDB 缓存被阻塞')
-            }
-          } catch (e) {
-            console.warn('[DEBUG] 清除缓存失败:', e)
-          }
-        }
 
         await book.open(arrayBuffer)
 
