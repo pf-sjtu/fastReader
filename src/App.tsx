@@ -37,6 +37,8 @@ import { toast } from 'sonner'
 import { Toaster } from '@/components/ui/sonner'
 import { scrollToTop } from './utils/index'
 import { useWebDAVConfig, useConfigStore, useAIConfig, useProcessingOptions, usePromptConfig, useAIServiceOptions } from './stores/configStore'
+import { metadataFormatter } from './services/metadataFormatter'
+import { normalizeMarkdownTypography } from './lib/markdown'
 
 
 const options = { direction: 1, alignment: 'nodes' } as Options
@@ -599,41 +601,60 @@ function App() {
   // 下载所有markdown文件
   const downloadAllMarkdown = useCallback(() => {
     if (!bookSummary || !file) return
-    
-    let markdownContent = `# ${bookSummary.title}\n\n`
-    markdownContent += `**作者**: ${bookSummary.author}\n\n`
-    markdownContent += `---\n\n`
-    
-    // 添加章节总结
-    bookSummary.chapters.forEach((chapter, index) => {
-      // 根据章节命名模式生成标题
-      let chapterTitle: string
-      if (processingOptions.chapterNamingMode === 'numbered') {
-        chapterTitle = `第${String(index + 1).padStart(2, '0')}章`
-      } else {
-        chapterTitle = chapter.title || `第${index + 1}章`
-      }
-      
-      markdownContent += `## ${chapterTitle}\n\n`
-      if (chapter.summary) {
-        markdownContent += `${chapter.summary}\n\n`
-      }
-      markdownContent += `---\n\n`
+
+    // 准备章节数据
+    const chapters = bookSummary.chapters.map((chapter: any) => ({
+      id: chapter.id,
+      title: chapter.title,
+      summary: chapter.summary || ''
+    }))
+
+    // 准备书籍数据
+    const bookData = {
+      title: bookSummary.title,
+      author: bookSummary.author,
+      chapters: chapters,
+      overallSummary: bookSummary.overallSummary,
+      connections: bookSummary.connections
+    }
+
+    // 计算原始内容字符数
+    const originalCharCount = bookSummary.chapters.reduce(
+      (total: number, chapter: any) => total + (chapter.content?.length || 0),
+      0
+    )
+
+    // 计算处理后内容字符数
+    const processedCharCount = bookSummary.chapters.reduce(
+      (total: number, chapter: any) => total + (chapter.summary?.length || 0),
+      0
+    )
+
+    // 选中的章节
+    const selectedChapters = bookSummary.chapters
+      .map((_: any, index: number) => index + 1)
+      .filter((_: any, index: number) => {
+        return bookSummary.chapters[index]?.summary
+      })
+
+    // 生成元数据
+    const metadata = metadataFormatter.generate({
+      fileName: file.name,
+      bookTitle: bookSummary.title,
+      model: aiConfig.model,
+      chapterDetectionMode: processingOptions.chapterDetectionMode,
+      selectedChapters: selectedChapters,
+      chapterCount: bookSummary.chapters.length,
+      originalCharCount: originalCharCount,
+      processedCharCount: processedCharCount
     })
-    
-    // 添加章节关联分析
-    if (bookSummary.connections) {
-      markdownContent += `## 章节关联分析\n\n`
-      markdownContent += `${bookSummary.connections}\n\n`
-      markdownContent += `---\n\n`
-    }
-    
-    // 添加全书总结
-    if (bookSummary.overallSummary) {
-      markdownContent += `## 全书总结\n\n`
-      markdownContent += `${bookSummary.overallSummary}\n\n`
-    }
-    
+
+    // 使用统一格式生成 Markdown
+    let markdownContent = metadataFormatter.formatUnified(bookData, metadata, processingOptions.chapterNamingMode)
+
+    // 应用预处理解决渲染问题
+    markdownContent = normalizeMarkdownTypography(markdownContent)
+
     // 创建下载链接
     const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -646,9 +667,9 @@ function App() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-    
+
     toast.success(t('download.downloadSuccess'))
-  }, [bookSummary, file, t])
+  }, [bookSummary, file, t, aiConfig.model, processingOptions.chapterDetectionMode, processingOptions.chapterNamingMode])
   const processBook = useCallback(async () => {
     if (!file || !extractedChapters || selectedChapters.size === 0) return
 

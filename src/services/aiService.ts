@@ -258,6 +258,11 @@ export class AIService {
     return typeof this.config === 'function' ? this.config() : this.config
   }
 
+  // 设置 Token 使用回调
+  setOnTokenUsage(callback: (tokens: number) => void): void {
+    this.onTokenUsage = callback
+  }
+
   // 识别流量限制错误
   private identifyRateLimitError(error: any, status?: number, errorBody?: string): RateLimitError | null {
     // 检查HTTP状态码

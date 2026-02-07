@@ -188,6 +188,11 @@ export class CacheService {
     }
   }
 
+  // 设置缓存值（兼容测试的简化接口）
+  set(filename: string, type: CacheKeyType, value: CacheValue, chapterId?: string): void {
+    this.setCache(filename, type, value, chapterId)
+  }
+
   // 设置缓存值
   setCache(filename: string, type: CacheKeyType, value: CacheValue, chapterId?: string): void {
     const key = CacheService.generateKey(filename, type, chapterId)
@@ -221,6 +226,11 @@ export class CacheService {
     this.saveToLocalStorage()
   }
 
+  // 删除缓存（公共接口，兼容测试）
+  delete(filename: string, type: CacheKeyType, chapterId?: string): boolean {
+    return this.deleteCache(filename, type, chapterId)
+  }
+
   // 删除缓存
   private deleteCache(filename: string, type: CacheKeyType, chapterId?: string): boolean {
     const key = CacheService.generateKey(filename, type, chapterId)
@@ -237,9 +247,11 @@ export class CacheService {
   }
 
   // 获取缓存统计信息（用于清除整本书缓存时查找相关键）
-  private getStats(): { keys: string[] } {
+  getStats(): { totalEntries: number; keys: string[] } {
+    const keys = Array.from(this.cache.keys())
     return {
-      keys: Array.from(this.cache.keys())
+      totalEntries: keys.length,
+      keys: keys
     }
   }
 
@@ -270,11 +282,34 @@ export class CacheService {
   }
 
   // 清除整本书缓存
-  clearBookCache(fileName: string, processingMode: 'summary' | 'mindmap' | 'combined_mindmap'): number {
+  clearBookCache(fileName: string, processingMode?: 'summary' | 'mindmap' | 'combined_mindmap'): number {
     let deletedCount = 0
 
     // 清除选中章节缓存
     if (this.deleteCache(fileName, 'selected_chapters')) deletedCount++
+
+    // 如果没有指定 processingMode，清除所有相关缓存
+    if (!processingMode) {
+      // 清除所有书籍级缓存
+      if (this.deleteCache(fileName, 'summary')) deletedCount++
+      if (this.deleteCache(fileName, 'connections')) deletedCount++
+      if (this.deleteCache(fileName, 'overall_summary')) deletedCount++
+      if (this.deleteCache(fileName, 'mindmap_arrows')) deletedCount++
+      if (this.deleteCache(fileName, 'merged_mindmap')) deletedCount++
+      if (this.deleteCache(fileName, 'combined_mindmap')) deletedCount++
+
+      // 清除所有章节的缓存（任何类型）
+      const stats = this.getStats()
+      const cleanFilename = fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')
+      const chapterKeys = stats.keys.filter(key =>
+        key.includes(`book_${cleanFilename}_chapter_`)
+      )
+      chapterKeys.forEach(key => {
+        if (this.deleteByKey(key)) deletedCount++
+      })
+
+      return deletedCount
+    }
 
     if (processingMode === 'summary') {
       // 文字总结模式：清除章节总结、章节关联、全书总结相关缓存

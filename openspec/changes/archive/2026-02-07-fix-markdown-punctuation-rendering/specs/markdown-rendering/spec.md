@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Markdown 标点符号预处理
 The system SHALL 在渲染 Markdown 内容前，检测 Markdown 强调标记（`**`, `__`, `*`, `_`）内部是否包含标点符号，并在对应侧的作用域外添加空格：

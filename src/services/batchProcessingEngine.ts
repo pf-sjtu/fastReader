@@ -361,10 +361,16 @@ export class BatchProcessingEngine {
           }))
 
         if (chapterObjects.length > 0) {
-          const connections = await this.aiService!.analyzeConnections(
-            chapterObjects,
-            processingOptions.outputLanguage
-          )
+          let connections: string
+          try {
+            connections = await this.aiService!.analyzeConnections(
+              chapterObjects,
+              processingOptions.outputLanguage
+            )
+          } catch (error) {
+            console.error('[BatchProcessingEngine] 章节关联分析生成失败:', error)
+            connections = '章节关联分析生成失败'
+          }
 
           if (this.shouldStop) {
             throw new Error('用户停止处理')
@@ -395,21 +401,33 @@ export class BatchProcessingEngine {
           }))
 
         if (chapterObjects.length > 0) {
-          const connections = await this.aiService!.analyzeConnections(
-            chapterObjects,
-            processingOptions.outputLanguage
-          )
+          let connections: string
+          try {
+            connections = await this.aiService!.analyzeConnections(
+              chapterObjects,
+              processingOptions.outputLanguage
+            )
+          } catch (error) {
+            console.error('[BatchProcessingEngine] 章节关联分析生成失败:', error)
+            connections = '章节关联分析生成失败'
+          }
 
           if (this.shouldStop) {
             throw new Error('用户停止处理')
           }
 
-          const overallSummary = await this.aiService!.generateOverallSummary(
-            bookTitle,
-            chapterObjects,
-            connections,
-            processingOptions.outputLanguage
-          )
+          let overallSummary: string
+          try {
+            overallSummary = await this.aiService!.generateOverallSummary(
+              bookTitle,
+              chapterObjects,
+              connections,
+              processingOptions.outputLanguage
+            )
+          } catch (error) {
+            console.error('[BatchProcessingEngine] 全书总结生成失败:', error)
+            overallSummary = '全书总结生成失败'
+          }
 
           if (this.shouldStop) {
             throw new Error('用户停止处理')

@@ -46,7 +46,7 @@ describe('AIService', () => {
       const service = new AIService(mockConfig)
       const callback = vi.fn()
       
-      service.onTokenUsage(callback)
+      service.setOnTokenUsage(callback)
       ;(service as any).recordTokenUsage(100)
       
       expect(callback).toHaveBeenCalledWith(100)

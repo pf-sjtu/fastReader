@@ -9,7 +9,9 @@
       "Bash(npx vitest run:*)",
       "Bash(ls:*)",
       "Bash(pip show:*)",
-      "mcp__tavily-mcp__tavily-search"
+      "mcp__tavily-mcp__tavily-search",
+      "Bash(npm test:*)",
+      "Bash(git reset:*)"
     ]
   },
   "mcpServers": {

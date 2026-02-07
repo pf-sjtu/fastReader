@@ -1,12 +1,27 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { CacheService, type CacheKeyType } from '../../src/services/cacheService'
 
+// Mock localStorage for Node.js test environment
+const createMockStorage = () => {
+  let store: Record<string, string> = {}
+  return {
+    getItem: (key: string) => store[key] || null,
+    setItem: (key: string, value: string) => { store[key] = value },
+    removeItem: (key: string) => { delete store[key] },
+    clear: () => { store = {} }
+  }
+}
+
 describe('CacheService', () => {
   let cacheService: CacheService
   const mockFilename = 'test-book.epub'
 
   beforeEach(() => {
-    // Clear localStorage before each test
+    // Mock localStorage for Node.js environment
+    Object.defineProperty(global, 'localStorage', {
+      value: createMockStorage(),
+      writable: true
+    })
     localStorage.clear()
     cacheService = new CacheService()
   })
