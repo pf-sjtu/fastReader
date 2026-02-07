@@ -326,6 +326,16 @@ function App() {
     setBookMindMap(null)
     setCurrentStepIndex(1)
     setRightPanelContent(null)
+    // 清理完整书籍数据和相关状态
+    setFullBookData(null)
+    setCurrentReadingChapter(null)
+    setCurrentProcessingChapter('')
+    setCurrentViewingChapter('')
+    setCurrentViewingChapterSummary('')
+    setExpandedChapters(new Set())
+    setCloudCacheMetadata(null)
+    setCloudCacheContent(null)
+    setCustomPrompt('')
   }, [])
 
   // 处理WebDAV文件选择
@@ -339,7 +349,17 @@ function App() {
     setBookMindMap(null)
     setCurrentStepIndex(1)
     setRightPanelContent(null)
-    
+    // 清理完整书籍数据和相关状态
+    setFullBookData(null)
+    setCurrentReadingChapter(null)
+    setCurrentProcessingChapter('')
+    setCurrentViewingChapter('')
+    setCurrentViewingChapterSummary('')
+    setExpandedChapters(new Set())
+    setCloudCacheMetadata(null)
+    setCloudCacheContent(null)
+    setCustomPrompt('')
+
     toast.success(`已选择文件: ${file.name}`)
   }, [])
 

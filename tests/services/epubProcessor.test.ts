@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { EpubProcessor, type ChapterData } from '../../src/services/epubProcessor'
+import { formatChapterNumber } from '../../src/services/epub'
+
+// Mock arrayBuffer for File in jsdom
+const originalArrayBuffer = File.prototype.arrayBuffer
+if (typeof File !== 'undefined') {
+  File.prototype.arrayBuffer = vi.fn().mockImplementation(function(this: File) {
+    // Return arrayBuffer with content matching file size
+    return Promise.resolve(new ArrayBuffer(this.size))
+  })
+}
 
 describe('EpubProcessor', () => {
   let processor: EpubProcessor
@@ -10,17 +20,17 @@ describe('EpubProcessor', () => {
 
   describe('formatChapterNumber', () => {
     it('should format single digit with padding', () => {
-      const result = (processor as any).formatChapterNumber(1, 10)
+      const result = formatChapterNumber(1, 10)
       expect(result).toBe('01')
     })
 
     it('should format double digit without padding', () => {
-      const result = (processor as any).formatChapterNumber(10, 10)
+      const result = formatChapterNumber(10, 10)
       expect(result).toBe('10')
     })
 
     it('should use 3 digits for large chapter counts', () => {
-      const result = (processor as any).formatChapterNumber(1, 100)
+      const result = formatChapterNumber(1, 100)
       expect(result).toBe('001')
     })
   })

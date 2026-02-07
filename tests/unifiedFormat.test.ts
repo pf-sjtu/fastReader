@@ -3,6 +3,8 @@
  * 测试新的 Markdown 统一格式是否正确生成和解析
  */
 
+import { describe, it, expect, beforeEach } from 'vitest'
+
 import {
   formatUnifiedMarkdown,
   parseUnifiedMarkdown,
