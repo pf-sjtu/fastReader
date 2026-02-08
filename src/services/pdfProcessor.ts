@@ -4,7 +4,8 @@ if (typeof window !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url).toString()
 }
 import { SKIP_CHAPTER_KEYWORDS } from './constants'
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { ConcurrencyLimiter } from '../utils/async'
 
 // 格式化章节编号，支持补零
 const formatChapterNumber = (index: number, total: number = 99): string => {
@@ -133,36 +134,44 @@ export class PdfProcessor {
           const chapterInfos = await this.extractChaptersFromOutline(pdf, outline, 0, maxSubChapterDepth, chapterNamingMode, estimatedTotal)
           console.log(chapterInfos, 'chapterInfos')
           if (chapterInfos.length > 0) {
-            // 根据章节信息提取内容
-            for (let i = 0; i < chapterInfos.length; i++) {
-              const chapterInfo = chapterInfos[i]
+            // 根据章节信息提取内容（使用并发控制）
+            const limiter = new ConcurrencyLimiter(3) // 最多3个并发
 
-              // 检查是否需要跳过此章节
-              if (skipNonEssentialChapters && this.shouldSkipChapter(chapterInfo.title)) {
-                console.log(`⏭️ [DEBUG] 跳过无关键内容章节: "${chapterInfo.title}"`)
-                continue
-              }
+            const chapterPromises = chapterInfos.map((chapterInfo, i) => {
+              return limiter.execute(async () => {
+                // 检查是否需要跳过此章节
+                if (skipNonEssentialChapters && this.shouldSkipChapter(chapterInfo.title)) {
+                  console.log(`⏭️ [DEBUG] 跳过无关键内容章节: "${chapterInfo.title}"`)
+                  return null
+                }
 
-              const nextChapterInfo = chapterInfos[i + 1]
+                const nextChapterInfo = chapterInfos[i + 1]
 
-              const startPage = chapterInfo.pageIndex + 1
-              const endPage = nextChapterInfo ? nextChapterInfo.pageIndex : totalPages
+                const startPage = chapterInfo.pageIndex + 1
+                const endPage = nextChapterInfo ? nextChapterInfo.pageIndex : totalPages
 
-              console.log(`📄 [DEBUG] 提取章节 "${chapterInfo.title}" (第${startPage}-${endPage}页)`)
+                console.log(`📄 [DEBUG] 提取章节 "${chapterInfo.title}" (第${startPage}-${endPage}页)`)
 
-              const chapterContent = await this.extractTextFromPages(pdf, startPage, endPage)
+                const chapterContent = await this.extractTextFromPages(pdf, startPage, endPage)
 
-              if (chapterContent.trim().length > 100) {
-                chapters.push({
-                  id: `chapter-${chapters.length + 1}`,
-                  title: chapterInfo.title,
-                  content: chapterContent,
-                  startPage: startPage,
-                  endPage: endPage,
-                  pageIndex: chapterInfo.pageIndex
-                })
-              }
-            }
+                if (chapterContent.trim().length > 100) {
+                  return {
+                    id: `chapter-${i + 1}`,
+                    title: chapterInfo.title,
+                    content: chapterContent,
+                    startPage: startPage,
+                    endPage: endPage,
+                    pageIndex: chapterInfo.pageIndex
+                  } as ChapterData
+                }
+                return null
+              })
+            })
+
+            const results = await Promise.all(chapterPromises)
+            results.forEach(result => {
+              if (result) chapters.push(result)
+            })
           }
         }
       } catch (outlineError) {
@@ -173,29 +182,34 @@ export class PdfProcessor {
       if (chapters.length === 0) {
         console.log(`📖 [DEBUG] 使用备用分章节方法，智能检测: ${useSmartDetection}`)
 
-        // 获取所有页面的文本内容
-        const allPageTexts: string[] = []
+        // 获取所有页面的文本内容（使用并发控制）
+        const allPageTexts: string[] = new Array(totalPages).fill('')
+        const pageLimiter = new ConcurrencyLimiter(3) // 最多3个并发页面提取
 
-        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-          console.log(`📖 [DEBUG] 处理第 ${pageNum}/${totalPages} 页`)
+        const pagePromises = Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => {
+          return pageLimiter.execute(async () => {
+            console.log(`📖 [DEBUG] 处理第 ${pageNum}/${totalPages} 页`)
 
-          try {
-            const page = await pdf.getPage(pageNum)
-            const textContent = await page.getTextContent()
+            try {
+              const page = await pdf.getPage(pageNum)
+              const textContent = await page.getTextContent()
 
-            // 提取页面文本
-            const pageText = textContent.items
-              .map((item: any) => item.str)
-              .join(' ')
-              .trim()
+              // 提取页面文本
+              const pageText = textContent.items
+                .map((item: any) => item.str)
+                .join(' ')
+                .trim()
 
-            allPageTexts.push(pageText)
-            console.log(`📄 [DEBUG] 第${pageNum}页文本长度: ${pageText.length} 字符`)
-          } catch (pageError) {
-            console.warn(`❌ [DEBUG] 跳过第${pageNum}页:`, pageError)
-            allPageTexts.push('')
-          }
-        }
+              allPageTexts[pageNum - 1] = pageText
+              console.log(`📄 [DEBUG] 第${pageNum}页文本长度: ${pageText.length} 字符`)
+            } catch (pageError) {
+              console.warn(`❌ [DEBUG] 跳过第${pageNum}页:`, pageError)
+              allPageTexts[pageNum - 1] = ''
+            }
+          })
+        })
+
+        await Promise.all(pagePromises)
 
         let detectedChapters: ChapterData[] = []
 
