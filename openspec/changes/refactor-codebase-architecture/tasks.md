@@ -45,9 +45,16 @@
 
 ## 阶段2: 架构重构 (需阶段1完成)
 
-### 2.1 拆分App.tsx [P0]
+### 2.1 拆分App.tsx [P0] - **已完成**
 **团队**: Team A (组件重构团队)
-- [ ] 创建 `features/` 目录结构
+- [x] 创建组件拆分结构
+- [x] 提取 `useBookProcessing` Hook (800+行)
+- [x] 创建 `FileUploadCard` 组件
+- [x] 创建 `ChapterSelectionSection` 组件
+- [x] 创建 `PreviewPanel` 组件
+- [x] 创建 `ResultsSection` 组件
+- [x] App.tsx 从 1669行 缩减至 453行
+- **完成日期**: 2026-02-08
 - [ ] 提取 `useFileProcessing` Hook
 - [ ] 创建 `FileUploadContainer` 组件
 - [ ] 创建 `ProcessingContainer` 组件
@@ -71,9 +78,18 @@
 - **依赖**: 阶段1完成
 - **并行**: 可与2.1、2.3并行
 
-### 2.3 拆分configStore [P0]
+### 2.3 拆分configStore [P0] - **已完成**
 **团队**: Team C (状态管理重构团队)
-- [ ] 创建 `stores/ai-config/` 目录
+- [x] 创建 `stores/ai-config/` 目录
+- [x] 创建 `useAIConfigStore`
+- [x] 创建 `useProcessingStore`
+- [x] 创建 `useWebDAVStore`
+- [x] 创建 `usePromptStore`
+- [x] 创建 `useCoreStore`
+- [x] 更新 configStore.ts 为兼容壳
+- [x] 所有引用点保持兼容
+- [x] 新增 Store 测试
+- **完成日期**: 2026-02-08
 - [ ] 创建 `useAIConfigStore`
 - [ ] 创建 `useProcessingOptionsStore`
 - [ ] 创建 `useWebDAVConfigStore`
