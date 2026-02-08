@@ -12,6 +12,7 @@ import {
   extractContentByAnchorImproved
 } from './epub'
 import type { ChapterData, BookData, ChapterInfo, ChapterNamingMode, ChapterDetectionMode } from './epub/types'
+import { ConcurrencyLimiter } from '../utils/async'
 
 export type { ChapterData, BookData }
 
@@ -119,30 +120,43 @@ export class EpubProcessor {
         }
 
         if (chapterInfos.length > 0) {
-          for (const chapterInfo of chapterInfos) {
-            if (skipNonEssentialChapters && this.shouldSkipChapter(chapterInfo.title)) {
-              continue
-            }
+          // 使用并发限制器并行提取章节内容，最多3个并发
+          const limiter = new ConcurrencyLimiter(3)
 
-            // 在 epub-toc 精确层级模式下，禁用子项内容聚合
-            const shouldIncludeSubitems = chapterDetectionMode !== 'epub-toc'
-            const chapterContent = await this.extractContentFromHref(
-              book,
-              chapterInfo.href,
-              shouldIncludeSubitems ? chapterInfo.subitems : undefined
-            )
+          const chapterPromises = chapterInfos.map((chapterInfo, index) => {
+            return limiter.execute(async () => {
+              if (skipNonEssentialChapters && this.shouldSkipChapter(chapterInfo.title)) {
+                return null
+              }
 
-            if (chapterContent.trim().length > 100) {
-              chapters.push({
-                id: `chapter-${chapters.length + 1}`,
-                title: chapterInfo.title,
-                content: chapterContent,
-                href: chapterInfo.href,
-                tocItem: chapterInfo.tocItem,
-                depth: chapterInfo.depth
-              })
+              // 在 epub-toc 精确层级模式下，禁用子项内容聚合
+              const shouldIncludeSubitems = chapterDetectionMode !== 'epub-toc'
+              const chapterContent = await this.extractContentFromHref(
+                book,
+                chapterInfo.href,
+                shouldIncludeSubitems ? chapterInfo.subitems : undefined
+              )
+
+              if (chapterContent.trim().length > 100) {
+                return {
+                  id: `chapter-${index + 1}`,
+                  title: chapterInfo.title,
+                  content: chapterContent,
+                  href: chapterInfo.href,
+                  tocItem: chapterInfo.tocItem,
+                  depth: chapterInfo.depth
+                } as ChapterData
+              }
+              return null
+            })
+          })
+
+          const results = await Promise.all(chapterPromises)
+          results.forEach(result => {
+            if (result) {
+              chapters.push(result)
             }
-          }
+          })
         }
       } catch (tocError) {
         console.warn('无法获取EPUB目录:', tocError)

@@ -30,6 +30,7 @@ export class AIService {
   private config: AIProviderConfig | (() => AIProviderConfig)
   private promptConfig: PromptConfig | (() => PromptConfig)
   private options: AIServiceOptions
+  private pendingRequests = new Map<string, Promise<string>>()
 
   constructor(
     config: AIProviderConfig | (() => AIProviderConfig),
@@ -71,9 +72,57 @@ export class AIService {
   }
 
   /**
-   * 生成内容（底层方法）
+   * 生成请求唯一键（用于去重）
+   */
+  private generateRequestKey(prompt: string, outputLanguage?: SupportedLanguage): string {
+    const config = this.getCurrentConfig()
+    const data = JSON.stringify({
+      prompt,
+      model: config.model,
+      temperature: config.temperature,
+      language: outputLanguage || 'en'
+    })
+    // 使用简单哈希生成 key
+    let hash = 0
+    for (let i = 0; i < data.length; i++) {
+      const char = data.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash
+    }
+    return `${config.model}_${Math.abs(hash).toString(36)}`
+  }
+
+  /**
+   * 生成内容（底层方法，带请求去重）
    */
   private async generateContent(
+    prompt: string,
+    outputLanguage?: SupportedLanguage
+  ): Promise<string> {
+    const key = this.generateRequestKey(prompt, outputLanguage)
+
+    // 检查是否有进行中的相同请求
+    if (this.pendingRequests.has(key)) {
+      console.log('[AIService] 复用进行中的请求:', key)
+      return this.pendingRequests.get(key)!
+    }
+
+    // 创建新请求
+    const promise = this.doGenerateContent(prompt, outputLanguage)
+    this.pendingRequests.set(key, promise)
+
+    // 请求完成后移除
+    promise.finally(() => {
+      this.pendingRequests.delete(key)
+    })
+
+    return promise
+  }
+
+  /**
+   * 实际执行内容生成
+   */
+  private async doGenerateContent(
     prompt: string,
     outputLanguage?: SupportedLanguage
   ): Promise<string> {

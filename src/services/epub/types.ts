@@ -1,31 +1,18 @@
 /**
  * EPUB 处理类型定义
+ * @deprecated 请从 @/types 导入
  */
 
-import type { Book, NavItem } from '@ssshooter/epubjs'
+// 从统一类型定义重新导出，保持向后兼容
+export type {
+  ChapterData,
+  EpubChapterData as ChapterDataEpub,
+  BookData,
+  EpubBookData as BookDataEpub,
+  ChapterInfo,
+  ChapterNamingMode,
+  ChapterDetectionMode,
+} from '../../types/chapter'
 
-export interface ChapterData {
-  id: string
-  title: string
-  content: string
-  href?: string
-  tocItem?: NavItem
-  depth?: number
-}
-
-export interface BookData {
-  book: Book
-  title: string
-  author: string
-}
-
-export interface ChapterInfo {
-  title: string
-  href: string
-  subitems?: NavItem[]
-  tocItem: NavItem
-  depth: number
-}
-
-export type ChapterNamingMode = 'auto' | 'numbered'
-export type ChapterDetectionMode = 'normal' | 'smart' | 'epub-toc'
+// 为保持向后兼容，保留原始导出
+export type { NavItem } from '@ssshooter/epubjs'
