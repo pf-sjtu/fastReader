@@ -2,7 +2,7 @@
  * 批量处理相关类型定义
  */
 
-import type { BatchQueueItem, BatchProcessingConfig } from '../stores/batchQueueStore'
+import type { BatchQueueItem } from '../stores/batchQueueStore'
 
 // ==================== 处理结果 ====================
 

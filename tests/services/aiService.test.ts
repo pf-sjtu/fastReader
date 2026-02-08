@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { AIService } from '../../src/services/aiService'
+import { describe, it, expect } from 'vitest'
+import { AIService, SKIPPED_SUMMARY_PREFIX } from '../../src/services/aiService'
 
 describe('AIService', () => {
   const mockConfig = {
@@ -10,46 +10,31 @@ describe('AIService', () => {
     temperature: 0.7
   }
 
-  describe('constructor', () => {
-    it('should initialize with config', () => {
-      const service = new AIService(mockConfig)
-      expect(service).toBeDefined()
-    })
+  it('should initialize with config', () => {
+    const service = new AIService(mockConfig)
+    expect(service).toBeDefined()
   })
 
-  describe('extractErrorContent', () => {
-    it('should extract message from error body', () => {
-      const service = new AIService(mockConfig)
-      const error = {
-        body: JSON.stringify({ error: { message: 'Test error' } })
-      }
-      const result = (service as any).extractErrorContent(error)
-      expect(result).toBe('Test error')
-    })
-
-    it('should handle plain error message', () => {
-      const service = new AIService(mockConfig)
-      const error = { message: 'Plain error' }
-      const result = (service as any).extractErrorContent(error)
-      expect(result).toBe('Plain error')
-    })
-
-    it('should return default for unknown error', () => {
-      const service = new AIService(mockConfig)
-      const result = (service as any).extractErrorContent(null)
-      expect(result).toBe('未知错误')
-    })
+  it('createSkippedSummary should include prefix and reason', () => {
+    const summary = AIService.createSkippedSummary('内容太短')
+    expect(summary).toContain(SKIPPED_SUMMARY_PREFIX)
+    expect(summary).toContain('内容太短')
   })
 
-  describe('recordTokenUsage', () => {
-    it('should record token usage', () => {
-      const service = new AIService(mockConfig)
-      const callback = vi.fn()
-      
-      service.setOnTokenUsage(callback)
-      ;(service as any).recordTokenUsage(100)
-      
-      expect(callback).toHaveBeenCalledWith(100)
-    })
+  it('isSkippedSummary should detect skipped marker', () => {
+    expect(AIService.isSkippedSummary(`${SKIPPED_SUMMARY_PREFIX} 触发内容过滤`)).toBe(true)
+    expect(AIService.isSkippedSummary('普通摘要')).toBe(false)
+  })
+
+  it('summarizeChapter should skip very short content', async () => {
+    const service = new AIService(mockConfig)
+    const summary = await service.summarizeChapter(
+      '短章节',
+      '太短',
+      'non-fiction',
+      'zh'
+    )
+
+    expect(summary).toContain(SKIPPED_SUMMARY_PREFIX)
   })
 })

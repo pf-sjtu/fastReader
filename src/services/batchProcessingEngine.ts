@@ -72,6 +72,7 @@ export class BatchProcessingEngine {
   private aiService: AIService | null = null
   private callbacks: BatchProcessingCallbacks = {}
   private startTime: number = 0
+  private static readonly DEFAULT_REQUEST_THROTTLE_MS = 100
 
 
   constructor() {
@@ -315,6 +316,8 @@ export class BatchProcessingEngine {
 
       // 根据处理模式生成内容
       if (processingOptions.processingMode === 'summary' || processingOptions.processingMode === 'combined-mindmap') {
+        const requestThrottleMs = this.getRequestThrottleMs(config)
+
         // 生成章节摘要
         for (let i = 0; i < chapters.length; i++) {
           if (this.shouldStop) {
@@ -350,7 +353,7 @@ export class BatchProcessingEngine {
 
 
           // 模拟 token 统计（实际由 AIService 内部记录）
-          await this.sleep(100) // 避免请求过快
+          await this.sleep(requestThrottleMs) // 避免请求过快
         }
       }
 
@@ -373,7 +376,8 @@ export class BatchProcessingEngine {
         if (chapterObjects.length > 0) {
           let connections: string
           try {
-            connections = await this.aiService!.analyzeConnections(
+            const aiService = this.getAIServiceOrThrow('章节关联分析')
+            connections = await aiService.analyzeConnections(
               chapterObjects,
               processingOptions.outputLanguage
             )
@@ -413,7 +417,8 @@ export class BatchProcessingEngine {
         if (chapterObjects.length > 0) {
           let connections: string
           try {
-            connections = await this.aiService!.analyzeConnections(
+            const aiService = this.getAIServiceOrThrow('全书总结-章节关联分析')
+            connections = await aiService.analyzeConnections(
               chapterObjects,
               processingOptions.outputLanguage
             )
@@ -428,7 +433,8 @@ export class BatchProcessingEngine {
 
           let overallSummary: string
           try {
-            overallSummary = await this.aiService!.generateOverallSummary(
+            const aiService = this.getAIServiceOrThrow('全书总结')
+            overallSummary = await aiService.generateOverallSummary(
               bookTitle,
               chapterObjects,
               connections,
@@ -662,6 +668,28 @@ export class BatchProcessingEngine {
       bookType,
       outputLanguage
     )
+  }
+
+  /**
+   * 获取 AI 服务实例（带可诊断错误）
+   */
+  private getAIServiceOrThrow(context: string): AIService {
+    if (!this.aiService) {
+      throw new Error(`AI 服务未初始化，无法执行${context}，请检查 AI 配置并重试`)
+    }
+
+    return this.aiService
+  }
+
+  /**
+   * 获取请求节流间隔（毫秒）
+   */
+  private getRequestThrottleMs(config: BatchProcessingConfig): number {
+    if (typeof config.requestThrottleMs !== 'number' || Number.isNaN(config.requestThrottleMs)) {
+      return BatchProcessingEngine.DEFAULT_REQUEST_THROTTLE_MS
+    }
+
+    return Math.max(0, config.requestThrottleMs)
   }
 
   /**

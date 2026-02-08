@@ -24,17 +24,52 @@ export interface ChapterData {
   pageIndex?: number
 }
 
+type PdfMetadataInfo = {
+  Title?: string
+  Author?: string
+}
+
+type PdfOutlineItem = {
+  title?: string
+  items?: PdfOutlineItem[]
+  dest?: unknown
+}
+
 export interface BookData {
   title: string
   author: string
   totalPages: number
   // 保存PDF文档实例用于后续页面渲染
-  pdfDocument?: any
+  pdfDocument?: PDFDocumentProxy
 }
 
 export class PdfProcessor {
 
+  private extractTextFromItems(items: unknown[]): string {
+    return items
+      .map((item) => {
+        if (item && typeof item === 'object' && 'str' in item && typeof (item as { str?: unknown }).str === 'string') {
+          return (item as { str: string }).str
+        }
+        return ''
+      })
+      .join(' ')
+      .trim()
+  }
+
+  private async safeDestroyPdf(pdf: PDFDocumentProxy | null | undefined, context: string): Promise<void> {
+    if (!pdf) return
+    try {
+      await pdf.destroy()
+    } catch (destroyError) {
+      console.warn(`⚠️ [DEBUG] 释放PDF资源失败 (${context}):`, destroyError)
+    }
+  }
+
   async parsePdf(file: File): Promise<BookData> {
+    let pdf: PDFDocumentProxy | null = null
+    let keepPdfForCaller = false
+
     try {
       console.log('[DEBUG] PdfProcessor.parsePdf 开始解析:', {
         fileName: file.name,
@@ -52,7 +87,7 @@ export class PdfProcessor {
       })
 
       // 使用PDF.js解析PDF文件
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
 
       console.log('[DEBUG] PdfProcessor.parsePdf pdfjsLib.getDocument 完成:', {
         fileName: file.name,
@@ -63,8 +98,9 @@ export class PdfProcessor {
       // 获取PDF元数据
       const metadata = await pdf.getMetadata()
       console.log('[DEBUG] PdfProcessor.parsePdf metadata:', metadata)
-      const title = (metadata.info as any)?.Title || file.name.replace('.pdf', '') || '未知标题'
-      const author = (metadata.info as any)?.Author || '未知作者'
+      const metadataInfo = metadata.info as PdfMetadataInfo | undefined
+      const title = metadataInfo?.Title || file.name.replace('.pdf', '') || '未知标题'
+      const author = metadataInfo?.Author || '未知作者'
 
       console.log(`[DEBUG] PDF解析完成:`, {
         fileName: file.name,
@@ -73,6 +109,7 @@ export class PdfProcessor {
         totalPages: pdf.numPages
       })
 
+      keepPdfForCaller = true
       return {
         title,
         author,
@@ -81,6 +118,10 @@ export class PdfProcessor {
       }
     } catch (error) {
       throw new Error(`解析PDF文件失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      if (!keepPdfForCaller) {
+        await this.safeDestroyPdf(pdf, 'parsePdf')
+      }
     }
   }
 
@@ -98,7 +139,16 @@ export class PdfProcessor {
       timestamp: Date.now()
     })
 
-    const chapters = await this.extractChapters(file, useSmartDetection, skipNonEssentialChapters, maxSubChapterDepth, chapterNamingMode, chapterDetectionMode, epubTocDepth)
+    const chapters = await this.extractChapters(
+      file,
+      useSmartDetection,
+      skipNonEssentialChapters,
+      maxSubChapterDepth,
+      chapterNamingMode,
+      chapterDetectionMode,
+      epubTocDepth,
+      bookData.pdfDocument as PDFDocumentProxy | undefined
+    )
 
     console.log('[DEBUG] PdfProcessor.extractChapters 完成:', {
       fileName: file.name,
@@ -113,10 +163,20 @@ export class PdfProcessor {
     }
   }
 
-  async extractChapters(file: File, useSmartDetection: boolean = false, skipNonEssentialChapters: boolean = true, maxSubChapterDepth: number = 0, chapterNamingMode: 'auto' | 'numbered' = 'auto', chapterDetectionMode: 'normal' | 'smart' | 'epub-toc' = 'normal', _epubTocDepth: number = 1): Promise<ChapterData[]> {
+  async extractChapters(file: File, useSmartDetection: boolean = false, skipNonEssentialChapters: boolean = true, maxSubChapterDepth: number = 0, chapterNamingMode: 'auto' | 'numbered' = 'auto', chapterDetectionMode: 'normal' | 'smart' | 'epub-toc' = 'normal', _epubTocDepth: number = 1, existingPdf?: PDFDocumentProxy): Promise<ChapterData[]> {
+    let pdf: PDFDocumentProxy | null = null
+    let shouldDestroyPdf = false
+
     try {
-      const arrayBuffer = await file.arrayBuffer()
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      void _epubTocDepth
+
+      if (existingPdf) {
+        pdf = existingPdf
+      } else {
+        const arrayBuffer = await file.arrayBuffer()
+        pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+        shouldDestroyPdf = true
+      }
 
       const chapters: ChapterData[] = []
       const totalPages = pdf.numPages
@@ -195,10 +255,7 @@ export class PdfProcessor {
               const textContent = await page.getTextContent()
 
               // 提取页面文本
-              const pageText = textContent.items
-                .map((item: any) => item.str)
-                .join(' ')
-                .trim()
+              const pageText = this.extractTextFromItems(textContent.items as unknown[])
 
               allPageTexts[pageNum - 1] = pageText
               console.log(`📄 [DEBUG] 第${pageNum}页文本长度: ${pageText.length} 字符`)
@@ -258,10 +315,14 @@ export class PdfProcessor {
     } catch (error) {
       console.error(`❌ [DEBUG] 提取章节失败:`, error)
       throw new Error(`提取章节失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      if (shouldDestroyPdf) {
+        await this.safeDestroyPdf(pdf, 'extractChapters')
+      }
     }
   }
 
-  private async extractChaptersFromOutline(pdf: any, outline: any[], currentDepth: number = 0, maxDepth: number = 0, chapterNamingMode: 'auto' | 'numbered' = 'auto', totalChapters: number = 99): Promise<{ title: string, pageIndex: number }[]> {
+  private async extractChaptersFromOutline(pdf: PDFDocumentProxy, outline: PdfOutlineItem[], currentDepth: number = 0, maxDepth: number = 0, chapterNamingMode: 'auto' | 'numbered' = 'auto', totalChapters: number = 99): Promise<{ title: string, pageIndex: number }[]> {
     const chapterInfos: { title: string, pageIndex: number }[] = []
 
     for (let i = 0; i < outline.length; i++) {
@@ -297,7 +358,7 @@ export class PdfProcessor {
     return chapterInfos
   }
 
-  private async getDestinationPageIndex(pdf: any, dest: any): Promise<number> {
+  private async getDestinationPageIndex(pdf: PDFDocumentProxy, dest: unknown): Promise<number> {
     try {
       if (typeof dest === 'string') {
         // 如果dest是字符串，需要解析为页面引用
@@ -322,7 +383,7 @@ export class PdfProcessor {
     }
   }
 
-  private async extractTextFromPages(pdf: any, startPage: number, endPage: number): Promise<string> {
+  private async extractTextFromPages(pdf: PDFDocumentProxy, startPage: number, endPage: number): Promise<string> {
     const pageTexts: string[] = []
 
     for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
@@ -330,10 +391,7 @@ export class PdfProcessor {
         const page = await pdf.getPage(pageNum)
         const textContent = await page.getTextContent()
 
-        const pageText = textContent.items
-          .map((item: any) => item.str)
-          .join(' ')
-          .trim()
+        const pageText = this.extractTextFromItems(textContent.items as unknown[])
 
         if (pageText.length > 0) {
           pageTexts.push(pageText)
@@ -445,10 +503,7 @@ export class PdfProcessor {
 
       // 获取文本内容
       const textContent = await page.getTextContent()
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ')
-        .trim()
+      const pageText = this.extractTextFromItems(textContent.items as unknown[])
 
       // 创建canvas用于渲染PDF页面
       const viewport = page.getViewport({ scale: 1.5 })
@@ -478,7 +533,7 @@ export class PdfProcessor {
   }
 
   // 新增方法：获取章节的所有页面内容（用于阅读器显示）
-  async getChapterPages(pdfDocument: any, chapter: ChapterData): Promise<{ textContent: string; canvas?: HTMLCanvasElement }[]> {
+  async getChapterPages(pdfDocument: PDFDocumentProxy, chapter: ChapterData): Promise<{ textContent: string; canvas?: HTMLCanvasElement }[]> {
     const pages: { textContent: string; canvas?: HTMLCanvasElement }[] = []
 
     if (!chapter.startPage || !chapter.endPage) {

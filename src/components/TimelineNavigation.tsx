@@ -1,4 +1,4 @@
-import React from 'react'
+import { memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { CheckCircle2, Circle, Loader2, BookOpen } from 'lucide-react'
@@ -19,7 +19,7 @@ interface TimelineNavigationProps {
   currentProcessingChapter?: string
 }
 
-export function TimelineNavigation({
+export const TimelineNavigation = memo(function TimelineNavigation({
   chapters,
   currentStepIndex,
   processingMode,
@@ -145,4 +145,4 @@ export function TimelineNavigation({
       </CardContent>
     </Card>
   )
-}
+})

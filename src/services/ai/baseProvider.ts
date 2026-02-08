@@ -85,9 +85,9 @@ export abstract class BaseAIProvider implements AIProvider {
   protected async executeWithRetry<T>(
     operation: () => Promise<T>,
     operationName: string,
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ): Promise<T> {
-    let lastError: any = null
+    let lastError: Error | null = null
 
     for (let attempt = 1; attempt <= this.options.maxRetries; attempt++) {
       try {
@@ -102,11 +102,11 @@ export abstract class BaseAIProvider implements AIProvider {
         }
 
         return result
-      } catch (error: any) {
-        lastError = error
+      } catch (error: unknown) {
+        lastError = error as Error
 
         // 尝试识别流量限制错误
-        const rateLimitError = this.identifyRateLimitError(error)
+        const rateLimitError = this.identifyRateLimitError(error as Error)
 
         if (rateLimitError && attempt < this.options.maxRetries) {
           const retryDelay = rateLimitError.retryAfter
@@ -146,8 +146,8 @@ export abstract class BaseAIProvider implements AIProvider {
   /**
    * 识别流量限制错误
    */
-  protected identifyRateLimitError(error: any): RateLimitError | null {
-    return identifyRateLimitError(error, error?.status, error?.body)
+  protected identifyRateLimitError(error: Error): RateLimitError | null {
+    return identifyRateLimitError(error, (error as { status?: number }).status, (error as { body?: string }).body)
   }
 
   /**

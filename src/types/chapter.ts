@@ -79,7 +79,7 @@ export interface PdfBookData extends BookData {
   /** 总页数 */
   totalPages: number
   /** PDF.js 文档实例 */
-  pdfDocument?: any
+  pdfDocument?: unknown
 }
 
 /**

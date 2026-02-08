@@ -24,10 +24,10 @@ interface BookMindMap {
     id: string
     title: string
     content: string
-    mindMap?: any
+    mindMap?: unknown
     processed: boolean
   }>
-  combinedMindMap?: any
+  combinedMindMap?: unknown
 }
 
 // 同步文件类型
@@ -245,7 +245,7 @@ export class AutoSyncService {
   /**
    * 格式化章节摘要
    */
-  private formatChapterSummary(chapter: any, chapterNumber: number, chapterNamingMode: 'auto' | 'numbered' = 'auto'): string {
+  private formatChapterSummary(chapter: { title?: string; summary?: string }, chapterNumber: number, chapterNamingMode: 'auto' | 'numbered' = 'auto'): string {
     // 根据章节命名模式生成标题
     let chapterTitle: string
     if (chapterNamingMode === 'numbered') {
@@ -253,11 +253,11 @@ export class AutoSyncService {
     } else {
       chapterTitle = chapter.title || `第${chapterNumber}章`
     }
-    
+
     let markdown = `# ${chapterTitle}\n\n`
     markdown += `${chapter.summary}\n\n`
     markdown += `---\n*由 fastReader 自动生成于 ${new Date().toLocaleString('zh-CN')}*`
-    
+
     return markdown
   }
 }

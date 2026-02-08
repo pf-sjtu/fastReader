@@ -1,6 +1,7 @@
 import { createClient, WebDAVClient } from 'webdav'
 import type { WebDAVConfig } from '../stores/configStore'
 import { buildWebdavProxyUrl, buildWebdavPath, normalizeDavPath, encodeDavHeaderPath } from './webdavProxyUtils'
+import { getMimeType, fileToArrayBuffer } from '../utils/file'
 
 
 // WebDAV文件信息接口
@@ -16,7 +17,7 @@ export interface WebDAVFileInfo {
 
 // WebDAV操作结果接口
 
-export interface WebDAVOperationResult<T = any> {
+export interface WebDAVOperationResult<T = unknown> {
   success: boolean
   data?: T
   error?: string
@@ -39,13 +40,6 @@ function getProcessedUrl(originalUrl: string): string {
   return originalUrl
 }
 
-function buildProxyBaseUrl(config: WebDAVConfig): string {
-  return buildWebdavProxyUrl({
-    baseUrl: config.serverUrl,
-    folder: config.browsePath || '/',
-    path: '/'
-  })
-}
 
 function buildHeaderPath(config: WebDAVConfig, path: string): string {
   return buildWebdavPath({
@@ -91,7 +85,11 @@ export class WebDAVService {
       const processedUrl = getProcessedUrl(config.serverUrl)
 
       // 创建WebDAV客户端
-      const clientConfig: any = {
+      const clientConfig: {
+        username: string
+        password: string
+        headers?: Record<string, string>
+      } = {
         username: config.username,
         password: config.password
       }
@@ -141,21 +139,13 @@ export class WebDAVService {
 
     try {
       const headerPath = '/'
-      this.client.setHeaders({
-        ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
-        'X-Request-Origin': window.location.origin
-      })
+      this.setDavHeader(headerPath)
       await this.client.getDirectoryContents('/')
 
       if (this.config?.syncPath) {
         const normalizedSyncPath = normalizeDavPath(this.config.syncPath)
         if (normalizedSyncPath !== '/') {
-          this.client.setHeaders({
-            ...this.client.getHeaders(),
-            'X-WebDAV-Path': encodeDavHeaderPath(normalizedSyncPath),
-            'X-Request-Origin': window.location.origin
-          })
+          this.setDavHeader(normalizedSyncPath)
 
           const exists = await this.client.exists('/')
           if (!exists) {
@@ -215,18 +205,16 @@ export class WebDAVService {
       const normalizedPath = normalizeDavPath(rawPath)
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
 
-      this.client.setHeaders({
-        ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
-        'X-Request-Origin': window.location.origin
-      })
+      this.setDavHeader(headerPath)
 
       const contents = await this.client.getDirectoryContents('/', { deep })
 
       
+      const contentList = Array.isArray(contents) ? contents : [contents]
+
       // 转换文件信息格式
-      const fileList: WebDAVFileInfo[] = (contents as any[]).map(item => {
-        let filename = item.filename
+      const fileList: WebDAVFileInfo[] = contentList.map(item => {
+        let filename = String(item.filename ?? '')
 
         try {
           const itemUrl = new URL(filename)
@@ -303,11 +291,7 @@ export class WebDAVService {
       const normalizedPath = normalizeDavPath(filePath)
       const headerPath = buildHeaderPath(this.config, normalizedPath)
 
-      this.client.setHeaders({
-        ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
-        'X-Request-Origin': window.location.origin
-      })
+      this.setDavHeader(headerPath)
 
       if (format === 'text') {
         const content = await this.client.getFileContents('/', {
@@ -323,19 +307,7 @@ export class WebDAVService {
       })
       console.log('WebDAV客户端返回的内容类型:', typeof binaryContent, binaryContent.constructor.name)
 
-      let arrayBuffer: ArrayBuffer
-      if (binaryContent instanceof ArrayBuffer) {
-        arrayBuffer = binaryContent
-      } else if (binaryContent instanceof Uint8Array) {
-        arrayBuffer = binaryContent.buffer.slice(binaryContent.byteOffset, binaryContent.byteOffset + binaryContent.byteLength) as ArrayBuffer
-      } else if (typeof binaryContent === 'string') {
-        arrayBuffer = this.base64ToArrayBuffer(binaryContent)
-      } else {
-        const uint8Array = binaryContent instanceof Buffer ?
-          new Uint8Array(binaryContent) :
-          new Uint8Array(binaryContent as unknown as ArrayBufferLike)
-        arrayBuffer = uint8Array.buffer.slice(uint8Array.byteOffset, uint8Array.byteOffset + uint8Array.byteLength) as ArrayBuffer
-      }
+      const arrayBuffer = await this.normalizeToArrayBuffer(binaryContent)
 
       return { success: true, data: arrayBuffer }
 
@@ -367,21 +339,7 @@ export class WebDAVService {
 
       const binaryContent = await directClient.getFileContents(filePath, { format: 'binary' })
 
-      // 转换为 ArrayBuffer
-      let arrayBuffer: ArrayBuffer
-      if (binaryContent instanceof ArrayBuffer) {
-        arrayBuffer = binaryContent
-      } else if (binaryContent instanceof Uint8Array) {
-        arrayBuffer = binaryContent.buffer.slice(binaryContent.byteOffset, binaryContent.byteOffset + binaryContent.byteLength) as ArrayBuffer
-      } else if (typeof binaryContent === 'string') {
-        arrayBuffer = this.base64ToArrayBuffer(binaryContent)
-      } else {
-        // 处理Buffer或其他类型
-        const uint8Array = binaryContent instanceof Buffer ?
-          new Uint8Array(binaryContent) :
-          new Uint8Array(binaryContent as unknown as ArrayBufferLike)
-        arrayBuffer = uint8Array.buffer.slice(uint8Array.byteOffset, uint8Array.byteOffset + uint8Array.byteLength) as ArrayBuffer
-      }
+      const arrayBuffer = await this.normalizeToArrayBuffer(binaryContent)
 
       return { success: true, data: arrayBuffer }
 
@@ -427,7 +385,7 @@ export class WebDAVService {
 
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
       this.setDavHeader(headerPath)
-      const result = await this.client.putFileContents('/', data as any, { overwrite })
+      const result = await this.client.putFileContents('/', data as string | Buffer | ArrayBuffer | Blob, { overwrite })
 
       return { success: true, data: result }
 
@@ -465,11 +423,7 @@ export class WebDAVService {
     try {
       const normalizedPath = normalizeDavPath(path)
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
-      this.client.setHeaders({
-        ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
-        'X-Request-Origin': window.location.origin
-      })
+      this.setDavHeader(headerPath)
       await this.client.createDirectory('/')
       return { success: true, data: true }
     } catch (error) {
@@ -493,11 +447,7 @@ export class WebDAVService {
     try {
       const normalizedPath = normalizeDavPath(filePath)
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
-      this.client.setHeaders({
-        ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
-        'X-Request-Origin': window.location.origin
-      })
+      this.setDavHeader(headerPath)
       await this.client.deleteFile('/')
       return { success: true, data: true }
     } catch (error) {
@@ -521,11 +471,7 @@ export class WebDAVService {
     try {
       const normalizedPath = normalizeDavPath(dirPath)
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
-      this.client.setHeaders({
-        ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
-        'X-Request-Origin': window.location.origin
-      })
+      this.setDavHeader(headerPath)
       await this.client.deleteFile('/')
       return { success: true, data: true }
     } catch (error) {
@@ -550,11 +496,7 @@ export class WebDAVService {
       const normalizedPath = normalizeDavPath(path)
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
 
-      this.client.setHeaders({
-        ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
-        'X-Request-Origin': window.location.origin
-      })
+      this.setDavHeader(headerPath)
 
       const exists = await this.client.exists('/')
 
@@ -596,21 +538,18 @@ export class WebDAVService {
     try {
       const normalizedPath = normalizeDavPath(path)
       const headerPath = buildHeaderPath(this.config!, normalizedPath)
-      this.client.setHeaders({
-        ...this.client.getHeaders(),
-        'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
-        'X-Request-Origin': window.location.origin
-      })
+      this.setDavHeader(headerPath)
       const stat = await this.client.stat('/')
       
+      const statRecord = stat as Record<string, unknown>
       const fileInfo: WebDAVFileInfo = {
         filename: normalizedPath,
-        basename: (stat as any).basename || normalizedPath.split('/').pop() || '',
-        lastmod: (stat as any).lastmod || new Date().toISOString(),
-        size: (stat as any).size || 0,
-        type: (stat as any).type || 'file',
-        etag: (stat as any).etag || '',
-        mime: (stat as any).mime || ''
+        basename: typeof statRecord.basename === 'string' ? statRecord.basename : normalizedPath.split('/').pop() || '',
+        lastmod: typeof statRecord.lastmod === 'string' ? statRecord.lastmod : new Date().toISOString(),
+        size: typeof statRecord.size === 'number' ? statRecord.size : 0,
+        type: statRecord.type === 'directory' ? 'directory' : 'file',
+        etag: typeof statRecord.etag === 'string' ? statRecord.etag : '',
+        mime: typeof statRecord.mime === 'string' ? statRecord.mime : ''
       }
 
       return { success: true, data: fileInfo }
@@ -735,7 +674,7 @@ export class WebDAVService {
 
       // 创建File对象
       const file = new File([contentResult.data], finalFileName, {
-        type: this.getMimeType(finalFileName)
+        type: getMimeType(finalFileName)
       })
 
       return { success: true, data: file }
@@ -748,36 +687,38 @@ export class WebDAVService {
   }
 
   /**
-   * Base64 字符串转 ArrayBuffer
-   * @param base64 Base64 编码的字符串
+   * 将 WebDAV 返回内容统一转换为 ArrayBuffer
    */
-  private base64ToArrayBuffer(base64: string): ArrayBuffer {
-    const binaryString = atob(base64)
-    const bytes = new Uint8Array(binaryString.length)
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i)
+  private async normalizeToArrayBuffer(content: unknown): Promise<ArrayBuffer> {
+    if (content instanceof ArrayBuffer) {
+      return content
     }
-    return bytes.buffer
-  }
 
-  /**
-   * 获取文件MIME类型
-   * @param fileName 文件名
-   */
-  private getMimeType(fileName: string): string {
-    const extension = fileName.toLowerCase().split('.').pop()
-    switch (extension) {
-      case 'pdf':
-        return 'application/pdf'
-      case 'epub':
-        return 'application/epub+zip'
-      case 'txt':
-        return 'text/plain'
-      case 'md':
-        return 'text/markdown'
-      default:
-        return 'application/octet-stream'
+    if (ArrayBuffer.isView(content)) {
+      const view = content as ArrayBufferView
+      return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer
     }
+
+    if (content instanceof Blob) {
+      return fileToArrayBuffer(new File([content], 'webdav-download.bin'))
+    }
+
+    if (typeof content === 'string') {
+      const binaryString = atob(content)
+      const bytes = new Uint8Array(binaryString.length)
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i)
+      }
+      return bytes.buffer
+    }
+
+    if (typeof Buffer !== 'undefined' && content instanceof Buffer) {
+      const uint8Array = new Uint8Array(content)
+      return uint8Array.buffer.slice(uint8Array.byteOffset, uint8Array.byteOffset + uint8Array.byteLength) as ArrayBuffer
+    }
+
+    const uint8Array = new Uint8Array(content as ArrayBufferLike)
+    return uint8Array.buffer.slice(uint8Array.byteOffset, uint8Array.byteOffset + uint8Array.byteLength) as ArrayBuffer
   }
 
   /**
@@ -796,7 +737,7 @@ export class WebDAVService {
         folder: this.config.syncPath || '/',
         path: normalizedPath
       })
-    } catch (_error) {
+    } catch {
       return ''
     }
   }

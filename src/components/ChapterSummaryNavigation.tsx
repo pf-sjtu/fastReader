@@ -1,4 +1,4 @@
-import React from 'react'
+import { memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { CheckCircle2, Circle, Loader2 } from 'lucide-react'
@@ -19,7 +19,7 @@ interface ChapterSummaryNavigationProps {
   currentViewingChapter?: string
 }
 
-export function ChapterSummaryNavigation({
+export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
   chapters,
   totalChapters,
   currentStepIndex,
@@ -107,4 +107,4 @@ export function ChapterSummaryNavigation({
       </CardContent>
     </Card>
   )
-}
+})

@@ -3,9 +3,10 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import type { GenerateContentRequest, GenerateContentResponse } from './types'
+import type { GenerateContentRequest, GenerateContentResponse, AIProviderConfig, AIServiceOptions } from './types'
 import { BaseAIProvider } from './baseProvider'
 import { isBrowser, getHttpsProxyAgent } from './utils'
+import type { GenerativeModel } from '@google/generative-ai'
 
 export class GeminiProvider extends BaseAIProvider {
   readonly type = 'gemini' as const
@@ -14,9 +15,9 @@ export class GeminiProvider extends BaseAIProvider {
   readonly supportsStreaming = false
 
   private genAI: GoogleGenerativeAI
-  private generativeModel: any
+  private generativeModel: GenerativeModel
 
-  constructor(config: any, options?: any) {
+  constructor(config: AIProviderConfig, options?: AIServiceOptions) {
     super(config, options)
     this.genAI = new GoogleGenerativeAI(this.config.apiKey)
     this.generativeModel = this.genAI.getGenerativeModel({
@@ -79,9 +80,7 @@ export class GeminiProvider extends BaseAIProvider {
       return this.doGenerateContent({ prompt, temperature })
     }
 
-    const https = require('https')
-    const { URL } = require('url')
-
+    const { default: https } = await import('node:https')
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.config.apiKey}`
     const parsedUrl = new URL(url)
 
@@ -102,9 +101,19 @@ export class GeminiProvider extends BaseAIProvider {
       }
     })
 
-    const requestOptions: any = {
+    interface RequestOptions {
+      hostname: string
+      port: number
+      path: string
+      method: string
+      headers: Record<string, string | number>
+      agent: typeof agent
+      timeout: number
+    }
+
+    const requestOptions: RequestOptions = {
       hostname: parsedUrl.hostname,
-      port: parsedUrl.port || 443,
+      port: parsedUrl.port ? Number(parsedUrl.port) : 443,
       path: parsedUrl.pathname + parsedUrl.search,
       method: 'POST',
       headers: {
@@ -117,7 +126,7 @@ export class GeminiProvider extends BaseAIProvider {
     }
 
     return new Promise((resolve, reject) => {
-      const req = https.request(requestOptions, (res: any) => {
+      const req = https.request(requestOptions, (res: { statusCode?: number; statusMessage?: string; on: (event: string, callback: unknown) => void }) => {
         const chunks: Buffer[] = []
 
         res.on('data', (chunk: Buffer) => {
@@ -129,7 +138,14 @@ export class GeminiProvider extends BaseAIProvider {
 
           if (res.statusCode === 200) {
             try {
-              const response = JSON.parse(body)
+              interface GeminiResponse {
+                candidates?: Array<{
+                  content?: { parts?: Array<{ text?: string }>; finishReason?: string }
+                  finishReason?: string
+                }>
+                usageMetadata?: { totalTokenCount?: number }
+              }
+              const response = JSON.parse(body) as GeminiResponse
               const content = response.candidates?.[0]?.content?.parts?.[0]?.text || ''
 
               // 统计 token 使用量
@@ -143,13 +159,13 @@ export class GeminiProvider extends BaseAIProvider {
                 tokenCount,
                 finishReason: response.candidates?.[0]?.finishReason
               })
-            } catch (parseError) {
+            } catch {
               reject(new Error('Gemini API 响应解析失败'))
             }
           } else {
             const error = new Error(
               `Gemini API 请求失败: ${res.statusCode} ${res.statusMessage}`
-            ) as any
+            ) as Error & { status?: number; body?: string }
             error.status = res.statusCode
             error.body = body
             reject(error)

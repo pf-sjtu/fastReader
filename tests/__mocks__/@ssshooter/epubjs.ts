@@ -21,8 +21,13 @@ export class Book {
     spine: Promise.resolve({ items: [] }),
   }
   spine = {
-    each: (fn: Function) => {},
-    get: (index: number) => null,
+    each: (fn: (item: unknown, index: number) => void) => {
+      void fn
+    },
+    get: (index: number) => {
+      void index
+      return null
+    },
   }
   archive = {
     zip: {},
@@ -57,6 +62,7 @@ export interface NavItem {
   subitems?: NavItem[]
 }
 
-export default function ePub(data?: any) {
+export default function ePub(data?: unknown) {
+  void data
   return new Book()
 }

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkCjkFriendly from "remark-cjk-friendly";
@@ -69,10 +70,12 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(initialContent);
   const [isDragging, setIsDragging] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
-  const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
+  const [, setRecentFiles] = useState<RecentFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reencodeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 新增状态
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -86,7 +89,7 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
   const [webdavFilePath, setWebdavFilePath] = useState<string | null>(null);
   
   // 标题ID映射状态
-  const [headingsMap, setHeadingsMap] = useState<Map<string, HeadingInfo>>(new Map());
+  const [, setHeadingsMap] = useState<Map<string, HeadingInfo>>(new Map());
   
   // 撤回功能相关状态
   const [editHistory, setEditHistory] = useState<string[]>([]);
@@ -263,54 +266,14 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
     return items;
   }, []);
 
-  // 自定义标题组件
-  const CustomHeading = ({ level, children, ...props }: any) => {
-    const Component = level === 1 ? 'h1' : level === 2 ? 'h2' : level === 3 ? 'h3' : level === 4 ? 'h4' : level === 5 ? 'h5' : 'h6';
-    
-    // 从children中提取纯文本内容用于查找对应的标题
-    const textContent = React.Children.toArray(children)
-      .map(child => typeof child === 'string' ? child : '')
-      .join('')
-      .trim();
-
-    // 在标题映射中查找对应的标题信息
-    let headingInfo: HeadingInfo | undefined;
-    for (const info of headingsMap.values()) {
-      if (info.title === textContent) {
-        headingInfo = info;
-        break;
-      }
-    }
-
-    // 如果没找到精确匹配，尝试包含匹配
-    if (!headingInfo) {
-      for (const info of headingsMap.values()) {
-        if (textContent.includes(info.title) || info.title.includes(textContent)) {
-          headingInfo = info;
-          break;
-        }
-      }
-    }
-
-    return (
-      <Component 
-        id={headingInfo?.id} 
-        className={`heading-${level} ${headingInfo?.id ? 'has-toc-id' : ''}`}
-        {...props}
-      >
-        {children}
-      </Component>
-    );
-  };
-
   // 自定义组件映射
-  const components = {
-    h1: (props: any) => <CustomHeading level={1} {...props} />,
-    h2: (props: any) => <CustomHeading level={2} {...props} />,
-    h3: (props: any) => <CustomHeading level={3} {...props} />,
-    h4: (props: any) => <CustomHeading level={4} {...props} />,
-    h5: (props: any) => <CustomHeading level={5} {...props} />,
-    h6: (props: any) => <CustomHeading level={6} {...props} />,
+  const components: Components = {
+    h1: ({ children, ...props }) => <h1 {...props}>{children}</h1>,
+    h2: ({ children, ...props }) => <h2 {...props}>{children}</h2>,
+    h3: ({ children, ...props }) => <h3 {...props}>{children}</h3>,
+    h4: ({ children, ...props }) => <h4 {...props}>{children}</h4>,
+    h5: ({ children, ...props }) => <h5 {...props}>{children}</h5>,
+    h6: ({ children, ...props }) => <h6 {...props}>{children}</h6>,
   };
 
   // Load recent files from localStorage on mount
@@ -351,25 +314,59 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
   // 键盘快捷键
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isEditing) {
+        if (e.ctrlKey && e.key === 'h') {
+          e.preventDefault();
+          setIsReplaceDialogOpen(true);
+        }
+        return;
+      }
+
       if (e.ctrlKey && e.key === 'h') {
         e.preventDefault();
         setIsReplaceDialogOpen(true);
       } else if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
-        if (isEditing) {
-          handleSaveEdit();
+        // 直接在 effect 内执行保存逻辑，避免外部函数依赖警告
+        const processedText = preprocessMarkdown(editContent);
+        const normalized = normalizeMarkdownTypography(processedText);
+
+        setContent(normalized);
+        setIsEditing(false);
+        setEditHistory([editContent]);
+        setHistoryIndex(0);
+
+        const newHeadingsMap = scanAndEncodeHeadings(normalized);
+        setHeadingsMap(newHeadingsMap);
+        setTocItems(generateTocFromMap(newHeadingsMap));
+
+        if (fileName) {
+          addToRecentFiles(fileName, editContent);
         }
       } else if (e.ctrlKey && e.key === 'z') {
         e.preventDefault();
-        if (isEditing) {
-          handleUndo();
+        // 直接在 effect 内执行撤回逻辑，避免外部函数依赖警告
+        if (historyIndex > 0) {
+          const newIndex = historyIndex - 1;
+          setHistoryIndex(newIndex);
+          setEditContent(editHistory[newIndex]);
         }
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isEditing, editContent, historyIndex]);
+  }, [
+    isEditing,
+    editContent,
+    fileName,
+    historyIndex,
+    editHistory,
+    addToRecentFiles,
+    preprocessMarkdown,
+    scanAndEncodeHeadings,
+    generateTocFromMap
+  ]);
 
   // 添加到编辑历史
   const addToHistory = useCallback((newContent: string) => {
@@ -520,7 +517,12 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
     };
     
     reader.readAsText(file);
-  }, [addToRecentFiles]);
+  }, [
+    addToRecentFiles,
+    preprocessMarkdown,
+    scanAndEncodeHeadings,
+    generateTocFromMap
+  ]);
 
   // 处理WebDAV文件选择
   const handleWebDAVFileSelect = useCallback((file: File, filePath?: string) => {
@@ -621,16 +623,16 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
     setIsEditing(false);
   };
 
-  // 组件卸载时清理全局定时器
+  // 组件卸载时清理定时器
   useEffect(() => {
     return () => {
-      if ((window as any).editTimeout) {
-        clearTimeout((window as any).editTimeout);
-        (window as any).editTimeout = null;
+      if (editTimeoutRef.current) {
+        clearTimeout(editTimeoutRef.current);
+        editTimeoutRef.current = null;
       }
-      if ((window as any).reencodeTimeout) {
-        clearTimeout((window as any).reencodeTimeout);
-        (window as any).reencodeTimeout = null;
+      if (reencodeTimeoutRef.current) {
+        clearTimeout(reencodeTimeoutRef.current);
+        reencodeTimeoutRef.current = null;
       }
     };
   }, []);
@@ -640,22 +642,22 @@ export const MarkdownReaderEnhanced: React.FC<MarkdownReaderProps> = ({
     setEditContent(newContent);
     
     // 清理之前的定时器
-    if ((window as any).editTimeout) {
-      clearTimeout((window as any).editTimeout);
+    if (editTimeoutRef.current) {
+      clearTimeout(editTimeoutRef.current);
     }
-    
+
     // 防抖处理
-    (window as any).editTimeout = setTimeout(() => {
+    editTimeoutRef.current = setTimeout(() => {
       addToHistory(newContent);
     }, 1000);
-    
+
     // 清理之前的重新编码定时器
-    if ((window as any).reencodeTimeout) {
-      clearTimeout((window as any).reencodeTimeout);
+    if (reencodeTimeoutRef.current) {
+      clearTimeout(reencodeTimeoutRef.current);
     }
-    
+
     // 防抖重新编码标题ID
-    (window as any).reencodeTimeout = setTimeout(() => {
+    reencodeTimeoutRef.current = setTimeout(() => {
       // 预处理编辑后的内容用于标题扫描
       const processedText = preprocessMarkdown(newContent);
       const normalized = normalizeMarkdownTypography(processedText);

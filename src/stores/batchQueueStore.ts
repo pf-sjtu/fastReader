@@ -42,6 +42,7 @@ export interface BatchProcessingConfig {
   processingMode: 'summary' | 'mindmap' | 'combined-mindmap'
   chapterDetectionMode: 'normal' | 'smart' | 'epub-toc'
   outputLanguage: string
+  requestThrottleMs?: number
 }
 
 /**

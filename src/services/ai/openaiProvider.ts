@@ -3,7 +3,7 @@
  * 支持 OpenAI 兼容的 API 格式
  */
 
-import type { GenerateContentRequest, GenerateContentResponse } from './types'
+import type { GenerateContentRequest, GenerateContentResponse, AIProviderConfig, AIServiceOptions } from './types'
 import { BaseAIProvider } from './baseProvider'
 
 export class OpenAIProvider extends BaseAIProvider {
@@ -12,7 +12,7 @@ export class OpenAIProvider extends BaseAIProvider {
   readonly supportsSystemPrompt = true
   readonly supportsStreaming = false
 
-  constructor(config: any, options?: any) {
+  constructor(config: AIProviderConfig, options?: AIServiceOptions) {
     super(config, options)
     this.type = config.provider
     this.name = config.provider === '302.ai' ? '302.AI' : 'OpenAI'
@@ -67,7 +67,7 @@ export class OpenAIProvider extends BaseAIProvider {
       const errorBody = await response.text()
       const error = new Error(
         `${this.name} API请求失败: ${response.status} ${response.statusText} - ${errorBody}`
-      ) as any
+      ) as Error & { status: number; body: string }
       error.status = response.status
       error.body = errorBody
 
@@ -129,7 +129,7 @@ export class Provider302 extends OpenAIProvider {
   readonly type = '302.ai' as const
   readonly name = '302.AI'
 
-  constructor(config: any, options?: any) {
+  constructor(config: AIProviderConfig, options?: AIServiceOptions) {
     super({ ...config, provider: '302.ai' }, options)
   }
 }

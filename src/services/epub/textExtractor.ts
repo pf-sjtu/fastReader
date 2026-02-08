@@ -64,18 +64,18 @@ function extractContentByAnchor(doc: Document, anchor: string): string {
     let anchorElement: Element | null = null
     try {
       anchorElement = doc.querySelector(`[id="${escapedAnchor}"]`)
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
 
     if (!anchorElement) {
       try {
         anchorElement = doc.querySelector(`[name="${escapedAnchor}"]`)
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
     }
 
     if (!anchorElement) {
       try {
         anchorElement = doc.querySelector(`[id*="${escapedAnchor}"]`)
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
     }
 
     if (!anchorElement) {

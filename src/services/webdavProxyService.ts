@@ -16,7 +16,7 @@ export interface WebDAVFileInfo {
   mime?: string
 }
 
-export interface WebDAVOperationResult<T = any> {
+export interface WebDAVOperationResult<T = unknown> {
   success: boolean
   data?: T
   error?: string

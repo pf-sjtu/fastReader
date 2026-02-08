@@ -55,31 +55,32 @@ export {
 } from './ai/utils'
 
 // 保持向后兼容的别名
+import type { AIProviderConfig, PromptConfig, AIServiceOptions } from './ai/types'
 import { AIService } from './ai/aiService'
 
 /**
  * @deprecated 使用 AIService 替代
  */
 export class AiService extends AIService {
-  constructor(config: any, promptConfig?: any, options?: any) {
+  constructor(config: AIProviderConfig, promptConfig?: PromptConfig, options?: AIServiceOptions) {
     super(config, promptConfig, options)
     console.warn('AiService 已弃用，请使用 AIService')
   }
 }
 
-// 兼容静态方法
-export namespace AIServiceCompat {
-  export const SKIPPED_SUMMARY_PREFIX = '【已跳过】'
+// 兼容静态方法对象
+export const AIServiceCompat = {
+  SKIPPED_SUMMARY_PREFIX: '【已跳过】',
 
-  export function createSkippedSummary(reason?: string): string {
+  createSkippedSummary(reason?: string): string {
     const details = reason?.trim()
     if (details) {
-      return `${SKIPPED_SUMMARY_PREFIX} 触发内容过滤：${details}`
+      return `${AIServiceCompat.SKIPPED_SUMMARY_PREFIX} 触发内容过滤：${details}`
     }
-    return `${SKIPPED_SUMMARY_PREFIX} 触发内容过滤，已跳过该章节`
-  }
+    return `${AIServiceCompat.SKIPPED_SUMMARY_PREFIX} 触发内容过滤，已跳过该章节`
+  },
 
-  export function isSkippedSummary(summary: string): boolean {
-    return summary.trim().startsWith(SKIPPED_SUMMARY_PREFIX)
+  isSkippedSummary(summary: string): boolean {
+    return summary.trim().startsWith(AIServiceCompat.SKIPPED_SUMMARY_PREFIX)
   }
 }

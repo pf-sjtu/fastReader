@@ -4,7 +4,7 @@
 `refactor-codebase-architecture`
 
 ## Status
-ACTIVE
+COMPLETED
 
 ## 1. 背景与动机
 

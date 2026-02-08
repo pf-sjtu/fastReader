@@ -23,18 +23,18 @@ export default defineConfig({
         changeOrigin: true,
         secure: true,
         rewrite: (path) => path.replace(/^\/webdav/, '/dav'),
-        configure: (proxy, options) => {
-          proxy.on('error', (err, req, res) => {
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
             console.log('proxy error', err);
           });
-          proxy.on('proxyReq', (proxyReq, req, res) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
             console.log('Sending Request to the Target (webdav):', req.method, req.url);
             // 确保认证头被正确转发
             if (req.headers.authorization) {
               proxyReq.setHeader('Authorization', req.headers.authorization);
             }
           });
-          proxy.on('proxyRes', (proxyRes, req, res) => {
+          proxy.on('proxyRes', (proxyRes, req) => {
             console.log('Received Response from the Target (webdav):', proxyRes.statusCode, req.url);
             // 设置CORS头，允许跨域访问
             proxyRes.headers['Access-Control-Allow-Origin'] = '*';
@@ -48,18 +48,18 @@ export default defineConfig({
         changeOrigin: true,
         secure: true,
         // 不要重写路径，直接转发
-        configure: (proxy, options) => {
-          proxy.on('error', (err, req, res) => {
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
             console.log('proxy error', err);
           });
-          proxy.on('proxyReq', (proxyReq, req, res) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
             console.log('Sending Request to the Target (dav):', req.method, req.url);
             // 确保认证头被正确转发
             if (req.headers.authorization) {
               proxyReq.setHeader('Authorization', req.headers.authorization);
             }
           });
-          proxy.on('proxyRes', (proxyRes, req, res) => {
+          proxy.on('proxyRes', (proxyRes, req) => {
             console.log('Received Response from the Target (dav):', proxyRes.statusCode, req.url);
             // 设置CORS头，允许跨域访问
             proxyRes.headers['Access-Control-Allow-Origin'] = '*';

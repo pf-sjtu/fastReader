@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { CacheService, type CacheKeyType } from '../../src/services/cacheService'
+import { CacheService } from '../../src/services/cacheService'
 
 // Mock localStorage for Node.js test environment
 const createMockStorage = () => {

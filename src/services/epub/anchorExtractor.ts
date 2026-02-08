@@ -11,7 +11,7 @@ import { cleanAndFormatText } from './utils'
 export function extractContentByAnchorImproved(htmlContent: string, anchor: string): string {
   try {
     // 策略1：查找锚点元素并提取完整内容（包括锚点本身和后续内容到下一个标题）
-    const headingMatch = htmlContent.match(new RegExp(`<(h[1-6]|div|p|section)[^>]*\\bid=["\']${anchor}["\'][^>]*>`, 'i'))
+    const headingMatch = htmlContent.match(new RegExp(`<(h[1-6]|div|p|section)[^>]*\\bid=["']${anchor}["'][^>]*>`, 'i'))
     if (headingMatch) {
       const anchorStart = htmlContent.indexOf(headingMatch[0])
       const tagName = headingMatch[1]
@@ -49,7 +49,7 @@ export function extractContentByAnchorImproved(htmlContent: string, anchor: stri
     }
 
     // 策略2：回退到简单匹配（标题文本）
-    const simpleMatch = htmlContent.match(new RegExp(`<(h[1-6]|div|p|section)[^>]*id=["\']${anchor}["\'][^>]*>(.*?)</\\1>`, 'is'))
+    const simpleMatch = htmlContent.match(new RegExp(`<(h[1-6]|div|p|section)[^>]*id=["']${anchor}["'][^>]*>(.*?)</\\1>`, 'is'))
     if (simpleMatch) {
       const content = simpleMatch[2].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
       if (content.length > 10) {
@@ -58,7 +58,7 @@ export function extractContentByAnchorImproved(htmlContent: string, anchor: stri
     }
 
     // 策略3：查找锚点后的内容到下一个标题
-    const anchorElementMatch = htmlContent.match(new RegExp(`<[^>]*id=["\']${anchor}["\'][^>]*>.*?</[^>]*>`, 'is'))
+    const anchorElementMatch = htmlContent.match(new RegExp(`<[^>]*id=["']${anchor}["'][^>]*>.*?</[^>]*>`, 'is'))
     if (anchorElementMatch) {
       const anchorStart = htmlContent.indexOf(anchorElementMatch[0])
       const afterAnchor = htmlContent.substring(anchorStart + anchorElementMatch[0].length)
@@ -89,7 +89,7 @@ export function extractContentByAnchorImproved(htmlContent: string, anchor: stri
 export function extractContentByAnchorRegex(htmlContent: string, anchor: string): string {
   try {
     // 策略1：查找带有id的标签
-    const idMatch = htmlContent.match(new RegExp(`<[^>]*id=["\']${anchor}["\'][^>]*>(.*?)</[^>]*>`, 'is'))
+    const idMatch = htmlContent.match(new RegExp(`<[^>]*id=["']${anchor}["'][^>]*>(.*?)</[^>]*>`, 'is'))
     if (idMatch) {
       const content = idMatch[1].replace(/<[^>]*>/g, ' ').trim()
       if (content.length > 20) {
@@ -98,7 +98,7 @@ export function extractContentByAnchorRegex(htmlContent: string, anchor: string)
     }
 
     // 策略2：查找带有name的标签
-    const nameMatch = htmlContent.match(new RegExp(`<[^>]*name=["\']${anchor}["\'][^>]*>(.*?)</[^>]*>`, 'is'))
+    const nameMatch = htmlContent.match(new RegExp(`<[^>]*name=["']${anchor}["'][^>]*>(.*?)</[^>]*>`, 'is'))
     if (nameMatch) {
       const content = nameMatch[1].replace(/<[^>]*>/g, ' ').trim()
       if (content.length > 20) {
@@ -107,7 +107,7 @@ export function extractContentByAnchorRegex(htmlContent: string, anchor: string)
     }
 
     // 策略3：查找包含锚点文本的标题
-    const titleMatch = htmlContent.match(new RegExp(`<h[1-6][^>]*id=["\'][^"\']*${anchor}[^"\']*["\'][^>]*>(.*?)</h[1-6]>`, 'is'))
+    const titleMatch = htmlContent.match(new RegExp(`<h[1-6][^>]*id=["'][^"']*${anchor}[^"']*["'][^>]*>(.*?)</h[1-6]>`, 'is'))
     if (titleMatch) {
       const title = titleMatch[1].replace(/<[^>]*>/g, '').trim()
       return cleanAndFormatText(title)

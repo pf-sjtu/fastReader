@@ -14,7 +14,7 @@ const defaultPromptVersionConfig: PromptVersionConfig = {
 
 export const usePromptStore = create<PromptState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       promptConfig: defaultPromptConfig,
       promptVersionConfig: defaultPromptVersionConfig,
       currentPromptVersion: 'v1',

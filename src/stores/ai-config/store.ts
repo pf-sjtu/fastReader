@@ -359,7 +359,6 @@ export const useAIConfigStore = create<AIConfigState>()(
           customFields: templateConfig.customFields
         }
 
-        const state = get()
         set((prevState) => {
           const newIndex = prevState.aiConfigManager.providers.length + 1
           const newAIConfigManager = {

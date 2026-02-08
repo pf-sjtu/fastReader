@@ -53,13 +53,13 @@ export class ConfigExportService {
    * @param config 原始配置
    * @returns 过滤后的配置数据
    */
-  private static filterConfigData(config: ConfigState): any {
-    const filtered: any = {}
+  private static filterConfigData(config: ConfigState): Record<string, unknown> {
+    const filtered: Record<string, unknown> = {}
 
     // 过滤aiConfigManager (简化版 - 使用 currentModelId)
     if (config.aiConfigManager) {
       filtered.aiConfigManager = {
-        providers: config.aiConfigManager.providers.map((provider: any) => {
+        providers: config.aiConfigManager.providers.map((provider: Record<string, unknown>) => {
           const { addProvider, updateProvider, deleteProvider, duplicateProvider,
                   setCurrentModelId, getActiveProvider, getProviderByIndex,
                   createFromTemplate, getAvailableTemplates, ...providerData } = provider
@@ -210,11 +210,11 @@ export class ConfigExportService {
         aiConfigManager: JSON.parse(JSON.stringify(config.aiConfigManager)),
         processingOptions: JSON.parse(JSON.stringify(config.processingOptions)),
         webdavConfig: JSON.parse(JSON.stringify(config.webdavConfig)),
-        promptConfig: JSON.parse(JSON.stringify((config as any).promptConfig)),
-        promptVersionConfig: JSON.parse(JSON.stringify((config as any).promptVersionConfig)),
-        currentPromptVersion: (config as any).currentPromptVersion,
-        tokenUsage: (config as any).tokenUsage
-      } as any
+        promptConfig: JSON.parse(JSON.stringify((config as Record<string, unknown>).promptConfig)),
+        promptVersionConfig: JSON.parse(JSON.stringify((config as Record<string, unknown>).promptVersionConfig)),
+        currentPromptVersion: (config as Record<string, unknown>).currentPromptVersion,
+        tokenUsage: (config as Record<string, unknown>).tokenUsage
+      } as FullConfigExport['config']
     }
   }
 }

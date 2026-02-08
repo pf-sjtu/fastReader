@@ -1,9 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { EpubProcessor, type ChapterData } from '../../src/services/epubProcessor'
+import type { Book, NavItem } from '@ssshooter/epubjs'
+import { EpubProcessor } from '../../src/services/epubProcessor'
 import { formatChapterNumber } from '../../src/services/epub'
 
+type ProcessorInternals = {
+  shouldSkipChapter: (title: string) => boolean
+  extractChaptersFromToc: (
+    book: Book,
+    toc: NavItem[],
+    currentDepth: number,
+    maxDepth: number,
+    chapterNamingMode: 'auto' | 'numbered',
+    totalChapters: number,
+    preserveAnchors: boolean
+  ) => Promise<Array<{ title: string; depth: number }>>
+  getSingleChapterContent: (book: Book, href: string, anchor?: string) => Promise<string>
+}
+
 // Mock arrayBuffer for File in jsdom
-const originalArrayBuffer = File.prototype.arrayBuffer
 if (typeof File !== 'undefined') {
   File.prototype.arrayBuffer = vi.fn().mockImplementation(function(this: File) {
     // Return arrayBuffer with content matching file size
@@ -13,9 +27,11 @@ if (typeof File !== 'undefined') {
 
 describe('EpubProcessor', () => {
   let processor: EpubProcessor
+  let processorInternals: ProcessorInternals
 
   beforeEach(() => {
     processor = new EpubProcessor()
+    processorInternals = processor as unknown as ProcessorInternals
   })
 
   describe('formatChapterNumber', () => {
@@ -51,18 +67,18 @@ describe('EpubProcessor', () => {
       await expect(processor.parseEpub(mockFile)).rejects.toThrow('文件正在处理中')
       
       // Wait for first to complete (will fail but that's ok)
-      try { await promise1 } catch {}
+      await promise1.catch(() => undefined)
     })
   })
 
   describe('shouldSkipChapter', () => {
     it('should skip chapter with keywords', () => {
-      const result = (processor as any).shouldSkipChapter('Preface')
+      const result = processorInternals.shouldSkipChapter('Preface')
       expect(result).toBe(true)
     })
 
     it('should not skip normal chapter', () => {
-      const result = (processor as any).shouldSkipChapter('Chapter 1: Introduction')
+      const result = processorInternals.shouldSkipChapter('Chapter 1: Introduction')
       expect(result).toBe(false)
     })
   })
@@ -103,8 +119,8 @@ describe('EpubProcessor', () => {
         spine: { spineItems: [{ href: 'chapter1.xhtml' }, { href: 'chapter2.xhtml' }] }
       }
 
-      const result = await (processor as any).extractChaptersFromToc(
-        mockBook, mockToc, 0, 3, 'auto', 10, false
+      const result = await processorInternals.extractChaptersFromToc(
+        mockBook as Book, mockToc as NavItem[], 0, 3, 'auto', 10, false
       )
 
       // Should collect all chapters with correct depths
@@ -171,11 +187,11 @@ describe('EpubProcessor', () => {
       const mockBook = createMockBook()
 
       // Mock getSingleChapterContent to return sufficient content (>100 chars)
-      vi.spyOn(processor as any, 'getSingleChapterContent')
+      vi.spyOn(processorInternals, 'getSingleChapterContent')
         .mockResolvedValue('This is chapter content with sufficient length to pass the 100 character minimum threshold for valid chapter content. It includes detailed information about the chapter.')
 
       const chapters = await processor.extractChapters(
-        mockBook as any,
+        mockBook as Book,
         false, // useSmartDetection
         false, // skipNonEssentialChapters
         0,     // maxSubChapterDepth
@@ -196,11 +212,11 @@ describe('EpubProcessor', () => {
       const mockBook = createMockBook()
 
       // Mock getSingleChapterContent to return sufficient content (>100 chars)
-      vi.spyOn(processor as any, 'getSingleChapterContent')
+      vi.spyOn(processorInternals, 'getSingleChapterContent')
         .mockResolvedValue('This is chapter content with sufficient length to pass the 100 character minimum threshold for valid chapter content. It includes detailed information about the chapter.')
 
       const chapters = await processor.extractChapters(
-        mockBook as any,
+        mockBook as Book,
         false,
         false,
         0,
@@ -223,11 +239,11 @@ describe('EpubProcessor', () => {
       const mockBook = createMockBook()
 
       // Mock getSingleChapterContent to return sufficient content (>100 chars)
-      vi.spyOn(processor as any, 'getSingleChapterContent')
+      vi.spyOn(processorInternals, 'getSingleChapterContent')
         .mockResolvedValue('This is chapter content with sufficient length to pass the 100 character minimum threshold for valid chapter content. It includes detailed information about the chapter.')
 
       const chapters = await processor.extractChapters(
-        mockBook as any,
+        mockBook as Book,
         false,
         false,
         0,
@@ -246,12 +262,12 @@ describe('EpubProcessor', () => {
       const mockBook = createMockBook()
 
       // Mock getSingleChapterContent to return sufficient content (>100 chars)
-      vi.spyOn(processor as any, 'getSingleChapterContent')
+      vi.spyOn(processorInternals, 'getSingleChapterContent')
         .mockResolvedValue('This is chapter content with sufficient length to pass the 100 character minimum threshold for valid chapter content. It includes detailed information about the chapter.')
 
       // Request depth=5 which has no chapters
       const chapters = await processor.extractChapters(
-        mockBook as any,
+        mockBook as Book,
         false,
         false,
         0,
@@ -269,11 +285,11 @@ describe('EpubProcessor', () => {
       const mockBook = createMockBook()
 
       // Mock getSingleChapterContent to track subitem usage
-      const getSingleChapterContentSpy = vi.spyOn(processor as any, 'getSingleChapterContent')
+      const getSingleChapterContentSpy = vi.spyOn(processorInternals, 'getSingleChapterContent')
         .mockResolvedValue('Direct chapter content')
 
       await processor.extractChapters(
-        mockBook as any,
+        mockBook as Book,
         false,
         false,
         0,

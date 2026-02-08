@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
@@ -26,7 +26,7 @@ interface UnifiedStatusBarProps {
   className?: string
 }
 
-export function UnifiedStatusBar({
+export const UnifiedStatusBar = memo(function UnifiedStatusBar({
   currentView,
   processing = false,
   progress = 0,
@@ -129,4 +129,4 @@ export function UnifiedStatusBar({
       </CardContent>
     </Card>
   )
-}
+})

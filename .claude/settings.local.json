@@ -13,7 +13,11 @@
       "Bash(npm test:*)",
       "Bash(git reset:*)",
       "Bash(git notes show:*)",
-      "Bash(git -C \"C:/Code/JS/fastReader\" ls-files)"
+      "Bash(git -C \"C:/Code/JS/fastReader\" ls-files)",
+      "Bash(git -C \"C:\\\\Code\\\\JS\\\\fastReader\" diff -- src/services/cacheService.ts)",
+      "Bash(git -C \"C:\\\\Code\\\\JS\\\\fastReader\" diff -- \"src/services/webdavService.ts\")",
+      "Bash(npx jq:*)",
+      "Bash(npm exec eslint:*)"
     ]
   },
   "outputStyle": "default",

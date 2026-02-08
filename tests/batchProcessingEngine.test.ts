@@ -1,292 +1,227 @@
-/**
- * 批量处理引擎测试（简化版）
- * 由于 epubjs 包在测试环境有解析问题，此测试验证接口和类型
- */
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { BatchProcessingConfig, BatchQueueItem } from '../src/stores/batchQueueStore'
 
-import { describe, it, expect } from 'vitest'
-import type { BatchProcessingCallbacks, BatchProcessingResult, BatchProcessingSummary } from '../src/services/batchProcessingEngine'
-import type { BatchQueueItem, BatchProcessingConfig } from '../src/stores/batchQueueStore'
+const {
+  mockState,
+  webdavServiceMock,
+  cloudCacheServiceMock,
+  metadataFormatterMock
+} = vi.hoisted(() => ({
+  mockState: {
+    aiConfig: {
+      provider: 'openai',
+      apiKey: 'test-key',
+      apiUrl: 'https://api.example.com/v1',
+      model: 'test-model',
+      temperature: 0.7,
+      proxyUrl: '',
+      proxyEnabled: false
+    },
+    aiServiceOptions: {
+      maxRetries: 1,
+      baseRetryDelay: 10
+    },
+    promptConfig: {},
+    processingOptions: {
+      processingMode: 'summary',
+      bookType: 'non-fiction',
+      useSmartDetection: false,
+      skipNonEssentialChapters: true,
+      maxSubChapterDepth: 0,
+      outputLanguage: 'zh',
+      chapterNamingMode: 'auto',
+      chapterDetectionMode: 'normal',
+      epubTocDepth: 1,
+      enableNotification: false
+    },
+    config: {
+      requestThrottleMs: 0
+    }
+  },
+  webdavServiceMock: {
+    getFileContents: vi.fn(),
+    uploadFile: vi.fn()
+  },
+  cloudCacheServiceMock: {
+    fetchCacheFileNames: vi.fn(),
+    isCachedByFileName: vi.fn(),
+    getCacheFilePath: vi.fn()
+  },
+  metadataFormatterMock: {
+    generate: vi.fn(),
+    formatUnified: vi.fn()
+  }
+}))
 
-describe('BatchProcessingEngine Types & Interfaces', () => {
-  describe('BatchProcessingCallbacks', () => {
-    it('should accept all callback types', () => {
-      const callbacks: BatchProcessingCallbacks = {
-        onItemStart: (item) => {
-          expect(item.id).toBeDefined()
-        },
-        onItemProgress: (itemId, progress, message) => {
-          expect(typeof itemId).toBe('string')
-          expect(typeof progress).toBe('number')
-          expect(typeof message).toBe('string')
-        },
-        onItemComplete: (item, result) => {
-          expect(item.fileName).toBeDefined()
-          expect(result.success).toBeDefined()
-        },
-        onItemError: (item, error) => {
-          expect(item.id).toBeDefined()
-          expect(typeof error).toBe('string')
-        },
-        onItemSkip: (item, reason) => {
-          expect(item.id).toBeDefined()
-          expect(typeof reason).toBe('string')
-        },
-        onQueueComplete: (results) => {
-          expect(results.totalFiles).toBeDefined()
-          expect(results.successCount).toBeDefined()
-        },
-        onError: (error) => {
-          expect(error.message).toBeDefined()
-        }
-      }
+vi.mock('../src/stores/configStore', () => ({
+  useConfigStore: {
+    getState: () => mockState
+  }
+}))
 
-      // Verify callbacks object is valid
-      expect(callbacks).toBeDefined()
-      expect(typeof callbacks.onItemStart).toBe('function')
-      expect(typeof callbacks.onItemProgress).toBe('function')
-      expect(typeof callbacks.onItemComplete).toBe('function')
-      expect(typeof callbacks.onItemError).toBe('function')
-      expect(typeof callbacks.onItemSkip).toBe('function')
-      expect(typeof callbacks.onQueueComplete).toBe('function')
-      expect(typeof callbacks.onError).toBe('function')
-    })
+vi.mock('../src/services/webdavService', () => ({
+  webdavService: webdavServiceMock
+}))
 
-    it('should accept partial callbacks', () => {
-      const callbacks: BatchProcessingCallbacks = {
-        onItemComplete: (item, result) => {
-          console.log('Completed:', item.fileName)
-        }
-      }
+vi.mock('../src/services/cloudCacheService', () => ({
+  cloudCacheService: cloudCacheServiceMock
+}))
 
-      expect(callbacks.onItemComplete).toBeDefined()
-      expect(callbacks.onItemStart).toBeUndefined()
-    })
-  })
+vi.mock('../src/services/metadataFormatter', () => ({
+  metadataFormatter: metadataFormatterMock
+}))
 
-  describe('BatchProcessingResult', () => {
-    it('should have correct structure for success result', () => {
-      const result: BatchProcessingResult = {
-        success: true,
-        fileName: 'test.epub',
-        outputPath: '/fastReader/test-完整摘要.md',
-        content: '# Test Book\n\nContent here.',
-        metadata: {
-          chapterCount: 10,
-          processedChapters: 5,
-          costUSD: 0.015,
-          costRMB: 0.105,
-          startTime: '2024-01-01T00:00:00.000Z',
-          endTime: '2024-01-01T00:05:00.000Z'
-        }
-      }
+vi.mock('../src/services/pdfProcessor', () => ({
+  PdfProcessor: class {
+    extractChapters = vi.fn().mockResolvedValue([])
+  }
+}))
 
-      expect(result.success).toBe(true)
-      expect(result.fileName).toBe('test.epub')
-      expect(result.outputPath).toBe('/fastReader/test-完整摘要.md')
-      expect(result.content).toBeDefined()
-      expect(result.metadata).toBeDefined()
-      expect(result.metadata?.chapterCount).toBe(10)
-      expect(result.metadata?.processedChapters).toBe(5)
-      expect(result.metadata?.costUSD).toBe(0.015)
-      expect(result.metadata?.costRMB).toBe(0.105)
-      expect(result.error).toBeUndefined()
-    })
+vi.mock('../src/services/aiService', () => {
+  class MockAIService {
+    summarizeChapter = vi.fn().mockResolvedValue('章节摘要')
+    analyzeConnections = vi.fn().mockResolvedValue('章节关联')
+    generateOverallSummary = vi.fn().mockResolvedValue('全书总结')
 
-    it('should have correct structure for error result', () => {
-      const result: BatchProcessingResult = {
-        success: false,
-        fileName: 'test.epub',
-        error: 'Failed to download file'
-      }
+    static isSkippedSummary(summary: string): boolean {
+      return summary.startsWith('【已跳过】')
+    }
+  }
 
-      expect(result.success).toBe(false)
-      expect(result.fileName).toBe('test.epub')
-      expect(result.error).toBe('Failed to download file')
-      expect(result.metadata).toBeUndefined()
-      expect(result.content).toBeUndefined()
-    })
-
-    it('should handle skipped result', () => {
-      const result: BatchProcessingResult = {
-        success: true,
-        fileName: 'test.epub',
-        error: '已跳过（已有缓存）'
-      }
-
-      expect(result.success).toBe(true)
-      expect(result.error).toContain('已跳过')
-    })
-  })
-
-  describe('BatchProcessingSummary', () => {
-    it('should have correct structure', () => {
-      const summary: BatchProcessingSummary = {
-        totalFiles: 10,
-        successCount: 7,
-        failedCount: 2,
-        skippedCount: 1,
-        totalCostUSD: 0.15,
-        totalCostRMB: 1.05,
-        results: [],
-        duration: 60000
-      }
-
-      expect(summary.totalFiles).toBe(10)
-      expect(summary.successCount).toBe(7)
-      expect(summary.failedCount).toBe(2)
-      expect(summary.skippedCount).toBe(1)
-      expect(summary.totalCostUSD).toBe(0.15)
-      expect(summary.totalCostRMB).toBe(1.05)
-      expect(summary.duration).toBe(60000)
-      expect(summary.results).toBeInstanceOf(Array)
-    })
-  })
+  return { AIService: MockAIService }
 })
 
-describe('BatchQueueItem Types', () => {
-  it('should accept valid status values', () => {
-    const pendingItem: BatchQueueItem = {
-      id: 'test-1',
-      fileName: 'test.epub',
-      filePath: '/test/test.epub',
-      status: 'pending',
-      progress: 0
-    }
+import { BatchProcessingEngine } from '../src/services/batchProcessingEngine'
 
-    const processingItem: BatchQueueItem = {
-      ...pendingItem,
-      status: 'processing',
-      progress: 50
-    }
+type BatchProcessingEngineInternals = {
+  extractChapters: (...args: unknown[]) => Promise<unknown>
+  getRequestThrottleMs: (...args: unknown[]) => number
+  processChapterSummary: (...args: unknown[]) => Promise<unknown>
+  sleep: (...args: unknown[]) => Promise<void>
+}
 
-    const completedItem: BatchQueueItem = {
-      ...pendingItem,
-      status: 'completed',
-      progress: 100,
-      metadata: {
-        chapterCount: 10,
-        processedChapters: 10,
-        costUSD: 0.01,
-        costRMB: 0.07,
-        startTime: '2024-01-01T00:00:00.000Z',
-        endTime: '2024-01-01T00:01:00.000Z'
-      }
-    }
+describe('BatchProcessingEngine 行为测试', () => {
+  const baseItem: BatchQueueItem = {
+    id: 'item-1',
+    fileName: 'book.epub',
+    filePath: '/books/book.epub',
+    status: 'pending',
+    progress: 0
+  }
 
-    const failedItem: BatchQueueItem = {
-      ...pendingItem,
-      status: 'failed',
-      error: 'Download failed'
-    }
+  const baseConfig: BatchProcessingConfig = {
+    sourcePath: '/books',
+    maxFiles: 0,
+    skipProcessed: false,
+    order: 'sequential',
+    bookType: 'non-fiction',
+    processingMode: 'summary',
+    chapterDetectionMode: 'normal',
+    outputLanguage: 'zh'
+  }
 
-    const skippedItem: BatchQueueItem = {
-      ...pendingItem,
-      status: 'skipped'
-    }
+  beforeEach(() => {
+    vi.clearAllMocks()
 
-    expect(pendingItem.status).toBe('pending')
-    expect(processingItem.status).toBe('processing')
-    expect(completedItem.status).toBe('completed')
-    expect(failedItem.status).toBe('failed')
-    expect(skippedItem.status).toBe('skipped')
+    mockState.processingOptions.processingMode = 'summary'
+    mockState.config.requestThrottleMs = 0
+
+    cloudCacheServiceMock.fetchCacheFileNames.mockResolvedValue(new Set())
+    cloudCacheServiceMock.isCachedByFileName.mockReturnValue(false)
+    cloudCacheServiceMock.getCacheFilePath.mockReturnValue('/cache/book-完整摘要.md')
+
+    webdavServiceMock.getFileContents.mockResolvedValue({
+      success: true,
+      data: new ArrayBuffer(8)
+    })
+    webdavServiceMock.uploadFile.mockResolvedValue({ success: true })
+
+    metadataFormatterMock.generate.mockReturnValue({ costUSD: 0, costRMB: 0 })
+    metadataFormatterMock.formatUnified.mockReturnValue('# 处理结果')
   })
 
-  it('should accept optional fields', () => {
-    const itemWithMetadata: BatchQueueItem = {
-      id: 'test-1',
-      fileName: 'test.epub',
-      filePath: '/test/test.epub',
-      status: 'completed',
-      progress: 100,
-      metadata: {
-        chapterCount: 10,
-        processedChapters: 5,
-        costUSD: 0.01,
-        costRMB: 0.07,
-        startTime: '2024-01-01T00:00:00.000Z',
-        endTime: '2024-01-01T00:01:00.000Z'
-      },
-      selectedChapters: [1, 2, 3, 4, 5]
-    }
+  it('AI 服务不可用时应返回可诊断失败信息', async () => {
+    const engine = new BatchProcessingEngine()
+    const engineWithInternals = engine as unknown as { aiService: unknown }
+    const internalEngine = engine as unknown as BatchProcessingEngineInternals
+    engineWithInternals.aiService = null
 
-    const itemWithoutOptionals: BatchQueueItem = {
-      id: 'test-2',
-      fileName: 'test2.epub',
-      filePath: '/test/test2.epub',
-      status: 'pending',
-      progress: 0
-    }
+    const extractChaptersSpy = vi
+      .spyOn(internalEngine, 'extractChapters')
+      .mockResolvedValue([{ id: '1', title: '第一章', content: 'A'.repeat(300) }])
 
-    expect(itemWithMetadata.metadata).toBeDefined()
-    expect(itemWithMetadata.selectedChapters).toEqual([1, 2, 3, 4, 5])
-    expect(itemWithoutOptionals.metadata).toBeUndefined()
-    expect(itemWithoutOptionals.selectedChapters).toBeUndefined()
-  })
-})
+    const result = await engine.processItem(baseItem, baseConfig)
 
-describe('BatchProcessingConfig Types', () => {
-  it('should accept valid config', () => {
-    const config: BatchProcessingConfig = {
-      sourcePath: '/books',
-      maxFiles: 20,
-      skipProcessed: true,
-      order: 'sequential',
-      bookType: 'fiction',
-      processingMode: 'mindmap',
-      chapterDetectionMode: 'normal',
-      outputLanguage: 'en'
-    }
-
-    expect(config.sourcePath).toBe('/books')
-    expect(config.maxFiles).toBe(20)
-    expect(config.skipProcessed).toBe(true)
-    expect(config.order).toBe('sequential')
-    expect(config.bookType).toBe('fiction')
-    expect(config.processingMode).toBe('mindmap')
-    expect(config.chapterDetectionMode).toBe('normal')
-    expect(config.outputLanguage).toBe('en')
+    expect(extractChaptersSpy).toHaveBeenCalledTimes(1)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('AI 服务未初始化')
+    expect(webdavServiceMock.uploadFile).not.toHaveBeenCalled()
   })
 
-  it('should accept random order', () => {
-    const config: BatchProcessingConfig = {
-      sourcePath: '/books',
-      maxFiles: 0,
-      skipProcessed: false,
-      order: 'random',
-      bookType: 'non-fiction',
-      processingMode: 'summary',
-      chapterDetectionMode: 'smart',
-      outputLanguage: 'zh'
-    }
+  it('应按 requestThrottleMs 对选中章节执行节流等待', async () => {
+    const engine = new BatchProcessingEngine()
 
-    expect(config.order).toBe('random')
-    expect(config.outputLanguage).toBe('zh')
+    const internalEngine = engine as unknown as BatchProcessingEngineInternals
+
+    const getRequestThrottleMsSpy = vi
+      .spyOn(internalEngine, 'getRequestThrottleMs')
+      .mockReturnValue(123)
+
+    const extractChaptersSpy = vi
+      .spyOn(internalEngine, 'extractChapters')
+      .mockResolvedValue([
+        { id: '1', title: '第一章', content: 'A'.repeat(200) },
+        { id: '2', title: '第二章', content: 'B'.repeat(220) }
+      ])
+
+    const processChapterSummarySpy = vi
+      .spyOn(internalEngine, 'processChapterSummary')
+      .mockResolvedValue('章节摘要内容')
+
+    const sleepSpy = vi
+      .spyOn(internalEngine, 'sleep')
+      .mockResolvedValue(undefined)
+
+    const result = await engine.processItem(
+      { ...baseItem, selectedChapters: [2] },
+      baseConfig
+    )
+
+    expect(extractChaptersSpy).toHaveBeenCalledTimes(1)
+    expect(processChapterSummarySpy).toHaveBeenCalledTimes(1)
+    expect(processChapterSummarySpy).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '第二章' }),
+      'non-fiction',
+      'zh'
+    )
+    expect(sleepSpy).toHaveBeenCalledTimes(1)
+    expect(getRequestThrottleMsSpy).toHaveBeenCalledTimes(1)
+    expect(sleepSpy).toHaveBeenCalledWith(123)
+    expect(result.success).toBe(true)
   })
 
-  it('should accept all processing modes', () => {
-    const summaryConfig: BatchProcessingConfig = {
-      sourcePath: '/books',
-      maxFiles: 10,
-      skipProcessed: true,
-      order: 'sequential',
-      bookType: 'non-fiction',
-      processingMode: 'summary',
-      chapterDetectionMode: 'normal',
-      outputLanguage: 'en'
-    }
+  it('命中缓存时应跳过并触发 onItemSkip 回调', async () => {
+    const engine = new BatchProcessingEngine()
+    const onItemSkip = vi.fn()
 
-    const mindmapConfig: BatchProcessingConfig = {
-      ...summaryConfig,
-      processingMode: 'mindmap'
-    }
+    engine.setCallbacks({ onItemSkip })
 
-    const combinedConfig: BatchProcessingConfig = {
-      ...summaryConfig,
-      processingMode: 'combined-mindmap'
-    }
+    const cached = new Set(['book.epub'])
+    cloudCacheServiceMock.isCachedByFileName.mockReturnValue(true)
 
-    expect(summaryConfig.processingMode).toBe('summary')
-    expect(mindmapConfig.processingMode).toBe('mindmap')
-    expect(combinedConfig.processingMode).toBe('combined-mindmap')
+    const result = await engine.processItem(
+      baseItem,
+      { ...baseConfig, skipProcessed: true },
+      cached
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.error).toContain('已跳过')
+    expect(onItemSkip).toHaveBeenCalledTimes(1)
+    expect(onItemSkip).toHaveBeenCalledWith(
+      expect.objectContaining({ id: baseItem.id }),
+      '已有缓存'
+    )
+    expect(webdavServiceMock.getFileContents).not.toHaveBeenCalled()
   })
 })

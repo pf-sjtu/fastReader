@@ -65,7 +65,7 @@ export class OllamaProvider extends BaseAIProvider {
       const errorBody = await response.text()
       const error = new Error(
         `Ollama API请求失败: ${response.status} ${response.statusText} - ${errorBody}`
-      ) as any
+      ) as Error & { status: number; body: string }
       error.status = response.status
       error.body = errorBody
 
@@ -97,8 +97,8 @@ export class OllamaProvider extends BaseAIProvider {
       if (response.ok) {
         const data = await response.json()
         // 检查模型是否可用
-        const models = data.models || []
-        const hasModel = models.some((m: any) => m.name === this.model || m.name === `${this.model}:latest`)
+        const models = data.models as Array<{ name: string }> || []
+        const hasModel = models.some((m) => m.name === this.model || m.name === `${this.model}:latest`)
 
         if (hasModel || models.length > 0) {
           return { success: true }

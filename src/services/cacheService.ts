@@ -1,4 +1,5 @@
 import type { MindElixirData } from 'mind-elixir'
+import { debounce } from '../utils/async'
 
 // 定义缓存键类型
 export type CacheKeyType =
@@ -20,16 +21,59 @@ export type CacheValue = string | MindElixirData | string[] | null
 interface CacheItem {
   data: CacheValue
   timestamp: number
+  lastAccessed: number
 }
+
+interface ChapterSummaryItem {
+  id: string
+  summary: string
+}
+
+interface SummaryCacheData {
+  chapters: ChapterSummaryItem[]
+  connections: string
+  overallSummary: string
+}
+
+interface ChapterMindMapItem {
+  id: string
+  mindMap: MindElixirData
+}
+
+interface MindMapCacheData {
+  chapters: ChapterMindMapItem[]
+  combinedMindMap: MindElixirData | null
+}
+
+type GenericCacheData = string | SummaryCacheData | MindMapCacheData | null
+
+interface IdleDeadlineLike {
+  readonly didTimeout: boolean
+  timeRemaining: () => number
+}
+
+type IdleCallback = (deadline: IdleDeadlineLike) => void
+
+type RequestIdleCallbackFn = (callback: IdleCallback, options?: { timeout: number }) => number
 
 export class CacheService {
   private cache: Map<string, CacheValue>
+  private cacheMeta: Map<string, { timestamp: number; lastAccessed: number }>
   private readonly STORAGE_KEY = 'ebook-processor-cache'
   private readonly MAX_CACHE_SIZE = 100 // 最大缓存条目数
   private readonly CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000 // 7天
+  private readonly SAVE_DEBOUNCE_DELAY = 500
+  private scheduleSaveToLocalStorage: () => void
+  private pendingSave = false
+  private idleSaveId: number | null = null
 
   constructor() {
     this.cache = new Map()
+    this.cacheMeta = new Map()
+    this.scheduleSaveToLocalStorage = debounce(() => {
+      this.pendingSave = true
+      this.scheduleIdleSave()
+    }, this.SAVE_DEBOUNCE_DELAY)
     this.loadFromLocalStorage()
   }
 
@@ -45,6 +89,10 @@ export class CacheService {
         Object.entries(data).forEach(([key, value]: [string, CacheItem]) => {
           if (value.timestamp && (now - value.timestamp) < this.CACHE_EXPIRY) {
             this.cache.set(key, value.data)
+            this.cacheMeta.set(key, {
+              timestamp: value.timestamp,
+              lastAccessed: value.lastAccessed ?? value.timestamp
+            })
           }
         })
       }
@@ -55,16 +103,53 @@ export class CacheService {
     }
   }
 
+  private getRequestIdleCallback(): RequestIdleCallbackFn | undefined {
+    return (globalThis as typeof globalThis & { requestIdleCallback?: RequestIdleCallbackFn }).requestIdleCallback
+  }
+
+  private scheduleIdleSave(): void {
+    if (!this.pendingSave) {
+      return
+    }
+
+    if (this.idleSaveId !== null) {
+      return
+    }
+
+    const requestIdleCallback = this.getRequestIdleCallback()
+    if (requestIdleCallback) {
+      this.idleSaveId = requestIdleCallback(() => {
+        this.idleSaveId = null
+        this.flushSaveToLocalStorage()
+      }, { timeout: 1000 })
+      return
+    }
+
+    setTimeout(() => {
+      this.flushSaveToLocalStorage()
+    }, 0)
+  }
+
   // 保存缓存到localStorage
-  private saveToLocalStorage(): void {
+  private flushSaveToLocalStorage(): void {
+    if (!this.pendingSave) {
+      return
+    }
+
+    this.pendingSave = false
+
     try {
       const data: Record<string, CacheItem> = {}
       const now = Date.now()
 
       this.cache.forEach((value, key) => {
+        const existingMeta = this.cacheMeta.get(key)
+        const meta = existingMeta ?? { timestamp: now, lastAccessed: now }
+
         data[key] = {
           data: value,
-          timestamp: now
+          timestamp: meta.timestamp,
+          lastAccessed: meta.lastAccessed
         }
       })
 
@@ -74,10 +159,72 @@ export class CacheService {
     }
   }
 
+  private touchKey(key: string): void {
+    const now = Date.now()
+    const meta = this.cacheMeta.get(key)
+
+    if (meta) {
+      meta.lastAccessed = now
+      this.cacheMeta.set(key, meta)
+      return
+    }
+
+    this.cacheMeta.set(key, {
+      timestamp: now,
+      lastAccessed: now
+    })
+  }
+
+  private upsertKey(key: string, value: CacheValue): void {
+    const now = Date.now()
+    const existed = this.cache.has(key)
+
+    if (existed) {
+      this.cache.delete(key)
+    }
+
+    this.cache.set(key, value)
+
+    const meta = this.cacheMeta.get(key)
+    this.cacheMeta.set(key, {
+      timestamp: meta?.timestamp ?? now,
+      lastAccessed: now
+    })
+
+    this.evictIfNeeded()
+    this.scheduleSaveToLocalStorage()
+  }
+
+  private evictIfNeeded(): void {
+    while (this.cache.size > this.MAX_CACHE_SIZE) {
+      let lruKey: string | null = null
+      let lruLastAccessed = Number.POSITIVE_INFINITY
+
+      this.cache.forEach((_, key) => {
+        const lastAccessed = this.cacheMeta.get(key)?.lastAccessed ?? 0
+        if (lastAccessed < lruLastAccessed) {
+          lruLastAccessed = lastAccessed
+          lruKey = key
+        }
+      })
+
+      if (!lruKey) {
+        break
+      }
+
+      this.cache.delete(lruKey)
+      this.cacheMeta.delete(lruKey)
+    }
+  }
+
   // 获取字符串类型的缓存值
   getString(filename: string, type: CacheKeyType, chapterId?: string): string | null {
     const key = CacheService.generateKey(filename, type, chapterId)
     const value = this.cache.get(key)
+    if (value !== undefined) {
+      this.touchKey(key)
+      this.scheduleSaveToLocalStorage()
+    }
     return typeof value === 'string' ? value : null
   }
 
@@ -85,6 +232,10 @@ export class CacheService {
   getMindMap(filename: string, type: CacheKeyType, chapterId?: string): MindElixirData | null {
     const key = CacheService.generateKey(filename, type, chapterId)
     const value = this.cache.get(key)
+    if (value !== undefined) {
+      this.touchKey(key)
+      this.scheduleSaveToLocalStorage()
+    }
     return value && typeof value === 'object' && 'nodeData' in value ? value as MindElixirData : null
   }
 
@@ -92,11 +243,15 @@ export class CacheService {
   getSelectedChapters(filename: string): string[] | null {
     const key = CacheService.generateKey(filename, 'selected_chapters')
     const value = this.cache.get(key)
+    if (value !== undefined) {
+      this.touchKey(key)
+      this.scheduleSaveToLocalStorage()
+    }
     return Array.isArray(value) ? value : null
   }
 
   // 获取书籍总结缓存
-  getSummary(filename: string): any | null {
+  getSummary(filename: string): SummaryCacheData | null {
     const stats = this.getStats()
     const cleanFilename = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')
     
@@ -105,8 +260,8 @@ export class CacheService {
       key.includes(`book_${cleanFilename}_chapter_`) &&
       key.endsWith('_summary')
     )
-    
-    const chapters = []
+
+    const chapters: ChapterSummaryItem[] = []
     for (const key of chapterKeys) {
       const value = this.cache.get(key)
       if (typeof value === 'string') {
@@ -138,7 +293,7 @@ export class CacheService {
   }
 
   // 获取思维导图数据
-  getMindMapData(filename: string): any | null {
+  getMindMapData(filename: string): MindMapCacheData | null {
     const stats = this.getStats()
     const cleanFilename = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')
     
@@ -147,8 +302,8 @@ export class CacheService {
       key.includes(`book_${cleanFilename}_chapter_`) &&
       key.endsWith('_mindmap')
     )
-    
-    const chapters = []
+
+    const chapters: ChapterMindMapItem[] = []
     for (const key of chapterKeys) {
       const value = this.cache.get(key)
       if (value && typeof value === 'object' && 'nodeData' in value) {
@@ -178,7 +333,7 @@ export class CacheService {
   }
 
   // 获取通用缓存
-  getCache(filename: string, type: CacheKeyType): any | null {
+  getCache(filename: string, type: CacheKeyType): GenericCacheData {
     if (type === 'summary') {
       return this.getSummary(filename)
     } else if (type === 'mindmap') {
@@ -196,34 +351,14 @@ export class CacheService {
   // 设置缓存值
   setCache(filename: string, type: CacheKeyType, value: CacheValue, chapterId?: string): void {
     const key = CacheService.generateKey(filename, type, chapterId)
-
-    // 如果缓存已满，删除最旧的条目
-    if (this.cache.size >= this.MAX_CACHE_SIZE) {
-      const firstKey = this.cache.keys().next().value
-      if (firstKey) {
-        this.cache.delete(firstKey)
-      }
-    }
-
-    this.cache.set(key, value)
-    this.saveToLocalStorage()
+    this.upsertKey(key, value)
   }
 
   // 缓存选中的章节
   setSelectedChapters(filename: string, selectedChapters: Set<string>): void {
     const key = CacheService.generateKey(filename, 'selected_chapters')
     const value = Array.from(selectedChapters)
-    
-    // 如果缓存已满，删除最旧的条目
-    if (this.cache.size >= this.MAX_CACHE_SIZE) {
-      const firstKey = this.cache.keys().next().value
-      if (firstKey) {
-        this.cache.delete(firstKey)
-      }
-    }
-
-    this.cache.set(key, value)
-    this.saveToLocalStorage()
+    this.upsertKey(key, value)
   }
 
   // 删除缓存（公共接口，兼容测试）
@@ -241,7 +376,8 @@ export class CacheService {
   private deleteByKey(key: string): boolean {
     const result = this.cache.delete(key)
     if (result) {
-      this.saveToLocalStorage()
+      this.cacheMeta.delete(key)
+      this.scheduleSaveToLocalStorage()
     }
     return result
   }

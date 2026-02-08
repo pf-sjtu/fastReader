@@ -13,14 +13,14 @@ export async function sleep(ms: number): Promise<void> {
 }
 
 // 动态加载代理相关包
-export async function getHttpsProxyAgent(): Promise<any | null> {
+export async function getHttpsProxyAgent(): Promise<new (url: string) => { destroy: () => void } | null> {
   if (isBrowser) {
     return null
   }
 
   try {
     const httpsProxyAgentModule = await import('https-proxy-agent')
-    return httpsProxyAgentModule.HttpsProxyAgent
+    return httpsProxyAgentModule.HttpsProxyAgent as new (url: string) => { destroy: () => void }
   } catch (error) {
     console.warn('无法加载 https-proxy-agent，代理功能将不可用:', error)
     return null
@@ -82,18 +82,27 @@ export async function proxyFetch(
     }
 
     const agent = new HttpsProxyAgent(proxyUrl)
-    const https = require('https')
-    const { URL } = require('url')
+    const { default: https } = await import('node:https')
 
     const parsedUrl = new URL(url)
 
-    const requestOptions: any = {
+    interface RequestOptions {
+      hostname: string
+      port: number
+      path: string
+      method: string
+      headers: Record<string, string>
+      agent: typeof agent
+      timeout: number
+    }
+
+    const requestOptions: RequestOptions = {
       hostname: parsedUrl.hostname,
-      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      port: parsedUrl.port ? Number(parsedUrl.port) : (parsedUrl.protocol === 'https:' ? 443 : 80),
       path: parsedUrl.pathname + parsedUrl.search,
       method: options.method || 'GET',
       headers: {
-        ...options.headers,
+        ...options.headers as Record<string, string>,
         Host: parsedUrl.hostname,
         'User-Agent': 'ebook-to-mindmap/1.0'
       },
@@ -104,11 +113,11 @@ export async function proxyFetch(
     if (options.body) {
       const bodyString =
         typeof options.body === 'string' ? options.body : JSON.stringify(options.body)
-      requestOptions.headers['Content-Length'] = Buffer.byteLength(bodyString)
+      requestOptions.headers['Content-Length'] = String(Buffer.byteLength(bodyString))
     }
 
     return new Promise((resolve, reject) => {
-      const req = https.request(requestOptions, (res: any) => {
+      const req = https.request(requestOptions, (res: { statusCode?: number; statusMessage?: string; headers: Record<string, string>; on: (event: string, callback: unknown) => void }) => {
         const chunks: Buffer[] = []
 
         res.on('data', (chunk: Buffer) => {
@@ -157,7 +166,7 @@ export async function proxyFetch(
 
 // 识别流量限制错误
 export function identifyRateLimitError(
-  error: any,
+  error: Error,
   status?: number,
   errorBody?: string
 ): RateLimitError | null {
@@ -186,7 +195,7 @@ export function identifyRateLimitError(
   }
 
   // 检查错误消息中的流量限制关键词
-  const errorMessage = String(error?.message || error || '')
+  const errorMessage = error.message || ''
   const rateLimitKeywords = [
     'token_quota_exceeded',
     'rate_limit_exceeded',

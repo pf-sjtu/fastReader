@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -30,7 +30,8 @@ export function FileUploadSection({
 }: FileUploadSectionProps) {
   const { t } = useTranslation()
   const [extractingChapters, setExtractingChapters] = useState(false)
-  
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const {
     processingOptions: { useSmartDetection, skipNonEssentialChapters, maxSubChapterDepth, chapterNamingMode, chapterDetectionMode, epubTocDepth }
   } = useConfigStore()
@@ -41,6 +42,10 @@ export function FileUploadSection({
     
     onFileSelect(selectedFile)
   }, [onFileSelect])
+
+  const triggerFileInput = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
 
   const extractChapters = useCallback(async () => {
     if (!file) return
@@ -105,7 +110,7 @@ export function FileUploadSection({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => document.getElementById('file')?.click()}
+                onClick={triggerFileInput}
                 disabled={processing}
               >
                 <Upload className="h-4 w-4 mr-1" />
@@ -115,6 +120,7 @@ export function FileUploadSection({
             </div>
           </div>
           <Input
+            ref={fileInputRef}
             id="file"
             type="file"
             accept=".epub,.pdf"

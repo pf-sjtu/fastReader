@@ -297,7 +297,7 @@ export class EpubProcessor {
         return ''
       }
 
-      let chapterHTML = await section.render(book.load.bind(book))
+      const chapterHTML = await section.render(book.load.bind(book))
       let textContent = this.extractTextFromXHTML(chapterHTML, anchor)
       
       // 封面-内容自动检测：如果内容为空，检查是否有 xxx_0001.xhtml 内容文件
@@ -359,7 +359,7 @@ export class EpubProcessor {
       }
 
       return cleanChapterTitle(textContent)
-    } catch (error) {
+    } catch {
       return this.extractTextWithRegex(xhtmlContent, anchor)
     }
   }
@@ -371,18 +371,18 @@ export class EpubProcessor {
       let anchorElement: Element | null = null
       try {
         anchorElement = doc.querySelector(`[id="${escapedAnchor}"]`)
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
 
       if (!anchorElement) {
         try {
           anchorElement = doc.querySelector(`[name="${escapedAnchor}"]`)
-        } catch (e) { /* ignore */ }
+        } catch { /* ignore */ }
       }
 
       if (!anchorElement) {
         try {
           anchorElement = doc.querySelector(`[id*="${escapedAnchor}"]`)
-        } catch (e) { /* ignore */ }
+        } catch { /* ignore */ }
       }
 
       if (!anchorElement) {

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useBatchQueueStore, type BatchQueueItem, type BatchProcessingConfig, type QueueItemStatus } from '../src/stores/batchQueueStore'
+import { useBatchQueueStore, type BatchProcessingConfig, type QueueItemStatus } from '../src/stores/batchQueueStore'
 
 describe('BatchQueueStore', () => {
   beforeEach(() => {

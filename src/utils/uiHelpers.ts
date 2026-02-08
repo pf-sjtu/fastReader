@@ -19,7 +19,8 @@ export const scrollToTop = () => {
  * @param _mindmapData 思维导图数据
  * @param _title 思维导图标题
  */
-export const openInMindElixir = async (_mindmapData: MindElixirData, _title: string) => {
+export const openInMindElixir = async (...args: [MindElixirData, string]) => {
+  void args
   toast.error('此功能已被禁用', {
     duration: 3000,
     position: 'top-center',
@@ -32,7 +33,8 @@ export const openInMindElixir = async (_mindmapData: MindElixirData, _title: str
  * @param _title 思维导图标题
  * @param _format 导出格式
  */
-export const downloadMindMap = async (_mindElixirInstance: MindElixirInstance, _title: string, _format: string) => {
+export const downloadMindMap = async (...args: [MindElixirInstance, string, string]) => {
+  void args
   toast.error('此功能已被禁用', {
     duration: 3000,
     position: 'top-center',
