@@ -30,6 +30,7 @@ export interface ProcessingMetadata {
   processedAt: string
   model: string
   chapterDetectionMode: string
+  epubTocDepth?: number
   selectedChapters: string
   chapterCount: number
   originalCharCount: number
@@ -231,6 +232,9 @@ export class CloudCacheService {
             break
           case 'isPartial':
             metadata.isPartial = value === 'true'
+            break
+          case 'epubTocDepth':
+            metadata.epubTocDepth = value === 'N/A' ? undefined : parseInt(value, 10) || undefined
             break
         }
       }

@@ -1,6 +1,6 @@
 import { WebDAVService } from './webdavService'
 import { useConfigStore } from '../stores/configStore'
-import { metadataFormatter } from './metadataFormatter'
+import { metadataFormatter, type ProcessResultInfo } from './metadataFormatter'
 
 // 定义本地类型（避免循环依赖）
 interface BookSummary {
@@ -54,11 +54,14 @@ export class AutoSyncService {
 
   /**
    * 同步摘要文件到WebDAV
+   * 生成与手动上传一致的单个完整 Markdown 文件
    */
   async syncSummary(bookSummary: BookSummary, fileName: string, chapterNamingMode: 'auto' | 'numbered' = 'auto'): Promise<boolean> {
     try {
       // 检查是否启用自动同步
       const webdavConfig = useConfigStore.getState().webdavConfig
+      const processingOptions = useConfigStore.getState().processingOptions
+
       if (!webdavConfig.enabled || !webdavConfig.autoSync) {
         return false
       }
@@ -70,7 +73,6 @@ export class AutoSyncService {
         return false
       }
 
-
       // 检查连接
       const connectionTest = await this.webdavService.testConnection()
       if (!connectionTest.success) {
@@ -78,38 +80,28 @@ export class AutoSyncService {
         return false
       }
 
-      const syncFiles: SyncFileInfo[] = []
+      // 生成统一的完整摘要文件（与手动上传格式一致）
+      const summaryContent = this.formatUnifiedSummary(bookSummary, fileName, chapterNamingMode, processingOptions)
 
-      // 添加全书摘要
-      const summaryContent = this.formatSummaryAsMarkdown(bookSummary, chapterNamingMode)
-      syncFiles.push({
-        name: `${fileName}_summary.md`,
-        content: summaryContent,
-        path: `${fileName}/${fileName}_summary.md`,
-        type: 'summary'
-      })
+      // 清理文件名
+      const sanitizedName = fileName
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[<>:"/\\|?*]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+      const remoteFileName = `${sanitizedName}-完整摘要.md`
+      const remotePath = `${webdavConfig.syncPath}/${remoteFileName}`
 
-      // 添加各章节摘要
-      bookSummary.chapters.forEach((chapter, index) => {
-        const chapterSummary = this.formatChapterSummary(chapter, index + 1, chapterNamingMode)
-        syncFiles.push({
-          name: `${fileName}_chapter_${index + 1}_summary.md`,
-          content: chapterSummary,
-          path: `${fileName}/chapters/${fileName}_chapter_${index + 1}_summary.md`,
-          type: 'summary'
-        })
-      })
+      // 上传文件
+      const uploadResult = await this.webdavService.uploadFile(remotePath, summaryContent)
 
-      // 执行同步
-      const syncResult = await this.webdavService.syncFiles(syncFiles)
-      
-      if (syncResult.success) {
-        console.log(`✅ 摘要文件同步成功: ${syncFiles.length} 个文件`)
+      if (uploadResult.success) {
+        console.log(`✅ 摘要文件同步成功: ${remoteFileName}`)
         // 更新最后同步时间
         useConfigStore.getState().updateWebDAVLastSyncTime()
         return true
       } else {
-        console.error('摘要文件同步失败:', syncResult.error)
+        console.error('摘要文件同步失败:', uploadResult.error)
         return false
       }
     } catch (error) {
@@ -183,9 +175,18 @@ export class AutoSyncService {
   }
 
   /**
-   * 格式化摘要为Markdown（使用统一格式）
+   * 格式化统一摘要为Markdown（与手动上传格式一致）
+   * @param bookSummary 书籍摘要数据
+   * @param fileName 原始文件名
+   * @param chapterNamingMode 章节命名模式
+   * @param processingOptions 处理选项（包含 chapterDetectionMode 和 epubTocDepth）
    */
-  private formatSummaryAsMarkdown(bookSummary: BookSummary, chapterNamingMode: 'auto' | 'numbered' = 'auto'): string {
+  private formatUnifiedSummary(
+    bookSummary: BookSummary,
+    fileName: string,
+    chapterNamingMode: 'auto' | 'numbered' = 'auto',
+    processingOptions?: { chapterDetectionMode?: string; epubTocDepth?: number }
+  ): string {
     // 准备章节数据
     const chapters = bookSummary.chapters.map(chapter => ({
       id: chapter.id,
@@ -202,24 +203,42 @@ export class AutoSyncService {
       connections: bookSummary.connections
     }
 
-    // 生成元数据
-    const metadata = metadataFormatter.generate({
-      fileName: '',
-      bookTitle: bookSummary.title,
-      model: '',
-      chapterDetectionMode: 'normal',
-      selectedChapters: bookSummary.chapters
-        .map((_, index) => index + 1)
-        .filter((_, idx) => bookSummary.chapters[idx]?.summary),
-      chapterCount: bookSummary.chapters.length,
-      originalCharCount: 0,
-      processedCharCount: bookSummary.chapters.reduce(
-        (total, ch) => total + (ch.summary?.length || 0),
-        0
-      )
-    })
+    // 计算原始内容字符数
+    const originalCharCount = bookSummary.chapters.reduce(
+      (total, ch) => total + (ch.content?.length || 0),
+      0
+    )
 
-    // 使用统一格式生成 Markdown
+    // 计算处理后内容字符数
+    const processedCharCount = bookSummary.chapters.reduce(
+      (total, ch) => total + (ch.summary?.length || 0),
+      0
+    )
+
+    // 选中的章节（有 summary 的章节）
+    const selectedChapters = bookSummary.chapters
+      .map((_, index) => index + 1)
+      .filter((_, idx) => bookSummary.chapters[idx]?.summary)
+
+    // 获取 AI 配置用于元数据
+    const aiConfig = useConfigStore.getState().aiConfig
+
+    // 生成元数据（包含目录识别方式和层级信息）
+    const metadataInput: ProcessResultInfo = {
+      fileName: fileName,
+      bookTitle: bookSummary.title,
+      model: aiConfig.model || 'unknown',
+      chapterDetectionMode: processingOptions?.chapterDetectionMode || 'normal',
+      epubTocDepth: processingOptions?.epubTocDepth,
+      selectedChapters: selectedChapters,
+      chapterCount: bookSummary.chapters.length,
+      originalCharCount: originalCharCount,
+      processedCharCount: processedCharCount
+    }
+
+    const metadata = metadataFormatter.generate(metadataInput)
+
+    // 使用统一格式生成 Markdown（与手动上传完全一致）
     return metadataFormatter.formatUnified(bookData, metadata, chapterNamingMode)
   }
 

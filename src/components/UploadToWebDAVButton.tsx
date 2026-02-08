@@ -73,6 +73,7 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
       bookTitle: bookSummary.title,
       model: aiConfig.model,
       chapterDetectionMode: processingOptions.chapterDetectionMode,
+      epubTocDepth: processingOptions.epubTocDepth,
       selectedChapters: selectedChapters,
       chapterCount: bookSummary.chapters.length,
       originalCharCount: originalCharCount,

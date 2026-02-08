@@ -44,6 +44,7 @@ export interface ProcessResultInfo {
   bookTitle?: string
   model: string
   chapterDetectionMode: string
+  epubTocDepth?: number
   selectedChapters: number[]
   selectedChapterCount?: number
   chapterCount: number
@@ -113,6 +114,7 @@ export function generateMetadata(result: ProcessResultInfo): ProcessingMetadata 
     fileName,
     model,
     chapterDetectionMode,
+    epubTocDepth,
     selectedChapters,
     selectedChapterCount,
     chapterCount,
@@ -137,6 +139,7 @@ export function generateMetadata(result: ProcessResultInfo): ProcessingMetadata 
     processedAt: new Date().toISOString(),
     model: model,
     chapterDetectionMode: chapterDetectionMode,
+    epubTocDepth: epubTocDepth,
     selectedChapters: selectedChapters.join(','),
     selectedChapterCount: selectedChapterCount ?? selectedChapters.length,
     chapterCount: chapterCount,
@@ -177,6 +180,7 @@ export function formatAsHTMLComment(metadata: ProcessingMetadata): string {
     `processedAt: ${metadata.processedAt}`,
     `model: ${metadata.model}`,
     `chapterDetectionMode: ${metadata.chapterDetectionMode}`,
+    `epubTocDepth: ${metadata.epubTocDepth ?? 'N/A'}`,
     `selectedChapters: ${metadata.selectedChapters}`,
     `selectedChapterCount: ${
       typeof (metadata as ProcessingMetadata & { selectedChapterCount?: number }).selectedChapterCount === 'number'
@@ -270,6 +274,9 @@ export function parseMetadataFromContent(content: string): ProcessingMetadata | 
           break
         case 'chapterDetectionMode':
           metadata.chapterDetectionMode = value
+          break
+        case 'epubTocDepth':
+          metadata.epubTocDepth = value === 'N/A' ? undefined : parseInt(value, 10) || undefined
           break
         case 'selectedChapters':
           metadata.selectedChapters = value
