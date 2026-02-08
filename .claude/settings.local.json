@@ -11,9 +11,12 @@
       "Bash(pip show:*)",
       "mcp__tavily-mcp__tavily-search",
       "Bash(npm test:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(git notes show:*)",
+      "Bash(git -C \"C:/Code/JS/fastReader\" ls-files)"
     ]
   },
+  "outputStyle": "default",
   "mcpServers": {
     "filesystem": {
       "command": "npx",

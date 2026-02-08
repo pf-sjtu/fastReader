@@ -287,7 +287,7 @@
     "epubTocDepth3": "Level 3 (Sections)",
     "epubTocDepth4": "Level 4 (Detailed Sections)",
     "epubTocDepth5": "Level 5 (Finest Granularity)",
-    "epubTocDepthDescription": "Extract only chapters at the selected level, excluding parent or child chapters. For example, selecting Level 2 returns only Level 2 sub-chapters, not Level 1 main chapters"
+    "epubTocDepthDescription": "Extract only chapters at the selected level, excluding parent or child chapters. For example, selecting Level 2 returns only Level 2 sub-chapters, not Level 1 main chapters",
     "chapterAndNotificationSettings": "Chapter and Notification Settings",
     "chapterNamingMode": "Chapter Naming Mode",
     "selectChapterNamingMode": "Select Chapter Naming Mode",
