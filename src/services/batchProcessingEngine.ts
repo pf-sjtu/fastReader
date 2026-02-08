@@ -13,6 +13,7 @@ import type { ChapterData } from './epubProcessor'
 import { useConfigStore } from '../stores/configStore'
 import type { BatchQueueItem, BatchProcessingConfig } from '../stores/batchQueueStore'
 import type { SupportedLanguage } from './prompts/utils'
+import { ConcurrencyLimiter } from '../utils/async'
 
 // 回调接口
 export interface BatchProcessingCallbacks {
@@ -136,46 +137,55 @@ export class BatchProcessingEngine {
         ? await cloudCacheService.fetchCacheFileNames()
         : undefined
 
-      for (let i = 0; i < queueItems.length; i++) {
-        if (this.shouldStop) {
-          console.log('[BatchEngine] 用户停止处理')
-          break
-        }
+      // 创建并发限制器（默认2个并发，避免内存和API限制）
+      const limiter = new ConcurrencyLimiter(2)
 
-
-        const item = queueItems[i]
-
-        // 检查是否暂停
-        while (this.isPaused && !this.shouldStop) {
-          await this.sleep(1000)
-        }
-
-        if (this.shouldStop) {
-          break
-        }
-
-        console.log(`[BatchEngine] 处理文件 ${i + 1}/${queueItems.length}: ${item.fileName}`)
-
-        try {
-          const result = await this.processItem(item, config, cachedFileNames)
-
-          results.push(result)
-
-          if (result.success) {
-            this.callbacks.onItemComplete?.(item, result)
-          } else {
-            this.callbacks.onItemError?.(item, result.error || '处理失败')
+      // 创建所有处理任务
+      const processingPromises = queueItems.map((item, index) => {
+        return limiter.execute(async () => {
+          // 检查是否需要停止
+          if (this.shouldStop) {
+            console.log('[BatchEngine] 用户停止处理')
+            return null
           }
-        } catch (error) {
-          const errorResult: BatchProcessingResult = {
-            success: false,
-            fileName: item.fileName,
-            error: error instanceof Error ? error.message : '未知错误'
+
+          // 检查是否暂停（忙等待直到继续或停止）
+          while (this.isPaused && !this.shouldStop) {
+            await this.sleep(1000)
           }
-          results.push(errorResult)
-          this.callbacks.onItemError?.(item, errorResult.error || '处理失败')
-        }
-      }
+
+          if (this.shouldStop) {
+            return null
+          }
+
+          console.log(`[BatchEngine] 处理文件 ${index + 1}/${queueItems.length}: ${item.fileName}`)
+
+          try {
+            const result = await this.processItem(item, config, cachedFileNames)
+
+            if (result.success) {
+              this.callbacks.onItemComplete?.(item, result)
+            } else {
+              this.callbacks.onItemError?.(item, result.error || '处理失败')
+            }
+
+            return result
+          } catch (error) {
+            const errorResult: BatchProcessingResult = {
+              success: false,
+              fileName: item.fileName,
+              error: error instanceof Error ? error.message : '未知错误'
+            }
+            this.callbacks.onItemError?.(item, errorResult.error || '处理失败')
+            return errorResult
+          }
+        })
+      })
+
+      // 等待所有任务完成（保持结果顺序）
+      const processedResults = await Promise.all(processingPromises)
+      results.push(...processedResults.filter((r): r is BatchProcessingResult => r !== null))
+
     } finally {
       this.isRunning = false
     }
