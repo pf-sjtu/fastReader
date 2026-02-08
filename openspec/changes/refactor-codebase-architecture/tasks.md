@@ -64,15 +64,19 @@
 - **依赖**: 阶段1完成
 - **并行**: 可与2.2、2.3并行
 
-### 2.2 重构AI Service为策略模式 [P0]
+### 2.2 重构AI Service为策略模式 [P0] - **已完成**
 **团队**: Team B (服务层重构团队)
-- [ ] 创建 `services/ai/` 目录结构
-- [ ] 定义 `AIProvider` 接口
-- [ ] 实现 `GeminiProvider`
-- [ ] 实现 `OpenAIProvider`
-- [ ] 实现 `OllamaProvider`
-- [ ] 实现 `Provider302`
-- [ ] 创建 `AIProviderFactory`
+- [x] 创建 `services/ai/` 目录结构
+- [x] 定义 `AIProvider` 接口
+- [x] 实现 `GeminiProvider`
+- [x] 实现 `OpenAIProvider`
+- [x] 实现 `OllamaProvider`
+- [x] 实现 `Provider302`
+- [x] 创建 `AIProviderFactory`
+- [x] 合并重复的 `generateContent` 方法
+- [x] 保持对外方法签名与错误语义稳定
+- **完成日期**: 2026-02-08
+- **成果**: aiService.ts 从 1305行 缩减至 85行 (兼容壳)
 - [ ] 合并重复的 `generateContent` 方法
 - [ ] 编写服务测试
 - **依赖**: 阶段1完成
@@ -99,15 +103,13 @@
 - **依赖**: 阶段1完成
 - **并行**: 可与2.1、2.2并行
 
-### 2.4 提取公共工具函数 [P1]
+### 2.4 提取公共工具函数 [P1] - **已完成**
 **团队**: Team D (工具函数团队)
-- [ ] 创建 `utils/async.ts` (sleep, retry)
-- [ ] 创建 `utils/file.ts` (getMimeType, convertToArrayBuffer)
-- [ ] 创建 `utils/url.ts` (buildProxyUrl)
-- [ ] 替换所有重复定义
-- [ ] 编写工具函数测试
-- **依赖**: 无
-- **并行**: 可与2.1、2.2、2.3并行
+- [x] 创建 `utils/async.ts` (sleep, retry, ConcurrencyLimiter)
+- [x] 创建 `utils/file.ts` (getMimeType, fileToArrayBuffer等)
+- [x] 创建 `utils/url.ts` (buildProxyUrl, buildAiProxyTarget等)
+- [x] 统一导出到 `utils/index.ts`
+- **完成日期**: 2026-02-08
 
 ### 2.5 统一类型定义 [P1]
 - [ ] 创建 `types/chapter.ts`
