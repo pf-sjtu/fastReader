@@ -252,7 +252,7 @@
     "epubTocDepth3": "第3级目录（小节）",
     "epubTocDepth4": "第4级目录（详细小节）",
     "epubTocDepth5": "第5级目录（最细粒度）",
-    "epubTocDepthDescription": "选择要提取的目录层级深度，数值越大提取的章节越详细",
+    "epubTocDepthDescription": "仅提取所选层级的章节，不包含父级或子级章节。例如选择第2级时，只返回第2级子章节，不返回第1级主章节",
     "chapterAndNotificationSettings": "章节和通知设置",
     "chapterNamingMode": "章节命名模式",
     "selectChapterNamingMode": "选择章节命名模式",

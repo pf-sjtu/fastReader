@@ -86,9 +86,19 @@ export class EpubProcessor {
         if (chapterDetectionMode === 'epub-toc') {
           const toc = book.navigation.toc
           const estimatedTotal = Math.max(toc.length, book.spine.spineItems.length)
+          // 收集所有层级的章节信息
           chapterInfos = await this.extractChaptersFromToc(
             book, toc, 0, epubTocDepth, chapterNamingMode, estimatedTotal, true
           )
+
+          // 精确层级过滤：仅保留目标层级的章节
+          const targetDepth = Math.max(0, epubTocDepth - 1)
+          const filteredChapterInfos = chapterInfos.filter(info => info.depth === targetDepth)
+
+          // 如果目标层级有章节则使用，否则保留全部（兜底）
+          if (filteredChapterInfos.length > 0) {
+            chapterInfos = filteredChapterInfos
+          }
 
           if (chapterInfos.length === 0) {
             chapterInfos = this.createFallbackChapterInfos(book, chapterNamingMode)
@@ -114,7 +124,13 @@ export class EpubProcessor {
               continue
             }
 
-            const chapterContent = await this.extractContentFromHref(book, chapterInfo.href, chapterInfo.subitems)
+            // 在 epub-toc 精确层级模式下，禁用子项内容聚合
+            const shouldIncludeSubitems = chapterDetectionMode !== 'epub-toc'
+            const chapterContent = await this.extractContentFromHref(
+              book,
+              chapterInfo.href,
+              shouldIncludeSubitems ? chapterInfo.subitems : undefined
+            )
 
             if (chapterContent.trim().length > 100) {
               chapters.push({
