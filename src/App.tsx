@@ -2,8 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
-import { BookOpen, Brain, ChevronUp, Loader2 } from 'lucide-react'
+import { BookOpen, Brain, ChevronUp } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
 import type { MindElixirData } from 'mind-elixir'
@@ -213,51 +212,6 @@ function App() {
     setCurrentStepIndex(2)
     await processBook()
   }, [processBook])
-
-  // 处理中状态展示
-  if (processing) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-slate-900 dark:via-blue-950 dark:to-slate-900 p-4 flex justify-center h-screen overflow-auto scroll-container">
-        <Toaster />
-        <div className="max-w-full xl:max-w-7xl space-y-4 w-full flex-1">
-          <div className="text-center space-y-2 relative">
-            <div className="absolute top-0 right-0 flex items-center gap-2">
-              <LanguageSwitcher />
-              <DarkModeToggle />
-            </div>
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 flex items-center justify-center gap-2">
-              <BookOpen className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-              {t('app.title')}
-            </h1>
-            <p className="text-gray-600 dark:text-gray-300">{t('app.description')}</p>
-          </div>
-
-          <UnifiedStatusBar
-            currentView={currentStepIndex === 1 ? 'config' : 'processing'}
-            processing={processing}
-            progress={progress}
-            currentStep={currentStep}
-            currentModel={aiConfig.model}
-            tokenUsage={tokenUsage}
-            onToggleView={() => setCurrentStepIndex(currentStepIndex === 1 ? 2 : 1)}
-          />
-
-          <BatchQueuePanel />
-
-          <Card>
-            <CardContent className="py-12">
-              <div className="flex flex-col items-center justify-center space-y-4">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <div className="text-lg font-medium">{currentStep}</div>
-                <Progress value={progress} className="w-64 h-2" />
-                <div className="text-sm text-muted-foreground">{Math.round(progress)}%</div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-slate-900 dark:via-blue-950 dark:to-slate-900 p-4 flex justify-center gap-4 h-screen overflow-auto scroll-container">
