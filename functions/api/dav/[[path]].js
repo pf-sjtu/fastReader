@@ -1,16 +1,25 @@
 import { isValidUpstreamBase } from '../../../src/services/webdavProxyUtils'
 
-const ALLOWED_ORIGINS = [
-  'https://fast-read.pages.dev',
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173'
-]
+// 从环境变量读取白名单，支持逗号分隔的字符串
+function getAllowedOrigins(env) {
+  const defaultOrigins = [
+    'https://fast-read.pages.dev',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173'
+  ]
+  
+  if (!env?.ALLOWED_ORIGINS) {
+    return defaultOrigins
+  }
+  
+  return [...new Set(env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean))]
+}
 
-function corsHeaders(origin, requestOrigin) {
-  const allowOrigin = origin && ALLOWED_ORIGINS.includes(origin)
+function corsHeaders(origin, requestOrigin, allowedOrigins) {
+  const allowOrigin = origin && allowedOrigins.includes(origin)
     ? origin
-    : (ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : 'null')
+    : (allowedOrigins.includes(requestOrigin) ? requestOrigin : 'null')
 
   return {
     'Access-Control-Allow-Origin': allowOrigin,
@@ -22,11 +31,11 @@ function corsHeaders(origin, requestOrigin) {
   }
 }
 
-function isAllowedOrigin(origin, requestOrigin) {
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+function isAllowedOrigin(origin, requestOrigin, allowedOrigins) {
+  if (origin && allowedOrigins.includes(origin)) {
     return true
   }
-  return ALLOWED_ORIGINS.includes(requestOrigin)
+  return allowedOrigins.includes(requestOrigin)
 }
 
 function isAllowedMethod(method) {
@@ -51,10 +60,11 @@ function filterRequestHeaders(headers) {
 }
 
 export async function onRequest(context) {
-  const { request } = context
+  const { request, env } = context
+  const allowedOrigins = getAllowedOrigins(env)
   const origin = request.headers.get('Origin') || ''
   const requestOrigin = request.headers.get('X-Request-Origin') || ''
-  const cors = corsHeaders(origin, requestOrigin)
+  const cors = corsHeaders(origin, requestOrigin, allowedOrigins)
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: cors })
@@ -64,7 +74,7 @@ export async function onRequest(context) {
     return new Response('Method not allowed', { status: 405, headers: cors })
   }
 
-  if (!isAllowedOrigin(origin, requestOrigin)) {
+  if (!isAllowedOrigin(origin, requestOrigin, allowedOrigins)) {
     return new Response('Origin not allowed', { status: 403, headers: cors })
   }
 

@@ -40,6 +40,44 @@
 - WebDAV UI：`src/components/project/WebDAVConfig.tsx`
 - 文档：`docs/webdav-proxy.md`
 
+## 环境变量配置（关键）
+
+在 Cloudflare Dashboard 中配置 `ALLOWED_ORIGINS` 环境变量，无需修改代码即可调整 CORS 白名单。
+
+### 配置步骤
+
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
+2. 进入 **Pages** → 你的项目
+3. 点击 **Settings** → **Environment variables**
+4. 添加变量：
+   - **Name**: `ALLOWED_ORIGINS`
+   - **Value**: 逗号分隔的域名列表，例如：
+     ```
+     https://your-domain.pages.dev, https://custom-domain.com, http://localhost:5173
+     ```
+5. 选择环境：**Production** / **Preview**
+6. 点击 **Save** 并重新部署
+
+### 格式说明
+
+- 多个域名用 **英文逗号** 分隔
+- 支持 `http://` 和 `https://`
+- 支持端口，如 `http://localhost:5173`
+- 如果不设置此变量，将使用默认白名单
+
+### 默认白名单
+
+未设置环境变量时的默认值：
+
+```
+https://fast-read.pages.dev
+http://localhost:3000
+http://localhost:5173
+http://127.0.0.1:5173
+```
+
+---
+
 ## 代理实现要点
 
 ### 1) 允许的请求方法
