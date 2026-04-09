@@ -14,10 +14,22 @@ function getAllowedOrigins(env) {
   return [...new Set(env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean))]
 }
 
+// 提取域名的核心部分（去掉协议和尾部斜杠）
+function normalizeDomain(domain) {
+  return domain
+    .replace(/^https?:\/\//, '')
+    .replace(/\/$/, '')
+    .toLowerCase()
+}
+
 function corsHeaders(origin, requestOrigin, allowedOrigins) {
-  const allowOrigin = origin && allowedOrigins.includes(origin)
+  const normalizedOrigin = origin ? normalizeDomain(origin) : ''
+  const normalizedRequestOrigin = requestOrigin ? normalizeDomain(requestOrigin) : ''
+  const normalizedAllowed = allowedOrigins.map(normalizeDomain)
+
+  const allowOrigin = normalizedOrigin && normalizedAllowed.includes(normalizedOrigin)
     ? origin
-    : (allowedOrigins.includes(requestOrigin) ? requestOrigin : 'null')
+    : (normalizedAllowed.includes(normalizedRequestOrigin) ? requestOrigin : 'null')
 
   return {
     'Access-Control-Allow-Origin': allowOrigin,
@@ -28,10 +40,14 @@ function corsHeaders(origin, requestOrigin, allowedOrigins) {
 }
 
 function isAllowedOrigin(origin, requestOrigin, allowedOrigins) {
-  if (origin && allowedOrigins.includes(origin)) {
+  const normalizedAllowed = allowedOrigins.map(normalizeDomain)
+  const normalizedOrigin = origin ? normalizeDomain(origin) : ''
+  const normalizedRequestOrigin = requestOrigin ? normalizeDomain(requestOrigin) : ''
+
+  if (normalizedOrigin && normalizedAllowed.includes(normalizedOrigin)) {
     return true
   }
-  return allowedOrigins.includes(requestOrigin)
+  return normalizedAllowed.includes(normalizedRequestOrigin)
 }
 
 function isAllowedMethod(method) {
