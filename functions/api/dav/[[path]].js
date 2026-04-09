@@ -1,6 +1,6 @@
 import { isValidUpstreamBase } from '../../../src/services/webdavProxyUtils'
 
-// 从环境变量读取白名单，支持逗号分隔的字符串
+// 从环境变量读取白名单，支持逗号分隔的字符串（追加到默认值）
 function getAllowedOrigins(env) {
   const defaultOrigins = [
     'https://fast-read.pages.dev',
@@ -8,12 +8,13 @@ function getAllowedOrigins(env) {
     'http://localhost:5173',
     'http://127.0.0.1:5173'
   ]
-  
+
   if (!env?.ALLOWED_ORIGINS) {
     return defaultOrigins
   }
-  
-  return [...new Set(env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean))]
+
+  const customOrigins = env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  return [...new Set([...defaultOrigins, ...customOrigins])]
 }
 
 // 提取域名的核心部分（去掉协议和尾部斜杠）
