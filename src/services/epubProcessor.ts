@@ -78,6 +78,7 @@ export class EpubProcessor {
     chapterDetectionMode: ChapterDetectionMode = 'normal',
     epubTocDepth: number = 1
   ): Promise<ChapterData[]> {
+    console.log(`[EpubProcessor] extractChapters开始: mode=${chapterDetectionMode}, epubTocDepth=${epubTocDepth}`)
     try {
       const chapters: ChapterData[] = []
 
@@ -119,13 +120,16 @@ export class EpubProcessor {
           }
         }
 
+        console.log(`[EpubProcessor] 准备提取内容: ${chapterInfos.length}个章节`)
         if (chapterInfos.length > 0) {
           // 使用并发限制器并行提取章节内容，最多3个并发
           const limiter = new ConcurrencyLimiter(3)
 
           const chapterPromises = chapterInfos.map((chapterInfo, index) => {
             return limiter.execute(async () => {
+              console.log(`[EpubProcessor] 处理第${index + 1}章: ${chapterInfo.title}`)
               if (skipNonEssentialChapters && this.shouldSkipChapter(chapterInfo.title)) {
+                console.log(`[EpubProcessor] 第${index + 1}章被跳过(关键词)`)
                 return null
               }
 
@@ -137,6 +141,7 @@ export class EpubProcessor {
                 shouldIncludeSubitems ? chapterInfo.subitems : undefined
               )
 
+              console.log(`[EpubProcessor] 第${index + 1}章内容长度: ${chapterContent.trim().length}`)
               if (chapterContent.trim().length > 100) {
                 return {
                   id: `chapter-${index + 1}`,
@@ -147,6 +152,7 @@ export class EpubProcessor {
                   depth: chapterInfo.depth
                 } as ChapterData
               }
+              console.log(`[EpubProcessor] 第${index + 1}章被跳过(内容太短)`)
               return null
             })
           })
@@ -157,17 +163,20 @@ export class EpubProcessor {
               chapters.push(result)
             }
           })
+          console.log(`[EpubProcessor] 内容提取完成: ${chapters.length}/${chapterInfos.length}章通过`)
         }
       } catch (tocError) {
         console.warn('无法获取EPUB目录:', tocError)
       }
 
       let finalChapters = chapters
+      console.log(`[EpubProcessor] detectChapters前: ${chapters.length}章, useSmartDetection=${useSmartDetection}`)
       if (chapterDetectionMode === 'smart') {
         finalChapters = this.detectChapters(chapters, true, chapterNamingMode)
       } else {
         finalChapters = this.detectChapters(chapters, useSmartDetection, chapterNamingMode)
       }
+      console.log(`[EpubProcessor] extractChapters完成: 返回${finalChapters.length}章`)
 
       return finalChapters
     } catch (error) {
@@ -299,11 +308,19 @@ export class EpubProcessor {
       }
 
       if (!section) {
-        console.warn(`无法获取章节: ${href}`)
+        console.warn(`[EpubProcessor] Spine匹配失败: href=${href}, cleanHref=${cleanHrefForMatch}`)
         return ''
       }
 
-      const chapterHTML = await section.render(book.load.bind(book))
+      let chapterHTML: string
+      try {
+        chapterHTML = await section.render(book.load.bind(book))
+      } catch (renderErr) {
+        console.warn(`[EpubProcessor] section.render失败: href=${href}, error=${renderErr}`)
+        section.unload()
+        return ''
+      }
+
       let textContent = this.extractTextFromXHTML(chapterHTML, anchor)
       
       // 封面-内容自动检测：如果内容为空，检查是否有 xxx_0001.xhtml 内容文件
