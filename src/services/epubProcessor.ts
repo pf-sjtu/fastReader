@@ -203,9 +203,11 @@ export class EpubProcessor {
     maxDepth: number = 0,
     chapterNamingMode: ChapterNamingMode = 'auto',
     totalChapters: number = 99,
-    preserveAnchors: boolean = false
+    preserveAnchors: boolean = false,
+    startIndex: number = 0
   ): Promise<ChapterInfo[]> {
     const chapterInfos: ChapterInfo[] = []
+    let currentIndex = startIndex
 
     for (const item of toc) {
       try {
@@ -214,9 +216,9 @@ export class EpubProcessor {
 
           let chapterTitle: string
           if (chapterNamingMode === 'numbered') {
-            chapterTitle = `第${formatChapterNumber(chapterInfos.length + 1, totalChapters)}章`
+            chapterTitle = `第${formatChapterNumber(currentIndex + 1, totalChapters)}章`
           } else {
-            const rawTitle = item.label || `第${chapterInfos.length + 1}章`
+            const rawTitle = item.label || `第${currentIndex + 1}章`
             chapterTitle = cleanChapterTitle(rawTitle)
           }
 
@@ -228,13 +230,15 @@ export class EpubProcessor {
             depth: currentDepth
           }
           chapterInfos.push(chapterInfo)
+          currentIndex++
         }
 
         if (item.subitems && item.subitems.length > 0 && maxDepth > 0 && currentDepth < maxDepth - 1) {
           const subChapters = await this.extractChaptersFromToc(
-            book, item.subitems, currentDepth + 1, maxDepth, chapterNamingMode, totalChapters, preserveAnchors
+            book, item.subitems, currentDepth + 1, maxDepth, chapterNamingMode, totalChapters, preserveAnchors, currentIndex
           )
           chapterInfos.push(...subChapters)
+          currentIndex += subChapters.length
         }
       } catch (error) {
         console.warn(`跳过章节 "${item.label}":`, error)

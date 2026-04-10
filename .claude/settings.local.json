@@ -18,7 +18,10 @@
       "Bash(git -C \"C:\\\\Code\\\\JS\\\\fastReader\" diff -- \"src/services/webdavService.ts\")",
       "Bash(npx jq:*)",
       "Bash(npm exec eslint:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(pnpm add:*)",
+      "Bash(node:*)",
+      "Bash(pnpm test:*)"
     ]
   },
   "outputStyle": "default",
