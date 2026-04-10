@@ -391,34 +391,50 @@ export class EpubProcessor {
 
   private extractContentByAnchor(doc: Document, anchor: string, originalHtml: string): string {
     try {
-      const escapedAnchor = CSS.escape(anchor)
+      // 首先使用 getElementById，它对 XHTML 命名空间更可靠
+      let anchorElement: Element | null = doc.getElementById(anchor)
 
-      let anchorElement: Element | null = null
-      try {
-        anchorElement = doc.querySelector(`[id="${escapedAnchor}"]`)
-      } catch { /* ignore */ }
-
+      // 如果 getElementById 失败，尝试 querySelector 备选方案
       if (!anchorElement) {
         try {
-          anchorElement = doc.querySelector(`[name="${escapedAnchor}"]`)
+          anchorElement = doc.querySelector(`[id="${anchor}"]`)
         } catch { /* ignore */ }
       }
 
       if (!anchorElement) {
         try {
-          anchorElement = doc.querySelector(`[id*="${escapedAnchor}"]`)
+          const escapedAnchor = CSS.escape(anchor)
+          anchorElement = doc.querySelector(`[id="${escapedAnchor}"]`)
         } catch { /* ignore */ }
       }
 
       if (!anchorElement) {
-        const originalAnchorElement = doc.querySelector(`[id*="${anchor}"]`) ||
-                                     doc.querySelector(`[name="${anchor}"]`)
-        if (originalAnchorElement) {
-          return this.extractContentFromElement(originalAnchorElement)
+        try {
+          anchorElement = doc.querySelector(`[name="${anchor}"]`)
+        } catch { /* ignore */ }
+      }
+
+      if (!anchorElement) {
+        try {
+          anchorElement = doc.querySelector(`[id*="${anchor}"]`)
+        } catch { /* ignore */ }
+      }
+
+      // 如果找到了锚点元素，使用 DOM 方法提取内容
+      if (anchorElement) {
+        const content = this.extractContentFromElement(anchorElement)
+        if (content.length > 100) {
+          return content
         }
-        return ''
+        // DOM 提取内容太短，尝试正则提取
+        const improvedContent = extractContentByAnchorImproved(originalHtml, anchor)
+        if (improvedContent.length > content.length) {
+          return improvedContent
+        }
+        return content
       }
 
+      // 最后尝试正则提取
       return extractContentByAnchorImproved(originalHtml, anchor)
     } catch (error) {
       console.warn('锚点内容提取失败:', error)
