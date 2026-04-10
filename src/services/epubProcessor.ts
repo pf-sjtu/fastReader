@@ -427,16 +427,14 @@ export class EpubProcessor {
   }
 
   private extractContentFromElement(anchorElement: Element): string {
-    let content = ''
+    // 首先包含锚点元素本身的文本（通常是章节标题）
+    let content = anchorElement.textContent || ''
+
+    // 然后添加后续兄弟元素的内容
     let currentElement: Element | null = anchorElement.nextElementSibling
-
     while (currentElement) {
-      content += currentElement.textContent + '\n'
+      content += '\n' + currentElement.textContent
       currentElement = currentElement.nextElementSibling
-    }
-
-    if (!content.trim()) {
-      content = anchorElement.textContent || ''
     }
 
     return cleanChapterTitle(content.trim())
