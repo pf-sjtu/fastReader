@@ -4,10 +4,12 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { List, Brain, Loader2, BookOpen } from 'lucide-react'
+import { Slider } from '@/components/ui/slider'
+import { List, Brain, Loader2, BookOpen, Filter } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConfigStore } from '@/stores/configStore'
 import type { ChapterData } from '@/services/epubProcessor'
+import { useState, useMemo, useEffect } from 'react'
 
 interface ChapterSelectionSectionProps {
   extractedChapters: ChapterData[]
@@ -39,6 +41,74 @@ export function ChapterSelectionSection({
   const { t } = useTranslation()
   const { apiKey } = useConfigStore(state => state.aiConfig)
 
+  // 字符数筛选状态
+  const [enableCharFilter, setEnableCharFilter] = useState(false)
+  const [charThreshold, setCharThreshold] = useState<number[]>([0])
+
+  // 计算每个章节的字符数
+  const chapterCharCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    extractedChapters.forEach(chapter => {
+      counts[chapter.id] = chapter.content?.length || 0
+    })
+    return counts
+  }, [extractedChapters])
+
+  // 计算字符数范围
+  const { minChars, maxChars } = useMemo(() => {
+    const counts = Object.values(chapterCharCounts)
+    if (counts.length === 0) return { minChars: 0, maxChars: 0 }
+    return {
+      minChars: Math.min(...counts),
+      maxChars: Math.max(...counts)
+    }
+  }, [chapterCharCounts])
+
+  // 初始化滑块值
+  useEffect(() => {
+    if (minChars !== maxChars && charThreshold[0] < minChars) {
+      setCharThreshold([minChars])
+    }
+  }, [minChars, maxChars])
+
+  // 格式化字符数为 k 单位（一位小数）
+  const formatCharCount = (count: number): string => {
+    const k = count / 1000
+    return `${k.toFixed(1)}k`
+  }
+
+  // 处理全选（考虑字符数筛选）
+  const handleSelectAll = (checked: boolean) => {
+    if (!checked) {
+      onSelectAll(false)
+      return
+    }
+
+    if (enableCharFilter) {
+      // 只选择满足字符数条件的章节
+      const threshold = charThreshold[0]
+      extractedChapters.forEach(chapter => {
+        const count = chapterCharCounts[chapter.id] || 0
+        onChapterSelect(chapter.id, count >= threshold)
+      })
+    } else {
+      onSelectAll(true)
+    }
+  }
+
+  // 检查是否所有可见章节都被选中
+  const allVisibleSelected = useMemo(() => {
+    if (extractedChapters.length === 0) return false
+
+    const visibleChapters = enableCharFilter
+      ? extractedChapters.filter(ch => (chapterCharCounts[ch.id] || 0) >= charThreshold[0])
+      : extractedChapters
+
+    if (visibleChapters.length === 0) return false
+
+    return visibleChapters.every(ch => selectedChapters.has(ch.id))
+  }, [extractedChapters, selectedChapters, enableCharFilter, charThreshold, chapterCharCounts])
+
   const handleStartProcessing = () => {
     if (!apiKey) {
       toast.error(t('chapters.apiKeyRequired'), {
@@ -60,42 +130,95 @@ export function ChapterSelectionSection({
         <CardDescription>
           {bookData?.title} - {bookData?.author} | {t('chapters.totalChapters', { count: extractedChapters.length })}，{t('chapters.selectedChapters', { count: selectedChapters.size })}
         </CardDescription>
-        <div className="flex items-center gap-2 mt-2">
-          <Checkbox
-            id="select-all"
-            checked={selectedChapters.size === extractedChapters.length && extractedChapters.length > 0}
-            onCheckedChange={(checked) => onSelectAll(checked as boolean)}
-          />
-          <Label htmlFor="select-all" className="text-sm font-medium">
-            {t('chapters.selectAll')}
-          </Label>
+        <div className="flex flex-col gap-3 mt-2">
+          {/* 全选和字符数筛选 */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="select-all"
+                checked={allVisibleSelected}
+                onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
+              />
+              <Label htmlFor="select-all" className="text-sm font-medium">
+                {t('chapters.selectAll')}
+              </Label>
+            </div>
+
+            {maxChars > 0 && (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="char-filter"
+                  checked={enableCharFilter}
+                  onCheckedChange={(checked) => setEnableCharFilter(checked as boolean)}
+                />
+                <Label htmlFor="char-filter" className="text-sm font-medium flex items-center gap-1">
+                  <Filter className="h-3 w-3" />
+                  按照字符数筛选
+                </Label>
+              </div>
+            )}
+          </div>
+
+          {/* 字符数滑动条 */}
+          {enableCharFilter && maxChars > 0 && (
+            <div className="flex items-center gap-3 px-1">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {formatCharCount(minChars)}
+              </span>
+              <div className="flex-1 flex flex-col gap-1">
+                <Slider
+                  value={charThreshold}
+                  onValueChange={setCharThreshold}
+                  min={minChars}
+                  max={maxChars}
+                  step={Math.max(1, Math.floor((maxChars - minChars) / 100))}
+                  className="flex-1"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>最小字符数: <span className="font-medium text-primary">{formatCharCount(charThreshold[0])}</span></span>
+                  <span>{formatCharCount(maxChars)}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-          {extractedChapters.map((chapter) => (
-            <div key={chapter.id} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-              <Checkbox
-                id={`chapter-${chapter.id}`}
-                checked={selectedChapters.has(chapter.id)}
-                onCheckedChange={(checked) => onChapterSelect(chapter.id, checked as boolean)}
-              />
-              <Label
-                htmlFor={`chapter-${chapter.id}`}
-                className="text-sm truncate cursor-pointer flex-1"
-                title={chapter.title}
+          {extractedChapters.map((chapter) => {
+            const charCount = chapterCharCounts[chapter.id] || 0
+            const isVisible = !enableCharFilter || charCount >= charThreshold[0]
+
+            return (
+              <div
+                key={chapter.id}
+                className={`flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${!isVisible ? 'opacity-40' : ''}`}
               >
-                {chapter.title}
-              </Label>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onViewChapterContent(chapter)}
-              >
-                <BookOpen className="h-3 w-3" />
-              </Button>
-            </div>
-          ))}
+                <Checkbox
+                  id={`chapter-${chapter.id}`}
+                  checked={selectedChapters.has(chapter.id)}
+                  onCheckedChange={(checked) => onChapterSelect(chapter.id, checked as boolean)}
+                />
+                <Label
+                  htmlFor={`chapter-${chapter.id}`}
+                  className="text-sm truncate cursor-pointer flex-1"
+                  title={chapter.title}
+                >
+                  {chapter.title}
+                </Label>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {formatCharCount(charCount)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onViewChapterContent(chapter)}
+                >
+                  <BookOpen className="h-3 w-3" />
+                </Button>
+              </div>
+            )
+          })}
         </div>
 
         {/* 自定义提示词输入框 */}

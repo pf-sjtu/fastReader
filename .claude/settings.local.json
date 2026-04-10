@@ -21,10 +21,21 @@
       "Bash(git checkout:*)",
       "Bash(pnpm add:*)",
       "Bash(node:*)",
-      "Bash(pnpm test:*)"
+      "Bash(pnpm test:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(start /B python -m http.server 8765)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_close",
+      "Bash(pkill -f \"http-server\")",
+      "Bash(sed -n '425,450p' src/services/epubProcessor.ts)",
+      "Read(//tmp/**)",
+      "Bash(cat /tmp/part1.txt C:/tmp/part_middle.txt /tmp/part2.txt)",
+      "Bash(mv src/services/epubProcessor.ts.new src/services/epubProcessor.ts)"
     ]
   },
-  "outputStyle": "default",
+  "outputStyle": "Explanatory",
+  "prefersReducedMotion": true,
   "mcpServers": {
     "filesystem": {
       "command": "npx",
