@@ -286,9 +286,11 @@ export class EpubProcessor {
       let spineIndex = -1
       const spineItems = book.spine.spineItems
 
+      // 移除 anchor 后再匹配，因为 spineItem.href 不包含 anchor
+      const cleanHrefForMatch = href.split('#')[0]
       for (let i = 0; i < spineItems.length; i++) {
         const spineItem = spineItems[i]
-        const match = spineItem.href === href || spineItem.href.endsWith(href)
+        const match = spineItem.href === cleanHrefForMatch || spineItem.href.endsWith(cleanHrefForMatch)
         if (match) {
           spineIndex = i
           section = book.spine.get(i)
@@ -531,9 +533,11 @@ export class EpubProcessor {
       let section: Section | null = null
       const spineItems = book.spine.spineItems
 
+      // 移除 anchor 后再匹配
+      const cleanHrefForMatch = href.split('#')[0]
       for (let i = 0; i < spineItems.length; i++) {
         const spineItem = spineItems[i]
-        if (spineItem.href === href || spineItem.href.endsWith(href)) {
+        if (spineItem.href === cleanHrefForMatch || spineItem.href.endsWith(cleanHrefForMatch)) {
           section = book.spine.get(i)
           break
         }
