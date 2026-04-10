@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { List, Brain, Loader2, BookOpen, Filter } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConfigStore } from '@/stores/configStore'
@@ -41,8 +42,8 @@ export function ChapterSelectionSection({
   const { t } = useTranslation()
   const { apiKey } = useConfigStore(state => state.aiConfig)
 
-  // 字符数筛选状态
-  const [enableCharFilter, setEnableCharFilter] = useState(false)
+  // 全选模式：'all' = 全选所有, 'filter' = 按字符数筛选
+  const [selectAllMode, setSelectAllMode] = useState<'all' | 'filter'>('all')
   const [charThreshold, setCharThreshold] = useState<number[]>([0])
 
   // 计算每个章节的字符数
@@ -77,37 +78,57 @@ export function ChapterSelectionSection({
     return `${k.toFixed(1)}k`
   }
 
-  // 处理全选（考虑字符数筛选）
-  const handleSelectAll = (checked: boolean) => {
-    if (!checked) {
-      onSelectAll(false)
-      return
-    }
+  // 处理全选模式变更
+  const handleSelectAllModeChange = (mode: 'all' | 'filter') => {
+    setSelectAllMode(mode)
 
-    if (enableCharFilter) {
-      // 只选择满足字符数条件的章节
+    if (mode === 'all') {
+      // 全选所有章节
+      onSelectAll(true)
+    } else {
+      // 按字符数筛选后全选
       const threshold = charThreshold[0]
+      // 先取消全选
+      onSelectAll(false)
+      // 然后选择满足条件的章节
       extractedChapters.forEach(chapter => {
         const count = chapterCharCounts[chapter.id] || 0
-        onChapterSelect(chapter.id, count >= threshold)
+        if (count >= threshold) {
+          onChapterSelect(chapter.id, true)
+        }
       })
-    } else {
-      onSelectAll(true)
     }
   }
 
-  // 检查是否所有可见章节都被选中
-  const allVisibleSelected = useMemo(() => {
+  // 处理滑动条变更
+  const handleThresholdChange = (value: number[]) => {
+    setCharThreshold(value)
+    // 如果当前是筛选模式，更新选中状态
+    if (selectAllMode === 'filter') {
+      const threshold = value[0]
+      onSelectAll(false)
+      extractedChapters.forEach(chapter => {
+        const count = chapterCharCounts[chapter.id] || 0
+        if (count >= threshold) {
+          onChapterSelect(chapter.id, true)
+        }
+      })
+    }
+  }
+
+  // 检查是否所有章节都被选中（用于判断全选状态）
+  const allChaptersSelected = useMemo(() => {
     if (extractedChapters.length === 0) return false
+    return extractedChapters.every(ch => selectedChapters.has(ch.id))
+  }, [extractedChapters, selectedChapters])
 
-    const visibleChapters = enableCharFilter
-      ? extractedChapters.filter(ch => (chapterCharCounts[ch.id] || 0) >= charThreshold[0])
-      : extractedChapters
-
-    if (visibleChapters.length === 0) return false
-
-    return visibleChapters.every(ch => selectedChapters.has(ch.id))
-  }, [extractedChapters, selectedChapters, enableCharFilter, charThreshold, chapterCharCounts])
+  // 检查是否满足筛选条件的章节都被选中
+  const filteredChaptersSelected = useMemo(() => {
+    if (extractedChapters.length === 0) return false
+    const filteredChapters = extractedChapters.filter(ch => (chapterCharCounts[ch.id] || 0) >= charThreshold[0])
+    if (filteredChapters.length === 0) return false
+    return filteredChapters.every(ch => selectedChapters.has(ch.id))
+  }, [extractedChapters, selectedChapters, charThreshold, chapterCharCounts])
 
   const handleStartProcessing = () => {
     if (!apiKey) {
@@ -131,54 +152,66 @@ export function ChapterSelectionSection({
           {bookData?.title} - {bookData?.author} | {t('chapters.totalChapters', { count: extractedChapters.length })}，{t('chapters.selectedChapters', { count: selectedChapters.size })}
         </CardDescription>
         <div className="flex flex-col gap-3 mt-2">
-          {/* 全选和字符数筛选 */}
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="select-all"
-                checked={allVisibleSelected}
-                onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
-              />
-              <Label htmlFor="select-all" className="text-sm font-medium">
-                {t('chapters.selectAll')}
-              </Label>
-            </div>
+          {/* 全选模式单选组 */}
+          {maxChars > 0 && (
+            <RadioGroup
+              value={selectAllMode}
+              onValueChange={(value) => handleSelectAllModeChange(value as 'all' | 'filter')}
+              className="flex flex-col gap-2"
+            >
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="all" id="select-all" />
+                  <Label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                    全选所有章节
+                  </Label>
+                </div>
 
-            {maxChars > 0 && (
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="char-filter"
-                  checked={enableCharFilter}
-                  onCheckedChange={(checked) => setEnableCharFilter(checked as boolean)}
-                />
-                <Label htmlFor="char-filter" className="text-sm font-medium flex items-center gap-1">
-                  <Filter className="h-3 w-3" />
-                  按照字符数筛选
-                </Label>
-              </div>
-            )}
-          </div>
-
-          {/* 字符数滑动条 */}
-          {enableCharFilter && maxChars > 0 && (
-            <div className="flex items-center gap-3 px-1">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {formatCharCount(minChars)}
-              </span>
-              <div className="flex-1 flex flex-col gap-1">
-                <Slider
-                  value={charThreshold}
-                  onValueChange={setCharThreshold}
-                  min={minChars}
-                  max={maxChars}
-                  step={Math.max(1, Math.floor((maxChars - minChars) / 100))}
-                  className="flex-1"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>最小字符数: <span className="font-medium text-primary">{formatCharCount(charThreshold[0])}</span></span>
-                  <span>{formatCharCount(maxChars)}</span>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="filter" id="char-filter" />
+                  <Label htmlFor="char-filter" className="text-sm font-medium flex items-center gap-1 cursor-pointer">
+                    <Filter className="h-3 w-3" />
+                    按照字符数筛选
+                  </Label>
                 </div>
               </div>
+
+              {/* 字符数滑动条 */}
+              {selectAllMode === 'filter' && (
+                <div className="flex items-center gap-3 px-1 mt-1">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {formatCharCount(minChars)}
+                  </span>
+                  <div className="flex-1 flex flex-col gap-1">
+                    <Slider
+                      value={charThreshold}
+                      onValueChange={handleThresholdChange}
+                      min={minChars}
+                      max={maxChars}
+                      step={Math.max(1, Math.floor((maxChars - minChars) / 100))}
+                      className="flex-1"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>最小字符数: <span className="font-medium text-primary">{formatCharCount(charThreshold[0])}</span></span>
+                      <span>{formatCharCount(maxChars)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </RadioGroup>
+          )}
+
+          {/* 无字符数据时的简单全选 */}
+          {maxChars === 0 && (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="select-all-simple"
+                checked={allChaptersSelected}
+                onCheckedChange={(checked) => onSelectAll(checked as boolean)}
+              />
+              <Label htmlFor="select-all-simple" className="text-sm font-medium">
+                {t('chapters.selectAll')}
+              </Label>
             </div>
           )}
         </div>
@@ -187,12 +220,11 @@ export function ChapterSelectionSection({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
           {extractedChapters.map((chapter) => {
             const charCount = chapterCharCounts[chapter.id] || 0
-            const isVisible = !enableCharFilter || charCount >= charThreshold[0]
 
             return (
               <div
                 key={chapter.id}
-                className={`flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${!isVisible ? 'opacity-40' : ''}`}
+                className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 <Checkbox
                   id={`chapter-${chapter.id}`}
