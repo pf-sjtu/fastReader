@@ -321,7 +321,9 @@ export class EpubProcessor {
         return ''
       }
 
+      console.log(`[EpubProcessor] section.render成功: href=${href}, html长度=${chapterHTML.length}`)
       let textContent = this.extractTextFromXHTML(chapterHTML, anchor)
+      console.log(`[EpubProcessor] extractTextFromXHTML结果: length=${textContent.length}, anchor=${anchor || 'none'}`)
       
       // 封面-内容自动检测：如果内容为空，检查是否有 xxx_0001.xhtml 内容文件
       if (textContent.length < 100 && spineIndex >= 0 && spineIndex < spineItems.length - 1) {
