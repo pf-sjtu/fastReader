@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { List, Brain, Loader2, BookOpen, Filter } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { List, Brain, Loader2, BookOpen, Filter, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConfigStore } from '@/stores/configStore'
 import type { ChapterData } from '@/services/epubProcessor'
@@ -42,9 +43,11 @@ export function ChapterSelectionSection({
   const { t } = useTranslation()
   const { apiKey } = useConfigStore(state => state.aiConfig)
 
-  // 全选模式：'all' = 全选所有, 'filter' = 按字符数筛选
-  const [selectAllMode, setSelectAllMode] = useState<'all' | 'filter'>('all')
+  // 全选模式：'all' = 全选所有, 'filter' = 按字符数筛选, 'range' = 定义首尾章节
+  const [selectAllMode, setSelectAllMode] = useState<'all' | 'filter' | 'range'>('all')
   const [charThreshold, setCharThreshold] = useState<number[]>([0])
+  const [startChapterId, setStartChapterId] = useState<string>('')
+  const [endChapterId, setEndChapterId] = useState<string>('')
 
   // 计算每个章节的字符数
   const chapterCharCounts = useMemo(() => {
@@ -79,13 +82,13 @@ export function ChapterSelectionSection({
   }
 
   // 处理全选模式变更
-  const handleSelectAllModeChange = (mode: 'all' | 'filter') => {
+  const handleSelectAllModeChange = (mode: 'all' | 'filter' | 'range') => {
     setSelectAllMode(mode)
 
     if (mode === 'all') {
       // 全选所有章节
       onSelectAll(true)
-    } else {
+    } else if (mode === 'filter') {
       // 按字符数筛选后全选
       const threshold = charThreshold[0]
       // 先取消全选
@@ -97,6 +100,45 @@ export function ChapterSelectionSection({
           onChapterSelect(chapter.id, true)
         }
       })
+    } else if (mode === 'range') {
+      // 首尾章节模式：根据当前选择的首尾章节更新选中状态
+      updateRangeSelection(startChapterId, endChapterId)
+    }
+  }
+
+  // 根据首尾章节ID更新选中状态
+  const updateRangeSelection = (startId: string, endId: string) => {
+    if (!startId || !endId) return
+
+    const startIndex = extractedChapters.findIndex(ch => ch.id === startId)
+    const endIndex = extractedChapters.findIndex(ch => ch.id === endId)
+
+    if (startIndex === -1 || endIndex === -1) return
+
+    const actualStart = Math.min(startIndex, endIndex)
+    const actualEnd = Math.max(startIndex, endIndex)
+
+    // 先取消全选
+    onSelectAll(false)
+    // 然后选择范围内的章节
+    for (let i = actualStart; i <= actualEnd; i++) {
+      onChapterSelect(extractedChapters[i].id, true)
+    }
+  }
+
+  // 处理起始章节变更
+  const handleStartChapterChange = (value: string) => {
+    setStartChapterId(value)
+    if (selectAllMode === 'range') {
+      updateRangeSelection(value, endChapterId)
+    }
+  }
+
+  // 处理结束章节变更
+  const handleEndChapterChange = (value: string) => {
+    setEndChapterId(value)
+    if (selectAllMode === 'range') {
+      updateRangeSelection(startChapterId, value)
     }
   }
 
@@ -156,7 +198,7 @@ export function ChapterSelectionSection({
           {maxChars > 0 && (
             <RadioGroup
               value={selectAllMode}
-              onValueChange={(value) => handleSelectAllModeChange(value as 'all' | 'filter')}
+              onValueChange={(value) => handleSelectAllModeChange(value as 'all' | 'filter' | 'range')}
               className="flex flex-col gap-2"
             >
               <div className="flex items-center gap-4 flex-wrap">
@@ -172,6 +214,13 @@ export function ChapterSelectionSection({
                   <Label htmlFor="char-filter" className="text-sm font-medium flex items-center gap-1 cursor-pointer">
                     <Filter className="h-3 w-3" />
                     按照字符数筛选
+                  </Label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="range" id="range-select" />
+                  <Label htmlFor="range-select" className="text-sm font-medium cursor-pointer">
+                    定义首尾章节
                   </Label>
                 </div>
               </div>
@@ -195,6 +244,45 @@ export function ChapterSelectionSection({
                       <span>最小字符数: <span className="font-medium text-primary">{formatCharCount(charThreshold[0])}</span></span>
                       <span>{formatCharCount(maxChars)}</span>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 首尾章节选择 */}
+              {selectAllMode === 'range' && (
+                <div className="flex items-center gap-3 px-1 mt-1">
+                  <div className="flex-1">
+                    <Label className="text-xs text-muted-foreground mb-1 block">起始章节</Label>
+                    <Select value={startChapterId} onValueChange={handleStartChapterChange}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="选择起始章节" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {extractedChapters.map((chapter) => (
+                          <SelectItem key={`start-${chapter.id}`} value={chapter.id}>
+                            {chapter.title} ({formatCharCount(chapterCharCounts[chapter.id] || 0)})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <ArrowRight className="h-4 w-4 text-muted-foreground mt-5" />
+
+                  <div className="flex-1">
+                    <Label className="text-xs text-muted-foreground mb-1 block">结束章节</Label>
+                    <Select value={endChapterId} onValueChange={handleEndChapterChange}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="选择结束章节" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {extractedChapters.map((chapter) => (
+                          <SelectItem key={`end-${chapter.id}`} value={chapter.id}>
+                            {chapter.title} ({formatCharCount(chapterCharCounts[chapter.id] || 0)})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               )}
