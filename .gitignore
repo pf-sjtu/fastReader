@@ -60,6 +60,7 @@ __pycache__/
 *.tmp
 *.temp
 .cache/
+.playwright-mcp/
 
 # Runtime data
 pids
