@@ -1,4 +1,5 @@
 import { Loader2, CheckCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { ProcessingMetadata } from '@/services/cloudCacheService'
 
@@ -21,32 +22,32 @@ export function CloudCacheSection({
   webdavInitialized,
   onLoadFromCloudCache
 }: CloudCacheSectionProps) {
-  // 检查中状态
+  const { t } = useTranslation()
+
   if (isCheckingCloudCache) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        正在检查云端缓存...
+        {t('cloudCache.checking')}
       </div>
     )
   }
 
-  // 有缓存元数据时显示缓存信息
   if (cloudCacheMetadata && !isCheckingCloudCache) {
     return (
       <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
         <div className="flex items-center gap-2 mb-2">
           <CheckCircle className="h-4 w-4 text-blue-600" />
           <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-            发现云端缓存
+            {t('cloudCache.found')}
           </span>
         </div>
         <div className="text-xs text-muted-foreground space-y-1">
-          <p>处理时间: {new Date(cloudCacheMetadata.processedAt).toLocaleString()}</p>
-          <p>处理模型: {cloudCacheMetadata.model}</p>
-          <p>章节数: {cloudCacheMetadata.chapterCount}</p>
+          <p>{t('cloudCache.processedAt')}: {new Date(cloudCacheMetadata.processedAt).toLocaleString()}</p>
+          <p>{t('cloudCache.model')}: {cloudCacheMetadata.model}</p>
+          <p>{t('cloudCache.chapterCount')}: {cloudCacheMetadata.chapterCount}</p>
           {cloudCacheMetadata.costUSD && cloudCacheMetadata.costUSD > 0 && (
-            <p>费用: ${cloudCacheMetadata.costUSD.toFixed(4)} / ¥{cloudCacheMetadata.costRMB?.toFixed(2)}</p>
+            <p>{t('cloudCache.cost')}: ${cloudCacheMetadata.costUSD.toFixed(4)} / ¥{cloudCacheMetadata.costRMB?.toFixed(2)}</p>
           )}
         </div>
         <Button
@@ -56,17 +57,16 @@ export function CloudCacheSection({
           className="mt-2 w-full"
           onClick={onLoadFromCloudCache}
         >
-          使用云端缓存
+          {t('cloudCache.useCache')}
         </Button>
       </div>
     )
   }
 
-  // 无缓存且WebDAV已启用时显示提示
   if (cloudCacheContent === null && !isCheckingCloudCache && file && webdavEnabled && webdavInitialized) {
     return (
       <div className="text-xs text-muted-foreground">
-        云端暂无缓存，将进行新处理
+        {t('cloudCache.noCache')}
       </div>
     )
   }

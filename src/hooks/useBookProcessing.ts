@@ -10,6 +10,7 @@ import { notificationService } from '@/services/notificationService'
 import { webdavService } from '@/services/webdavService'
 import type { MindElixirData } from 'mind-elixir'
 import { useConfigStore } from '@/stores/configStore'
+import { useProcessingHistoryStore } from '@/stores/processingHistory'
 import { toast } from 'sonner'
 
 const epubProcessor = new EpubProcessor()
@@ -217,11 +218,11 @@ export function useBookProcessing() {
   const loadFromCloudCache = useCallback(() => {
     if (!cloudCacheContent) return
 
-    toast.info('已加载云端缓存，可直接查看处理结果')
-    toast.info('发现云端缓存，可跳过处理直接查看结果', {
-      description: '如需重新处理，请点击"提取章节"按钮'
+    toast.info(t('cloudCache.loaded'))
+    toast.info(t('cloudCache.skipProcessing'), {
+      description: t('cloudCache.reprocessHint')
     })
-  }, [cloudCacheContent])
+  }, [cloudCacheContent, t])
 
   // 章节选择处理
   const handleChapterSelect = useCallback((chapterId: string, checked: boolean) => {
@@ -487,12 +488,25 @@ export function useBookProcessing() {
       setProgress(100)
       setCurrentStep(t('progress.completed'))
 
+      // 记录处理历史
+      try {
+        useProcessingHistoryStore.getState().addRecord({
+          bookTitle: bookData?.title || file.name.replace(/\.[^/.]+$/, ''),
+          fileName: file.name,
+          processingMode,
+          model: aiConfig.model,
+          chapterCount: selectedChapterData.length
+        })
+      } catch (e) {
+        console.error('记录处理历史失败:', e)
+      }
+
       toast.success(t('progress.processingCompleted'))
 
       // 发送任务完成通知
       if (processingOptions.enableNotification) {
         await notificationService.sendTaskCompleteNotification(
-          t('progress.bookProcessing') || '书籍处理',
+          t('progress.bookProcessing'),
           bookData?.title
         )
       }
@@ -649,18 +663,18 @@ export function useBookProcessing() {
   const handleWebDAVFileSelect = useCallback((selectedFile: File) => {
     setFile(selectedFile)
     resetState()
-    toast.success(`已选择文件: ${selectedFile.name}`)
-  }, [resetState])
+    toast.success(t('webdav.fileSelected', { name: selectedFile.name }))
+  }, [resetState, t])
 
   // 打开WebDAV浏览器
   const openWebDAVBrowser = useCallback(() => {
     if (!webdavConfig.enabled) {
-      toast.error('请先在设置中启用并配置WebDAV')
+      toast.error(t('webdav.enableFirst'))
       return
     }
 
     if (!webdavService.isInitialized()) {
-      toast.error('WebDAV服务未初始化，请先测试连接')
+      toast.error(t('webdav.notInitialized'))
       return
     }
 
@@ -719,6 +733,65 @@ export function useBookProcessing() {
     }
   }, [extractedChapters])
 
+  // 从历史记录加载云端缓存
+  const loadFromHistoryRecord = useCallback(async (fileName: string): Promise<boolean> => {
+    try {
+      const config = useConfigStore.getState().webdavConfig
+      if (!config.enabled) {
+        toast.error(t('history.webdavRequired'))
+        return false
+      }
+
+      // 确保 WebDAV 已初始化
+      if (!webdavService.isInitialized()) {
+        const initResult = await webdavService.initialize(config)
+        if (!initResult.success) {
+          toast.error(t('history.webdavInitFailed'))
+          return false
+        }
+      }
+
+      // 读取云端缓存
+      const result = await cloudCacheService.readCache(fileName)
+      if (!result.success || !result.content) {
+        toast.error(t('history.cacheNotFound'))
+        return false
+      }
+
+      // 解析缓存内容
+      const parsed = cloudCacheService.parseUnifiedContent(result.content)
+      if (!parsed.chapters.length && !parsed.overallSummary) {
+        toast.error(t('history.cacheParseError'))
+        return false
+      }
+
+      // 转换为 BookSummary 格式
+      const summary: BookSummary = {
+        title: parsed.title || fileName.replace(/\.[^/.]+$/, ''),
+        author: parsed.author,
+        chapters: parsed.chapters.map((ch, index) => ({
+          id: `history-${index}`,
+          title: ch.title,
+          content: '',
+          summary: ch.summary,
+          processed: true
+        })),
+        connections: parsed.connections,
+        overallSummary: parsed.overallSummary
+      }
+
+      // 重置状态并设置结果
+      resetState()
+      setBookSummary(summary)
+
+      return true
+    } catch (error) {
+      console.error('从历史加载失败:', error)
+      toast.error(t('history.loadError'))
+      return false
+    }
+  }, [t, resetState])
+
   return {
     // 状态
     file,
@@ -769,6 +842,7 @@ export function useBookProcessing() {
     openWebDAVBrowser,
     handleChapterSummaryNavigation,
     handleChapterNavigation,
+    loadFromHistoryRecord,
 
     // 设置器
     setCustomPrompt,

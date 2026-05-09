@@ -7,6 +7,7 @@ export * from './processing'
 export * from './webdav'
 export * from './prompts'
 export * from './core'
+export * from './processingHistory'
 
 // 兼容壳store（保持向后兼容）
 export {

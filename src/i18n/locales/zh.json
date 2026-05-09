@@ -64,7 +64,8 @@
     "chaptersExtracted": "章节提取完成！共提取到 {{count}} 个章节",
     "successfullyExtracted": "成功提取 {{count}} 个章节",
     "processingError": "处理过程中发生错误",
-    "extractionError": "章节提取过程中发生错误"
+    "extractionError": "章节提取过程中发生错误",
+    "bookProcessing": "书籍处理"
   },
   "results": {
     "title": "处理结果",
@@ -339,5 +340,45 @@
     "readyToProcess": "准备就绪，可以开始处理",
     "viewingResults": "查看处理结果",
     "completed": "已完成"
+  },
+  "history": {
+    "dialogTitle": "处理历史",
+    "viewMore": "更多",
+    "empty": "暂无处理历史",
+    "clearAll": "清除全部",
+    "chapters": "章",
+    "modeSummary": "文字总结",
+    "modeMindmap": "章节思维导图",
+    "modeCombinedMindmap": "整书思维导图",
+    "webdavRequired": "请先启用 WebDAV 云端同步",
+    "webdavInitFailed": "WebDAV 连接失败，请检查配置",
+    "cacheNotFound": "云端缓存未找到，请重新处理",
+    "cacheParseError": "缓存内容解析失败",
+    "loadError": "加载历史记录失败"
+  },
+  "cloudCache": {
+    "checking": "正在检查云端缓存...",
+    "found": "发现云端缓存",
+    "processedAt": "处理时间",
+    "model": "处理模型",
+    "chapterCount": "章节数",
+    "cost": "费用",
+    "useCache": "使用云端缓存",
+    "noCache": "云端暂无缓存，将进行新处理",
+    "loaded": "已加载云端缓存，可直接查看处理结果",
+    "skipProcessing": "发现云端缓存，可跳过处理直接查看结果",
+    "reprocessHint": "如需重新处理，请点击「提取章节」按钮"
+  },
+  "webdav": {
+    "fileSelected": "已选择文件: {{name}}",
+    "enableFirst": "请先在设置中启用并配置WebDAV",
+    "notInitialized": "WebDAV服务未初始化，请先测试连接",
+    "autoConnected": "WebDAV 自动连接成功",
+    "notEnabled": "请先启用 WebDAV",
+    "noContent": "暂无内容可上传",
+    "noSearchResults": "未找到匹配的文件",
+    "tryDifferentSearch": "请尝试其他搜索关键词",
+    "emptyDirectory": "目录为空",
+    "emptyDirectoryDesc": "当前目录下没有文件或文件夹"
   }
 }

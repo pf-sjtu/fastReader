@@ -13,6 +13,7 @@ import { normalizeMarkdownTypography } from '@/lib/markdown'
 import { scrollToTop } from '@/utils/index'
 import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
+import type { ProcessingHistoryRecord } from '@/stores/processingHistory'
 
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
@@ -87,6 +88,7 @@ function App() {
     openWebDAVBrowser,
     handleChapterSummaryNavigation,
     handleChapterNavigation,
+    loadFromHistoryRecord,
 
     // 设置器
     setCustomPrompt,
@@ -213,6 +215,15 @@ function App() {
     await processBook()
   }, [processBook])
 
+  // 从历史记录加载云端缓存
+  const handleLoadFromHistory = useCallback(async (record: ProcessingHistoryRecord): Promise<boolean> => {
+    const success = await loadFromHistoryRecord(record.fileName)
+    if (success) {
+      setCurrentStepIndex(2)
+    }
+    return success
+  }, [loadFromHistoryRecord])
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-slate-900 dark:via-blue-950 dark:to-slate-900 p-4 flex justify-center gap-4 h-screen overflow-auto scroll-container">
       <Toaster />
@@ -245,6 +256,7 @@ function App() {
           currentModel={aiConfig.model}
           tokenUsage={tokenUsage}
           onToggleView={() => setCurrentStepIndex(currentStepIndex === 1 ? 2 : 1)}
+          onLoadFromHistory={handleLoadFromHistory}
         />
 
         {/* 批量处理队列面板 */}

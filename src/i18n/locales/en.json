@@ -64,7 +64,8 @@
     "chaptersExtracted": "Chapter extraction completed! {{count}} chapters extracted",
     "successfullyExtracted": "Successfully extracted {{count}} chapters",
     "processingError": "An error occurred during processing",
-    "extractionError": "An error occurred during chapter extraction"
+    "extractionError": "An error occurred during chapter extraction",
+    "bookProcessing": "Book Processing"
   },
   "results": {
     "summaryTitle": "Analysis Results for \"{{title}}\"",
@@ -350,5 +351,45 @@
     "readyToProcess": "Ready to process",
     "viewingResults": "Viewing results",
     "completed": "Completed"
+  },
+  "history": {
+    "dialogTitle": "Processing History",
+    "viewMore": "More",
+    "empty": "No processing history",
+    "clearAll": "Clear All",
+    "chapters": "chapters",
+    "modeSummary": "Summary",
+    "modeMindmap": "Chapter Mindmap",
+    "modeCombinedMindmap": "Combined Mindmap",
+    "webdavRequired": "Please enable WebDAV cloud sync first",
+    "webdavInitFailed": "WebDAV connection failed, please check config",
+    "cacheNotFound": "Cloud cache not found, please reprocess",
+    "cacheParseError": "Failed to parse cache content",
+    "loadError": "Failed to load history record"
+  },
+  "cloudCache": {
+    "checking": "Checking cloud cache...",
+    "found": "Cloud cache found",
+    "processedAt": "Processed at",
+    "model": "Model",
+    "chapterCount": "Chapters",
+    "cost": "Cost",
+    "useCache": "Use cloud cache",
+    "noCache": "No cloud cache found, will process from scratch",
+    "loaded": "Cloud cache loaded, ready to view results",
+    "skipProcessing": "Cloud cache found, you can skip processing and view results directly",
+    "reprocessHint": "To reprocess, click the \"Extract Chapters\" button"
+  },
+  "webdav": {
+    "fileSelected": "File selected: {{name}}",
+    "enableFirst": "Please enable and configure WebDAV in settings first",
+    "notInitialized": "WebDAV service not initialized, please test connection first",
+    "autoConnected": "WebDAV auto-connected successfully",
+    "notEnabled": "Please enable WebDAV first",
+    "noContent": "No content to upload",
+    "noSearchResults": "No matching files found",
+    "tryDifferentSearch": "Try a different search term",
+    "emptyDirectory": "Empty directory",
+    "emptyDirectoryDesc": "No files or folders in the current directory"
   }
 }
