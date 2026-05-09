@@ -35,10 +35,10 @@ export function CloudCacheSection({
 
   if (cloudCacheMetadata && !isCheckingCloudCache) {
     return (
-      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+      <div className="p-3 bg-muted border rounded-lg">
         <div className="flex items-center gap-2 mb-2">
-          <CheckCircle className="h-4 w-4 text-blue-600" />
-          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+          <CheckCircle className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">
             {t('cloudCache.found')}
           </span>
         </div>

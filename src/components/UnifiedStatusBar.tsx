@@ -160,7 +160,7 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-auto py-0.5 px-2 text-xs text-blue-500 hover:text-blue-600"
+                        className="h-auto py-0.5 px-2 text-xs text-muted-foreground hover:text-foreground"
                         onClick={() => setHistoryDialogOpen(true)}
                       >
                         {t('history.viewMore')}

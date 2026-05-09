@@ -452,7 +452,7 @@ function AIProviderListItem({ index, provider, isActive, onActivate, onEdit, onD
 
   const getProviderColor = (provider: string) => {
     switch (provider) {
-      case 'gemini': return 'bg-blue-100 text-blue-800'
+      case 'gemini': return 'bg-secondary text-secondary-foreground'
       case 'openai': return 'bg-green-100 text-green-800'
       case 'ollama': return 'bg-purple-100 text-purple-800'
       case '302.ai': return 'bg-orange-100 text-orange-800'
@@ -485,7 +485,7 @@ function AIProviderListItem({ index, provider, isActive, onActivate, onEdit, onD
             <span className="truncate">模型: {provider.model}</span>
             <span className="flex-shrink-0">温度: {provider.temperature}</span>
             {provider.proxyEnabled && (
-              <span className="flex-shrink-0 text-blue-600">代理</span>
+              <span className="flex-shrink-0 text-primary">代理</span>
             )}
           </div>
         </div>
@@ -575,11 +575,11 @@ export function AIProviderConfig() {
   return (
     <div className="space-y-4">
       {/* 提示说明 */}
-      <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+      <Card className="bg-muted border">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
-            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-            <div className="text-sm text-blue-800 dark:text-blue-200">
+            <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+            <div className="text-sm text-foreground">
               <p className="font-medium mb-1">AI服务商配置说明</p>
               <p className="text-xs">
                 在此页面可以管理多个AI服务商配置，包括Google Gemini、OpenAI GPT、Ollama本地服务等。

@@ -149,7 +149,7 @@ export function WebDAVConfig() {
       case 'connected':
         return <CheckCircle className="h-4 w-4 text-green-500" />
       case 'connecting':
-        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+        return <Loader2 className="h-4 w-4 text-primary animate-spin" />
       case 'error':
         return <XCircle className="h-4 w-4 text-red-500" />
       default:
@@ -401,7 +401,7 @@ export function WebDAVConfig() {
                     href="https://help.jianguoyun.com/?p=1464" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
+                    className="text-primary hover:underline"
                   >
                     查看坚果云WebDAV设置教程
                   </a>

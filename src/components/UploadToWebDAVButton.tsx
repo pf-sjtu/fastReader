@@ -259,10 +259,10 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
           variant="outline" 
           size="sm" 
           onClick={() => uploadToWebDAV()} 
-          className={`${className} border-blue-200 hover:border-blue-300 hover:bg-blue-50`}
+          className={`${className} border hover:border-foreground/20 hover:bg-accent`}
           title={t('upload.clickToOverwrite', { defaultValue: '点击覆盖上传' })}
         >
-          <Cloud className="h-4 w-4 mr-1 text-blue-600" />
+          <Cloud className="h-4 w-4 mr-1 text-primary" />
           {t('upload.exists', { defaultValue: '云端已存在' })}
         </Button>
       )

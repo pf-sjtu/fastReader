@@ -52,7 +52,7 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
           {/* 进度条 */}
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1">
             <div 
-              className="bg-blue-600 dark:bg-blue-400 h-1 rounded-full transition-all duration-300"
+              className="bg-primary h-1 rounded-full transition-all duration-300"
               style={{ width: `${getProgressPercentage()}%` }}
             />
           </div>
@@ -72,7 +72,7 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
                     disabled={!chapter.processed}
                     className={`w-10 h-10 p-0 text-xs font-medium ${
                       isViewing 
-                        ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                         : status === 'completed'
                         ? 'hover:bg-gray-100 dark:hover:bg-gray-700'
                         : 'cursor-default'
@@ -85,7 +85,7 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
                         </div>
                       )}
                       {status === 'processing' && (
-                        <Loader2 className="h-3 w-3 text-blue-600 dark:text-blue-400 animate-spin" />
+                        <Loader2 className="h-3 w-3 text-primary animate-spin" />
                       )}
                       {status === 'pending' && (
                         <span className="text-sm text-gray-400 dark:text-gray-500">{index + 1}</span>

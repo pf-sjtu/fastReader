@@ -129,7 +129,7 @@ export function WebDAVFileBrowser({
   // 文件类型图标映射
   const getFileIcon = (file: WebDAVFileInfo) => {
     if (file.type === 'directory') {
-      return <FolderOpen className="h-4 w-4 text-blue-500" />
+      return <FolderOpen className="h-4 w-4 text-primary" />
     }
     
     const extension = file.basename.toLowerCase().split('.').pop()
@@ -561,7 +561,7 @@ export function WebDAVFileBrowser({
                         <div
                           key={index}
                           className={`flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer border-b border-gray-100 dark:border-gray-800 ${
-                            selectedFile?.filename === file.filename ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                            selectedFile?.filename === file.filename ? 'bg-accent' : ''
                           }`}
                           onClick={() => file.type === 'directory' ? handleDirectoryClick(file) : handleFileClick(file)}
                         >

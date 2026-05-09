@@ -60,7 +60,7 @@ export const TimelineNavigation = memo(function TimelineNavigation({
           {/* 进度条 */}
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
             <div 
-              className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full transition-all duration-300"
+              className="bg-primary h-2 rounded-full transition-all duration-300"
               style={{ width: `${getProgressPercentage()}%` }}
             />
           </div>
@@ -83,7 +83,7 @@ export const TimelineNavigation = memo(function TimelineNavigation({
                       <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                     )}
                     {status === 'processing' && (
-                      <Loader2 className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />
+                      <Loader2 className="h-4 w-4 text-primary animate-spin" />
                     )}
                     {status === 'pending' && (
                       <Circle className="h-4 w-4 text-gray-400 dark:text-gray-500" />
@@ -109,7 +109,7 @@ export const TimelineNavigation = memo(function TimelineNavigation({
                         </div>
                       )}
                       {status === 'processing' && (
-                        <div className="text-blue-600 dark:text-blue-400 text-xs">
+                        <div className="text-primary text-xs">
                           处理中...
                         </div>
                       )}

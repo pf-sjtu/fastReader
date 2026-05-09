@@ -239,7 +239,7 @@ export function BatchQueuePanel() {
       case 'pending':
         return <Badge variant="secondary" className="text-xs">等待</Badge>
       case 'processing':
-        return <Badge variant="default" className="bg-blue-500 text-xs">处理中</Badge>
+        return <Badge variant="default" className="bg-primary text-xs">处理中</Badge>
       case 'completed':
         return <Badge variant="default" className="bg-green-500 text-xs">完成</Badge>
       case 'failed':
@@ -293,9 +293,9 @@ export function BatchQueuePanel() {
 
           {/* Current item */}
           {currentItem && (
-            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md">
+            <div className="p-2 bg-muted rounded-md">
               <div className="flex items-center gap-2 text-sm">
-                <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                <Loader2 className="h-3 w-3 animate-spin text-primary" />
                 <span className="font-medium truncate flex-1">{currentItem.fileName}</span>
                 {getStatusBadge(currentItem.status)}
               </div>
@@ -313,7 +313,7 @@ export function BatchQueuePanel() {
                   key={item.id}
                   className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${
                     item.status === 'processing'
-                      ? 'bg-blue-50 dark:bg-blue-900/20'
+                      ? 'bg-accent'
                       : 'hover:bg-muted/50'
                   }`}
                 >

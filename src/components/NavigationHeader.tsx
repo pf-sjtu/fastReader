@@ -88,7 +88,7 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
         <div className="w-full">
           <div className="relative h-2 bg-muted rounded-full overflow-hidden">
             <div 
-              className="absolute top-0 left-0 h-full bg-blue-500 transition-all duration-300 ease-out"
+              className="absolute top-0 left-0 h-full bg-primary transition-all duration-300 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>

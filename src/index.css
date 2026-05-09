@@ -80,92 +80,77 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-  
+  /* Demo A: 暖灰褐 (Warm Taupe) */
+  --background: oklch(0.9576 0.0086 67.7);
+  --foreground: oklch(0.2801 0.0080 59.3);
+  --card: oklch(1.0000 0.0000 89.9);
+  --card-foreground: oklch(0.2801 0.0080 59.3);
+  --popover: oklch(1.0000 0.0000 89.9);
+  --popover-foreground: oklch(0.2801 0.0080 59.3);
+  --primary: oklch(0.3438 0.0124 72.4);
+  --primary-foreground: oklch(0.9576 0.0086 67.7);
+  --secondary: oklch(0.9272 0.0097 72.7);
+  --secondary-foreground: oklch(0.3438 0.0124 72.4);
+  --muted: oklch(0.9156 0.0115 71.9);
+  --muted-foreground: oklch(0.6031 0.0211 67.4);
+  --accent: oklch(0.8491 0.0152 70.9);
+  --accent-foreground: oklch(0.2801 0.0080 59.3);
+  --destructive: oklch(0.5086 0.1300 26.3);
+  --border: oklch(0.8491 0.0152 70.9);
+  --input: oklch(0.8491 0.0152 70.9);
+  --ring: oklch(0.6031 0.0211 67.4);
+  --chart-1: oklch(0.65 0.12 65);
+  --chart-2: oklch(0.55 0.10 30);
+  --chart-3: oklch(0.50 0.07 85);
+  --chart-4: oklch(0.75 0.10 75);
+  --chart-5: oklch(0.60 0.08 45);
+  --sidebar: oklch(0.9332 0.0097 72.7);
+  --sidebar-foreground: oklch(0.2801 0.0080 59.3);
+  --sidebar-primary: oklch(0.3438 0.0124 72.4);
+  --sidebar-primary-foreground: oklch(0.9576 0.0086 67.7);
+  --sidebar-accent: oklch(0.9156 0.0115 71.9);
+  --sidebar-accent-foreground: oklch(0.3438 0.0124 72.4);
+  --sidebar-border: oklch(0.8491 0.0152 70.9);
+  --sidebar-ring: oklch(0.6031 0.0211 67.4);
+
   /* 字体大小控制变量 */
   --font-scale: 1;
   --base-font-size: 16px;
 }
 
 .dark {
-  /* 深色模式背景 - 使用深蓝灰色调 */
-  --background: oklch(0.11 0.01 240);
-  --foreground: oklch(0.95 0.01 240);
-  
-  /* 卡片背景 - 稍微亮一点的深蓝色 */
-  --card: oklch(0.16 0.02 240);
-  --card-foreground: oklch(0.95 0.01 240);
-  --popover: oklch(0.16 0.02 240);
-  --popover-foreground: oklch(0.95 0.01 240);
-  
-  /* 主色调 - 使用更亮的蓝色 */
-  --primary: oklch(0.65 0.15 240);
-  --primary-foreground: oklch(0.11 0.01 240);
-  
-  /* 次要色调 - 温和的蓝紫色 */
-  --secondary: oklch(0.21 0.03 250);
-  --secondary-foreground: oklch(0.95 0.01 240);
-  
-  /* 静音色调 - 中性灰蓝 */
-  --muted: oklch(0.19 0.02 230);
-  --muted-foreground: oklch(0.65 0.02 230);
-  
-  /* 强调色 - 青蓝色 */
-  --accent: oklch(0.25 0.05 200);
-  --accent-foreground: oklch(0.95 0.01 240);
-  
-  /* 危险色 - 深红色 */
-  --destructive: oklch(0.65 0.20 0);
-  --border: oklch(0.25 0.03 240);
-  --input: oklch(0.21 0.03 250);
-  --ring: oklch(0.65 0.15 240);
-  
-  /* 图表颜色 - 更鲜艳的色调 */
-  --chart-1: oklch(0.65 0.18 200);
-  --chart-2: oklch(0.6 0.15 280);
-  --chart-3: oklch(0.55 0.12 320);
-  --chart-4: oklch(0.6 0.18 160);
-  --chart-5: oklch(0.65 0.15 40);
-  
-  /* 侧边栏颜色 */
-  --sidebar: oklch(0.13 0.02 240);
-  --sidebar-foreground: oklch(0.95 0.01 240);
-  --sidebar-primary: oklch(0.65 0.15 240);
-  --sidebar-primary-foreground: oklch(0.11 0.01 240);
-  --sidebar-accent: oklch(0.21 0.03 250);
-  --sidebar-accent-foreground: oklch(0.95 0.01 240);
-  --sidebar-border: oklch(0.25 0.03 240);
-  --sidebar-ring: oklch(0.65 0.15 240);
+  /* Demo A: 纯灰白 (Pure Gray-White) — 无色调偏移 */
+  --background: oklch(0.1638 0.0000 89.9);
+  --foreground: oklch(0.9310 0.0000 89.9);
+  --card: oklch(0.2178 0.0000 89.9);
+  --card-foreground: oklch(0.9310 0.0000 89.9);
+  --popover: oklch(0.2178 0.0000 89.9);
+  --popover-foreground: oklch(0.9310 0.0000 89.9);
+  --primary: oklch(0.9310 0.0000 89.9);
+  --primary-foreground: oklch(0.1638 0.0000 89.9);
+  --secondary: oklch(0.2520 0.0000 89.9);
+  --secondary-foreground: oklch(0.9310 0.0000 89.9);
+  --muted: oklch(0.2686 0.0000 89.9);
+  --muted-foreground: oklch(0.6268 0.0000 89.9);
+  --accent: oklch(0.2850 0.0000 89.9);
+  --accent-foreground: oklch(0.9310 0.0000 89.9);
+  --destructive: oklch(0.6029 0.1520 22.8);
+  --border: oklch(0.3211 0.0000 89.9);
+  --input: oklch(0.3211 0.0000 89.9);
+  --ring: oklch(0.6268 0.0000 89.9);
+  --chart-1: oklch(0.65 0.10 65);
+  --chart-2: oklch(0.60 0.08 30);
+  --chart-3: oklch(0.55 0.06 85);
+  --chart-4: oklch(0.65 0.10 75);
+  --chart-5: oklch(0.60 0.08 45);
+  --sidebar: oklch(0.1913 0.0000 89.9);
+  --sidebar-foreground: oklch(0.9310 0.0000 89.9);
+  --sidebar-primary: oklch(0.9310 0.0000 89.9);
+  --sidebar-primary-foreground: oklch(0.1638 0.0000 89.9);
+  --sidebar-accent: oklch(0.2686 0.0000 89.9);
+  --sidebar-accent-foreground: oklch(0.9310 0.0000 89.9);
+  --sidebar-border: oklch(0.3211 0.0000 89.9);
+  --sidebar-ring: oklch(0.6268 0.0000 89.9);
 }
 
 @layer base {
@@ -203,9 +188,8 @@
     font-size: calc(var(--base-font-size) * var(--font-scale)) !important;
   }
   
-  /* MarkdownCard专用样式 */
   .markdown-card-content {
-    color: rgb(55 65 81);
+    color: rgb(44 40 37);
     line-height: 1.625;
     font-size: calc(var(--base-font-size) * var(--font-scale));
     max-width: none !important;
@@ -214,9 +198,9 @@
     margin: 0 !important;
     padding: 0 !important;
   }
-  
+
   .dark .markdown-card-content {
-    color: rgb(209 213 219);
+    color: rgb(232 232 232);
   }
   
   /* 确保prose类不会限制宽度 */
@@ -263,30 +247,30 @@
   .markdown-card-content h4,
   .markdown-card-content h5,
   .markdown-card-content h6 {
-    color: rgb(17 24 39) !important;
+    color: rgb(35 31 28) !important;
     font-weight: 600;
   }
-  
+
   .dark .markdown-card-content h1,
   .dark .markdown-card-content h2,
   .dark .markdown-card-content h3,
   .dark .markdown-card-content h4,
   .dark .markdown-card-content h5,
   .dark .markdown-card-content h6 {
-    color: rgb(229 231 235) !important;
+    color: rgb(238 238 238) !important;
     font-weight: 600;
   }
   
   /* 特别优化2级标题 */
   .markdown-card-content h2 {
-    color: rgb(31 41 55) !important;
+    color: rgb(35 31 28) !important;
     font-size: 1.5em;
     margin-top: 1.5em;
     margin-bottom: 0.75em;
   }
-  
+
   .dark .markdown-card-content h2 {
-    color: rgb(243 244 246) !important;
+    color: rgb(240 240 240) !important;
     font-size: 1.5em;
     margin-top: 1.5em;
     margin-bottom: 0.75em;
@@ -294,20 +278,20 @@
   
   /* 段落样式 */
   .markdown-card-content p {
-    color: rgb(55 65 81);
+    color: rgb(44 40 37);
   }
-  
+
   .dark .markdown-card-content p {
-    color: rgb(209 213 219);
+    color: rgb(232 232 232);
   }
   
   /* 列表样式 */
   .markdown-card-content li {
-    color: rgb(55 65 81);
+    color: rgb(44 40 37);
   }
-  
+
   .dark .markdown-card-content li {
-    color: rgb(209 213 219);
+    color: rgb(232 232 232);
   }
   
   /* 加粗文本样式 - 中等浓度黄色马克笔（bottom 50-150%） */
@@ -319,7 +303,7 @@
   }
   
   .dark .markdown-card-content strong {
-    background: linear-gradient(to bottom, transparent 50%, rgba(34, 211, 238, 0.45) 50%, rgba(34, 211, 238, 0.45) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 50%, rgba(245, 158, 11, 0.45) 50%, rgba(245, 158, 11, 0.45) 150%, transparent 150%) !important;
     color: inherit !important;
   }
   
@@ -335,7 +319,7 @@
   
   .dark .markdown-card-content em strong,
   .dark .markdown-card-content strong em {
-    background: linear-gradient(to bottom, transparent 50%, rgba(34, 211, 238, 0.35) 50%, rgba(34, 211, 238, 0.35) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 50%, rgba(245, 158, 11, 0.35) 50%, rgba(245, 158, 11, 0.35) 150%, transparent 150%) !important;
     color: inherit !important;
   }
   
@@ -348,14 +332,14 @@
   }
   
   .dark .markdown-card-content em {
-    background: linear-gradient(to bottom, transparent 50%, rgba(34, 211, 238, 0.2) 50%, rgba(34, 211, 238, 0.2) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 50%, rgba(245, 158, 11, 0.2) 50%, rgba(245, 158, 11, 0.2) 150%, transparent 150%) !important;
     color: inherit !important;
   }
   
   /* 代码样式 - 移除底色，让高亮效果直接显示 */
   .markdown-card-content code {
     background-color: transparent !important;
-    color: rgb(55 65 81) !important;
+    color: rgb(44 40 37) !important;
     /* padding: 0.1rem 0.1rem !important; */
     /* border-radius: 0.25rem !important; */
     font-size: calc(0.99em * var(--font-scale)) !important;
@@ -365,7 +349,7 @@
   
   .dark .markdown-card-content code {
     background-color: transparent !important;
-    color: rgb(229 231 235) !important;
+    color: rgb(232 232 232) !important;
     /* border: 1px solid rgba(75, 85, 99, 0.5) !important; */
   }
 

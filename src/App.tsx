@@ -225,7 +225,7 @@ function App() {
   }, [loadFromHistoryRecord])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-slate-900 dark:via-blue-950 dark:to-slate-900 p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container">
+    <div className="min-h-screen bg-background p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container">
       <Toaster />
       <WebDAVFileBrowser
         isOpen={isWebDAVBrowserOpen}
@@ -241,7 +241,7 @@ function App() {
             <DarkModeToggle />
           </div>
           <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 flex items-center justify-center gap-2">
-            <BookOpen className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+            <BookOpen className="h-8 w-8 text-primary" />
             {t('app.title')}
           </h1>
           <p className="text-gray-600 dark:text-gray-300">{t('app.description')}</p>
@@ -404,7 +404,7 @@ function App() {
         {showBackToTop && (
           <Button
             onClick={scrollToTop}
-            className="fixed bottom-6 right-6 z-50 rounded-full w-12 h-12 shadow-lg hover:shadow-xl transition-all duration-300 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+            className="fixed bottom-6 right-6 z-50 rounded-full w-12 h-12 shadow-lg hover:shadow-xl transition-all duration-300 bg-primary hover:bg-primary/90 text-primary-foreground"
             size="icon"
             aria-label={t('common.backToTop')}
           >

@@ -327,7 +327,7 @@ export function BatchProcessingDialog({
       case 'pending':
         return <Badge variant="secondary">等待中</Badge>
       case 'processing':
-        return <Badge variant="default" className="bg-blue-500">处理中</Badge>
+        return <Badge variant="default" className="bg-primary">处理中</Badge>
       case 'completed':
         return <Badge variant="default" className="bg-green-500">完成</Badge>
       case 'failed':
@@ -475,14 +475,14 @@ export function BatchProcessingDialog({
                           <div
                             key={index}
                             className={`flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b ${
-                              isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                              isSelected ? 'bg-accent' : ''
                             }`}
                             onClick={() => handleFileSelect(file)}
                           >
                             <Checkbox checked={isSelected} />
 
                             {file.type === 'directory' ? (
-                              <FolderOpen className="h-4 w-4 text-blue-500" />
+                              <FolderOpen className="h-4 w-4 text-primary" />
                             ) : (
                               <>
                                 {extension === 'pdf' ? (
@@ -615,7 +615,7 @@ export function BatchProcessingDialog({
                   <div className="text-xs text-muted-foreground">跳过</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-500">¥{(stats.totalCostRMB || 0).toFixed(2)}</div>
+                  <div className="text-2xl font-bold text-primary">¥{(stats.totalCostRMB || 0).toFixed(2)}</div>
                   <div className="text-xs text-muted-foreground">成本</div>
                 </div>
               </div>
@@ -674,7 +674,7 @@ export function BatchProcessingDialog({
                         <div
                           key={item.id}
                           className={`flex items-center gap-2 px-3 py-2 border-b ${
-                            item.status === 'processing' ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                            item.status === 'processing' ? 'bg-accent' : ''
                           }`}
                         >
                           <span className="w-6 text-xs text-muted-foreground">{index + 1}.</span>
@@ -692,7 +692,7 @@ export function BatchProcessingDialog({
                             )}
                           </div>
                           {item.status === 'processing' && (
-                            <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
                           )}
                           {item.status === 'completed' && (
                             <CheckCircle className="h-4 w-4 text-green-500" />

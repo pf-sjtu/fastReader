@@ -590,7 +590,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
             </div>
 
             {/* 流量限制配置 */}
-            <div className="space-y-4 p-4 bg-blue-50 dark:bg-blue-950/50 rounded-lg border dark:border-blue-800">
+            <div className="space-y-4 p-4 bg-muted rounded-lg border">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />
@@ -652,8 +652,8 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
                 </div>
               </div>
 
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-md border border-blue-200 dark:border-blue-700">
-                <div className="flex items-start gap-2 text-xs text-blue-700 dark:text-blue-400">
+              <div className="p-3 bg-muted rounded-md border">
+                <div className="flex items-start gap-2 text-xs text-primary">
                   <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
                   <div className="space-y-1">
                     <div className="font-medium">流量限制重试机制说明</div>
@@ -668,7 +668,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
               </div>
             </div>
 
-            <div className="p-3 bg-indigo-50 dark:bg-indigo-950/50 rounded-lg border dark:border-indigo-800">
+            <div className="p-3 bg-muted rounded-lg border">
               <div className="space-y-2">
                 <Label htmlFor="output-language" className="text-sm font-medium">
                   {t('config.outputLanguage')}
@@ -829,7 +829,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
             </div>
 
             {/* 章节识别模式设置 */}
-            <div className="space-y-4 p-4 bg-blue-50 dark:bg-blue-950/50 rounded-lg border dark:border-blue-800">
+            <div className="space-y-4 p-4 bg-muted rounded-lg border">
               <div className="flex items-center gap-2 mb-3">
                 <Settings className="h-4 w-4" />
                 <Label className="text-sm font-medium">{t('config.chapterDetectionMode')}</Label>

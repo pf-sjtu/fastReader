@@ -67,9 +67,9 @@ export function ChapterNavigation({
       }
       
       // 高亮效果
-      element.classList.add('ring-2', 'ring-blue-500', 'ring-opacity-50')
+      element.classList.add('ring-2', 'ring-ring', 'ring-opacity-50')
       highlightTimerRef.current = setTimeout(() => {
-        element.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50')
+        element.classList.remove('ring-2', 'ring-ring', 'ring-opacity-50')
         highlightTimerRef.current = null
       }, 2000)
     }
@@ -112,7 +112,7 @@ export function ChapterNavigation({
                   key={chapter.id} 
                   className={cn(
                     "border rounded-lg transition-all duration-200",
-                    isCurrent && "ring-2 ring-blue-500 ring-opacity-50",
+                    isCurrent && "ring-2 ring-ring ring-opacity-50",
                     isProcessed && "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20"
                   )}
                 >
