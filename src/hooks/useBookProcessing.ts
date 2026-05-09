@@ -218,11 +218,27 @@ export function useBookProcessing() {
   const loadFromCloudCache = useCallback(() => {
     if (!cloudCacheContent) return
 
+    // 解析缓存内容并记录到处理历史
+    try {
+      const parsed = cloudCacheService.parseUnifiedContent(cloudCacheContent)
+      if (file && (parsed.chapters.length || parsed.overallSummary)) {
+        useProcessingHistoryStore.getState().addRecord({
+          bookTitle: parsed.title || file.name.replace(/\.[^/.]+$/, ''),
+          fileName: file.name,
+          processingMode,
+          model: cloudCacheMetadata?.model || aiConfig.model,
+          chapterCount: parsed.chapters.length
+        })
+      }
+    } catch (e) {
+      console.error('记录缓存访问历史失败:', e)
+    }
+
     toast.info(t('cloudCache.loaded'))
     toast.info(t('cloudCache.skipProcessing'), {
       description: t('cloudCache.reprocessHint')
     })
-  }, [cloudCacheContent, t])
+  }, [cloudCacheContent, cloudCacheMetadata, file, processingMode, aiConfig.model, t])
 
   // 章节选择处理
   const handleChapterSelect = useCallback((chapterId: string, checked: boolean) => {
@@ -783,6 +799,15 @@ export function useBookProcessing() {
       // 重置状态并设置结果
       resetState()
       setBookSummary(summary)
+
+      // 更新历史位置（移到最顶部）
+      useProcessingHistoryStore.getState().addRecord({
+        bookTitle: summary.title,
+        fileName,
+        processingMode: useConfigStore.getState().processingOptions.processingMode,
+        model: result.metadata?.model || 'unknown',
+        chapterCount: parsed.chapters.length
+      })
 
       return true
     } catch (error) {
