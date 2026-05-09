@@ -65,9 +65,9 @@ export const TimelineNavigation = memo(function TimelineNavigation({
           const isLast = index === chapters.length - 1
 
           return (
-            <div key={chapter.id} className="flex min-h-0">
-              {/* 时间轴轨道 */}
-              <div className="flex flex-col items-center shrink-0 mr-2.5">
+            <div key={chapter.id}>
+              {/* 节点 + 文字同行，垂直居中对齐 */}
+              <div className="flex items-center">
                 {isProcessing ? (
                   <div className="w-3.5 h-3.5 rounded-full border-2 border-primary/30 flex items-center justify-center shrink-0">
                     <Loader2 className="h-2 w-2 text-primary animate-spin" />
@@ -80,15 +80,10 @@ export const TimelineNavigation = memo(function TimelineNavigation({
                 ) : (
                   <div className="w-3.5 h-3.5 rounded-full border-2 border-border shrink-0" />
                 )}
-                {!isLast && <div className="w-px flex-1 bg-border" />}
-              </div>
-
-              {/* 章节内容 */}
-              <div className="pb-3 min-w-0 flex-1">
                 <button
                   onClick={() => chapter.processed && onChapterClick(chapter.id)}
                   disabled={!chapter.processed}
-                  className={`text-left text-xs leading-snug truncate w-full transition-colors ${
+                  className={`ml-2.5 text-left text-xs leading-snug truncate min-w-0 flex-1 transition-colors ${
                     chapter.processed
                       ? 'text-muted-foreground hover:text-foreground'
                       : 'text-muted-foreground/40'
@@ -96,10 +91,12 @@ export const TimelineNavigation = memo(function TimelineNavigation({
                 >
                   {chapter.title}
                 </button>
-                {isProcessing && (
-                  <div className="text-[10px] text-primary mt-0.5">{t('common.processing', '处理中...')}</div>
-                )}
               </div>
+              {isProcessing && (
+                <div className="ml-6 text-[10px] text-primary mt-0.5">{t('common.processing', '处理中...')}</div>
+              )}
+              {/* 连接线独立于节点下方 */}
+              {!isLast && <div className="ml-[7px] w-px h-3 bg-border" />}
             </div>
           )
         })}
