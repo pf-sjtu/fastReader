@@ -225,7 +225,7 @@ function App() {
   }, [loadFromHistoryRecord])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-slate-900 dark:via-blue-950 dark:to-slate-900 p-4 flex justify-center gap-4 h-screen overflow-auto scroll-container">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-slate-900 dark:via-blue-950 dark:to-slate-900 p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container">
       <Toaster />
       <WebDAVFileBrowser
         isOpen={isWebDAVBrowserOpen}

@@ -66,12 +66,12 @@ export function FileUploadCard({
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="file">{t('upload.selectFile')}</Label>
-          <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50 dark:bg-gray-800">
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 min-w-0 flex-1">
+          <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50 dark:bg-gray-800 gap-2">
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 min-w-0 flex-1 overflow-hidden">
               <FileText className="h-4 w-4 shrink-0" />
-              <span className="truncate">{file?.name || t('upload.noFileSelected')}</span>
+              <span className="truncate block">{file?.name || t('upload.noFileSelected')}</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <Button
                 type="button"
                 variant="outline"
@@ -108,8 +108,8 @@ export function FileUploadCard({
           />
         </div>
 
-        <div className="flex items-center justify-end">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-end overflow-x-auto">
+          <div className="flex items-center gap-2 shrink-0">
             <Button
               onClick={onExtractChapters}
               disabled={!file || extractingChapters || processing}
