@@ -10,8 +10,8 @@
     "baseSize": "Base Size"
   },
   "app": {
-    "title": "eBook to Mind Map",
-    "description": "Use AI technology to parse EPUB and PDF eBooks by chapters and generate intelligent summaries"
+    "title": "Fast Reader",
+    "description": "Quick EPUB eBook Knowledge Summarizer"
   },
   "upload": {
     "title": "File Upload & Configuration",
