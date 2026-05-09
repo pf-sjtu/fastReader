@@ -94,7 +94,7 @@ export const TimelineNavigation = memo(function TimelineNavigation({
                       : 'text-muted-foreground/40'
                   }`}
                 >
-                  <span className="font-medium">{index + 1}.</span> {chapter.title}
+                  {chapter.title}
                 </button>
                 {isProcessing && (
                   <div className="text-[10px] text-primary mt-0.5">{t('common.processing', '处理中...')}</div>

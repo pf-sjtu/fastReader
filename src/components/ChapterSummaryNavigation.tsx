@@ -94,7 +94,7 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
                       : 'text-muted-foreground/40'
                   }`}
                 >
-                  {index + 1}. {chapter.title}
+                  {chapter.title}
                 </button>
               </div>
             </div>
