@@ -52,8 +52,8 @@ export function ResultsSection({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <div className="truncate flex-1 w-1">
+        <CardTitle>
+          <div className="truncate">
             {processingMode === 'summary' ? (
               <><BookOpen className="h-5 w-5 inline-block mr-2" />{t('results.summaryTitle', { title: bookSummary?.title })}</>
             ) : processingMode === 'mindmap' ? (
@@ -62,17 +62,22 @@ export function ResultsSection({
               <><Network className="h-5 w-5 inline-block mr-2" />{t('results.wholeMindMapTitle', { title: bookMindMap?.title })}</>
             )}
           </div>
-          <div className="flex items-center gap-2">
+        </CardTitle>
+        <div className="flex items-center justify-between -mt-1">
+          <CardDescription>
+            {t('results.author', { author: bookSummary?.author || bookMindMap?.author })} | {t('results.chapterCount', { count: bookSummary?.chapters.length || bookMindMap?.chapters.length })}
+          </CardDescription>
+          <div className="flex items-center gap-1.5 shrink-0">
             <FontSizeControl variant="compact" showLabel={false} />
             {processingMode === 'summary' && bookSummary && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={onDownloadAllMarkdown}
-                className="flex items-center gap-2"
+                className="flex items-center gap-1.5 h-7 text-xs"
               >
-                <Download className="h-4 w-4" />
-                {t('download.downloadAllMarkdown')}
+                <Download className="h-3.5 w-3.5" />
+                MD
               </Button>
             )}
             {processingMode === 'summary' && bookSummary && (
@@ -83,10 +88,7 @@ export function ResultsSection({
               />
             )}
           </div>
-        </CardTitle>
-        <CardDescription>
-          {t('results.author', { author: bookSummary?.author || bookMindMap?.author })} | {t('results.chapterCount', { count: bookSummary?.chapters.length || bookMindMap?.chapters.length })}
-        </CardDescription>
+        </div>
       </CardHeader>
       <CardContent>
         {processingMode === 'summary' && bookSummary ? (
