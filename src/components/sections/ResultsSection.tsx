@@ -51,8 +51,8 @@ export function ResultsSection({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>
+      <CardHeader className="overflow-hidden">
+        <CardTitle className="min-w-0">
           <div className="truncate">
             {processingMode === 'summary' ? (
               <><BookOpen className="h-5 w-5 inline-block mr-2" />{t('results.summaryTitle', { title: bookSummary?.title })}</>
@@ -63,8 +63,8 @@ export function ResultsSection({
             )}
           </div>
         </CardTitle>
-        <div className="flex items-center justify-between -mt-1">
-          <CardDescription>
+        <div className="flex items-center justify-between -mt-1 min-w-0">
+          <CardDescription className="truncate min-w-0">
             {t('results.author', { author: bookSummary?.author || bookMindMap?.author })} | {t('results.chapterCount', { count: bookSummary?.chapters.length || bookMindMap?.chapters.length })}
           </CardDescription>
           <div className="flex items-center gap-1.5 shrink-0">
