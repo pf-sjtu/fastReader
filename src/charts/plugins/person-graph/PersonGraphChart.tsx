@@ -3,12 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { Core, EventObject } from 'cytoscape'
 import type { BookCharts, EntityGraphNode } from '../../types'
 import { getEntityGraph } from '../../types'
-import {
-  toCytoscapeElements,
-  nodeSize,
-  nodeLabelMaxWidth,
-  forceLayoutOptions,
-} from './toCytoscape'
+import { toCytoscapeElements, forceLayoutOptions } from './toCytoscape'
 import { readChartTheme, subscribeThemeChange, type ChartThemeColors } from '../../theme'
 import {
   Sheet,
@@ -51,6 +46,7 @@ function buildStyles(theme: ChartThemeColors): any[] {
     {
       selector: 'node',
       style: {
+        // label 已在 toCytoscape 中按宽度拆行，保证落在圆内
         label: 'data(label)',
         'text-valign': 'center',
         'text-halign': 'center',
@@ -58,19 +54,20 @@ function buildStyles(theme: ChartThemeColors): any[] {
         'background-color': nodeFill,
         'background-opacity': 1,
         color: onNodeText,
-        'font-size': 11,
+        'font-size': (ele: { data: (k: string) => number }) =>
+          ele.data('fontSize') || 10,
         'font-weight': 600,
         'text-wrap': 'wrap',
         'text-max-width': (ele: { data: (k: string) => number }) =>
-          nodeLabelMaxWidth(ele.data('importance')),
+          ele.data('textMaxWidth') || 36,
         'text-outline-width': 0,
         'text-background-opacity': 0,
-        width: (ele: { data: (k: string) => number }) => nodeSize(ele.data('importance')),
-        height: (ele: { data: (k: string) => number }) => nodeSize(ele.data('importance')),
+        width: (ele: { data: (k: string) => number }) => ele.data('size') || 64,
+        height: (ele: { data: (k: string) => number }) => ele.data('size') || 64,
         'border-width': 2,
         'border-color': theme.border,
         'border-opacity': 1,
-        'min-zoomed-font-size': 7,
+        'min-zoomed-font-size': 6,
       },
     },
     {
@@ -170,6 +167,21 @@ export function PersonGraphChart({ charts }: Props) {
     return subscribeThemeChange(() => setThemeTick((n) => n + 1))
   }, [])
 
+  // Tab 切回时容器从 display:none 恢复，需 resize 否则画布空白/错位
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      const cy = cyRef.current
+      if (!cy) return
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        cy.resize()
+      }
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [graph])
+
   useEffect(() => {
     const cy = cyRef.current
     if (cy) applyTheme(cy)
@@ -215,7 +227,8 @@ export function PersonGraphChart({ charts }: Props) {
           layout: { name: 'null' },
           minZoom: 0.25,
           maxZoom: 3.5,
-          wheelSensitivity: 0.75,
+          // 0.25 默认 → 曾 ×3=0.75 → 再 ×2 ≈ 1.5
+          wheelSensitivity: 1.5,
           // 可拖节点；松开后保持位置（力再跑时会重新散开）
           autoungrabify: false,
           boxSelectionEnabled: false,

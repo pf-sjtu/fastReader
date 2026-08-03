@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Trash2, RefreshCw } from 'lucide-react'
 import type { BookCharts } from './types'
 import { getSortedPlugins } from './registry'
+import { cn } from '@/lib/utils'
 
 export interface ChartsPanelProps {
   charts?: BookCharts | null
@@ -28,11 +29,23 @@ export function ChartsPanel({
   const { t } = useTranslation()
   const plugins = useMemo(() => getSortedPlugins(), [])
   const [regenBusy, setRegenBusy] = useState(false)
+  const [activePlugin, setActivePlugin] = useState<string>('')
 
   const available = useMemo(
     () => (charts ? plugins.filter((p) => p.hasData(charts)) : []),
     [charts, plugins]
   )
+
+  // 保持当前子 Tab；数据就绪后默认选第一个
+  useEffect(() => {
+    if (!available.length) {
+      setActivePlugin('')
+      return
+    }
+    setActivePlugin((prev) =>
+      prev && available.some((p) => p.id === prev) ? prev : available[0].id
+    )
+  }, [available])
 
   const handleRegenerate = async () => {
     if (!onRegenerate || regenBusy) return
@@ -107,13 +120,23 @@ export function ChartsPanel({
     )
   }
 
-  const defaultTab = available[0].id
+  if (!activePlugin) {
+    return (
+      <div className="space-y-3 min-w-0">
+        {toolbar}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-3 min-w-0">
       {toolbar}
 
-      <Tabs defaultValue={defaultTab} className="w-full min-w-0">
+      <Tabs
+        value={activePlugin}
+        onValueChange={setActivePlugin}
+        className="w-full min-w-0"
+      >
         <TabsList
           className="h-auto flex flex-wrap w-full justify-start gap-1"
         >
@@ -131,7 +154,15 @@ export function ChartsPanel({
         {available.map((p) => {
           const Comp = p.Component
           return (
-            <TabsContent key={p.id} value={p.id} className="mt-3 min-w-0">
+            <TabsContent
+              key={p.id}
+              value={p.id}
+              forceMount
+              className={cn(
+                'mt-3 min-w-0',
+                activePlugin !== p.id && 'hidden'
+              )}
+            >
               <Comp charts={charts} />
             </TabsContent>
           )

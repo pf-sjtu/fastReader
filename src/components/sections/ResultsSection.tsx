@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Download, BookOpen, Network } from 'lucide-react'
@@ -27,6 +29,7 @@ interface ResultsSectionProps {
   onDownloadAllMarkdown: () => void
   onDownloadMindMap?: (mindMapData: MindElixirData, title?: string) => void
   onRegenerateKeyCharts?: () => void | Promise<void>
+  chartsGenerating?: boolean
 }
 
 export function ResultsSection({
@@ -43,8 +46,11 @@ export function ResultsSection({
   onDownloadAllMarkdown,
   onDownloadMindMap,
   onRegenerateKeyCharts,
+  chartsGenerating = false,
 }: ResultsSectionProps) {
   const { t } = useTranslation()
+  // 受控 Tab，避免切换时整树 default 重置
+  const [summaryTab, setSummaryTab] = useState('chapters')
 
   if (!bookSummary && !bookMindMap) {
     return null
@@ -94,7 +100,11 @@ export function ResultsSection({
       </CardHeader>
       <CardContent className="min-w-0">
         {processingMode === 'summary' && bookSummary ? (
-          <Tabs defaultValue="chapters" className="w-full min-w-0">
+          <Tabs
+            value={summaryTab}
+            onValueChange={setSummaryTab}
+            className="w-full min-w-0"
+          >
             <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
               <TabsTrigger value="chapters" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
                 {t('results.tabs.chapterSummary')}
@@ -156,10 +166,19 @@ export function ResultsSection({
               />
             </TabsContent>
 
-            <TabsContent value="charts" className="min-w-0">
+            {/* forceMount：切走 Tab 不销毁关系图/cytoscape，避免布局抖动 */}
+            <TabsContent
+              value="charts"
+              forceMount
+              className={cn(
+                'min-w-0 mt-2',
+                summaryTab !== 'charts' && 'hidden'
+              )}
+            >
               <ChartsPanel
                 charts={bookSummary.charts}
                 chartsError={bookSummary.chartsError}
+                generating={chartsGenerating}
                 onClearCache={() => onClearSpecificCache('key_charts')}
                 onRegenerate={onRegenerateKeyCharts}
                 canRegenerate={

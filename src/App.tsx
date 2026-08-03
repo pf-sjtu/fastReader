@@ -94,6 +94,7 @@ function App() {
     clearChapterMindMapCache,
     clearSpecificCache,
     regenerateKeyCharts,
+    chartsGenerating,
     clearBookCache,
     increasePreviewFontSize,
     decreasePreviewFontSize,
@@ -475,6 +476,7 @@ function App() {
                   onDownloadAllMarkdown={downloadAllMarkdown}
                   onDownloadMindMap={downloadMindMap}
                   onRegenerateKeyCharts={regenerateKeyCharts}
+                  chartsGenerating={chartsGenerating}
                 />
               ) : (
                 <Card>
