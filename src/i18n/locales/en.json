@@ -63,6 +63,7 @@
     "generatingOverallSummary": "Generating overall summary...",
     "generatingKeyCharts": "Generating key charts...",
     "postPhaseChartsFailed": "Chapters done, but key charts generation failed",
+    "chartsCloudSaveFailed": "Key charts generated, but cloud JSON save failed (retry regenerate or cloud upload)",
     "mergingMindMaps": "Merging chapter mind maps...",
     "generatingCombinedMindMap": "Generating combined mind map...",
     "completed": "Processing completed!",

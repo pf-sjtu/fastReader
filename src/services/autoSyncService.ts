@@ -131,6 +131,47 @@ export class AutoSyncService {
   }
 
   /**
+   * 仅上传关键图表同名 JSON（不依赖 autoSync）
+   * 用于：整本处理生成图表后、或 MD 同步关闭时仍要落盘图表
+   */
+  async syncChartsJson(
+    fileName: string,
+    charts: unknown
+  ): Promise<{ success: boolean; path?: string; error?: string }> {
+    try {
+      const webdavConfig = useConfigStore.getState().webdavConfig
+      if (!webdavConfig.enabled) {
+        return { success: false, error: 'WebDAV 未启用' }
+      }
+      if (charts == null) {
+        return { success: false, error: '无图表数据' }
+      }
+
+      const initResult = await this.webdavService.initialize(webdavConfig)
+      if (!initResult.success) {
+        return { success: false, error: initResult.error || 'WebDAV 初始化失败' }
+      }
+
+      const connectionTest = await this.webdavService.testConnection()
+      if (!connectionTest.success) {
+        return { success: false, error: connectionTest.error || 'WebDAV 连接失败' }
+      }
+
+      const up = await cloudCacheService.uploadChartsJson(fileName, charts)
+      if (up.success) {
+        console.log(`✅ 关键图表 JSON 已保存: ${up.path}`)
+        useConfigStore.getState().updateWebDAVLastSyncTime()
+      }
+      return up
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '未知错误',
+      }
+    }
+  }
+
+  /**
    * 同步思维导图文件到WebDAV
    */
   async syncMindMap(bookMindMap: BookMindMap, fileName: string): Promise<boolean> {

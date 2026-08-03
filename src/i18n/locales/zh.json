@@ -63,6 +63,7 @@
     "generatingOverallSummary": "正在生成全书总结...",
     "generatingKeyCharts": "正在生成关键图表...",
     "postPhaseChartsFailed": "章节已完成，但关键图表生成失败",
+    "chartsCloudSaveFailed": "关键图表已生成，但云端 JSON 保存失败（可点重新生成或云端上传）",
     "mergingMindMaps": "正在合并章节思维导图...",
     "generatingCombinedMindMap": "正在生成整书思维导图...",
     "completed": "处理完成！",
