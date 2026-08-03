@@ -25,6 +25,7 @@ interface FileUploadCardProps {
   isCheckingCloudCache: boolean
   cloudCacheMetadata: ProcessingMetadata | null
   cloudCacheContent: string | null
+  cloudChartsFileFound?: boolean
   webdavEnabled: boolean
   webdavInitialized: boolean
   onFileSelect: (file: File) => void
@@ -41,6 +42,7 @@ export function FileUploadCard({
   isCheckingCloudCache,
   cloudCacheMetadata,
   cloudCacheContent,
+  cloudChartsFileFound = false,
   webdavEnabled,
   webdavInitialized,
   onFileSelect,
@@ -179,6 +181,7 @@ export function FileUploadCard({
           isCheckingCloudCache={isCheckingCloudCache}
           cloudCacheMetadata={cloudCacheMetadata}
           cloudCacheContent={cloudCacheContent}
+          cloudChartsFileFound={cloudChartsFileFound}
           file={file}
           webdavEnabled={webdavEnabled}
           webdavInitialized={webdavInitialized}

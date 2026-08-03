@@ -45,7 +45,9 @@ const {
   cloudCacheServiceMock: {
     fetchCacheFileNames: vi.fn(),
     isCachedByFileName: vi.fn(),
-    getCacheFilePath: vi.fn()
+    getCacheFilePath: vi.fn(),
+    getChartsCacheFilePath: vi.fn(),
+    uploadChartsJson: vi.fn().mockResolvedValue({ success: true, path: '/x.json' }),
   },
   metadataFormatterMock: {
     generate: vi.fn(),

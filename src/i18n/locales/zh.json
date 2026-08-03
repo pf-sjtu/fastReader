@@ -116,6 +116,8 @@
       "graphLoadError": "关系图加载失败",
       "regenerate": "重新生成图表",
       "regenerated": "关键图表已更新",
+      "regeneratedAndSynced": "关键图表已更新并保存到云端",
+      "syncFailedHint": "本地已更新，云端同步失败（可点「云端」按钮手动上传）",
       "needOverall": "请先完成全书总结后再生成图表",
       "needChapters": "缺少章节摘要"
     },
@@ -418,6 +420,9 @@
     "loaded": "已加载云端缓存，可直接查看处理结果",
     "loadedWithCharts": "已加载云端缓存（含关键图表）",
     "includesKeyCharts": "含关键图表",
+    "includesKeyChartsJson": "含关键图表（同名 JSON）",
+    "noKeyChartsYet": "暂无关键图表 JSON，加载后可重新生成",
+    "chartsMissingHint": "云端暂无关键图表 JSON，可点「重新生成图表」并保存到云端",
     "skipProcessing": "发现云端缓存，可跳过处理直接查看结果",
     "reprocessHint": "如需重新处理，请点击「提取章节」按钮",
     "parseError": "云端缓存解析失败"

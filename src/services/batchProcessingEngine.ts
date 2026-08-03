@@ -513,12 +513,19 @@ export class BatchProcessingEngine {
         processingOptions.chapterNamingMode
       )
 
-      // 6. 上传到 WebDAV
+      // 6. 上传到 WebDAV：MD + 同名关键图表 JSON
       const outputPath = cloudCacheService.getCacheFilePath(item.fileName)
       const uploadResult = await webdavService.uploadFile(outputPath, finalContent)
 
       if (!uploadResult.success) {
         throw new Error(uploadResult.error || '上传结果失败')
+      }
+
+      if (charts) {
+        const chartsUp = await cloudCacheService.uploadChartsJson(item.fileName, charts)
+        if (!chartsUp.success) {
+          console.warn('[BatchProcessingEngine] 图表 JSON 上传失败:', chartsUp.error)
+        }
       }
 
       this.callbacks.onItemProgress?.(item.id, 100, '处理完成')

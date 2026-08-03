@@ -14,10 +14,16 @@ export interface CloudCacheFile {
 
 /**
  * 缓存读取结果
+ * 完整摘要：`{name}-完整摘要.md`
+ * 关键图表：同名 JSON `{name}-完整摘要.json`（优先）；MD 内 ## 关键图表 为兜底
  */
 export interface CacheReadResult {
   success: boolean
   content?: string
+  /** 同名 .json 原文（若存在） */
+  chartsJson?: string | null
+  /** 是否发现图表文件（无论解析是否成功） */
+  chartsFileFound?: boolean
   metadata?: ProcessingMetadata
   error?: string
 }
@@ -95,6 +101,20 @@ export class CloudCacheService {
     return `${sanitizedName}-完整摘要.md`
   }
 
+  /**
+   * 关键图表云存档：与完整摘要同名、扩展名为 .json
+   * 例：`书名-完整摘要.md` → `书名-完整摘要.json`
+   */
+  getChartsCacheFileName(fileName: string): string {
+    return this.getCacheFileName(fileName).replace(/\.md$/i, '.json')
+  }
+
+  getChartsCacheFilePath(fileName: string): string {
+    const chartsName = this.getChartsCacheFileName(fileName)
+    const webdavConfig = useConfigStore.getState().webdavConfig
+    const syncPath = webdavConfig.syncPath || '/fastReader'
+    return `${syncPath}/${chartsName}`
+  }
 
   /**
    * 检查缓存是否存在
@@ -120,9 +140,61 @@ export class CloudCacheService {
     return cachedFileNames.has(this.getCacheFileName(fileName))
   }
 
+  /**
+   * 读取关键图表同名 JSON（404 视为无文件，非失败）
+   */
+  async readChartsJson(fileName: string): Promise<{
+    found: boolean
+    content: string | null
+    error?: string
+  }> {
+    try {
+      const path = this.getChartsCacheFilePath(fileName)
+      console.log(`[CloudCache] 读取图表 JSON: ${path}`)
+      const result = await this.webdavService.getFileContents(path, 'text')
+      if (!result.success || result.data == null) {
+        return { found: false, content: null, error: result.error }
+      }
+      return { found: true, content: String(result.data) }
+    } catch (error) {
+      console.warn('[CloudCache] 读取图表 JSON 失败:', error)
+      return {
+        found: false,
+        content: null,
+        error: error instanceof Error ? error.message : '未知错误',
+      }
+    }
+  }
 
   /**
-   * 读取缓存文件内容
+   * 上传关键图表 JSON（与完整摘要同名）
+   */
+  async uploadChartsJson(
+    fileName: string,
+    charts: unknown
+  ): Promise<{ success: boolean; path?: string; error?: string }> {
+    try {
+      if (charts == null) {
+        return { success: false, error: '无图表数据' }
+      }
+      const path = this.getChartsCacheFilePath(fileName)
+      const body = JSON.stringify(charts, null, 2)
+      const upload = await this.webdavService.uploadFile(path, body)
+      if (!upload.success) {
+        return { success: false, error: upload.error || '上传图表 JSON 失败' }
+      }
+      console.log(`[CloudCache] 图表 JSON 已上传: ${path}`)
+      return { success: true, path }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '未知错误',
+      }
+    }
+  }
+
+  /**
+   * 读取缓存文件内容（MD + 并行尝试同名 JSON）
    * @param fileName 原始文件名
    * @returns 缓存读取结果
    */
@@ -131,25 +203,30 @@ export class CloudCacheService {
       const cachePath = this.getCacheFilePath(fileName)
       console.log(`[CloudCache] 读取缓存: ${cachePath}`)
 
-      // 下载文件
-      const downloadResult = await this.webdavService.getFileContents(cachePath, 'text')
+      // MD 与图表 JSON 并行
+      const [downloadResult, chartsResult] = await Promise.all([
+        this.webdavService.getFileContents(cachePath, 'text'),
+        this.readChartsJson(fileName),
+      ])
 
       if (!downloadResult.success || !downloadResult.data) {
         return {
           success: false,
-          error: downloadResult.error || '下载缓存文件失败'
+          error: downloadResult.error || '下载缓存文件失败',
+          chartsJson: chartsResult.content,
+          chartsFileFound: chartsResult.found,
         }
       }
 
       const content = downloadResult.data as string
-
-      // 解析元数据
       const metadata = this.parseMetadata(content)
 
       return {
         success: true,
         content,
-        metadata: metadata || undefined
+        metadata: metadata || undefined,
+        chartsJson: chartsResult.content,
+        chartsFileFound: chartsResult.found,
       }
     } catch (error) {
       console.error('[CloudCache] 读取缓存失败:', error)

@@ -115,6 +115,8 @@
       "graphLoadError": "Failed to load graph",
       "regenerate": "Regenerate charts",
       "regenerated": "Key charts updated",
+      "regeneratedAndSynced": "Key charts updated and saved to cloud",
+      "syncFailedHint": "Updated locally; cloud sync failed (use the Cloud button to upload)",
       "needOverall": "Complete overall summary before generating charts",
       "needChapters": "Chapter summaries required"
     },
@@ -429,6 +431,9 @@
     "loaded": "Cloud cache loaded, ready to view results",
     "loadedWithCharts": "Cloud cache loaded (including key charts)",
     "includesKeyCharts": "Includes key charts",
+    "includesKeyChartsJson": "Includes key charts (sidecar JSON)",
+    "noKeyChartsYet": "No key-charts JSON yet; regenerate after load",
+    "chartsMissingHint": "No key-charts JSON on cloud; use Regenerate charts to create and save",
     "skipProcessing": "Cloud cache found, you can skip processing and view results directly",
     "reprocessHint": "To reprocess, click the \"Extract Chapters\" button",
     "parseError": "Failed to parse cloud cache"

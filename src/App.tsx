@@ -68,6 +68,7 @@ function App() {
     cloudCacheMetadata,
     isCheckingCloudCache,
     cloudCacheContent,
+    cloudChartsFileFound,
     rightPanelContent,
     currentViewingChapterSummary,
     previewFontSize,
@@ -392,6 +393,7 @@ function App() {
                 isCheckingCloudCache={isCheckingCloudCache}
                 cloudCacheMetadata={cloudCacheMetadata}
                 cloudCacheContent={cloudCacheContent}
+                cloudChartsFileFound={cloudChartsFileFound}
                 webdavEnabled={webdavConfig.enabled}
                 webdavInitialized={webdavService.isInitialized()}
                 onFileSelect={handleFileSelect}

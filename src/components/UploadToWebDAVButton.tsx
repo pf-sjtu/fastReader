@@ -19,6 +19,7 @@ import {
 import { Alert, AlertDescription } from './ui/alert'
 import { useWebDAVConfig, useAIConfig, useProcessingOptions } from '../stores/configStore'
 import { webdavService } from '../services/webdavService'
+import { cloudCacheService } from '../services/cloudCacheService'
 import { metadataFormatter } from '../services/metadataFormatter'
 import { toast } from 'sonner'
 
@@ -177,31 +178,35 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
         return
       }
 
-      // 上传文件
-      console.log('🚀 开始上传到WebDAV:')
-      console.log('   远程路径:', remotePath)
-      console.log('   内容长度:', markdownContent.length)
-      console.log('   内容预览:', markdownContent.substring(0, 100) + '...')
-      
+      // 上传 MD
+      console.log('🚀 开始上传到WebDAV:', remotePath, 'len=', markdownContent.length)
       const uploadResult = await webdavService.uploadFile(remotePath, markdownContent)
-      
-      console.log('📤 上传结果:', uploadResult)
-      
       if (!uploadResult.success) {
         throw new Error(uploadResult.error || '上传失败')
       }
-      
-      // 验证文件是否真的上传成功
-      console.log('🔍 验证上传结果...')
+
       const verifyResult = await webdavService.fileExists(remotePath)
-      console.log('📁 文件存在检查:', verifyResult)
-      
       if (!verifyResult) {
         throw new Error('文件上传后验证失败：文件在服务器上未找到')
       }
-      
+
+      // 有关键图表则上传同名 JSON（{name}-完整摘要.json）
+      let chartsNote = ''
+      if (bookSummary.charts) {
+        const chartsUp = await cloudCacheService.uploadChartsJson(
+          file.name,
+          bookSummary.charts
+        )
+        chartsNote = chartsUp.success
+          ? '（含关键图表 JSON）'
+          : '（图表 JSON 上传失败，摘要 MD 已成功）'
+        if (!chartsUp.success) {
+          console.warn('图表 JSON 上传失败:', chartsUp.error)
+        }
+      }
+
       setUploadStatus('uploaded')
-      toast.success(`文件已上传到WebDAV: ${fileName}`)
+      toast.success(`文件已上传到WebDAV: ${fileName}${chartsNote}`)
       
     } catch (error) {
       console.error('上传失败:', error)

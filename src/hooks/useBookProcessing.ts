@@ -99,6 +99,9 @@ export function useBookProcessing() {
   const [cloudCacheMetadata, setCloudCacheMetadata] = useState<ProcessingMetadata | null>(null)
   const [isCheckingCloudCache, setIsCheckingCloudCache] = useState(false)
   const [cloudCacheContent, setCloudCacheContent] = useState<string | null>(null)
+  /** 同名 .json 关键图表原文（检查云缓存时并行拉取） */
+  const [cloudChartsJson, setCloudChartsJson] = useState<string | null>(null)
+  const [cloudChartsFileFound, setCloudChartsFileFound] = useState(false)
 
   // 右侧面板状态
   const [rightPanelContent, setRightPanelContent] = useState<RightPanelContent | null>(null)
@@ -133,6 +136,8 @@ export function useBookProcessing() {
     setExpandedChapters(new Set())
     setCloudCacheMetadata(null)
     setCloudCacheContent(null)
+    setCloudChartsJson(null)
+    setCloudChartsFileFound(false)
     setCustomPrompt('')
     resetTokenUsage()
   }, [resetTokenUsage])
@@ -215,10 +220,12 @@ export function useBookProcessing() {
     await extractChapters(selectedFile)
   }, [resetState, webdavConfig.enabled, extractChapters])
 
-  // 检查云端缓存
+  // 检查云端缓存（MD + 同名 JSON 并行）
   const checkCloudCache = useCallback(async (fileName: string) => {
     setCloudCacheMetadata(null)
     setCloudCacheContent(null)
+    setCloudChartsJson(null)
+    setCloudChartsFileFound(false)
 
     if (!webdavConfig.enabled || !webdavService.isInitialized()) {
       return false
@@ -231,6 +238,8 @@ export function useBookProcessing() {
       if (result.success && result.content) {
         setCloudCacheMetadata(result.metadata || null)
         setCloudCacheContent(result.content)
+        setCloudChartsJson(result.chartsJson ?? null)
+        setCloudChartsFileFound(!!result.chartsFileFound)
         setIsCheckingCloudCache(false)
         return true
       }
@@ -244,6 +253,40 @@ export function useBookProcessing() {
     }
   }, [webdavConfig.enabled])
 
+  /**
+   * 解析关键图表：优先同名 JSON → MD 内嵌段 → 本地 key_charts
+   */
+  const resolveChartsFromCloudSources = useCallback(
+    (
+      mdContent: string,
+      chartsJson: string | null | undefined,
+      cacheFileKey?: string | null
+    ): BookCharts | null => {
+      // 1) 同名 .json
+      if (chartsJson?.trim()) {
+        const fromJson = deserializeCharts(chartsJson)
+        if (fromJson) return fromJson
+        console.warn('[charts] 云端 JSON 解析失败，尝试 MD 内嵌')
+      }
+      // 2) MD ## 关键图表
+      const parsed = cloudCacheService.parseUnifiedContent(mdContent)
+      if (parsed.charts) {
+        const fromMd = deserializeCharts(JSON.stringify(parsed.charts))
+        if (fromMd) return fromMd
+      }
+      // 3) 本地缓存
+      if (cacheFileKey) {
+        const local = cacheService.getString(cacheFileKey, 'key_charts')
+        if (local) {
+          const fromLocal = deserializeCharts(local)
+          if (fromLocal) return fromLocal
+        }
+      }
+      return null
+    },
+    []
+  )
+
   // 从云端缓存加载（写入结果态，与历史加载对齐）
   const loadFromCloudCache = useCallback((): boolean => {
     if (!cloudCacheContent) return false
@@ -255,11 +298,12 @@ export function useBookProcessing() {
         return false
       }
 
-      // 云端 ## 关键图表 → zod 校验后写入结果态与本地缓存
-      let charts: BookCharts | null = null
-      if (parsed.charts) {
-        charts = deserializeCharts(JSON.stringify(parsed.charts))
-      }
+      const cacheKey = file?.name || null
+      const charts = resolveChartsFromCloudSources(
+        cloudCacheContent,
+        cloudChartsJson,
+        cacheKey
+      )
 
       const summary: BookSummary = {
         title: parsed.title || file?.name.replace(/\.[^/.]+$/, '') || '',
@@ -279,7 +323,7 @@ export function useBookProcessing() {
 
       setBookSummary(summary)
 
-      // 本地缓存：章节/关联/全书/图表一并落盘，刷新后可复用
+      // 本地缓存：章节/关联/全书/图表一并落盘
       if (file) {
         summary.chapters.forEach((ch) => {
           if (ch.summary) {
@@ -305,18 +349,33 @@ export function useBookProcessing() {
         })
       }
 
-      toast.success(
-        charts
-          ? t('cloudCache.loadedWithCharts', '已加载云端缓存（含关键图表）')
-          : t('cloudCache.loaded')
-      )
+      if (charts) {
+        toast.success(t('cloudCache.loadedWithCharts', '已加载云端缓存（含关键图表）'))
+      } else {
+        toast.success(t('cloudCache.loaded'))
+        toast.message(
+          t(
+            'cloudCache.chartsMissingHint',
+            '云端暂无关键图表 JSON，可点「重新生成图表」并保存到云端'
+          )
+        )
+      }
       return true
     } catch (e) {
       console.error('加载云端缓存失败:', e)
       toast.error(t('cloudCache.parseError') || t('history.cacheParseError'))
       return false
     }
-  }, [cloudCacheContent, cloudCacheMetadata, file, processingMode, aiConfig.model, t])
+  }, [
+    cloudCacheContent,
+    cloudChartsJson,
+    cloudCacheMetadata,
+    file,
+    processingMode,
+    aiConfig.model,
+    t,
+    resolveChartsFromCloudSources,
+  ])
 
   // 章节选择处理
   const handleChapterSelect = useCallback((chapterId: string, checked: boolean) => {
@@ -913,21 +972,42 @@ export function useBookProcessing() {
       }
       setBookSummary(nextSummary)
 
-      // 重新生成后回写云端完整摘要（含 ## 关键图表），与自动同步策略一致
-      if (file) {
+      // 强制回写：MD（可选内嵌）+ 同名 JSON（主存档）；不依赖 autoSync 开关
+      if (file && webdavConfig.enabled) {
         try {
-          const baseName = file.name.replace(/\.[^/.]+$/, '')
-          await autoSyncService.syncSummary(
+          const synced = await autoSyncService.syncSummary(
             nextSummary,
-            baseName,
-            chapterNamingMode
+            file.name,
+            chapterNamingMode,
+            { force: true }
           )
+          if (synced) {
+            toast.success(
+              t('results.charts.regeneratedAndSynced', '关键图表已更新并保存到云端'),
+              { id: toastId }
+            )
+          } else {
+            toast.success(t('results.charts.regenerated', '关键图表已更新'), {
+              id: toastId,
+            })
+            toast.warning(
+              t(
+                'results.charts.syncFailedHint',
+                '本地已更新，云端同步失败（可点「云端」按钮手动上传）'
+              )
+            )
+          }
         } catch (syncErr) {
           console.warn('[regenerateKeyCharts] 云端同步失败:', syncErr)
+          toast.success(t('results.charts.regenerated', '关键图表已更新'), {
+            id: toastId,
+          })
         }
+      } else {
+        toast.success(t('results.charts.regenerated', '关键图表已更新'), {
+          id: toastId,
+        })
       }
-
-      toast.success(t('results.charts.regenerated', '关键图表已更新'), { id: toastId })
     } catch (err) {
       const msg = err instanceof Error ? err.message : '未知错误'
       console.error('[regenerateKeyCharts]', err)
@@ -948,6 +1028,7 @@ export function useBookProcessing() {
     aiServiceOptions,
     processingOptions.outputLanguage,
     chapterNamingMode,
+    webdavConfig.enabled,
   ])
 
   // 清除书籍缓存
@@ -1122,10 +1203,12 @@ export function useBookProcessing() {
         return false
       }
 
-      let charts: BookCharts | null = null
-      if (parsed.charts) {
-        charts = deserializeCharts(JSON.stringify(parsed.charts))
-      }
+      // readCache 已并行拉取同名 JSON
+      const charts = resolveChartsFromCloudSources(
+        result.content,
+        result.chartsJson,
+        fileName
+      )
 
       // 转换为 BookSummary 格式
       const summary: BookSummary = {
@@ -1147,6 +1230,9 @@ export function useBookProcessing() {
       // 重置状态并设置结果
       resetState()
       setBookSummary(summary)
+      setCloudCacheContent(result.content)
+      setCloudChartsJson(result.chartsJson ?? null)
+      setCloudChartsFileFound(!!result.chartsFileFound)
 
       // 历史加载同样写入本地图表缓存
       summary.chapters.forEach((ch) => {
@@ -1179,7 +1265,7 @@ export function useBookProcessing() {
       toast.error(t('history.loadError'))
       return false
     }
-  }, [t, resetState])
+  }, [t, resetState, resolveChartsFromCloudSources])
 
   return {
     // 状态
@@ -1199,6 +1285,7 @@ export function useBookProcessing() {
     cloudCacheMetadata,
     isCheckingCloudCache,
     cloudCacheContent,
+    cloudChartsFileFound,
     rightPanelContent,
     currentViewingChapter,
     currentViewingChapterSummary,

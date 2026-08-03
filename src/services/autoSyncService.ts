@@ -1,6 +1,7 @@
 import { WebDAVService } from './webdavService'
 import { useConfigStore } from '../stores/configStore'
 import { metadataFormatter, type ProcessResultInfo } from './metadataFormatter'
+import { cloudCacheService } from './cloudCacheService'
 
 // 定义本地类型（避免循环依赖）
 interface BookSummary {
@@ -54,57 +55,75 @@ export class AutoSyncService {
   }
 
   /**
-   * 同步摘要文件到WebDAV
-   * 生成与手动上传一致的单个完整 Markdown 文件
+   * 同步摘要文件到 WebDAV
+   * - MD：`{name}-完整摘要.md`
+   * - 关键图表（若有）：同名 JSON `{name}-完整摘要.json`
+   * @param options.force 为 true 时忽略 autoSync 开关（手动重生成图表后回写）
    */
-  async syncSummary(bookSummary: BookSummary, fileName: string, chapterNamingMode: 'auto' | 'numbered' = 'auto'): Promise<boolean> {
+  async syncSummary(
+    bookSummary: BookSummary,
+    fileName: string,
+    chapterNamingMode: 'auto' | 'numbered' = 'auto',
+    options?: { force?: boolean }
+  ): Promise<boolean> {
     try {
-      // 检查是否启用自动同步
       const webdavConfig = useConfigStore.getState().webdavConfig
       const processingOptions = useConfigStore.getState().processingOptions
+      const force = options?.force === true
 
-      if (!webdavConfig.enabled || !webdavConfig.autoSync) {
+      if (!webdavConfig.enabled) {
+        return false
+      }
+      if (!force && !webdavConfig.autoSync) {
         return false
       }
 
-      // 初始化WebDAV服务
       const initResult = await this.webdavService.initialize(webdavConfig)
       if (!initResult.success) {
         console.error('WebDAV初始化失败:', initResult.error)
         return false
       }
 
-      // 检查连接
       const connectionTest = await this.webdavService.testConnection()
       if (!connectionTest.success) {
         console.error('WebDAV连接失败:', connectionTest.error)
         return false
       }
 
-      // 生成统一的完整摘要文件（与手动上传格式一致）
-      const summaryContent = this.formatUnifiedSummary(bookSummary, fileName, chapterNamingMode, processingOptions)
+      const summaryContent = this.formatUnifiedSummary(
+        bookSummary,
+        fileName,
+        chapterNamingMode,
+        processingOptions
+      )
 
-      // 清理文件名
-      const sanitizedName = fileName
-        .replace(/\.[^/.]+$/, '')
-        .replace(/[<>:"/\\|?*]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-      const remoteFileName = `${sanitizedName}-完整摘要.md`
-      const remotePath = `${webdavConfig.syncPath}/${remoteFileName}`
+      // 用 cloudCache 统一路径规则（与读取一致）
+      const mdPath = cloudCacheService.getCacheFilePath(fileName)
+      const uploadResult = await this.webdavService.uploadFile(mdPath, summaryContent)
 
-      // 上传文件
-      const uploadResult = await this.webdavService.uploadFile(remotePath, summaryContent)
-
-      if (uploadResult.success) {
-        console.log(`✅ 摘要文件同步成功: ${remoteFileName}`)
-        // 更新最后同步时间
-        useConfigStore.getState().updateWebDAVLastSyncTime()
-        return true
-      } else {
+      if (!uploadResult.success) {
         console.error('摘要文件同步失败:', uploadResult.error)
         return false
       }
+
+      console.log(`✅ 摘要 MD 同步成功: ${mdPath}`)
+
+      // 有图表则写同名 JSON；无图表不删旧文件（避免误清）
+      if (bookSummary.charts) {
+        const chartsUp = await cloudCacheService.uploadChartsJson(
+          fileName,
+          bookSummary.charts
+        )
+        if (chartsUp.success) {
+          console.log(`✅ 关键图表 JSON 同步成功: ${chartsUp.path}`)
+        } else {
+          console.warn('关键图表 JSON 同步失败:', chartsUp.error)
+          // MD 已成功；图表失败单独告警，整体仍返回 true 但由调用方可查
+        }
+      }
+
+      useConfigStore.getState().updateWebDAVLastSyncTime()
+      return true
     } catch (error) {
       console.error('同步摘要文件时发生错误:', error)
       return false
