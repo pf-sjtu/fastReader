@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useState } from 'react'
-import { Download, FileText, BookOpen, Network, Loader2 } from 'lucide-react'
+import { Download, BookOpen, Network } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FontSizeControl } from '@/components/FontSizeControl'
 import { MarkdownCard } from '@/components/MarkdownCard'
@@ -26,7 +25,6 @@ interface ResultsSectionProps {
   onChapterExpandChange: (chapterId: string, isExpanded: boolean) => void
   onReadChapter: (chapterId: string) => void
   onDownloadAllMarkdown: () => void
-  onDownloadAllPdf?: () => void | Promise<void>
   onDownloadMindMap?: (mindMapData: MindElixirData, title?: string) => void
   onRegenerateKeyCharts?: () => void | Promise<void>
 }
@@ -43,22 +41,10 @@ export function ResultsSection({
   onChapterExpandChange,
   onReadChapter,
   onDownloadAllMarkdown,
-  onDownloadAllPdf,
   onDownloadMindMap,
   onRegenerateKeyCharts,
 }: ResultsSectionProps) {
   const { t } = useTranslation()
-  const [pdfExporting, setPdfExporting] = useState(false)
-
-  const handleDownloadPdf = async () => {
-    if (!onDownloadAllPdf || pdfExporting) return
-    setPdfExporting(true)
-    try {
-      await onDownloadAllPdf()
-    } finally {
-      setPdfExporting(false)
-    }
-  }
 
   if (!bookSummary && !bookMindMap) {
     return null
@@ -96,23 +82,6 @@ export function ResultsSection({
                   <Download className="h-3.5 w-3.5" />
                   MD
                 </Button>
-                {onDownloadAllPdf && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDownloadPdf}
-                    disabled={pdfExporting}
-                    className="flex items-center gap-1.5 h-8 min-h-8 text-xs"
-                    title={t('download.downloadAllPdf')}
-                  >
-                    {pdfExporting ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <FileText className="h-3.5 w-3.5" />
-                    )}
-                    PDF
-                  </Button>
-                )}
                 <UploadToWebDAVButton
                   bookSummary={bookSummary}
                   file={file}

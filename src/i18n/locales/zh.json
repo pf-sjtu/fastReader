@@ -107,6 +107,7 @@
       "noTimeline": "暂无时间线数据",
       "personGraphHint": "滚轮缩放 · 拖动画布/节点 · 点击人物查看详情",
       "timelineHint": "纵轴为时间/事件顺序，横轴为实体；点击色块查看详情",
+      "timelineTime": "时间",
       "relatedEntities": "相关实体",
       "relations": "关系",
       "graphLoadError": "关系图加载失败",
@@ -309,10 +310,7 @@
   "download": {
     "title": "下载思维导图",
     "downloadAllMarkdown": "下载完整 Markdown",
-    "downloadAllPdf": "下载完整 PDF",
     "markdownDownloaded": "Markdown 文件已下载",
-    "pdfDownloaded": "PDF 文件已下载",
-    "pdfGenerating": "正在生成 PDF…",
     "noContent": "没有可下载的内容",
     "downloadFailed": "下载失败，请重试",
     "downloadSuccess": "下载成功",
@@ -415,6 +413,8 @@
     "useCache": "使用云端缓存",
     "noCache": "云端暂无缓存，将进行新处理",
     "loaded": "已加载云端缓存，可直接查看处理结果",
+    "loadedWithCharts": "已加载云端缓存（含关键图表）",
+    "includesKeyCharts": "含关键图表",
     "skipProcessing": "发现云端缓存，可跳过处理直接查看结果",
     "reprocessHint": "如需重新处理，请点击「提取章节」按钮",
     "parseError": "云端缓存解析失败"

@@ -17,7 +17,7 @@ import type { MindElixirData } from 'mind-elixir'
 
 import { webdavService } from '@/services/webdavService'
 import { scrollToTop } from '@/utils/index'
-import { downloadSummaryMarkdown, downloadSummaryPdf } from '@/utils/exportSummary'
+import { downloadSummaryMarkdown } from '@/utils/exportSummary'
 import { triggerTextDownload } from '@/utils/download'
 import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
@@ -165,37 +165,6 @@ function App() {
     } catch (error) {
       console.error('Markdown 下载失败:', error)
       toast.error(t('download.downloadFailed'))
-    }
-  }, [
-    bookSummary,
-    file,
-    aiConfig.model,
-    processingOptions.chapterDetectionMode,
-    processingOptions.chapterNamingMode,
-    processingOptions.epubTocDepth,
-    t,
-  ])
-
-  // 下载完整 PDF
-  const downloadAllPdf = useCallback(async () => {
-    if (!bookSummary) {
-      toast.error(t('download.noContent'))
-      return
-    }
-    const toastId = toast.loading(t('download.pdfGenerating'))
-    try {
-      await downloadSummaryPdf({
-        bookSummary,
-        fileName: file?.name,
-        model: aiConfig.model,
-        chapterDetectionMode: processingOptions.chapterDetectionMode,
-        chapterNamingMode: processingOptions.chapterNamingMode,
-        epubTocDepth: processingOptions.epubTocDepth,
-      })
-      toast.success(t('download.pdfDownloaded'), { id: toastId })
-    } catch (error) {
-      console.error('PDF 下载失败:', error)
-      toast.error(t('download.downloadFailed'), { id: toastId })
     }
   }, [
     bookSummary,
@@ -502,7 +471,6 @@ function App() {
                     if (chapter) handleViewChapterContent(chapter)
                   }}
                   onDownloadAllMarkdown={downloadAllMarkdown}
-                  onDownloadAllPdf={downloadAllPdf}
                   onDownloadMindMap={downloadMindMap}
                   onRegenerateKeyCharts={regenerateKeyCharts}
                 />

@@ -28,11 +28,7 @@ export { triggerBlobDownload, triggerTextDownload } from './download'
 export {
   buildSummaryMarkdown,
   downloadSummaryMarkdown,
-  downloadSummaryPdf,
   getSummaryExportBaseName,
-  markdownToPrintableHtml,
-  convertMarkdownTables,
-  convertMarkdownHorizontalRules,
 } from './exportSummary'
 
 // URL处理工具
