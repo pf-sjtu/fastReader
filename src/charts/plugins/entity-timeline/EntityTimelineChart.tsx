@@ -77,8 +77,8 @@ export function EntityTimelineChart({ charts }: Props) {
   }
 
   const { config, entities, timeRows, entityColor } = layout
-  // 冻结列/行用实色底，避免滚动时透出
-  const stickyColBg = theme.isDark ? 'hsl(var(--card))' : 'var(--card, #fff)'
+  // 冻结列用实色底（hex，来自主题），避免滚动时透出下层
+  const stickyColBg = theme.card || '#ffffff'
 
   return (
     <>
