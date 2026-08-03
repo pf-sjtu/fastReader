@@ -109,7 +109,6 @@ describe('prepareMarkdownForRender', () => {
     expect(out).toContain('*1970年代*')
     expect(out).not.toMatch(/\* 1970/)
     expect(out).toContain('***给予我探索世界的自主权***')
-    // 粗体块仍成对
     expect(out).toMatch(/\*\*[^*]+\*\*/)
   })
 
@@ -123,5 +122,12 @@ describe('prepareMarkdownForRender', () => {
     expect(out).toContain('*80公里*')
     expect(out).toContain('***折返就意味着放弃。***')
     expect(out).not.toMatch(/\* \d/)
+  })
+
+  it('默认管道不对外侧标点强行补空格（交给 cjk-friendly）', () => {
+    // 预处理不应把 **文本。**后文 改成带奇怪空格的半合法串
+    const input = '**该星号会被识别。**这是因为 cjk-friendly。'
+    const out = prepareMarkdownForRender(input)
+    expect(out).toBe(input)
   })
 })

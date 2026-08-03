@@ -158,6 +158,10 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
       {!actualIsCollapsed && (
         <CardContent className="min-w-0">
           <div className="markdown-card-content prose prose-sm max-w-none overflow-x-auto">
+            {/*
+              强调作用域：micromark (CommonMark delimiter run) + remark-cjk-friendly
+              预处理只清 AI 脏源文（内侧空格、段中 >），不手写配对。
+            */}
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]}>
               {prepareMarkdownForRender(markdownContent)}
             </ReactMarkdown>

@@ -1,28 +1,30 @@
 /**
- * Markdown 渲染前预处理
+ * Markdown 渲染前预处理（薄清洗层）
  *
- * ## 根因备忘（*** 字面残留）
- * 旧实现按 `**` → `*` 顺序配对，会把合法 `***洞见***` 拆成：
- *   open `**` + inner `*洞见` + close `**`，残留 `*`
- * 且 `*` 落在「标点」字符类里，inner 以 `*` 开头会被当成「内侧首标点」
- * → 在作用域**前**误加空格 → 渲染成 `。 *** 洞见***`（与线上截图一致）。
+ * ## 架构原则（系统化方案）
  *
- * 这是预处理作用域/配对错误，**不是**「外侧/内侧补空格规则写反」，也不是模型必然输出错误。
- * Prompt（v2）要求 `***text***` 内侧无空格；合法输出必须原样保留。
+ * 1. **作用域/强调匹配不在本文件实现**
+ *    CommonMark 用 delimiter run + left/right-flanking 规则（见
+ *    https://spec.commonmark.org/ ）在 **解析器** 内匹配强调。
+ *    micromark 实现该算法；CJK 场景下内侧为中文标点、外侧为汉字时，
+ *    标准 CM 会失败 → 项目已用 `remark-cjk-friendly`
+ *    （底层 `micromark-extension-cjk-friendly`）在解析期修正 flanking。
  *
- * ## 稳定处理顺序
- * protect code → 修段中 `>` → 松散内侧空白（*** 优先）→ 外侧标点空格（*** 优先，* 不算标点）
+ * 2. **本模块只做「脏源文」修复，不改写合法 Markdown**
+ *    - AI 常输出 `* 文 *` / `*** 洞见 ***`（标记内侧空白 → 非法）
+ *    - AI 常在段中写 `。> 引用`（`>` 须行首）
+ *    - 不在这里做 ** 配对 / 外侧补空格（那是解析器职责，手写易与 ** / *** 互拆）
+ *
+ * 3. **管道**
+ *    protect code → 段中 `>` → 去内侧空白 →（可选遗留）typography 外侧补空格
+ *    默认 `prepareMarkdownForRender` **不**再跑外侧补空格，交给 remark-cjk-friendly。
+ *
+ * 4. **没有可靠的「通用强调正则」可替代解析器**
+ *    嵌套 `***`、码段内 `*`、跨段、CJK 标点 flanking 都不是单条正则能正确覆盖的；
+ *    markdownlint MD037 等只做 lint，不负责渲染。
  */
 
-/** 用于「内侧是否以标点开头/结尾」——排除 * _ 以免与 Markdown 标记混淆 */
-const PUNCTUATION_RE =
-  /[\u2000-\u206F\u2E00-\u2E7F\u3000-\u303F\uFF00-\uFFEF\u0021-\u0029\u002B-\u002F\u003A-\u0040\u005B-\u005E\u0060\u007B-\u007E]/
-
-function isPunctuation(char: string | undefined): boolean {
-  return !!char && PUNCTUATION_RE.test(char)
-}
-
-/** i 处连续 * 的数量是否严格大于 markerLen */
+/** i 处连续 * 的数量 */
 function starRunLength(input: string, i: number): number {
   let n = 0
   while (i + n < input.length && input[i + n] === '*') n++
@@ -36,20 +38,17 @@ function underRunLength(input: string, i: number): number {
 }
 
 /**
- * 成对标记扫描：仅当 i 处 run 长度**恰好**等于 marker.length 时才视为该级标记的开/闭。
- * 这样 `***` 不会被 `**` 或 `*` 误打开。
+ * 仅当 i 处 run 长度恰好等于 marker.length 时配对。
+ * 更长/更短 run 整段原样跳过（禁止 ** 被拆成 *+*）。
  */
 function mapExactRunMarker(
   input: string,
   marker: string,
-  mapPair: (inner: string, openAt: number, closeAt: number) => string
+  mapPair: (inner: string) => string
 ): string {
   const len = marker.length
   const ch = marker[0]
-  if (ch !== '*' && ch !== '_') {
-    // 非 run 类（当前未使用）
-    return input
-  }
+  if (ch !== '*' && ch !== '_') return input
   const runLen = ch === '*' ? starRunLength : underRunLength
 
   let result = ''
@@ -63,17 +62,15 @@ function mapExactRunMarker(
 
     const openRun = runLen(input, i)
     if (openRun !== len) {
-      // 整段 run 原样输出。切勿逐字吐出，否则 ** 会被拆成 *+* 再被单星误配
-      // （典型症状：`**粗体。** … *1970年代*` → `* 1970年代*`）
       result += input.slice(i, i + openRun)
       i += openRun
       continue
     }
 
-    // 找闭合：同样要求恰好 len 个
     let j = i + len
     let closeAt = -1
     while (j < input.length) {
+      // 不跨空行配对，降低误吞下一段的风险
       if (input[j] === '\n' && input[j + 1] === '\n') break
       if (input[j] === ch) {
         const cr = runLen(input, j)
@@ -81,7 +78,6 @@ function mapExactRunMarker(
           closeAt = j
           break
         }
-        // 更长/更短 run：跳过整段 run，避免卡在中间
         j += Math.max(1, cr)
         continue
       }
@@ -89,14 +85,13 @@ function mapExactRunMarker(
     }
 
     if (closeAt === -1) {
-      // 未配对：整段 open run 原样输出，避免拆碎多星号
       result += input.slice(i, i + openRun)
       i += openRun
       continue
     }
 
     const inner = input.slice(i + len, closeAt)
-    result += mapPair(inner, i, closeAt)
+    result += mapPair(inner)
     i = closeAt + len
   }
   return result
@@ -104,7 +99,7 @@ function mapExactRunMarker(
 
 /**
  * 去掉成对强调内侧首尾空白：`* 文 *` → `*文*`
- * 合法 `***洞见***` 不变。
+ * 只服务「模型脏输出」；合法无空白标记不变。
  */
 export function repairLooseMarkdownEmphasis(input: string): string {
   if (!input) return ''
@@ -115,6 +110,7 @@ export function repairLooseMarkdownEmphasis(input: string): string {
   }
 
   let output = input
+  // 长标记优先
   for (const marker of ['***', '**', '*', '___', '__', '_'] as const) {
     output = mapExactRunMarker(output, marker, (inner) => marker + trimInner(inner) + marker)
   }
@@ -145,9 +141,18 @@ function withProtectedCode(input: string, fn: (body: string) => string): string 
   return s
 }
 
+/** 用于「内侧是否以标点开头/结尾」——排除 * _ */
+const PUNCTUATION_RE =
+  /[\u2000-\u206F\u2E00-\u2E7F\u3000-\u303F\uFF00-\uFFEF\u0021-\u0029\u002B-\u002F\u003A-\u0040\u005B-\u005E\u0060\u007B-\u007E]/
+
+function isPunctuation(char: string | undefined): boolean {
+  return !!char && PUNCTUATION_RE.test(char)
+}
+
 /**
- * 内侧首/尾为标点时，在作用域**外侧**补空格。
- * 使用「恰好 N 个 *」配对；`*`/`_` 字符本身不算内侧标点。
+ * 【遗留 / openspec】内侧首尾为标点时在作用域外侧补空格。
+ * 渲染主路径已改用 remark-cjk-friendly 处理 CJK flanking，默认不再调用本函数。
+ * 保留导出以兼容旧测试与导出管道中可能的显式需求。
  */
 export function normalizeMarkdownTypography(input?: string): string {
   if (!input) return ''
@@ -176,7 +181,6 @@ function padOutsideForMarker(input: string, marker: string): string {
 
     const openRun = runLen(input, i)
     if (openRun !== len) {
-      // 与 mapExactRunMarker 相同：整段跳过，禁止 ** 被 * 拆配
       result += input.slice(i, i + openRun)
       i += openRun
       continue
@@ -208,7 +212,6 @@ function padOutsideForMarker(input: string, marker: string): string {
     let piece = marker + inner + marker
 
     if (inner.length > 0) {
-      // 与 openspec 一致：内侧首/尾标点 → 作用域外侧补空格（串首/串尾也补）
       if (isPunctuation(inner[0])) {
         const prev = result.length > 0 ? result[result.length - 1] : ''
         if (prev !== ' ' && prev !== '\n') {
@@ -230,8 +233,7 @@ function padOutsideForMarker(input: string, marker: string): string {
 }
 
 /**
- * 渲染前完整管道。
- * 合法 `***text***` / `**text**` 必须保持可解析；仅修复松散空白与段中引用。
+ * 渲染前默认管道：只清洗明显非法源文，强调匹配交给解析器 + cjk-friendly。
  */
 export function prepareMarkdownForRender(input?: string): string {
   if (!input) return ''
@@ -239,7 +241,8 @@ export function prepareMarkdownForRender(input?: string): string {
   return withProtectedCode(input, (body) => {
     let s = repairMidParagraphBlockquotes(body)
     s = repairLooseMarkdownEmphasis(s)
-    s = normalizeMarkdownTypography(s)
+    // 不再调用 normalizeMarkdownTypography：
+    // CJK 标点 flanking 由 remark-cjk-friendly 在 micromark 层处理，更系统且不易拆 **/***
     return s
   })
 }
