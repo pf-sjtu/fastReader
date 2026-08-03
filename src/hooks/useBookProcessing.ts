@@ -39,7 +39,7 @@ export interface BookSummary {
   chapters: Chapter[]
   connections: string
   overallSummary: string
-  /** 关键图表结构化数据（人物关系 + 时间线等） */
+  /** 关键图表结构化数据（实体关系 + 时间线等） */
   charts?: BookCharts | null
   chartsError?: string | null
 }

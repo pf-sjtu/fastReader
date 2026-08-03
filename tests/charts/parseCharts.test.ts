@@ -28,7 +28,7 @@ describe('extractJsonObject', () => {
 describe('parseCharts', () => {
   const valid = {
     version: 1 as const,
-    personGraph: {
+    entityGraph: {
       nodes: [
         { id: 'a', name: '甲', importance: 9 },
         { id: 'b', name: '乙', importance: 7 },
@@ -55,13 +55,27 @@ describe('parseCharts', () => {
   it('解析合法 JSON', () => {
     const charts = parseCharts(JSON.stringify(valid))
     expect(charts).not.toBeNull()
-    expect(charts!.personGraph!.nodes).toHaveLength(2)
+    expect(charts!.entityGraph!.nodes).toHaveLength(2)
     expect(charts!.entityTimeline!.events).toHaveLength(1)
   })
 
   it('解析 fence 包裹', () => {
     const charts = parseCharts('```json\n' + JSON.stringify(valid) + '\n```')
-    expect(charts?.personGraph?.nodes[0].name).toBe('甲')
+    expect(charts?.entityGraph?.nodes[0].name).toBe('甲')
+  })
+
+  it('兼容旧字段 personGraph 并归一为 entityGraph', () => {
+    const charts = parseCharts(
+      JSON.stringify({
+        version: 1,
+        personGraph: {
+          nodes: [{ id: 'x', name: '概念X', type: '概念', importance: 8 }],
+          edges: [],
+        },
+      })
+    )
+    expect(charts?.entityGraph?.nodes[0].name).toBe('概念X')
+    expect(charts?.personGraph).toBeUndefined()
   })
 
   it('缺 version 时自动补 1', () => {
@@ -72,7 +86,7 @@ describe('parseCharts', () => {
 
   it('空节点空事件返回 null', () => {
     expect(
-      parseCharts(JSON.stringify({ version: 1, personGraph: { nodes: [], edges: [] } }))
+      parseCharts(JSON.stringify({ version: 1, entityGraph: { nodes: [], edges: [] } }))
     ).toBeNull()
   })
 
@@ -83,7 +97,7 @@ describe('parseCharts', () => {
   it('序列化往返', () => {
     const charts = parseCharts(JSON.stringify(valid))!
     const again = deserializeCharts(serializeCharts(charts))
-    expect(again?.personGraph?.nodes).toHaveLength(2)
+    expect(again?.entityGraph?.nodes).toHaveLength(2)
   })
 })
 
@@ -96,19 +110,19 @@ describe('enforceChartLimits', () => {
     }))
     const limited = enforceChartLimits({
       version: 1,
-      personGraph: { nodes, edges: [] },
+      entityGraph: { nodes, edges: [] },
     })
-    expect(limited.personGraph!.nodes.length).toBe(CHART_LIMITS.maxNodes)
+    expect(limited.entityGraph!.nodes.length).toBe(CHART_LIMITS.maxNodes)
     // 保留 importance 最高
-    expect(limited.personGraph!.nodes[0].importance).toBeGreaterThanOrEqual(
-      limited.personGraph!.nodes.at(-1)!.importance ?? 0
+    expect(limited.entityGraph!.nodes[0].importance).toBeGreaterThanOrEqual(
+      limited.entityGraph!.nodes.at(-1)!.importance ?? 0
     )
   })
 
-  it('从 personGraph 回填时间线缺失实体', () => {
+  it('从 entityGraph 回填时间线缺失实体', () => {
     const limited = enforceChartLimits({
       version: 1,
-      personGraph: {
+      entityGraph: {
         nodes: [
           { id: 'p1', name: '甲', importance: 10 },
           { id: 'p8', name: '乙', importance: 6 },

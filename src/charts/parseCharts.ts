@@ -81,13 +81,15 @@ export function parseCharts(text: string): BookCharts | null {
 
   const limited = enforceChartLimits(result.data as BookChartsParsed)
 
-  // 至少有一种图的数据才算成功
-  const hasPerson = (limited.personGraph?.nodes.length ?? 0) > 0
+  // 至少有一种图的数据才算成功（entityGraph 已由 enforce 归一化）
+  const hasGraph =
+    (limited.entityGraph?.nodes.length ?? 0) > 0 ||
+    (limited.personGraph?.nodes.length ?? 0) > 0
   const hasTimeline =
     (limited.entityTimeline?.entities.length ?? 0) > 0 ||
     (limited.entityTimeline?.events.length ?? 0) > 0
 
-  if (!hasPerson && !hasTimeline) return null
+  if (!hasGraph && !hasTimeline) return null
 
   return limited as BookCharts
 }

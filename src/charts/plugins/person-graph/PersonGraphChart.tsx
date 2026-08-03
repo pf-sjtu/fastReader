@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Core, EventObject } from 'cytoscape'
-import type { BookCharts, PersonGraphNode } from '../../types'
+import type { BookCharts, EntityGraphNode } from '../../types'
+import { getEntityGraph } from '../../types'
 import { toCytoscapeElements, nodeSize } from './toCytoscape'
 import { readChartTheme, subscribeThemeChange, type ChartThemeColors } from '../../theme'
 import {
@@ -17,7 +18,7 @@ interface Props {
 }
 
 interface SelectedNode {
-  node: PersonGraphNode
+  node: EntityGraphNode
   edges: {
     relation: string
     otherName: string
@@ -121,7 +122,7 @@ export function PersonGraphChart({ charts }: Props) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
-  const graph = charts.personGraph
+  const graph = getEntityGraph(charts)
   const [selected, setSelected] = useState<SelectedNode | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [themeTick, setThemeTick] = useState(0)
@@ -186,7 +187,7 @@ export function PersonGraphChart({ charts }: Props) {
         cy.on('tap', 'node', (evt: EventObject) => {
           const n = evt.target
           const id = n.id()
-          const nodeData: PersonGraphNode = {
+          const nodeData: EntityGraphNode = {
             id,
             name: n.data('name') || n.data('label'),
             type: n.data('type'),
@@ -232,7 +233,7 @@ export function PersonGraphChart({ charts }: Props) {
   if (!graph || (graph.nodes?.length ?? 0) === 0) {
     return (
       <div className="text-sm text-muted-foreground py-8 text-center">
-        {t('results.charts.noPersonGraph', '暂无人物关系数据')}
+        {t('results.charts.noEntityGraph', '暂无实体关系数据')}
       </div>
     )
   }
@@ -253,8 +254,8 @@ export function PersonGraphChart({ charts }: Props) {
       />
       <p className="text-xs text-muted-foreground mt-2">
         {t(
-          'results.charts.personGraphHint',
-          '滚轮缩放 · 拖动画布/节点 · 点击人物查看详情'
+          'results.charts.entityGraphHint',
+          '滚轮缩放 · 拖动画布/节点 · 点击实体查看详情'
         )}
       </p>
 

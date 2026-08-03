@@ -4,7 +4,8 @@
  */
 import type { ComponentType } from 'react'
 
-export interface PersonGraphNode {
+/** 实体关系图节点（人物/概念/理论/物种等） */
+export interface EntityGraphNode {
   id: string
   name: string
   type?: string
@@ -13,17 +14,25 @@ export interface PersonGraphNode {
   importance?: number
 }
 
-export interface PersonGraphEdge {
+export interface EntityGraphEdge {
   source: string
   target: string
   relation: string
   description?: string
 }
 
-export interface PersonGraph {
-  nodes: PersonGraphNode[]
-  edges: PersonGraphEdge[]
+/** 实体关系图（原 personGraph，兼容旧缓存字段） */
+export interface EntityGraph {
+  nodes: EntityGraphNode[]
+  edges: EntityGraphEdge[]
 }
+
+/** @deprecated 使用 EntityGraphNode */
+export type PersonGraphNode = EntityGraphNode
+/** @deprecated 使用 EntityGraphEdge */
+export type PersonGraphEdge = EntityGraphEdge
+/** @deprecated 使用 EntityGraph */
+export type PersonGraph = EntityGraph
 
 export interface TimelineEntity {
   id: string
@@ -53,8 +62,20 @@ export interface EntityTimeline {
 /** 统一图表数据（version 便于缓存迁移） */
 export interface BookCharts {
   version: 1
-  personGraph?: PersonGraph
+  /** 实体关系图（推荐） */
+  entityGraph?: EntityGraph
+  /**
+   * @deprecated 旧云存档字段，解析时会归一到 entityGraph
+   */
+  personGraph?: EntityGraph
   entityTimeline?: EntityTimeline
+}
+
+/** 读取实体关系图（兼容 personGraph） */
+export function getEntityGraph(charts: BookCharts): EntityGraph | undefined {
+  const g = charts.entityGraph || charts.personGraph
+  if (!g?.nodes?.length) return undefined
+  return g
 }
 
 export interface ChartPluginProps {

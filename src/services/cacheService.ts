@@ -9,7 +9,7 @@ export type CacheKeyType =
   // 书籍级缓存
   | 'connections'      // 章节关联分析
   | 'overall_summary'  // 全书总结
-  | 'key_charts'       // 关键图表 JSON（人物关系 + 时间线）
+  | 'key_charts'       // 关键图表 JSON（实体关系 + 时间线）
   | 'combined_mindmap' // 整书思维导图（直接从整书内容生成）
   | 'merged_mindmap'   // 合并思维导图（从章节思维导图合并生成）
   | 'mindmap_arrows'   // 思维导图箭头

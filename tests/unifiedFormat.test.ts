@@ -30,7 +30,7 @@ const testBookData: UnifiedBookSummaryData = {
   connections: '各章节之间的关联分析内容',
   charts: {
     version: 1,
-    personGraph: {
+    entityGraph: {
       nodes: [{ id: 'a', name: '甲' }],
       edges: [],
     },
@@ -170,7 +170,10 @@ describe('统一格式 Markdown 测试', () => {
       expect(parsed.data.overallSummary).toBe('这是全书的总结')
       expect(parsed.data.connections).toBe('各章节之间的关联分析内容')
       expect(parsed.data.charts).toBeTruthy()
-      expect((parsed.data.charts as { personGraph?: { nodes: unknown[] } })?.personGraph?.nodes).toHaveLength(1)
+      expect(
+        (parsed.data.charts as { entityGraph?: { nodes: unknown[] } })?.entityGraph
+          ?.nodes
+      ).toHaveLength(1)
       expect(parsed.data.chapters).toHaveLength(3)
       expect(parsed.data.chapters[0].title).toBe('第一章：开始')
       expect(parsed.data.chapters[0].summary).toBe('这是第一章的总结内容')
@@ -183,8 +186,8 @@ describe('统一格式 Markdown 测试', () => {
       const parsed = parseUnifiedMarkdown(markdown)
       expect(parsed.data.charts).toMatchObject({ version: 1 })
       expect(
-        (parsed.data.charts as { personGraph?: { nodes: { name: string }[] } })
-          ?.personGraph?.nodes?.[0]?.name
+        (parsed.data.charts as { entityGraph?: { nodes: { name: string }[] } })
+          ?.entityGraph?.nodes?.[0]?.name
       ).toBe('甲')
     })
 
@@ -198,7 +201,7 @@ describe('统一格式 Markdown 测试', () => {
 ## 关键图表
 
 \`\`\`json
-{"version":1,"personGraph":{"nodes":[{"id":"p1","name":"甲"}],"edges":[]}}
+{"version":1,"entityGraph":{"nodes":[{"id":"p1","name":"甲"}],"edges":[]}}
 \`\`\`
 
 ## 章节摘要
@@ -210,8 +213,8 @@ describe('统一格式 Markdown 测试', () => {
       const parsed = parseUnifiedMarkdown(md)
       expect(parsed.data.charts).toMatchObject({ version: 1 })
       expect(
-        (parsed.data.charts as { personGraph: { nodes: { id: string }[] } })
-          .personGraph.nodes[0].id
+        (parsed.data.charts as { entityGraph: { nodes: { id: string }[] } })
+          .entityGraph.nodes[0].id
       ).toBe('p1')
     })
 

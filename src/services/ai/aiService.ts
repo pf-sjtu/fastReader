@@ -276,7 +276,7 @@ export class AIService {
   }
 
   /**
-   * 全书总结后：抽取关键图表结构化数据（人物关系 + 实体时间线）
+   * 全书总结后：抽取关键图表结构化数据（实体关系 + 实体时间线）
    * 解析失败抛错，由调用方 soft-fail。
    */
   async generateKeyCharts(

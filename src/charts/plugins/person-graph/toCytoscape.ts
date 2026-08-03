@@ -1,4 +1,4 @@
-import type { PersonGraph } from '../../types'
+import type { EntityGraph } from '../../types'
 
 export interface CyElement {
   data: Record<string, unknown>
@@ -6,9 +6,9 @@ export interface CyElement {
 }
 
 /**
- * BookCharts personGraph → cytoscape elements
+ * BookCharts entityGraph → cytoscape elements
  */
-export function toCytoscapeElements(graph: PersonGraph): CyElement[] {
+export function toCytoscapeElements(graph: EntityGraph): CyElement[] {
   const nodes: CyElement[] = (graph.nodes || []).map((n) => ({
     data: {
       id: n.id,

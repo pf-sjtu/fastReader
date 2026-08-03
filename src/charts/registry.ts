@@ -1,4 +1,5 @@
 import type { ChartPlugin } from './types'
+import { getEntityGraph } from './types'
 import { PersonGraphChart } from './plugins/person-graph/PersonGraphChart'
 import { EntityTimelineChart } from './plugins/entity-timeline/EntityTimelineChart'
 
@@ -8,10 +9,10 @@ import { EntityTimelineChart } from './plugins/entity-timeline/EntityTimelineCha
  */
 export const CHART_PLUGINS: ChartPlugin[] = [
   {
-    id: 'person-graph',
-    titleKey: 'results.charts.personGraph',
+    id: 'entity-graph',
+    titleKey: 'results.charts.entityGraph',
     order: 10,
-    hasData: (c) => (c.personGraph?.nodes?.length ?? 0) > 0,
+    hasData: (c) => !!getEntityGraph(c),
     Component: PersonGraphChart,
   },
   {

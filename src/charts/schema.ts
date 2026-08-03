@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { CHART_LIMITS } from './types'
 
-const personNodeSchema = z.object({
+const entityNodeSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   type: z.string().optional(),
@@ -9,16 +9,16 @@ const personNodeSchema = z.object({
   importance: z.number().min(0).max(10).optional(),
 })
 
-const personEdgeSchema = z.object({
+const entityEdgeSchema = z.object({
   source: z.string().min(1),
   target: z.string().min(1),
   relation: z.string().min(1),
   description: z.string().optional(),
 })
 
-const personGraphSchema = z.object({
-  nodes: z.array(personNodeSchema).default([]),
-  edges: z.array(personEdgeSchema).default([]),
+const entityGraphSchema = z.object({
+  nodes: z.array(entityNodeSchema).default([]),
+  edges: z.array(entityEdgeSchema).default([]),
 })
 
 const timelineEntitySchema = z.object({
@@ -45,48 +45,64 @@ const entityTimelineSchema = z.object({
 
 export const bookChartsSchema = z.object({
   version: z.literal(1).default(1),
-  personGraph: personGraphSchema.optional(),
+  /** 新字段 */
+  entityGraph: entityGraphSchema.optional(),
+  /** 旧云存档 / 旧模型输出 */
+  personGraph: entityGraphSchema.optional(),
   entityTimeline: entityTimelineSchema.optional(),
 })
 
 export type BookChartsParsed = z.infer<typeof bookChartsSchema>
 
-/** 裁剪超限数据，保证可视化可读；补齐时间线缺失实体（从 personGraph 回填） */
+/**
+ * 裁剪超限 + 归一化：personGraph → entityGraph；
+ * 时间线缺失实体从关系图回填
+ */
 export function enforceChartLimits(data: BookChartsParsed): BookChartsParsed {
   const out: BookChartsParsed = { version: 1 }
-  const personNodes: Array<{ id: string; name: string; type?: string; importance?: number }> = []
+  const graphNodes: Array<{
+    id: string
+    name: string
+    type?: string
+    importance?: number
+  }> = []
 
-  if (data.personGraph) {
-    let nodes = [...data.personGraph.nodes]
+  const rawGraph = data.entityGraph || data.personGraph
+  if (rawGraph) {
+    let nodes = [...rawGraph.nodes]
     nodes.sort((a, b) => (b.importance ?? 5) - (a.importance ?? 5))
     nodes = nodes.slice(0, CHART_LIMITS.maxNodes)
-    personNodes.push(...nodes)
+    graphNodes.push(...nodes)
     const nodeIds = new Set(nodes.map((n) => n.id))
 
-    let edges = data.personGraph.edges.filter(
+    let edges = rawGraph.edges.filter(
       (e) => nodeIds.has(e.source) && nodeIds.has(e.target) && e.source !== e.target
     )
     edges = edges.slice(0, CHART_LIMITS.maxEdges)
 
     if (nodes.length > 0) {
-      out.personGraph = { nodes, edges }
+      // 只写 entityGraph，云存档与新代码统一用新字段
+      out.entityGraph = { nodes, edges }
     }
   }
 
   if (data.entityTimeline) {
     let entities = [...(data.entityTimeline.entities || [])]
     const entityById = new Map(entities.map((e) => [e.id, e]))
-    const personById = new Map(personNodes.map((n) => [n.id, n]))
+    const graphById = new Map(graphNodes.map((n) => [n.id, n]))
 
-    // 统计事件引用；从 personGraph 补齐缺失实体
     const refCount = new Map<string, number>()
     for (const ev of data.entityTimeline.events || []) {
       for (const id of ev.entityIds || []) {
         refCount.set(id, (refCount.get(id) || 0) + 1)
         if (!entityById.has(id)) {
-          const pn = personById.get(id)
-          if (pn) {
-            const ent = { id: pn.id, name: pn.name, type: pn.type || '人物' }
+          const gn = graphById.get(id)
+          if (gn) {
+            const ent = {
+              id: gn.id,
+              name: gn.name,
+              type: gn.type || '实体',
+            }
             entityById.set(id, ent)
             entities.push(ent)
           }
