@@ -125,11 +125,22 @@ vk_swiftshader.*
 vulkan-1.dll
 resources.pak
 
-# Binary directories
+# Binary directories（勿用过宽的 locales/，会误伤 src/i18n/locales）
 bin/
 tools/
-locales/
 policies/
 resources/
+# Electron/Chromium 等解包目录（若放在仓库根）
+/locales/
+
+# 书籍样例与二进制（体积大，勿入库）
+*.epub
+*.pdf
+!public/**
+
+# Python 字节码（已 ignore 目录时仍可能被历史 add -f）
+**/__pycache__/
+*.py[cod]
+*$py.class
 
 *config*.yaml
