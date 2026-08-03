@@ -186,13 +186,36 @@ export class CloudCacheService {
       if (charts == null) {
         return { success: false, error: '无图表数据' }
       }
+      if (!this.webdavService.isInitialized()) {
+        const webdavConfig = useConfigStore.getState().webdavConfig
+        if (!webdavConfig.enabled) {
+          return { success: false, error: 'WebDAV 未启用' }
+        }
+        const init = await this.webdavService.initialize(webdavConfig)
+        if (!init.success) {
+          return { success: false, error: init.error || 'WebDAV 未初始化' }
+        }
+      }
       const path = this.getChartsCacheFilePath(fileName)
       const body = JSON.stringify(charts, null, 2)
+      console.log(`[CloudCache] 上传图表 JSON: ${path} (${body.length} chars)`)
       const upload = await this.webdavService.uploadFile(path, body)
       if (!upload.success) {
+        console.warn(`[CloudCache] 图表 JSON 上传失败: ${path}`, upload.error)
         return { success: false, error: upload.error || '上传图表 JSON 失败' }
       }
-      console.log(`[CloudCache] 图表 JSON 已上传: ${path}`)
+      // 回读校验，避免「上传假成功」
+      const verify = await this.webdavService.getFileContents(path, 'text')
+      if (!verify.success || verify.data == null) {
+        console.warn(`[CloudCache] 图表 JSON 上传后回读失败: ${path}`, verify.error)
+        return {
+          success: false,
+          error: verify.error || '上传后回读失败（可能未真正写入）',
+        }
+      }
+      console.log(
+        `[CloudCache] 图表 JSON 已上传并校验: ${path}, ${String(verify.data).length} chars`
+      )
       return { success: true, path }
     } catch (error) {
       return {

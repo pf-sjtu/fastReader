@@ -1,4 +1,4 @@
-import { WebDAVService } from './webdavService'
+import { webdavService } from './webdavService'
 import { useConfigStore } from '../stores/configStore'
 import { metadataFormatter, type ProcessResultInfo } from './metadataFormatter'
 import { cloudCacheService } from './cloudCacheService'
@@ -46,14 +46,11 @@ export interface SyncFileInfo {
 /**
  * 自动同步服务
  * 负责在文件处理完成后自动同步到WebDAV
+ *
+ * 必须使用全局 webdavService 单例：cloudCacheService 读写也走同一 client。
+ * 旧实现 new 了独立实例，导致 init 成功但 uploadChartsJson 打到未初始化的单例上失败。
  */
 export class AutoSyncService {
-  private webdavService: WebDAVService
-
-  constructor() {
-    this.webdavService = new WebDAVService()
-  }
-
   /**
    * 同步摘要文件到 WebDAV
    * - MD：`{name}-完整摘要.md`
@@ -78,13 +75,13 @@ export class AutoSyncService {
         return false
       }
 
-      const initResult = await this.webdavService.initialize(webdavConfig)
+      const initResult = await webdavService.initialize(webdavConfig)
       if (!initResult.success) {
         console.error('WebDAV初始化失败:', initResult.error)
         return false
       }
 
-      const connectionTest = await this.webdavService.testConnection()
+      const connectionTest = await webdavService.testConnection()
       if (!connectionTest.success) {
         console.error('WebDAV连接失败:', connectionTest.error)
         return false
@@ -99,7 +96,7 @@ export class AutoSyncService {
 
       // 用 cloudCache 统一路径规则（与读取一致）
       const mdPath = cloudCacheService.getCacheFilePath(fileName)
-      const uploadResult = await this.webdavService.uploadFile(mdPath, summaryContent)
+      const uploadResult = await webdavService.uploadFile(mdPath, summaryContent)
 
       if (!uploadResult.success) {
         console.error('摘要文件同步失败:', uploadResult.error)
@@ -147,12 +144,13 @@ export class AutoSyncService {
         return { success: false, error: '无图表数据' }
       }
 
-      const initResult = await this.webdavService.initialize(webdavConfig)
+      // 与 cloudCacheService / 读缓存共用同一单例，禁止另起 client
+      const initResult = await webdavService.initialize(webdavConfig)
       if (!initResult.success) {
         return { success: false, error: initResult.error || 'WebDAV 初始化失败' }
       }
 
-      const connectionTest = await this.webdavService.testConnection()
+      const connectionTest = await webdavService.testConnection()
       if (!connectionTest.success) {
         return { success: false, error: connectionTest.error || 'WebDAV 连接失败' }
       }
@@ -161,6 +159,8 @@ export class AutoSyncService {
       if (up.success) {
         console.log(`✅ 关键图表 JSON 已保存: ${up.path}`)
         useConfigStore.getState().updateWebDAVLastSyncTime()
+      } else {
+        console.warn('❌ 关键图表 JSON 保存失败:', up.error, 'file=', fileName)
       }
       return up
     } catch (error) {
@@ -183,8 +183,8 @@ export class AutoSyncService {
         return true
       }
 
-      // 初始化WebDAV服务
-      const initResult = await this.webdavService.initialize(config)
+      // 初始化WebDAV服务（全局单例）
+      const initResult = await webdavService.initialize(config)
       if (!initResult.success) {
         console.error('WebDAV初始化失败:', initResult.error)
         return false
@@ -218,7 +218,7 @@ export class AutoSyncService {
       }
 
       // 执行同步
-      const syncResult = await this.webdavService.syncFiles(syncFiles)
+      const syncResult = await webdavService.syncFiles(syncFiles)
       
       if (syncResult.success) {
         console.log(`✅ 思维导图文件同步成功: ${syncFiles.length} 个文件`)
