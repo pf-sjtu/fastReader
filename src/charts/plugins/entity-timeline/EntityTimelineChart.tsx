@@ -10,6 +10,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -33,9 +38,10 @@ export function EntityTimelineChart({ charts }: Props) {
     () =>
       data
         ? layoutEntityTimeline(data, {
-            colWidth: 132,
+            colWidth: 140,
             labelWidth: 104,
-            headerHeight: 48,
+            // 名称 + 简介两行
+            headerHeight: 64,
             pad: 8,
             fontSize: 11,
             lineHeight: 15,
@@ -76,7 +82,7 @@ export function EntityTimelineChart({ charts }: Props) {
     <>
       <div className="w-full overflow-auto border border-border rounded-lg bg-card">
         <div className="min-w-max" style={{ width: Math.max(layout.width, 320) }}>
-          {/* 表头：完整实体名，换行不截断 */}
+          {/* 表头：实体名 + 简介（截断）；悬停展示全文 */}
           <div
             className="flex border-b border-border sticky top-0 z-10 bg-card/95 backdrop-blur-sm"
             style={{ minHeight: config.headerHeight }}
@@ -89,19 +95,45 @@ export function EntityTimelineChart({ charts }: Props) {
             </div>
             {entities.map((ent) => {
               const color = entityColor.get(ent.id) || theme.palette[0]
+              const blurb =
+                ent.description?.trim() ||
+                ent.type?.trim() ||
+                ''
+              const tipLines = [
+                ent.name,
+                ent.type ? `${t('results.charts.entityType', '类型')}: ${ent.type}` : '',
+                blurb && blurb !== ent.type ? blurb : '',
+              ].filter(Boolean)
+              const tip = tipLines.join('\n')
+
               return (
-                <div
-                  key={ent.id}
-                  className="shrink-0 px-1.5 py-2 flex items-center justify-center text-center border-r border-border/50 last:border-r-0"
-                  style={{
-                    width: config.colWidth,
-                    background: `color-mix(in oklab, ${color} 18%, var(--card))`,
-                  }}
-                >
-                  <span className="text-[11px] font-medium text-foreground leading-snug break-words whitespace-normal w-full">
-                    {ent.name}
-                  </span>
-                </div>
+                <Tooltip key={ent.id} delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <div
+                      className="shrink-0 px-1.5 py-1.5 flex flex-col items-center justify-center text-center border-r border-border/50 last:border-r-0 cursor-default"
+                      style={{
+                        width: config.colWidth,
+                        background: `color-mix(in oklab, ${color} 18%, var(--card))`,
+                      }}
+                      title={tip}
+                    >
+                      <span className="text-[11px] font-medium text-foreground leading-snug line-clamp-2 w-full break-words">
+                        {ent.name}
+                      </span>
+                      {blurb ? (
+                        <span className="text-[10px] text-muted-foreground leading-snug line-clamp-2 w-full mt-0.5 break-words">
+                          {blurb}
+                        </span>
+                      ) : null}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="bottom"
+                    className="max-w-xs whitespace-pre-wrap text-left text-xs"
+                  >
+                    {tip}
+                  </TooltipContent>
+                </Tooltip>
               )
             })}
           </div>

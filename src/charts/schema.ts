@@ -26,6 +26,7 @@ const timelineEntitySchema = z.object({
   name: z.coerce.string().min(1),
   color: z.string().optional(),
   type: z.string().optional(),
+  description: z.string().optional(),
 })
 
 const timelineEventSchema = z.object({
@@ -68,6 +69,7 @@ export function enforceChartLimits(data: BookChartsParsed): BookChartsParsed {
     id: string
     name: string
     type?: string
+    description?: string
     importance?: number
   }> = []
 
@@ -95,6 +97,18 @@ export function enforceChartLimits(data: BookChartsParsed): BookChartsParsed {
     const entityById = new Map(entities.map((e) => [e.id, e]))
     const graphById = new Map(graphNodes.map((n) => [n.id, n]))
 
+    // 用关系图节点补全时间线实体的简介/类型
+    entities = entities.map((e) => {
+      const gn = graphById.get(e.id)
+      if (!gn) return e
+      return {
+        ...e,
+        type: e.type || gn.type || e.type,
+        description: e.description || gn.description,
+      }
+    })
+    entities.forEach((e) => entityById.set(e.id, e))
+
     const refCount = new Map<string, number>()
     for (const ev of data.entityTimeline.events || []) {
       for (const id of ev.entityIds || []) {
@@ -106,6 +120,7 @@ export function enforceChartLimits(data: BookChartsParsed): BookChartsParsed {
               id: gn.id,
               name: gn.name,
               type: gn.type || '实体',
+              description: gn.description,
             }
             entityById.set(id, ent)
             entities.push(ent)

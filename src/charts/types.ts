@@ -40,6 +40,10 @@ export interface TimelineEntity {
   /** CSS 色值；缺省由布局层按 id 哈希分配 */
   color?: string
   type?: string
+  /**
+   * 简介：与主实体关系、定位、角色等（表头展示，可截断，悬停看全文）
+   */
+  description?: string
 }
 
 export interface TimelineEvent {

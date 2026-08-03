@@ -25,7 +25,12 @@ export function getKeyChartsPrompt(): string {
   },
   "entityTimeline": {
     "entities": [
-      { "id": "e1", "name": "实体名", "type": "概念" }
+      {
+        "id": "e1",
+        "name": "实体名",
+        "type": "概念",
+        "description": "简介：与主实体关系/定位/角色（≤40字）"
+      }
     ],
     "events": [
       {
@@ -58,9 +63,11 @@ export function getKeyChartsPrompt(): string {
    - type 用上面枚举中文短标签
 3. **关系边** relation 用短中文（2–6 字），贴合学科（如「因果」「组成」「演化」「证伪」「合作」），勿全用「相关」
 4. **时间线实体**（≤10–12）：从关系图中选最能讲清发展脉络的子集；自然科学可用「理论提出→实验验证→修正」等阶段
+   - 每个 entity **必须** 写 `description` 简介（≤40 字）：与主线实体的关系、角色定位、学科地位等
+   - 例：人物→「盖兹挚友/微软联合创始人」；概念→「贯穿全书的核心方法」；产品→「首款商业 BASIC」
 5. **事件** order 递增；timeLabel 可用年代、章节、地质时期、「提出/验证/应用」等阶段，不强制 ISO 日期
    - 优先 12–25 个节点；label 极短；entityIds 列主要参与实体
-6. entityGraph 与 entityTimeline 的 **id 尽量一致**，便于对照
+6. entityGraph 与 entityTimeline 的 **id 尽量一致**，便于对照；时间线 description 可与节点 description 呼应
 7. 硬上限：nodes≤40、edges≤80、entities≤12、events≤50
 8. 若某类信息不足可省略对应字段，但至少提供一类有意义的数据
 9. 不要输出 personGraph 字段（除非你无法使用 entityGraph；此时 personGraph 结构相同亦可）`

@@ -112,6 +112,7 @@
       "relayout": "Relayout",
       "timelineHint": "Vertical axis = time/order, horizontal = entities; click a block for details",
       "timelineTime": "Time",
+      "entityType": "Type",
       "relatedEntities": "Related entities",
       "relations": "Relations",
       "graphLoadError": "Failed to load graph",

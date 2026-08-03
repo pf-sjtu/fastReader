@@ -113,6 +113,7 @@
       "relayout": "重新排布",
       "timelineHint": "纵轴为时间/事件顺序，横轴为实体；点击色块查看详情",
       "timelineTime": "时间",
+      "entityType": "类型",
       "relatedEntities": "相关实体",
       "relations": "关系",
       "graphLoadError": "关系图加载失败",
