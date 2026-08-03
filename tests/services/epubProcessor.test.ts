@@ -140,60 +140,75 @@ describe('EpubProcessor', () => {
   })
 
   describe('epub-toc mode exact level filtering', () => {
+    const longBody = (label: string) =>
+      `<html><body><p>${label} ${'正文内容段落。'.repeat(20)}</p></body></html>`
+
     // Mock book factory for epub-toc tests
-    const createMockBook = () => ({
-      navigation: {
-        toc: [
-          {
-            id: 'ch1',
-            href: 'chapter1.xhtml',
-            label: 'Chapter 1',
-            subitems: [
-              {
-                id: 'ch1-1',
-                href: 'chapter1-1.xhtml',
-                label: 'Section 1.1',
-                subitems: [
-                  { id: 'ch1-1-1', href: 'chapter1-1-1.xhtml', label: 'Subsection 1.1.1', subitems: [] }
-                ]
-              },
-              { id: 'ch1-2', href: 'chapter1-2.xhtml', label: 'Section 1.2', subitems: [] }
-            ]
-          },
-          {
-            id: 'ch2',
-            href: 'chapter2.xhtml',
-            label: 'Chapter 2',
-            subitems: [
-              { id: 'ch2-1', href: 'chapter2-1.xhtml', label: 'Section 2.1', subitems: [] }
-            ]
-          }
-        ]
-      },
-      spine: {
-        spineItems: [
-          { idref: 's1', href: 'chapter1.xhtml' },
-          { idref: 's2', href: 'chapter1-1.xhtml' },
-          { idref: 's3', href: 'chapter1-1-1.xhtml' },
-          { idref: 's4', href: 'chapter1-2.xhtml' },
-          { idref: 's5', href: 'chapter2.xhtml' },
-          { idref: 's6', href: 'chapter2-1.xhtml' }
-        ],
-        get: vi.fn().mockReturnValue({
-          render: vi.fn().mockResolvedValue('<html><body><p>Content</p></body></html>'),
-          unload: vi.fn()
-        })
-      },
-      load: vi.fn().mockResolvedValue({}),
-      packaging: { metadata: { title: 'Test Book', creator: 'Test Author' } }
-    })
+    const createMockBook = () => {
+      const htmlByHref: Record<string, string> = {
+        'chapter1.xhtml': longBody('Chapter1'),
+        'chapter1-1.xhtml': longBody('Section1.1'),
+        'chapter1-1-1.xhtml': longBody('Subsection1.1.1'),
+        'chapter1-2.xhtml': longBody('Section1.2'),
+        'chapter2.xhtml': longBody('Chapter2'),
+        'chapter2-1.xhtml': longBody('Section2.1'),
+      }
+
+      const spineItems = [
+        { idref: 's1', href: 'chapter1.xhtml' },
+        { idref: 's2', href: 'chapter1-1.xhtml' },
+        { idref: 's3', href: 'chapter1-1-1.xhtml' },
+        { idref: 's4', href: 'chapter1-2.xhtml' },
+        { idref: 's5', href: 'chapter2.xhtml' },
+        { idref: 's6', href: 'chapter2-1.xhtml' }
+      ]
+
+      return {
+        navigation: {
+          toc: [
+            {
+              id: 'ch1',
+              href: 'chapter1.xhtml',
+              label: 'Chapter 1',
+              subitems: [
+                {
+                  id: 'ch1-1',
+                  href: 'chapter1-1.xhtml',
+                  label: 'Section 1.1',
+                  subitems: [
+                    { id: 'ch1-1-1', href: 'chapter1-1-1.xhtml', label: 'Subsection 1.1.1', subitems: [] }
+                  ]
+                },
+                { id: 'ch1-2', href: 'chapter1-2.xhtml', label: 'Section 1.2', subitems: [] }
+              ]
+            },
+            {
+              id: 'ch2',
+              href: 'chapter2.xhtml',
+              label: 'Chapter 2',
+              subitems: [
+                { id: 'ch2-1', href: 'chapter2-1.xhtml', label: 'Section 2.1', subitems: [] }
+              ]
+            }
+          ]
+        },
+        spine: {
+          spineItems,
+          get: vi.fn((index: number) => {
+            const href = spineItems[index]?.href
+            return {
+              render: vi.fn().mockResolvedValue(htmlByHref[href] || longBody('fallback')),
+              unload: vi.fn()
+            }
+          })
+        },
+        load: vi.fn().mockResolvedValue({}),
+        packaging: { metadata: { title: 'Test Book', creator: 'Test Author' } }
+      }
+    }
 
     it('should extract only depth=0 chapters when epubTocDepth=1', async () => {
       const mockBook = createMockBook()
-
-      // Mock getSingleChapterContent to return sufficient content (>100 chars)
-      vi.spyOn(processorInternals, 'getSingleChapterContent')
-        .mockResolvedValue('This is chapter content with sufficient length to pass the 100 character minimum threshold for valid chapter content. It includes detailed information about the chapter.')
 
       const chapters = await processor.extractChapters(
         mockBook as Book,
@@ -215,10 +230,6 @@ describe('EpubProcessor', () => {
 
     it('should extract only depth=1 chapters when epubTocDepth=2', async () => {
       const mockBook = createMockBook()
-
-      // Mock getSingleChapterContent to return sufficient content (>100 chars)
-      vi.spyOn(processorInternals, 'getSingleChapterContent')
-        .mockResolvedValue('This is chapter content with sufficient length to pass the 100 character minimum threshold for valid chapter content. It includes detailed information about the chapter.')
 
       const chapters = await processor.extractChapters(
         mockBook as Book,
@@ -243,10 +254,6 @@ describe('EpubProcessor', () => {
     it('should extract only depth=2 chapters when epubTocDepth=3', async () => {
       const mockBook = createMockBook()
 
-      // Mock getSingleChapterContent to return sufficient content (>100 chars)
-      vi.spyOn(processorInternals, 'getSingleChapterContent')
-        .mockResolvedValue('This is chapter content with sufficient length to pass the 100 character minimum threshold for valid chapter content. It includes detailed information about the chapter.')
-
       const chapters = await processor.extractChapters(
         mockBook as Book,
         false,
@@ -266,10 +273,6 @@ describe('EpubProcessor', () => {
     it('should fallback to spine when target level is empty', async () => {
       const mockBook = createMockBook()
 
-      // Mock getSingleChapterContent to return sufficient content (>100 chars)
-      vi.spyOn(processorInternals, 'getSingleChapterContent')
-        .mockResolvedValue('This is chapter content with sufficient length to pass the 100 character minimum threshold for valid chapter content. It includes detailed information about the chapter.')
-
       // Request depth=5 which has no chapters
       const chapters = await processor.extractChapters(
         mockBook as Book,
@@ -286,14 +289,10 @@ describe('EpubProcessor', () => {
       expect(chapters.length).toBeGreaterThan(0)
     })
 
-    it('should not include subitem content in exact level mode', async () => {
+    it('should aggregate spine range between consecutive TOC entries', async () => {
       const mockBook = createMockBook()
 
-      // Mock getSingleChapterContent to track subitem usage
-      const getSingleChapterContentSpy = vi.spyOn(processorInternals, 'getSingleChapterContent')
-        .mockResolvedValue('Direct chapter content')
-
-      await processor.extractChapters(
+      const chapters = await processor.extractChapters(
         mockBook as Book,
         false,
         false,
@@ -303,12 +302,74 @@ describe('EpubProcessor', () => {
         1
       )
 
-      // In epub-toc mode, should not call getSingleChapterContent for subitems
-      // The first call is for the main chapter, subsequent calls would be for subitems
-      // With exact level filtering, only main chapters are processed
-      expect(getSingleChapterContentSpy).toHaveBeenCalledTimes(2) // Only 2 main chapters
+      // Chapter 1 区间含 chapter1 + 1-1 + 1-1-1 + 1-2，直到 chapter2
+      expect(chapters[0].content).toContain('Chapter1')
+      expect(chapters[0].content).toContain('Section1.1')
+      expect(chapters[0].content).toContain('Section1.2')
+      expect(chapters[0].content).not.toContain('Chapter2')
 
-      getSingleChapterContentSpy.mockRestore()
+      // Chapter 2 区间含 chapter2 + 2-1
+      expect(chapters[1].content).toContain('Chapter2')
+      expect(chapters[1].content).toContain('Section2.1')
+    })
+
+    it('should merge title-page + body when TOC only points to short title page', async () => {
+      const titleHtml = '<html><body><p>第一章 特雷 从游戏中学会</p></body></html>'
+      const bodyHtml = `<html><body><p>玩牌高手 ${'这是正文段落内容。'.repeat(30)}</p></body></html>`
+      const nextTitleHtml = '<html><body><p>第二章 维岭 在充满机会的美国</p></body></html>'
+      const nextBodyHtml = `<html><body><p>六零年代的西雅图 ${'这是第二章正文。'.repeat(30)}</p></body></html>`
+
+      const spineItems = [
+        { idref: 's9', href: 'Text/story-9.xhtml' },
+        { idref: 's10', href: 'Text/story-10.xhtml' },
+        { idref: 's11', href: 'Text/story-11.xhtml' },
+        { idref: 's12', href: 'Text/story-12.xhtml' }
+      ]
+      const htmlByHref: Record<string, string> = {
+        'Text/story-9.xhtml': titleHtml,
+        'Text/story-10.xhtml': bodyHtml,
+        'Text/story-11.xhtml': nextTitleHtml,
+        'Text/story-12.xhtml': nextBodyHtml
+      }
+
+      const mockBook = {
+        navigation: {
+          toc: [
+            { id: 'c1', href: 'story-9.xhtml', label: '第一章　特雷', subitems: [] },
+            { id: 'c2', href: 'story-11.xhtml', label: '第二章　维岭', subitems: [] }
+          ]
+        },
+        spine: {
+          spineItems,
+          get: vi.fn((index: number) => {
+            const href = spineItems[index]?.href
+            return {
+              render: vi.fn().mockResolvedValue(htmlByHref[href]),
+              unload: vi.fn()
+            }
+          })
+        },
+        load: vi.fn().mockResolvedValue({}),
+        packaging: { metadata: { title: '原始码', creator: 'Bill Gates' } }
+      }
+
+      const chapters = await processor.extractChapters(
+        mockBook as Book,
+        false,
+        false,
+        0,
+        'auto',
+        'epub-toc',
+        1
+      )
+
+      expect(chapters.length).toBe(2)
+      expect(chapters[0].title).toContain('第一章')
+      expect(chapters[0].content).toContain('玩牌高手')
+      expect(chapters[0].content.length).toBeGreaterThan(100)
+      // 单读扉页会 <100 被丢弃；区间聚合后应保留
+      expect(chapters[1].title).toContain('第二章')
+      expect(chapters[1].content).toContain('六零年代的西雅图')
     })
   })
 })

@@ -130,19 +130,33 @@ export class EpubProcessor {
           // 使用并发限制器并行提取章节内容，最多3个并发
           const limiter = new ConcurrencyLimiter(3)
 
+          // epub-toc：按相邻 TOC 条目的 spine 区间聚合（扉页 + 正文等多文件章）
+          const spineRangeEnds =
+            chapterDetectionMode === 'epub-toc'
+              ? this.computeSpineRangeEnds(book, chapterInfos)
+              : null
+
           const chapterPromises = chapterInfos.map((chapterInfo, index) => {
             return limiter.execute(async () => {
               if (skipNonEssentialChapters && this.shouldSkipChapter(chapterInfo.title)) {
                 return null
               }
 
-              // 在 epub-toc 精确层级模式下，禁用子项内容聚合
-              const shouldIncludeSubitems = chapterDetectionMode !== 'epub-toc'
-              const chapterContent = await this.extractContentFromHref(
-                book,
-                chapterInfo.href,
-                shouldIncludeSubitems ? chapterInfo.subitems : undefined
-              )
+              let chapterContent: string
+              if (spineRangeEnds) {
+                chapterContent = await this.extractContentBySpineRange(
+                  book,
+                  chapterInfo.href,
+                  spineRangeEnds[index]
+                )
+              } else {
+                // normal/smart：保留 subitems 聚合行为
+                chapterContent = await this.extractContentFromHref(
+                  book,
+                  chapterInfo.href,
+                  chapterInfo.subitems
+                )
+              }
 
               if (chapterContent.trim().length > 100) {
                 return {
@@ -287,62 +301,174 @@ export class EpubProcessor {
     }
   }
 
-  private async getSingleChapterContent(book: Book, href: string, anchor?: string): Promise<string> {
-    try {
-      let section: Section | null = null
-      let spineIndex = -1
-      const spineItems = book.spine.spineItems
+  /**
+   * 将 TOC href 解析为 spine 下标。兼容 Text/xxx.xhtml vs xxx.xhtml、URL 编码。
+   */
+  private resolveSpineIndex(book: Book, href: string): number {
+    const spineItems = book.spine?.spineItems ?? []
+    if (!href || spineItems.length === 0) return -1
 
-      // 移除 anchor 后再匹配，因为 spineItem.href 不包含 anchor
-      const cleanHrefForMatch = href.split('#')[0]
-      for (let i = 0; i < spineItems.length; i++) {
-        const spineItem = spineItems[i]
-        const match = spineItem.href === cleanHrefForMatch || spineItem.href.endsWith(cleanHrefForMatch)
-        if (match) {
-          spineIndex = i
-          section = book.spine.get(i)
-          break
+    let cleanHref = href.split('#')[0].replace(/^\.\//, '')
+    try {
+      cleanHref = decodeURIComponent(cleanHref)
+    } catch {
+      // keep raw
+    }
+
+    const fileName = cleanHref.split('/').pop() || cleanHref
+
+    for (let i = 0; i < spineItems.length; i++) {
+      let spineHref = (spineItems[i].href || '').split('#')[0]
+      try {
+        spineHref = decodeURIComponent(spineHref)
+      } catch {
+        // keep raw
+      }
+
+      if (
+        spineHref === cleanHref ||
+        spineHref.endsWith(cleanHref) ||
+        cleanHref.endsWith(spineHref) ||
+        spineHref.endsWith('/' + fileName) ||
+        spineHref === fileName
+      ) {
+        return i
+      }
+    }
+
+    return -1
+  }
+
+  /**
+   * 为每个 TOC 章节计算 spine 区间右开边界（下一 TOC 条目的 spine 下标）。
+   * 无后续条目时为 spine.length。
+   */
+  private computeSpineRangeEnds(book: Book, chapterInfos: ChapterInfo[]): number[] {
+    const spineLen = book.spine?.spineItems?.length ?? 0
+    const starts = chapterInfos.map((info) => this.resolveSpineIndex(book, info.href))
+
+    return starts.map((start, i) => {
+      if (start < 0) return -1
+
+      // 优先：TOC 顺序上的下一条有效 spine
+      for (let j = i + 1; j < starts.length; j++) {
+        if (starts[j] > start) return starts[j]
+        // 同文件不同锚点：仅取当前文件
+        if (starts[j] === start) return start + 1
+      }
+
+      // 兜底：全局更大的 spine 下标（TOC 顺序与 spine 不一致时）
+      let minGreater = -1
+      for (let j = 0; j < starts.length; j++) {
+        if (j === i) continue
+        if (starts[j] > start && (minGreater < 0 || starts[j] < minGreater)) {
+          minGreater = starts[j]
+        }
+      }
+      if (minGreater > start) return minGreater
+
+      return spineLen
+    })
+  }
+
+  /**
+   * 聚合 [startHref, endSpineIndexExclusive) 区间内所有有实质文本的 spine 页。
+   * 用于 epub-toc：TOC 只指扉页、正文在后续文件的情况。
+   */
+  private async extractContentBySpineRange(
+    book: Book,
+    startHref: string,
+    endSpineIndexExclusive: number
+  ): Promise<string> {
+    try {
+      const spineItems = book.spine?.spineItems ?? []
+      const [cleanHref, anchor] = startHref.split('#')
+      const startIdx = this.resolveSpineIndex(book, startHref)
+
+      if (startIdx < 0) {
+        return this.getSingleChapterContent(book, cleanHref, anchor)
+      }
+
+      const endIdx =
+        endSpineIndexExclusive < 0
+          ? startIdx + 1
+          : Math.min(Math.max(endSpineIndexExclusive, startIdx + 1), spineItems.length)
+
+      const parts: string[] = []
+      // 跳过近空页（插图 SVG 页通常只有书名等极短文本）
+      const minPartLength = 20
+
+      for (let i = startIdx; i < endIdx; i++) {
+        const partAnchor = i === startIdx ? anchor : undefined
+        const text = await this.renderSpineItemText(book, i, partAnchor)
+        if (text.trim().length >= minPartLength) {
+          parts.push(text.trim())
         }
       }
 
-      if (!section) {
-        console.warn(`[EpubProcessor] Spine匹配失败: href=${href}, cleanHref=${cleanHrefForMatch}`)
-        return ''
+      // 区间聚合失败时回退单文件 + 旧启发式
+      if (parts.length === 0) {
+        return this.getSingleChapterContent(book, cleanHref, anchor)
       }
 
-      let chapterHTML: string
+      return parts.join('\n\n')
+    } catch (error) {
+      console.warn(`spine 区间提取失败 (href: ${startHref}):`, error)
+      const [cleanHref, anchor] = startHref.split('#')
+      return this.getSingleChapterContent(book, cleanHref, anchor)
+    }
+  }
+
+  /** 按 spine 下标渲染并提取纯文本 */
+  private async renderSpineItemText(
+    book: Book,
+    spineIndex: number,
+    anchor?: string
+  ): Promise<string> {
+    const section = book.spine.get(spineIndex)
+    if (!section) return ''
+
+    try {
+      const chapterHTML = await section.render(book.load.bind(book))
+      const textContent = this.extractTextFromXHTML(chapterHTML, anchor)
+      section.unload()
+      return textContent
+    } catch (error) {
       try {
-        chapterHTML = await section.render(book.load.bind(book))
-      } catch (renderErr) {
-        console.warn(`[EpubProcessor] section.render失败: href=${href}, error=${renderErr}`)
         section.unload()
+      } catch {
+        // ignore unload errors
+      }
+      console.warn(`[EpubProcessor] spine[${spineIndex}] 渲染失败:`, error)
+      return ''
+    }
+  }
+
+  private async getSingleChapterContent(book: Book, href: string, anchor?: string): Promise<string> {
+    try {
+      const spineItems = book.spine.spineItems
+      const spineIndex = this.resolveSpineIndex(book, href)
+
+      if (spineIndex < 0) {
+        console.warn(`[EpubProcessor] Spine匹配失败: href=${href}`)
         return ''
       }
 
-      let textContent = this.extractTextFromXHTML(chapterHTML, anchor)
-      
+      let textContent = await this.renderSpineItemText(book, spineIndex, anchor)
+
       // 封面-内容自动检测：如果内容为空，检查是否有 xxx_0001.xhtml 内容文件
       if (textContent.length < 100 && spineIndex >= 0 && spineIndex < spineItems.length - 1) {
         const nextSpineItem = spineItems[spineIndex + 1]
         const nextHref = nextSpineItem.href
-        
+
         // 检查是否是 _0001.xhtml 格式的内容文件
         if (nextHref.match(/_\d+\.xhtml$/)) {
-          const nextSection = book.spine.get(spineIndex + 1)
-          if (nextSection) {
-            const nextHTML = await nextSection.render(book.load.bind(book))
-            const nextText = this.extractTextFromXHTML(nextHTML, anchor)
-            
-            if (nextText.length > textContent.length) {
-              textContent = nextText
-            }
-            
-            nextSection.unload()
+          const nextText = await this.renderSpineItemText(book, spineIndex + 1, anchor)
+          if (nextText.length > textContent.length) {
+            textContent = nextText
           }
         }
       }
-      
-      section.unload()
 
       return textContent
     } catch (error) {
