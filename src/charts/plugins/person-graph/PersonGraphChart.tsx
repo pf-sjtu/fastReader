@@ -32,6 +32,29 @@ interface SelectedNode {
 }
 
 const DEFAULT_FORCE = 55
+const FORCE_STORAGE_KEY = 'fastreader.entityGraph.forceStrength'
+
+function readStoredForce(): number {
+  if (typeof window === 'undefined') return DEFAULT_FORCE
+  try {
+    const raw = localStorage.getItem(FORCE_STORAGE_KEY)
+    if (raw == null) return DEFAULT_FORCE
+    const n = Number(raw)
+    if (!Number.isFinite(n)) return DEFAULT_FORCE
+    return Math.min(100, Math.max(0, Math.round(n)))
+  } catch {
+    return DEFAULT_FORCE
+  }
+}
+
+function writeStoredForce(value: number) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(FORCE_STORAGE_KEY, String(value))
+  } catch {
+    /* private mode / quota */
+  }
+}
 
 // cytoscape 样式：名字居中写在球上
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -129,10 +152,16 @@ export function PersonGraphChart({ charts }: Props) {
   const [selected, setSelected] = useState<SelectedNode | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [themeTick, setThemeTick] = useState(0)
-  /** 力导向强度 0–100，类似 Obsidian 斥力 */
-  const [force, setForce] = useState(DEFAULT_FORCE)
+  /** 力导向强度 0–100；localStorage 持久化（浏览器级记忆） */
+  const [force, setForce] = useState(readStoredForce)
   const forceRef = useRef(force)
   forceRef.current = force
+
+  const updateForce = useCallback((value: number) => {
+    const v = Math.min(100, Math.max(0, Math.round(value)))
+    setForce(v)
+    writeStoredForce(v)
+  }, [])
 
   const elements = useMemo(
     () => (graph ? toCytoscapeElements(graph) : []),
@@ -317,47 +346,56 @@ export function PersonGraphChart({ charts }: Props) {
 
   return (
     <>
-      {/* 力导向强度：类似 Obsidian 散开程度 */}
-      <div className="flex flex-wrap items-center gap-3 mb-2 px-0.5">
-        <Label
-          htmlFor="graph-force"
-          className="text-xs text-muted-foreground shrink-0 whitespace-nowrap"
-        >
-          {t('results.charts.forceStrength', '相互作用力')}
-        </Label>
-        <Slider
-          id="graph-force"
-          className="w-[min(100%,220px)] flex-1 max-w-xs"
-          min={0}
-          max={100}
-          step={1}
-          value={[force]}
-          onValueChange={(v) => setForce(v[0] ?? DEFAULT_FORCE)}
+      <div className="relative w-full">
+        <div
+          ref={containerRef}
+          className="w-full h-[min(60vh,640px)] min-h-[280px] border border-border rounded-lg bg-card"
         />
-        <span className="text-xs tabular-nums text-muted-foreground w-8">{force}</span>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs"
-          onClick={() => {
-            const cy = cyRef.current
-            if (cy) runForceLayout(cy, force, true)
-          }}
+        {/* 右下角设置浮层：相互作用力（localStorage 记忆） */}
+        <div
+          className="absolute bottom-3 right-3 z-10 flex flex-col gap-2 rounded-lg border border-border/80 bg-card/95 backdrop-blur-sm shadow-md px-3 py-2.5 max-w-[min(100%-1.5rem,17rem)]"
+          onPointerDown={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
         >
-          <RefreshCw className="h-3 w-3 mr-1" />
-          {t('results.charts.relayout', '重新排布')}
-        </Button>
+          <div className="flex items-center justify-between gap-2">
+            <Label
+              htmlFor="graph-force"
+              className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap"
+            >
+              {t('results.charts.forceStrength', '相互作用力')}
+            </Label>
+            <span className="text-[11px] tabular-nums text-muted-foreground">
+              {force}
+            </span>
+          </div>
+          <Slider
+            id="graph-force"
+            className="w-full min-w-[9rem]"
+            min={0}
+            max={100}
+            step={1}
+            value={[force]}
+            onValueChange={(v) => updateForce(v[0] ?? DEFAULT_FORCE)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs w-full"
+            onClick={() => {
+              const cy = cyRef.current
+              if (cy) runForceLayout(cy, force, true)
+            }}
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            {t('results.charts.relayout', '重新排布')}
+          </Button>
+        </div>
       </div>
-
-      <div
-        ref={containerRef}
-        className="w-full h-[min(60vh,640px)] min-h-[280px] border border-border rounded-lg bg-card"
-      />
       <p className="text-xs text-muted-foreground mt-2">
         {t(
           'results.charts.entityGraphHint',
-          '滚轮缩放 · 拖动画布/节点 · 点击实体查看详情 · 滑块调节节点斥力'
+          '滚轮缩放 · 拖动画布/节点 · 点击实体查看详情 · 右下角调节斥力（浏览器记忆）'
         )}
       </p>
 

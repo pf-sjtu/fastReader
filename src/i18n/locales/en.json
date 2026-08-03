@@ -107,7 +107,7 @@
       "noEntityGraph": "No entity graph data",
       "noTimeline": "No timeline data",
       "personGraphHint": "Scroll to zoom · drag canvas/nodes · click an entity for details",
-      "entityGraphHint": "Scroll to zoom · drag canvas/nodes · click entity · slider adjusts repulsion",
+      "entityGraphHint": "Scroll to zoom · drag canvas/nodes · click entity · force slider (bottom-right, remembered)",
       "forceStrength": "Force",
       "relayout": "Relayout",
       "timelineHint": "Vertical axis = time/order, horizontal = entities; click a block for details",
