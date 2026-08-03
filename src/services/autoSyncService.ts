@@ -130,22 +130,35 @@ export class AutoSyncService {
     fileName: string,
     charts: unknown
   ): Promise<{ success: boolean; path?: string; error?: string }> {
+    console.log('[syncChartsJson] enter', {
+      fileName,
+      hasCharts: charts != null,
+      chartsType: charts == null ? 'null' : typeof charts,
+    })
     try {
       const webdavConfig = useConfigStore.getState().webdavConfig
       if (!webdavConfig.enabled) {
+        console.warn('[syncChartsJson] WebDAV 未启用')
         return { success: false, error: 'WebDAV 未启用' }
       }
       if (charts == null) {
+        console.warn('[syncChartsJson] charts 为空')
         return { success: false, error: '无图表数据' }
+      }
+      if (!fileName?.trim()) {
+        console.warn('[syncChartsJson] fileName 为空')
+        return { success: false, error: '文件名为空' }
       }
 
       // 与 cloudCacheService / 读缓存共用同一单例；已连接则跳过重建与二次 test
       const initResult = await webdavService.initialize(webdavConfig)
+      console.log('[syncChartsJson] initialize', initResult)
       if (!initResult.success) {
         return { success: false, error: initResult.error || 'WebDAV 初始化失败' }
       }
 
       const up = await cloudCacheService.uploadChartsJson(fileName, charts)
+      console.log('[syncChartsJson] uploadChartsJson', up)
       if (up.success) {
         console.log(`✅ 关键图表 JSON 已保存: ${up.path}`)
         useConfigStore.getState().updateWebDAVLastSyncTime()
@@ -154,6 +167,7 @@ export class AutoSyncService {
       }
       return up
     } catch (error) {
+      console.error('[syncChartsJson] exception', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '未知错误',

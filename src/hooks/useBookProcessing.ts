@@ -313,7 +313,14 @@ export function useBookProcessing() {
         return false
       }
 
-      const cacheKey = file?.name || null
+      const cacheKey =
+        file?.name ||
+        cloudCacheKeyRef.current ||
+        cloudCacheMetadata?.fileName ||
+        null
+      if (cacheKey) {
+        cloudCacheKeyRef.current = cacheKey
+      }
 
       // 优先现场读取同名 JSON（不依赖 check 阶段写入的 state）
       let chartsJson = cloudChartsJson
@@ -701,10 +708,14 @@ export function useBookProcessing() {
           toast.warning(t('progress.syncFailed') || '结果已生成，但云端同步失败')
         }
 
-        // 关键图表 JSON：只要 WebDAV 开启就强制落盘（不依赖 autoSync，避免「生成了却没保存」）
-        if (charts && webdavConfig.enabled) {
+        // 关键图表 JSON：WebDAV 开启则强制落盘（读 store，不依赖闭包 / autoSync）
+        const davOn = useConfigStore.getState().webdavConfig.enabled
+        if (charts && davOn) {
+          cloudCacheKeyRef.current = file.name
           try {
+            console.log('[processBook] → syncChartsJson', file.name)
             const chartsSaved = await autoSyncService.syncChartsJson(file.name, charts)
+            console.log('[processBook] ← syncChartsJson', chartsSaved)
             if (!chartsSaved.success) {
               console.warn('[processBook] 图表 JSON 未保存到云端:', chartsSaved.error)
               toast.warning(
@@ -723,6 +734,8 @@ export function useBookProcessing() {
               )
             )
           }
+        } else {
+          console.log('[processBook] skip charts upload', { hasCharts: !!charts, davOn })
         }
       } else if (processingMode === 'mindmap' || processingMode === 'combined-mindmap') {
         // 章节导图：0–85%；整书导图 85–100%
@@ -1034,6 +1047,23 @@ export function useBookProcessing() {
     toast.success(t('cache.specificCleared', '已清除缓存'))
   }, [file, bookSummary, bookMindMap, cloudCacheMetadata?.fileName, t])
 
+  /** 解析云端图表上传用的文件名键（与 getCacheFilePath 入参一致） */
+  const resolveChartsUploadKey = useCallback(
+    (explicit?: string | null): string | null => {
+      const candidates = [
+        explicit,
+        file?.name,
+        cloudCacheKeyRef.current,
+        cloudCacheMetadata?.fileName,
+      ]
+      for (const c of candidates) {
+        if (typeof c === 'string' && c.trim()) return c.trim()
+      }
+      return null
+    },
+    [file?.name, cloudCacheMetadata?.fileName]
+  )
+
   /**
    * 生成关键图表（可传入 summary 快照，避免 setState 异步导致用旧数据）
    * @param silent 自动补全时少弹成功 toast
@@ -1043,6 +1073,15 @@ export function useBookProcessing() {
       source: BookSummary,
       options?: { silent?: boolean; cacheFileName?: string | null }
     ) => {
+      console.log('[runKeyChartsGeneration] start', {
+        silent: !!options?.silent,
+        optionKey: options?.cacheFileName,
+        fileName: file?.name,
+        refKey: cloudCacheKeyRef.current,
+        metaKey: cloudCacheMetadata?.fileName,
+        webdavEnabled: useConfigStore.getState().webdavConfig.enabled,
+      })
+
       if (!source.overallSummary || source.overallSummary.startsWith('【全书总结失败】')) {
         if (!options?.silent) {
           toast.error(t('results.charts.needOverall', '请先完成全书总结后再生成图表'))
@@ -1055,7 +1094,13 @@ export function useBookProcessing() {
         }
         return
       }
-      if (chartsAutoGenRef.current) return
+      if (chartsAutoGenRef.current) {
+        console.warn('[runKeyChartsGeneration] skipped: already running')
+        if (!options?.silent) {
+          toast.message(t('results.charts.busy', '关键图表正在生成中，请稍候…'))
+        }
+        return
+      }
       chartsAutoGenRef.current = true
       setChartsGenerating(true)
       setBookSummary((prev) =>
@@ -1072,6 +1117,7 @@ export function useBookProcessing() {
           ...aiServiceOptions,
         })
 
+        console.log('[runKeyChartsGeneration] calling AI generateKeyCharts…')
         const charts = await aiService.generateKeyCharts(
           source.title || '',
           source.chapters,
@@ -1081,6 +1127,10 @@ export function useBookProcessing() {
           source.overallSummary,
           processingOptions.outputLanguage
         )
+        console.log('[runKeyChartsGeneration] AI done', {
+          nodes: charts?.entityGraph?.nodes?.length ?? 0,
+          events: charts?.entityTimeline?.events?.length ?? 0,
+        })
 
         const nextSummary: BookSummary = {
           ...source,
@@ -1088,12 +1138,7 @@ export function useBookProcessing() {
           chartsError: null,
         }
 
-        const cacheName =
-          options?.cacheFileName ||
-          file?.name ||
-          cloudCacheKeyRef.current ||
-          cloudCacheMetadata?.fileName ||
-          null
+        const cacheName = resolveChartsUploadKey(options?.cacheFileName)
         if (cacheName) {
           cloudCacheKeyRef.current = cacheName
           cacheService.setCache(cacheName, 'key_charts', serializeCharts(charts))
@@ -1107,35 +1152,53 @@ export function useBookProcessing() {
           return { ...prev, charts, chartsError: null }
         })
 
-        // 云端：JSON 必传（不依赖 autoSync）；MD 用 force 尽量一并更新
+        // 云端上传：运行时读 store，避免闭包里 enabled 过期；不依赖 autoSync 开关
         let chartsCloudOk = false
         let chartsCloudErr: string | undefined
+        const dav = useConfigStore.getState().webdavConfig
+        console.log('[runKeyChartsGeneration] upload gate', {
+          cacheName,
+          enabled: dav.enabled,
+          hasServer: !!dav.serverUrl,
+          hasUser: !!dav.username,
+        })
+
         if (!cacheName) {
-          console.warn(
-            '[runKeyChartsGeneration] 无 cacheName，跳过云端 JSON 上传（本地仍有图表）'
-          )
-        } else if (!webdavConfig.enabled) {
-          console.log('[runKeyChartsGeneration] WebDAV 未启用，跳过云端上传')
+          chartsCloudErr = '缺少文件名，无法定位云端路径'
+          console.warn('[runKeyChartsGeneration] skip upload: no cacheName', {
+            optionKey: options?.cacheFileName,
+            fileName: file?.name,
+            refKey: cloudCacheKeyRef.current,
+            metaKey: cloudCacheMetadata?.fileName,
+          })
+        } else if (!dav.enabled) {
+          chartsCloudErr = 'WebDAV 未启用'
+          console.warn('[runKeyChartsGeneration] skip upload: WebDAV disabled')
         } else {
           try {
-            console.log('[runKeyChartsGeneration] 开始上传图表 JSON, cacheName=', cacheName)
+            console.log(
+              '[runKeyChartsGeneration] → syncChartsJson start, cacheName=',
+              cacheName
+            )
             const chartsOnly = await autoSyncService.syncChartsJson(cacheName, charts)
             chartsCloudOk = chartsOnly.success
             chartsCloudErr = chartsOnly.error
+            console.log('[runKeyChartsGeneration] ← syncChartsJson result', chartsOnly)
             if (!chartsCloudOk) {
               console.warn('[runKeyChartsGeneration] JSON 保存失败:', chartsOnly.error)
             }
             // 顺带 force 写 MD（内嵌图表兜底），失败不挡 JSON 成功态
-            await autoSyncService.syncSummary(
+            const mdOk = await autoSyncService.syncSummary(
               nextSummary,
               cacheName,
               chapterNamingMode,
               { force: true }
             )
+            console.log('[runKeyChartsGeneration] syncSummary force=', mdOk)
           } catch (syncErr) {
             chartsCloudErr =
               syncErr instanceof Error ? syncErr.message : String(syncErr)
-            console.warn('[runKeyChartsGeneration] 云端同步失败:', syncErr)
+            console.warn('[runKeyChartsGeneration] 云端同步异常:', syncErr)
           }
         }
 
@@ -1153,19 +1216,17 @@ export function useBookProcessing() {
               : t('results.charts.regenerated', '关键图表已更新'),
             { id: toastId }
           )
-          if (webdavConfig.enabled) {
-            const reason = !cacheName
-              ? t('progress.chartsNoCacheKey', '缺少文件名，无法定位云端路径')
-              : chartsCloudErr || t('progress.chartsCloudSaveFailed', '云端 JSON 保存失败')
+          // 只要启用了 WebDAV 或缺 key，都提示原因（便于对照 console）
+          if (dav.enabled || !cacheName) {
             toast.warning(
               t('progress.chartsCloudSaveFailed', '关键图表已生成，但云端 JSON 保存失败') +
-                `: ${reason}`
+                `: ${chartsCloudErr || '未知原因'}`
             )
           }
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : '未知错误'
-        console.error('[runKeyChartsGeneration]', err)
+        console.error('[runKeyChartsGeneration] failed', err)
         setBookSummary((prev) =>
           prev ? { ...prev, chartsError: msg } : prev
         )
@@ -1175,6 +1236,7 @@ export function useBookProcessing() {
       } finally {
         chartsAutoGenRef.current = false
         setChartsGenerating(false)
+        console.log('[runKeyChartsGeneration] end')
       }
     },
     [
@@ -1185,20 +1247,33 @@ export function useBookProcessing() {
       aiServiceOptions,
       processingOptions.outputLanguage,
       file,
-      webdavConfig.enabled,
       chapterNamingMode,
       cloudCacheMetadata?.fileName,
+      resolveChartsUploadKey,
     ]
   )
 
-  /** 手动重新生成 */
+  /** 手动重新生成（显式传入 cache 键，避免漏传导致跳过上传） */
   const regenerateKeyCharts = useCallback(async () => {
     if (!bookSummary) {
       toast.error(t('results.charts.needChapters', '缺少章节摘要'))
       return
     }
-    await runKeyChartsGeneration(bookSummary, { silent: false })
-  }, [bookSummary, runKeyChartsGeneration, t])
+    const cacheFileName = resolveChartsUploadKey(null)
+    console.log('[regenerateKeyCharts] click', { cacheFileName })
+    if (!cacheFileName) {
+      toast.warning(
+        t(
+          'progress.chartsNoCacheKey',
+          '无法确定云端文件名：请先选择原书文件，或从云端/历史加载后再重新生成'
+        )
+      )
+    }
+    await runKeyChartsGeneration(bookSummary, {
+      silent: false,
+      cacheFileName,
+    })
+  }, [bookSummary, runKeyChartsGeneration, resolveChartsUploadKey, t])
 
   // 清除书籍缓存
   const clearBookCache = useCallback(() => {
