@@ -10,6 +10,7 @@ import { prepareMarkdownForRender } from '@/lib/markdown'
 import { CopyButton } from '@/components/ui/copy-button'
 import { ViewContentDialog } from './ViewContentDialog'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 
 interface MarkdownCardProps {
   /** 章节ID */
@@ -85,8 +86,11 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
   }
 
   return (
-    <Card id={`chapter-summary-${id}`} className={`gap-2 min-w-0 ${className}`}>
-      <CardHeader className="space-y-2">
+    <Card
+      id={`chapter-summary-${id}`}
+      className={cn('gap-2 min-w-0 py-2.5 sm:py-4', className)}
+    >
+      <CardHeader className="space-y-2 px-2.5 sm:px-4">
         <CardTitle className="text-base sm:text-lg flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <Badge variant="outline" className="shrink-0"># {index + 1}</Badge>
@@ -156,7 +160,7 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
         </CardTitle>
       </CardHeader>
       {!actualIsCollapsed && (
-        <CardContent className="min-w-0">
+        <CardContent className="min-w-0 px-2.5 sm:px-4">
           <div className="markdown-card-content prose prose-sm max-w-none overflow-x-auto">
             {/*
               强调作用域：micromark (CommonMark delimiter run) + remark-cjk-friendly

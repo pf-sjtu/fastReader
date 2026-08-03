@@ -57,8 +57,8 @@ export function ResultsSection({
   }
 
   return (
-    <Card className="min-w-0">
-      <CardHeader className="overflow-hidden">
+    <Card className="min-w-0 gap-2 sm:gap-4 py-2.5 sm:py-4">
+      <CardHeader className="overflow-hidden px-2.5 sm:px-4">
         <CardTitle className="min-w-0">
           <div className="truncate text-base sm:text-lg">
             {processingMode === 'summary' ? (
@@ -98,7 +98,8 @@ export function ResultsSection({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="min-w-0">
+      {/* 内容区移动端更窄边距，避免外层 Card + 章节 Card 双重 padding 挤内容 */}
+      <CardContent className="min-w-0 px-2 sm:px-4">
         {processingMode === 'summary' && bookSummary ? (
           <Tabs
             value={summaryTab}
@@ -120,7 +121,7 @@ export function ResultsSection({
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="chapters" className="grid grid-cols-1 gap-4">
+            <TabsContent value="chapters" className="grid grid-cols-1 gap-2.5 sm:gap-4">
               {bookSummary.chapters.map((chapter, index) => (
                 <MarkdownCard
                   key={chapter.id}

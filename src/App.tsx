@@ -286,7 +286,7 @@ function App() {
   ) : null
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
+    <div className="min-h-screen bg-background px-2 py-3 sm:p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
       <Toaster />
       <WebDAVFileBrowser
         isOpen={isWebDAVBrowserOpen}
@@ -294,7 +294,7 @@ function App() {
         onFileSelect={handleWebDAVFileSelect}
       />
 
-      <div className="max-w-full xl:max-w-7xl space-y-3 sm:space-y-4 w-full flex-1 min-w-0">
+      <div className="max-w-full xl:max-w-7xl space-y-2.5 sm:space-y-4 w-full flex-1 min-w-0">
         {/* Header */}
         <div className="flex flex-col gap-2 sm:block sm:relative sm:space-y-2 sm:text-center">
           <div className="flex items-center justify-between gap-2 sm:absolute sm:top-0 sm:right-0 sm:justify-end">
