@@ -184,82 +184,191 @@ export function markdownToPrintableHtml(markdown: string): string {
   return text
 }
 
+/** PDF 导出用空白文档样式：仅 hex/rgb，禁止 oklch（html2canvas 不支持） */
+const PDF_EXPORT_DOC_STYLE = `
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+    color: #222222;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  #root {
+    width: 720px;
+    padding: 28px 32px 40px;
+    box-sizing: border-box;
+    background: #ffffff;
+    color: #222222;
+    text-align: left;
+  }
+`
+
 /**
- * 下载完整摘要 PDF（浏览器端：HTML 渲染 → jsPDF）
+ * 在隔离 iframe 中挂载导出 HTML，避免继承主站 Tailwind oklch 变量。
+ * html2canvas 解析 oklch 会直接抛错（Chrome + Tailwind v4 场景必现）。
+ */
+function mountPdfExportFrame(htmlBody: string, titleLine: string): {
+  iframe: HTMLIFrameElement
+  root: HTMLElement
+  cleanup: () => void
+} {
+  const iframe = document.createElement('iframe')
+  iframe.setAttribute('aria-hidden', 'true')
+  iframe.setAttribute('data-export-pdf-frame', '1')
+  iframe.style.cssText = [
+    'position:fixed',
+    'left:-10000px',
+    'top:0',
+    'width:760px',
+    'height:1200px',
+    'border:0',
+    'opacity:0',
+    'pointer-events:none',
+  ].join(';')
+  document.body.appendChild(iframe)
+
+  const idoc = iframe.contentDocument
+  if (!idoc) {
+    document.body.removeChild(iframe)
+    throw new Error('无法创建 PDF 导出文档')
+  }
+
+  idoc.open()
+  idoc.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>${PDF_EXPORT_DOC_STYLE}</style>
+</head>
+<body>
+<div id="root">
+  <div style="font-size:11px;color:#888888;margin-bottom:16px;">${titleLine}</div>
+  ${htmlBody}
+</div>
+</body>
+</html>`)
+  idoc.close()
+
+  const root = idoc.getElementById('root')
+  if (!root) {
+    document.body.removeChild(iframe)
+    throw new Error('PDF 导出根节点缺失')
+  }
+
+  return {
+    iframe,
+    root,
+    cleanup: () => {
+      if (iframe.parentNode) {
+        iframe.parentNode.removeChild(iframe)
+      }
+    },
+  }
+}
+
+/**
+ * 将长图按 A4 分页写入 jsPDF
+ */
+function addCanvasImageToPdf(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  doc: any,
+  canvas: HTMLCanvasElement,
+  marginX: number,
+  marginY: number
+): void {
+  const pageWidth = doc.internal.pageSize.getWidth() as number
+  const pageHeight = doc.internal.pageSize.getHeight() as number
+  const contentWidth = pageWidth - marginX * 2
+  const contentHeight = pageHeight - marginY * 2
+  const imgHeight = (canvas.height * contentWidth) / canvas.width
+
+  // JPEG 体积更小；白底内容几乎无损
+  const imgData = canvas.toDataURL('image/jpeg', 0.92)
+
+  let heightLeft = imgHeight
+  let yOffset = 0
+  let pageIndex = 0
+
+  while (heightLeft > 0) {
+    if (pageIndex > 0) {
+      doc.addPage()
+    }
+    // 负 y：向上滚动长图，露出下一页区域
+    const y = marginY - yOffset
+    doc.addImage(imgData, 'JPEG', marginX, y, contentWidth, imgHeight, undefined, 'FAST')
+    yOffset += contentHeight
+    heightLeft -= contentHeight
+    pageIndex += 1
+    // 安全上限，防止异常死循环
+    if (pageIndex > 200) break
+  }
+}
+
+/**
+ * 下载完整摘要 PDF（浏览器端：隔离 iframe HTML → html2canvas → jsPDF）
  * 使用系统字体渲染中文，避免嵌入巨型中文字体包。
- * jspdf 按需动态加载，避免拖大首屏包体积。
+ * jspdf / html2canvas 按需动态加载。
+ *
+ * 注意：必须隔离主站 CSS。Tailwind v4 使用 oklch()，html2canvas 无法解析会抛错。
  */
 export async function downloadSummaryPdf(
   options: BuildSummaryMarkdownOptions
 ): Promise<{ fileName: string }> {
-  const { jsPDF } = await import('jspdf')
+  const [{ jsPDF }, html2canvasMod] = await Promise.all([
+    import('jspdf'),
+    import('html2canvas'),
+  ])
+  const html2canvas = html2canvasMod.default
 
   const markdown = buildSummaryMarkdown(options)
   const base = getSummaryExportBaseName(options.bookSummary, options.fileName)
   const fileName = `${base}_总结.pdf`
   const htmlBody = markdownToPrintableHtml(markdown)
+  const titleLine = `${escapeHtml(options.bookSummary.title || base)} · PDF 导出`
 
-  const host = document.createElement('div')
-  host.setAttribute('data-export-pdf-host', '1')
-  // 固定排版宽度，离屏渲染（仍在 layout 树中以便 html2canvas 测量）
-  host.style.cssText = [
-    'position:fixed',
-    'left:-10000px',
-    'top:0',
-    'width:720px',
-    'padding:28px 32px 40px',
-    'box-sizing:border-box',
-    'background:#ffffff',
-    'color:#222222',
-    "font-family:'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',system-ui,sans-serif",
-    'font-size:13px',
-    'line-height:1.7',
-    'text-align:left',
-    'z-index:-1',
-  ].join(';')
-
-  host.innerHTML = `
-    <div style="font-size:11px;color:#888;margin-bottom:16px;">
-      ${escapeHtml(options.bookSummary.title || base)} · PDF 导出
-    </div>
-    ${htmlBody}
-  `
-  document.body.appendChild(host)
+  const { root, cleanup } = mountPdfExportFrame(htmlBody, titleLine)
 
   try {
+    // 等 iframe 布局稳定
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    })
+
+    const canvas = await html2canvas(root, {
+      scale: 1.5,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      // 仅截取导出根节点，不带主文档样式表
+      foreignObjectRendering: false,
+      windowWidth: 720,
+      onclone: (clonedDoc) => {
+        // 双保险：去掉任何可能注入的外链/含 oklch 的样式
+        clonedDoc
+          .querySelectorAll('link[rel="stylesheet"], style[data-vite-dev-id]')
+          .forEach((el) => el.remove())
+        const body = clonedDoc.body
+        if (body) {
+          body.style.background = '#ffffff'
+          body.style.color = '#222222'
+        }
+      },
+    })
+
     const doc = new jsPDF({
       unit: 'pt',
       format: 'a4',
       compress: true,
     })
-
-    const pageWidth = doc.internal.pageSize.getWidth()
-    const marginX = 40
-    const marginY = 36
-    const contentWidth = pageWidth - marginX * 2
-
-    await doc.html(host, {
-      x: marginX,
-      y: marginY,
-      width: contentWidth,
-      windowWidth: 720,
-      autoPaging: 'text',
-      margin: [marginY, marginX, marginY, marginX],
-      html2canvas: {
-        scale: 0.85,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-      },
-    })
+    addCanvasImageToPdf(doc, canvas, 36, 36)
 
     const blob = doc.output('blob')
     triggerBlobDownload(blob, fileName)
     return { fileName }
   } finally {
-    if (host.parentNode) {
-      document.body.removeChild(host)
-    }
+    cleanup()
   }
 }
 
