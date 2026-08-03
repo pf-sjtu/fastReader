@@ -26,37 +26,43 @@ interface SelectedNode {
   }[]
 }
 
-// cytoscape 样式对象（动态主题）
+// cytoscape 样式：颜色必须是 #rrggbb（theme 层已转换）
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildStyles(theme: ChartThemeColors): any[] {
+  const nodeFill = theme.primary
+  // 标签在节点外：用前景色 + 卡片底（色值已是 #rrggbb）
+  const labelColor = theme.foreground
+  const labelBg = theme.card
+  const edgeColor = theme.mutedForeground
+
   return [
     {
       selector: 'node',
       style: {
         label: 'data(label)',
-        // 标签放节点下方 + 背景衬底，亮/暗都清晰
         'text-valign': 'bottom',
         'text-halign': 'center',
         'text-margin-y': 8,
-        'background-color': theme.primary,
-        'background-opacity': theme.isDark ? 0.92 : 0.88,
-        color: theme.foreground,
+        'background-color': nodeFill,
+        'background-opacity': 1,
+        color: labelColor,
         'font-size': 12,
         'font-weight': 500,
         'text-wrap': 'wrap',
         'text-max-width': 96,
-        'text-background-color': theme.card,
-        'text-background-opacity': 0.92,
+        'text-background-color': labelBg,
+        'text-background-opacity': 0.95,
         'text-background-padding': '3px',
         'text-background-shape': 'roundrectangle',
         'text-border-width': 1,
         'text-border-color': theme.border,
-        'text-border-opacity': 0.6,
+        'text-border-opacity': 0.7,
+        'text-outline-width': 0,
         width: (ele: { data: (k: string) => number }) => nodeSize(ele.data('importance')),
         height: (ele: { data: (k: string) => number }) => nodeSize(ele.data('importance')),
         'border-width': 2,
         'border-color': theme.border,
-        'border-opacity': 0.9,
+        'border-opacity': 1,
       },
     },
     {
@@ -66,13 +72,14 @@ function buildStyles(theme: ChartThemeColors): any[] {
         'border-color': theme.primary,
         'border-width': 3,
         color: theme.accentForeground,
-        'text-background-color': theme.card,
+        'text-background-color': labelBg,
+        'text-background-opacity': 0.98,
       },
     },
     {
       selector: 'node:active',
       style: {
-        'overlay-opacity': 0.08,
+        'overlay-opacity': 0.1,
         'overlay-color': theme.primary,
       },
     },
@@ -80,22 +87,22 @@ function buildStyles(theme: ChartThemeColors): any[] {
       selector: 'edge',
       style: {
         width: 1.5,
-        'line-color': theme.mutedForeground,
-        'target-arrow-color': theme.mutedForeground,
+        'line-color': edgeColor,
+        'target-arrow-color': edgeColor,
         'target-arrow-shape': 'triangle',
         'arrow-scale': 0.9,
         'curve-style': 'bezier',
         label: 'data(label)',
         'font-size': 10,
         'font-weight': 500,
-        color: theme.foreground,
+        color: labelColor,
         'text-rotation': 'autorotate',
         'text-margin-y': -10,
-        'text-background-color': theme.card,
-        'text-background-opacity': 0.88,
+        'text-background-color': labelBg,
+        'text-background-opacity': 0.95,
         'text-background-padding': '2px',
         'text-background-shape': 'roundrectangle',
-        opacity: 0.85,
+        opacity: 0.9,
       },
     },
     {
@@ -251,9 +258,14 @@ export function PersonGraphChart({ charts }: Props) {
       </p>
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent side="right" className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>{selected?.node.name}</SheetTitle>
+        <SheetContent
+          side="right"
+          className="sm:max-w-md p-0 gap-0 flex flex-col h-full max-h-dvh overflow-hidden"
+        >
+          <SheetHeader className="shrink-0 pr-12 border-b border-border">
+            <SheetTitle className="pr-2 break-words">
+              {selected?.node.name}
+            </SheetTitle>
             <SheetDescription>
               {[
                 selected?.node.type,
@@ -265,16 +277,18 @@ export function PersonGraphChart({ charts }: Props) {
                 .join(' · ') || ' '}
             </SheetDescription>
           </SheetHeader>
-          <div className="mt-4 space-y-3 text-sm px-1">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 space-y-3 text-sm">
             {selected?.node.description && (
-              <p className="leading-relaxed">{selected.node.description}</p>
+              <p className="leading-relaxed break-words">
+                {selected.node.description}
+              </p>
             )}
             {selected?.edges && selected.edges.length > 0 && (
               <div>
-                <div className="text-muted-foreground mb-2">
+                <div className="text-muted-foreground mb-2 sticky top-0 bg-background/95 backdrop-blur-sm py-1">
                   {t('results.charts.relations', '关系')}
                 </div>
-                <ul className="space-y-2">
+                <ul className="space-y-2 pb-6">
                   {selected.edges.map((e, i) => (
                     <li key={i} className="border rounded-md p-2">
                       <span className="font-medium">{e.relation}</span>
@@ -283,7 +297,7 @@ export function PersonGraphChart({ charts }: Props) {
                         {e.direction === 'out' ? '→' : '←'} {e.otherName}
                       </span>
                       {e.description && (
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-xs text-muted-foreground mt-1 break-words">
                           {e.description}
                         </p>
                       )}

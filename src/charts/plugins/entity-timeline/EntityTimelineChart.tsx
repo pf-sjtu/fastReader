@@ -178,27 +178,36 @@ export function EntityTimelineChart({ charts }: Props) {
       </p>
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
-        <SheetContent side="right" className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>{selected?.label}</SheetTitle>
-            <SheetDescription>
+        <SheetContent
+          side="right"
+          className="sm:max-w-md p-0 gap-0 flex flex-col h-full max-h-dvh overflow-hidden"
+        >
+          <SheetHeader className="shrink-0 pr-12 border-b border-border">
+            <SheetTitle className="pr-2 break-words">{selected?.label}</SheetTitle>
+            <SheetDescription className="break-words">
               {selected?.timeLabel}
               {selected?.chapterHint ? ` · ${selected.chapterHint}` : ''}
             </SheetDescription>
           </SheetHeader>
-          <div className="mt-4 space-y-3 text-sm px-1">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 space-y-3 text-sm">
             {selected?.description && (
-              <p className="text-foreground leading-relaxed">{selected.description}</p>
+              <p className="text-foreground leading-relaxed break-words">
+                {selected.description}
+              </p>
             )}
             {selected?.entityIds?.length ? (
-              <div>
-                <div className="text-muted-foreground mb-1">
+              <div className="pb-6">
+                <div className="text-muted-foreground mb-1 sticky top-0 bg-background/95 backdrop-blur-sm py-1">
                   {t('results.charts.relatedEntities', '相关实体')}
                 </div>
-                <ul className="list-disc pl-5">
+                <ul className="list-disc pl-5 space-y-1">
                   {selected.entityIds.map((id) => {
                     const name = entities.find((e) => e.id === id)?.name || id
-                    return <li key={id}>{name}</li>
+                    return (
+                      <li key={id} className="break-words">
+                        {name}
+                      </li>
+                    )
                   })}
                 </ul>
               </div>
