@@ -59,7 +59,8 @@ export const MindMapCard: React.FC<MindMapCardProps> = ({
   showClearCache = true,
   showViewContent = true,
   showCopyButton = true,
-  showOpenInMindElixir = true,
+  // 默认关闭：外部 MindElixir Desktop 已禁用，避免伪入口
+  showOpenInMindElixir = false,
   showDownloadButton = true,
   className = '',
   mindMapClassName = 'aspect-square w-full max-w-full mx-auto min-h-[240px] max-h-[min(100vw,480px)] sm:max-h-none',

@@ -9,6 +9,14 @@ import { ConfigDialog } from '@/components/project/ConfigDialog'
 import { BatchProcessingDialog } from '@/components/project/BatchProcessingDialog'
 import { CloudCacheSection } from './CloudCacheSection'
 import type { ProcessingMetadata } from '@/services/cloudCacheService'
+import { useConfigStore } from '@/stores/configStore'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface FileUploadCardProps {
   file: File | null
@@ -43,6 +51,8 @@ export function FileUploadCard({
 }: FileUploadCardProps) {
   const { t } = useTranslation()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const processingMode = useConfigStore((s) => s.processingOptions.processingMode)
+  const setProcessingMode = useConfigStore((s) => s.setProcessingMode)
 
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
@@ -64,6 +74,29 @@ export function FileUploadCard({
         <CardDescription>{t('upload.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* 处理模式：主路径可见，不必进配置 Dialog */}
+        <div className="space-y-2">
+          <Label>{t('config.processingMode') || '处理模式'}</Label>
+          <Select
+            value={processingMode}
+            onValueChange={(value: 'summary' | 'mindmap' | 'combined-mindmap') =>
+              setProcessingMode(value)
+            }
+            disabled={processing}
+          >
+            <SelectTrigger className="w-full min-h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="summary">{t('config.summaryMode') || '章节总结'}</SelectItem>
+              <SelectItem value="mindmap">{t('config.mindmapMode') || '章节思维导图'}</SelectItem>
+              <SelectItem value="combined-mindmap">
+                {t('config.combinedMindmapMode') || '整书思维导图'}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="file">{t('upload.selectFile')}</Label>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg bg-gray-50 dark:bg-gray-800 gap-3">

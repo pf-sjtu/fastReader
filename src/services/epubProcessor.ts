@@ -139,6 +139,10 @@ export class EpubProcessor {
             chapterDetectionMode === 'epub-toc'
               ? this.computeSpineRangeEnds(book, chapterInfos)
               : null
+          const endAnchors =
+            chapterDetectionMode === 'epub-toc'
+              ? this.computeEndAnchors(chapterInfos)
+              : null
 
           const chapterPromises = chapterInfos.map((chapterInfo, index) => {
             return limiter.execute(async () => {
@@ -156,7 +160,8 @@ export class EpubProcessor {
                 chapterContent = await this.extractContentBySpineRange(
                   book,
                   chapterInfo.href,
-                  spineRangeEnds[index]
+                  spineRangeEnds[index],
+                  endAnchors?.[index]
                 )
               } else {
                 // normal/smart：保留 subitems 聚合行为
@@ -346,7 +351,7 @@ export class EpubProcessor {
       // 优先：TOC 顺序上的下一条有效 spine
       for (let j = i + 1; j < starts.length; j++) {
         if (starts[j] > start) return starts[j]
-        // 同文件不同锚点：仅取当前文件
+        // 同文件不同锚点：仅取当前文件（内容边界由 endAnchor 截断）
         if (starts[j] === start) return start + 1
       }
 
@@ -364,6 +369,28 @@ export class EpubProcessor {
     })
   }
 
+  /** 同 spine 文件上下一条 TOC 的锚点（用于防止前章吞后章） */
+  private computeEndAnchors(chapterInfos: ChapterInfo[]): Array<string | undefined> {
+    return chapterInfos.map((info, i) => {
+      const clean = normalizeHref(info.href)
+      const [, startAnchor] = asHrefString(info.href).split('#')
+      if (!clean) return undefined
+
+      for (let j = i + 1; j < chapterInfos.length; j++) {
+        const nextClean = normalizeHref(chapterInfos[j].href)
+        if (nextClean !== clean) {
+          // 不同文件：无需 endAnchor
+          return undefined
+        }
+        const [, nextAnchor] = asHrefString(chapterInfos[j].href).split('#')
+        if (nextAnchor && nextAnchor !== startAnchor) {
+          return nextAnchor
+        }
+      }
+      return undefined
+    })
+  }
+
   /**
    * 聚合 [startHref, endSpineIndexExclusive) 区间内所有有实质文本的 spine 页。
    * 用于 epub-toc：TOC 只指扉页、正文在后续文件的情况。
@@ -371,7 +398,8 @@ export class EpubProcessor {
   private async extractContentBySpineRange(
     book: Book,
     startHref: unknown,
-    endSpineIndexExclusive: number
+    endSpineIndexExclusive: number,
+    endAnchor?: string
   ): Promise<string> {
     const raw = asHrefString(startHref)
     const [cleanHref, anchor] = raw.split('#')
@@ -381,7 +409,7 @@ export class EpubProcessor {
       const startIdx = this.resolveSpineIndex(book, raw)
 
       if (startIdx < 0) {
-        return this.getSingleChapterContent(book, cleanHref, anchor)
+        return this.getSingleChapterContent(book, cleanHref, anchor, endAnchor)
       }
 
       const endIdx =
@@ -394,8 +422,10 @@ export class EpubProcessor {
       const minPartLength = 20
 
       for (let i = startIdx; i < endIdx; i++) {
-        const partAnchor = i === startIdx ? anchor : undefined
-        const text = await this.renderSpineItemText(book, i, partAnchor)
+        // 仅起始文件使用起止锚点；中间页无锚点
+        const partStartAnchor = i === startIdx ? anchor : undefined
+        const partEndAnchor = i === startIdx ? endAnchor : undefined
+        const text = await this.renderSpineItemText(book, i, partStartAnchor, partEndAnchor)
         if (text.trim().length >= minPartLength) {
           parts.push(text.trim())
         }
@@ -403,13 +433,13 @@ export class EpubProcessor {
 
       // 区间聚合失败时回退单文件 + 旧启发式
       if (parts.length === 0) {
-        return this.getSingleChapterContent(book, cleanHref, anchor)
+        return this.getSingleChapterContent(book, cleanHref, anchor, endAnchor)
       }
 
       return parts.join('\n\n')
     } catch (error) {
       console.warn(`spine 区间提取失败 (href: ${raw}):`, error)
-      return this.getSingleChapterContent(book, cleanHref, anchor)
+      return this.getSingleChapterContent(book, cleanHref, anchor, endAnchor)
     }
   }
 
@@ -417,14 +447,15 @@ export class EpubProcessor {
   private async renderSpineItemText(
     book: Book,
     spineIndex: number,
-    anchor?: string
+    anchor?: string,
+    endAnchor?: string
   ): Promise<string> {
     const section = book.spine.get(spineIndex)
     if (!section) return ''
 
     try {
       const chapterHTML = await section.render(book.load.bind(book))
-      const textContent = this.extractTextFromXHTML(chapterHTML, anchor)
+      const textContent = this.extractTextFromXHTML(chapterHTML, anchor, endAnchor)
       section.unload()
       return textContent
     } catch (error) {
@@ -438,7 +469,12 @@ export class EpubProcessor {
     }
   }
 
-  private async getSingleChapterContent(book: Book, href: unknown, anchor?: string): Promise<string> {
+  private async getSingleChapterContent(
+    book: Book,
+    href: unknown,
+    anchor?: string,
+    endAnchor?: string
+  ): Promise<string> {
     try {
       const spineItems = book.spine?.spineItems ?? []
       const spineIndex = this.resolveSpineIndex(book, href)
@@ -448,7 +484,7 @@ export class EpubProcessor {
         return ''
       }
 
-      let textContent = await this.renderSpineItemText(book, spineIndex, anchor)
+      let textContent = await this.renderSpineItemText(book, spineIndex, anchor, endAnchor)
 
       // 封面-内容自动检测：如果内容为空，检查是否有 xxx_0001.xhtml 内容文件
       if (textContent.length < 100 && spineIndex >= 0 && spineIndex < spineItems.length - 1) {
@@ -457,7 +493,7 @@ export class EpubProcessor {
 
         // 检查是否是 _0001.xhtml 格式的内容文件（nextHref 可能为空）
         if (nextHref && /_\d+\.xhtml$/i.test(nextHref)) {
-          const nextText = await this.renderSpineItemText(book, spineIndex + 1, anchor)
+          const nextText = await this.renderSpineItemText(book, spineIndex + 1, anchor, endAnchor)
           if (nextText.length > textContent.length) {
             textContent = nextText
           }
@@ -471,7 +507,11 @@ export class EpubProcessor {
     }
   }
 
-  private extractTextFromXHTML(xhtmlContent: string, anchor?: string): string {
+  private extractTextFromXHTML(
+    xhtmlContent: string,
+    anchor?: string,
+    endAnchor?: string
+  ): string {
     try {
       const parser = new DOMParser()
       const doc = parser.parseFromString(xhtmlContent, 'application/xhtml+xml')
@@ -492,7 +532,7 @@ export class EpubProcessor {
       let textContent = ''
 
       if (anchor) {
-        textContent = this.extractContentByAnchor(doc, anchor, xhtmlContent)
+        textContent = this.extractContentByAnchor(doc, anchor, xhtmlContent, endAnchor)
       }
 
       if (!textContent.trim()) {
@@ -506,7 +546,12 @@ export class EpubProcessor {
     }
   }
 
-  private extractContentByAnchor(doc: Document, anchor: string, originalHtml: string): string {
+  private extractContentByAnchor(
+    doc: Document,
+    anchor: string,
+    originalHtml: string,
+    endAnchor?: string
+  ): string {
     try {
       // 首先使用 getElementById，它对 XHTML 命名空间更可靠
       let anchorElement: Element | null = doc.getElementById(anchor)
@@ -539,7 +584,14 @@ export class EpubProcessor {
 
       // 如果找到了锚点元素，使用 DOM 方法提取内容
       if (anchorElement) {
-        const content = this.extractContentFromElement(anchorElement)
+        let endElement: Element | null = null
+        if (endAnchor) {
+          endElement =
+            doc.getElementById(endAnchor) ||
+            doc.querySelector(`[id="${CSS.escape(endAnchor)}"]`) ||
+            doc.querySelector(`[name="${endAnchor}"]`)
+        }
+        const content = this.extractContentFromElement(anchorElement, endElement)
         if (content.length > 100) {
           return content
         }
@@ -559,18 +611,31 @@ export class EpubProcessor {
     }
   }
 
-  private extractContentFromElement(anchorElement: Element): string {
+  private extractContentFromElement(
+    anchorElement: Element,
+    endElement?: Element | null
+  ): string {
     // 首先包含锚点元素本身的文本（通常是章节标题）
     let content = anchorElement.textContent || ''
 
-    // 然后添加后续兄弟元素的内容
+    // 然后添加后续兄弟元素的内容，直到下一 TOC 锚点
     let currentElement: Element | null = anchorElement.nextElementSibling
     while (currentElement) {
-      content += '\n' + currentElement.textContent
+      if (endElement && (currentElement === endElement || currentElement.contains(endElement))) {
+        break
+      }
+      if (
+        endElement &&
+        (currentElement.id === endElement.id ||
+          currentElement.getAttribute('name') === endElement.getAttribute('name'))
+      ) {
+        break
+      }
+      content += '\n' + (currentElement.textContent || '')
       currentElement = currentElement.nextElementSibling
     }
 
-    return cleanChapterTitle(content.trim())
+    return cleanAndFormatText(content.trim())
   }
 
   private extractTextWithRegex(xhtmlContent: string, anchor?: string): string {

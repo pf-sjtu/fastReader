@@ -24,7 +24,6 @@ interface ResultsSectionProps {
   onChapterExpandChange: (chapterId: string, isExpanded: boolean) => void
   onReadChapter: (chapterId: string) => void
   onDownloadAllMarkdown: () => void
-  onOpenInMindElixir?: (mindMapData: MindElixirData, title?: string) => void
   onDownloadMindMap?: (mindMapData: MindElixirData, title?: string) => void
 }
 
@@ -40,7 +39,6 @@ export function ResultsSection({
   onChapterExpandChange,
   onReadChapter,
   onDownloadAllMarkdown,
-  onOpenInMindElixir,
   onDownloadMindMap
 }: ResultsSectionProps) {
   const { t } = useTranslation()
@@ -174,8 +172,8 @@ export function ResultsSection({
                     index={index}
                     showCopyButton={false}
                     onClearCache={() => onClearChapterCache(chapter.id)}
-                    onOpenInMindElixir={onOpenInMindElixir}
                     onDownloadMindMap={onDownloadMindMap}
+                    showOpenInMindElixir={false}
                     mindElixirOptions={mindElixirOptions}
                   />
                 )
@@ -190,12 +188,12 @@ export function ResultsSection({
                   content=""
                   mindMapData={bookMindMap.combinedMindMap}
                   index={0}
-                  onOpenInMindElixir={(mindmapData) => onOpenInMindElixir?.(mindmapData, t('results.combinedMindMapTitle', { title: bookMindMap.title }))}
                   onDownloadMindMap={onDownloadMindMap}
                   onClearCache={() => onClearSpecificCache('merged_mindmap')}
                   showClearCache={true}
                   showViewContent={false}
                   showCopyButton={false}
+                  showOpenInMindElixir={false}
                   mindMapClassName="w-full h-[min(60vh,600px)] min-h-[240px] mx-auto"
                   mindElixirOptions={mindElixirOptions}
                 />
@@ -218,12 +216,12 @@ export function ResultsSection({
               content=""
               mindMapData={bookMindMap.combinedMindMap}
               index={0}
-              onOpenInMindElixir={(mindmapData) => onOpenInMindElixir?.(mindmapData, t('results.combinedMindMapTitle', { title: bookMindMap.title }))}
               onDownloadMindMap={onDownloadMindMap}
               onClearCache={() => onClearSpecificCache('combined_mindmap')}
               showClearCache={true}
               showViewContent={false}
               showCopyButton={false}
+              showOpenInMindElixir={false}
               mindMapClassName="w-full h-[min(60vh,600px)] min-h-[240px] mx-auto"
               mindElixirOptions={mindElixirOptions}
             />

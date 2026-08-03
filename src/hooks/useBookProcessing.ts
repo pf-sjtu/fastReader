@@ -862,11 +862,18 @@ export function useBookProcessing() {
   }, [file, checkCloudCache])
 
   // WebDAV文件选择处理
-  const handleWebDAVFileSelect = useCallback((selectedFile: File) => {
+  const handleWebDAVFileSelect = useCallback(async (selectedFile: File) => {
     setFile(selectedFile)
     resetState()
+    setFile(selectedFile)
     toast.success(t('webdav.fileSelected', { name: selectedFile.name }))
-  }, [resetState, t])
+
+    // 与本地上传一致：自动查缓存并提取章节
+    if (webdavConfig.enabled && webdavService.isInitialized()) {
+      await checkCloudCache(selectedFile.name)
+    }
+    await extractChapters(selectedFile)
+  }, [resetState, t, webdavConfig.enabled, extractChapters, checkCloudCache])
 
   // 打开WebDAV浏览器
   const openWebDAVBrowser = useCallback(() => {

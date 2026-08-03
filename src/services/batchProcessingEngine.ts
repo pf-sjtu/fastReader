@@ -83,7 +83,7 @@ export class BatchProcessingEngine {
   /**
    * 初始化 AI 服务
    */
-  private initializeAIService(): void {
+  private initializeAIService(onTokenUsage?: (tokens: number) => void): void {
     const aiConfig = useConfigStore.getState().aiConfig
     const aiServiceOptions = useConfigStore.getState().aiServiceOptions
 
@@ -100,7 +100,8 @@ export class BatchProcessingEngine {
       () => useConfigStore.getState().promptConfig,
       {
         maxRetries: aiServiceOptions.maxRetries,
-        baseRetryDelay: aiServiceOptions.baseRetryDelay
+        baseRetryDelay: aiServiceOptions.baseRetryDelay,
+        onTokenUsage,
       }
     )
   }
@@ -302,23 +303,25 @@ export class BatchProcessingEngine {
 
       console.log(`[BatchEngine] 提取到 ${chapters.length} 个章节`)
 
-      // 4. 处理选中的章节
+      // 4. 处理选中的章节（结构化累积，禁止 ##/### 二次解析）
       const selectedChapters = item.selectedChapters || chapters.map((_, i) => i + 1)
-      const results: string[] = []
-      const totalInputTokens = 0
-      const totalOutputTokens = 0
+      let totalTokens = 0
+      this.initializeAIService((n) => {
+        totalTokens += n
+      })
+
       let skippedChapters = 0
       let selectedChapterCount = 0
+      const chapterSummaries: Array<{ id: string; title: string; summary: string }> = []
+      let connections = ''
+      let overallSummary = ''
 
-
-      // 生成书名（从文件名提取）
       const bookTitle = item.fileName.replace(/\.(epub|pdf|txt|mobi|azw3)$/i, '')
+      const mode = processingOptions.processingMode
+      const requestThrottleMs = this.getRequestThrottleMs(config)
 
-      // 根据处理模式生成内容
-      if (processingOptions.processingMode === 'summary' || processingOptions.processingMode === 'combined-mindmap') {
-        const requestThrottleMs = this.getRequestThrottleMs(config)
-
-        // 生成章节摘要
+      // 章节摘要：summary / combined-mindmap
+      if (mode === 'summary' || mode === 'combined-mindmap') {
         for (let i = 0; i < chapters.length; i++) {
           if (this.shouldStop) {
             throw new Error('用户停止处理')
@@ -330,13 +333,11 @@ export class BatchProcessingEngine {
           }
 
           selectedChapterCount += 1
-
-
-          const progress = 10 + Math.floor((i / chapters.length) * 60)
+          const progress = 10 + Math.floor((selectedChapterCount / Math.max(selectedChapters.length, 1)) * 55)
           this.callbacks.onItemProgress?.(
             item.id,
             progress,
-            `生成章节摘要 (${i + 1}/${chapters.length}): ${chapter.title}`
+            `生成章节摘要 (${selectedChapterCount}): ${chapter.title}`
           )
 
           const summary = await this.processChapterSummary(
@@ -349,32 +350,46 @@ export class BatchProcessingEngine {
             skippedChapters++
           }
 
-          results.push(`## ${chapter.title}\n\n${summary}`)
+          chapterSummaries.push({
+            id: chapter.id || `chapter-${selectedChapterCount}`,
+            title: chapter.title,
+            summary,
+          })
 
-
-          // 模拟 token 统计（实际由 AIService 内部记录）
-          await this.sleep(requestThrottleMs) // 避免请求过快
+          await this.sleep(requestThrottleMs)
         }
       }
 
-      // 生成关联分析
-      if (processingOptions.processingMode === 'combined-mindmap' || processingOptions.processingMode === 'mindmap') {
+      // mindmap 模式：批量侧仍用关联分析作为可读结果（完整导图 JSON 不适合统一 md 缓存）
+      // summary / combined：关联分析只跑一次
+      const needConnections =
+        mode === 'summary' || mode === 'combined-mindmap' || mode === 'mindmap'
+
+      if (needConnections) {
         if (this.shouldStop) {
           throw new Error('用户停止处理')
         }
 
         this.callbacks.onItemProgress?.(item.id, 75, '生成章节关联分析...')
 
-        const chapterObjects = chapters
-          .filter((_, i) => selectedChapters.includes(i + 1))
-          .map((ch, idx) => ({
-            id: String(idx + 1),
-            title: ch.title,
-            content: ch.content
-          }))
+        const chapterObjects =
+          chapterSummaries.length > 0
+            ? chapterSummaries.map((ch) => ({
+                id: ch.id,
+                title: ch.title,
+                content: '',
+                summary: ch.summary,
+              }))
+            : chapters
+                .filter((_, i) => selectedChapters.includes(i + 1))
+                .map((ch, idx) => ({
+                  id: ch.id || String(idx + 1),
+                  title: ch.title,
+                  content: ch.content,
+                  summary: '',
+                }))
 
         if (chapterObjects.length > 0) {
-          let connections: string
           try {
             const aiService = this.getAIServiceOrThrow('章节关联分析')
             connections = await aiService.analyzeConnections(
@@ -383,55 +398,27 @@ export class BatchProcessingEngine {
             )
           } catch (error) {
             console.error('[BatchProcessingEngine] 章节关联分析生成失败:', error)
-            connections = '章节关联分析生成失败'
-          }
-
-          if (this.shouldStop) {
-            throw new Error('用户停止处理')
-          }
-
-          if (processingOptions.processingMode === 'combined-mindmap') {
-            results.push(`## 章节关联分析\n\n${connections}`)
+            connections = `【关联分析失败】${error instanceof Error ? error.message : '未知错误'}`
           }
         }
       }
 
-
-      // 生成全书总结
-      if (processingOptions.processingMode === 'summary' || processingOptions.processingMode === 'combined-mindmap') {
+      // 全书总结
+      if (mode === 'summary' || mode === 'combined-mindmap') {
         if (this.shouldStop) {
           throw new Error('用户停止处理')
         }
 
-        this.callbacks.onItemProgress?.(item.id, 85, '生成全书总结...')
+        this.callbacks.onItemProgress?.(item.id, 88, '生成全书总结...')
 
-        const chapterObjects = chapters
-          .filter((_, i) => selectedChapters.includes(i + 1))
-          .map((ch, idx) => ({
-            id: String(idx + 1),
-            title: ch.title,
-            content: ch.content,
-            summary: results[idx]?.replace(/^## .*\n\n/, '') || ''
-          }))
+        const chapterObjects = chapterSummaries.map((ch) => ({
+          id: ch.id,
+          title: ch.title,
+          content: '',
+          summary: ch.summary,
+        }))
 
         if (chapterObjects.length > 0) {
-          let connections: string
-          try {
-            const aiService = this.getAIServiceOrThrow('全书总结-章节关联分析')
-            connections = await aiService.analyzeConnections(
-              chapterObjects,
-              processingOptions.outputLanguage
-            )
-          } catch (error) {
-            console.error('[BatchProcessingEngine] 章节关联分析生成失败:', error)
-            connections = '章节关联分析生成失败'
-          }
-
-          if (this.shouldStop) {
-            throw new Error('用户停止处理')
-          }
-
-          let overallSummary: string
           try {
             const aiService = this.getAIServiceOrThrow('全书总结')
             overallSummary = await aiService.generateOverallSummary(
@@ -442,30 +429,25 @@ export class BatchProcessingEngine {
             )
           } catch (error) {
             console.error('[BatchProcessingEngine] 全书总结生成失败:', error)
-            overallSummary = '全书总结生成失败'
-          }
-
-          if (this.shouldStop) {
-            throw new Error('用户停止处理')
-          }
-
-          if (overallSummary) {
-            results.push(`## 全书总结\n\n${overallSummary}`)
+            overallSummary = `【全书总结失败】${error instanceof Error ? error.message : '未知错误'}`
           }
         }
-
       }
-
 
       // 5. 生成最终内容
       this.callbacks.onItemProgress?.(item.id, 95, '保存结果...')
 
       const endTime = new Date().toISOString()
       const originalCharCount = chapters.reduce((sum, ch) => sum + ch.content.length, 0)
-      const processedCharCount = results.join('\n\n').length
+      const processedCharCount =
+        chapterSummaries.reduce((sum, ch) => sum + ch.summary.length, 0) +
+        connections.length +
+        overallSummary.length
       const isPartial = skippedChapters > 0
+      // 无分项 usage 时用总 token 作近似
+      const totalInputTokens = Math.floor(totalTokens * 0.7)
+      const totalOutputTokens = Math.max(0, totalTokens - totalInputTokens)
 
-      // 生成元数据
       const metadata = metadataFormatter.generate({
         fileName: item.fileName,
         bookTitle,
@@ -484,33 +466,6 @@ export class BatchProcessingEngine {
         }
       })
 
-
-      // 提取全书总结和章节关联
-      let overallSummary = ''
-      let connections = ''
-      const chapterSummaries: Array<{id: string, title: string, summary: string}> = []
-
-      // 解析 results 数组，提取各部分内容
-      for (const result of results) {
-        if (result.startsWith('### ')) {
-          // 章节摘要
-          const lines = result.split('\n')
-          const title = lines[0].replace('### ', '').trim()
-          const summary = lines.slice(1).join('\n').trim()
-          chapterSummaries.push({ id: `chapter-${chapterSummaries.length + 1}`, title, summary })
-        } else if (result.includes('章节关联')) {
-          // 章节关联
-          const lines = result.split('\n')
-          connections = lines.slice(1).join('\n').trim()
-        } else if (!result.includes('章节') && !result.startsWith('---')) {
-          // 全书总结（假设是第一个非章节内容）
-          if (!overallSummary && result.length > 50) {
-            overallSummary = result
-          }
-        }
-      }
-
-      // 准备书籍数据
       const bookData = {
         title: bookTitle,
         author: '',
@@ -519,7 +474,6 @@ export class BatchProcessingEngine {
         connections
       }
 
-      // 使用统一格式生成最终内容
       const finalContent = metadataFormatter.formatUnified(
         bookData,
         metadata,

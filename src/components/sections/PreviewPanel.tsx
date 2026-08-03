@@ -121,7 +121,7 @@ export function PreviewPanel({
         <div
           className={cn(
             'overflow-y-auto overscroll-contain',
-            isSheet ? 'flex-1 min-h-0' : 'max-h-96'
+            isSheet ? 'flex-1 min-h-0' : 'max-h-[min(70vh,36rem)]'
           )}
         >
           {isEpub ? (

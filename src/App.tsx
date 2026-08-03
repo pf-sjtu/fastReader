@@ -203,13 +203,7 @@ function App() {
     toast.success(t('download.downloadSuccess'))
   }, [bookSummary, file, aiConfig.model, processingOptions.chapterDetectionMode, processingOptions.chapterNamingMode, t])
 
-  // 在 MindElixir 中打开
-  const openInMindElixir = useCallback((mindMapData: MindElixirData, title?: string) => {
-    // 实际实现需要在 MindMapCard 中处理
-    console.log('Open in MindElixir:', title)
-  }, [])
-
-  // 下载思维导图
+  // 导出思维导图 JSON（MindElixir Desktop 入口已下线）
   const downloadMindMap = useCallback((mindMapData: MindElixirData, title?: string) => {
     const blob = new Blob([JSON.stringify(mindMapData, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -220,7 +214,8 @@ function App() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-  }, [])
+    toast.success(t('download.downloadSuccess') || '已导出 JSON')
+  }, [t])
 
   // 开始处理并切换到结果页
   const handleStartProcessing = useCallback(async () => {
@@ -501,7 +496,6 @@ function App() {
                     if (chapter) handleViewChapterContent(chapter)
                   }}
                   onDownloadAllMarkdown={downloadAllMarkdown}
-                  onOpenInMindElixir={openInMindElixir}
                   onDownloadMindMap={downloadMindMap}
                 />
               ) : (

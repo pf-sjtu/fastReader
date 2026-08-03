@@ -142,9 +142,14 @@ describe('BatchProcessingEngine 行为测试', () => {
 
   it('AI 服务不可用时应返回可诊断失败信息', async () => {
     const engine = new BatchProcessingEngine()
-    const engineWithInternals = engine as unknown as { aiService: unknown }
     const internalEngine = engine as unknown as BatchProcessingEngineInternals
-    engineWithInternals.aiService = null
+
+    // 每文件会重新 initializeAIService；模拟初始化失败保持 null
+    vi.spyOn(internalEngine, 'initializeAIService').mockImplementation(function (this: {
+      aiService: unknown
+    }) {
+      this.aiService = null
+    })
 
     const extractChaptersSpy = vi
       .spyOn(internalEngine, 'extractChapters')
@@ -154,7 +159,7 @@ describe('BatchProcessingEngine 行为测试', () => {
 
     expect(extractChaptersSpy).toHaveBeenCalledTimes(1)
     expect(result.success).toBe(false)
-    expect(result.error).toContain('AI 服务未初始化')
+    expect(result.error).toMatch(/AI 服务未初始化/)
     expect(webdavServiceMock.uploadFile).not.toHaveBeenCalled()
   })
 
