@@ -115,7 +115,6 @@ export function EntityTimelineChart({ charts }: Props) {
                         width: config.colWidth,
                         background: `color-mix(in oklab, ${color} 18%, var(--card))`,
                       }}
-                      title={tip}
                     >
                       <span className="text-[11px] font-medium text-foreground leading-snug line-clamp-2 w-full break-words">
                         {ent.name}
