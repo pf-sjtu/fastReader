@@ -66,9 +66,14 @@
     "processingError": "An error occurred during processing",
     "extractionError": "An error occurred during chapter extraction",
     "bookProcessing": "Book Processing",
-    "cancelled": "Processing cancelled",
+    "cancelled": "Processing aborted",
     "generatingSummaries": "Generating summaries",
-    "generatingMindMaps": "Generating mind maps"
+    "generatingMindMaps": "Generating mind maps",
+    "abort": "Abort",
+    "abortAndEditSettings": "Abort and edit settings",
+    "abortAndEditSettingsShort": "Settings",
+    "restart": "Restart",
+    "cancelledHint": "Aborted. Edit settings then start again, or click Restart."
   },
   "results": {
     "summaryTitle": "Analysis Results for \"{{title}}\"",

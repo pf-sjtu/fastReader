@@ -83,6 +83,7 @@ function App() {
     extractChapters,
     processBook,
     cancelProcessing,
+    restartProcessing,
     handleChapterSelect,
     handleSelectAll,
     handleViewChapterContent,
@@ -227,6 +228,18 @@ function App() {
     await processBook()
   }, [processBook])
 
+  // 中止后返回配置改设置
+  const handleAbortToConfig = useCallback(() => {
+    cancelProcessing()
+    setCurrentStepIndex(1)
+  }, [cancelProcessing])
+
+  // 按当前配置重新处理（可先在配置页改设置再点）
+  const handleRestartProcessing = useCallback(async () => {
+    setCurrentStepIndex(2)
+    await restartProcessing()
+  }, [restartProcessing])
+
   // 从历史记录加载云端缓存
   const handleLoadFromHistory = useCallback(async (record: ProcessingHistoryRecord): Promise<boolean> => {
     const success = await loadFromHistoryRecord(record.fileName)
@@ -344,9 +357,22 @@ function App() {
           tokenUsage={tokenUsage}
           hasApiKey={Boolean(aiConfig.apiKey?.trim())}
           processingMode={processingMode}
-          onToggleView={() => setCurrentStepIndex(currentStepIndex === 1 ? 2 : 1)}
+          onToggleView={() => {
+            if (processing) {
+              // 处理中切回配置：中止并返回
+              handleAbortToConfig()
+              return
+            }
+            setCurrentStepIndex(currentStepIndex === 1 ? 2 : 1)
+          }}
           onLoadFromHistory={handleLoadFromHistory}
           onCancelProcessing={cancelProcessing}
+          onRestartProcessing={
+            file && extractedChapters && selectedChapters.size > 0
+              ? handleRestartProcessing
+              : undefined
+          }
+          onAbortToConfig={handleAbortToConfig}
         />
 
         {/* 批量处理队列面板 */}

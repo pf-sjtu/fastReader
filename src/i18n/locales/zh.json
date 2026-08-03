@@ -66,9 +66,14 @@
     "processingError": "处理过程中发生错误",
     "extractionError": "章节提取过程中发生错误",
     "bookProcessing": "书籍处理",
-    "cancelled": "已取消处理",
+    "cancelled": "已中止处理",
     "generatingSummaries": "生成章节总结",
-    "generatingMindMaps": "生成思维导图"
+    "generatingMindMaps": "生成思维导图",
+    "abort": "中止",
+    "abortAndEditSettings": "中止并返回修改设置",
+    "abortAndEditSettingsShort": "改设置",
+    "restart": "重新处理",
+    "cancelledHint": "已中止。可返回配置修改设置后点「开始处理」，或点「重新处理」。"
   },
   "results": {
     "title": "处理结果",

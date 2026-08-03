@@ -328,9 +328,25 @@ export function useBookProcessing() {
     })
   }, [])
 
+  /**
+   * 进度条权重（与文案「第 x/n 章」对齐）：
+   * - 章节循环占绝大部分（summary 0–80%，mindmap 0–85%）
+   * - 后处理（关联/全书总结/整书导图）占剩余
+   * 旧公式「10 + done*30/total」在 15/16 章时只有约 36%，易误解。
+   */
+  const chapterPhaseProgress = (done: number, total: number, phaseMax: number) => {
+    if (total <= 0) return 0
+    return Math.min(phaseMax, Math.round((done / total) * phaseMax))
+  }
+
   // 处理书籍
   const processBook = useCallback(async () => {
     if (!file || !extractedChapters || selectedChapters.size === 0) return
+
+    // 若仍有未结束的任务，先中止
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
 
     const controller = new AbortController()
     abortControllerRef.current = controller
@@ -344,6 +360,7 @@ export function useBookProcessing() {
 
     setProcessing(true)
     setProgress(0)
+    setCurrentStep(t('progress.startProcessing'))
 
     try {
       resetTokenUsage()
@@ -353,11 +370,13 @@ export function useBookProcessing() {
         ...aiServiceOptions
       })
       const selectedChapterData = extractedChapters.filter(ch => selectedChapters.has(ch.id))
+      const totalChapters = selectedChapterData.length
 
       if (processingMode === 'summary') {
-        // 生成章节总结
+        // 章节总结：0–80%；关联 80–90%；全书总结 90–100%
+        const CHAPTER_PHASE_MAX = 80
         setCurrentStep(t('progress.generatingSummaries'))
-        setProgress(10)
+        setProgress(0)
 
         const processedChapters: Chapter[] = []
 
@@ -370,13 +389,15 @@ export function useBookProcessing() {
         }
         setBookSummary(initialSummary)
 
-        for (let i = 0; i < selectedChapterData.length; i++) {
+        for (let i = 0; i < totalChapters; i++) {
           throwIfAborted()
           const chapter = selectedChapterData[i]
           setCurrentProcessingChapter(chapter.id)
+          // 进入第 i+1 章时，进度反映「已完成 i 章」
+          setProgress(chapterPhaseProgress(i, totalChapters, CHAPTER_PHASE_MAX))
           setCurrentStep(t('progress.processingChapter', {
             current: i + 1,
-            total: selectedChapterData.length,
+            total: totalChapters,
             title: chapter.title
           }))
 
@@ -387,6 +408,8 @@ export function useBookProcessing() {
             processingOptions.outputLanguage,
             customPrompt
           )
+
+          throwIfAborted()
 
           const processedChapter: Chapter = {
             id: chapter.id,
@@ -403,14 +426,15 @@ export function useBookProcessing() {
             chapters: [...prev!.chapters, processedChapter]
           }))
 
-          setProgress(10 + (i + 1) * 30 / selectedChapterData.length)
+          setProgress(chapterPhaseProgress(i + 1, totalChapters, CHAPTER_PHASE_MAX))
         }
 
         setCurrentProcessingChapter('')
 
         // 生成章节关联分析
+        throwIfAborted()
         setCurrentStep(t('progress.analyzingConnections'))
-        setProgress(50)
+        setProgress(85)
 
         const connections = await aiService.analyzeConnections(
           processedChapters,
@@ -418,8 +442,9 @@ export function useBookProcessing() {
         )
 
         // 生成全书总结
+        throwIfAborted()
         setCurrentStep(t('progress.generatingOverallSummary'))
-        setProgress(70)
+        setProgress(92)
 
         const overallSummary = await aiService.generateOverallSummary(
           bookData?.title || '',
@@ -459,9 +484,10 @@ export function useBookProcessing() {
           console.error('自动同步失败:', error)
         }
       } else if (processingMode === 'mindmap' || processingMode === 'combined-mindmap') {
-        // 生成章节思维导图
+        // 章节导图：0–85%；整书导图 85–100%
+        const CHAPTER_PHASE_MAX = processingMode === 'combined-mindmap' ? 85 : 95
         setCurrentStep(t('progress.generatingMindMaps'))
-        setProgress(10)
+        setProgress(0)
 
         const processedChapters: Chapter[] = []
 
@@ -473,13 +499,14 @@ export function useBookProcessing() {
         }
         setBookMindMap(initialMindMap)
 
-        for (let i = 0; i < selectedChapterData.length; i++) {
+        for (let i = 0; i < totalChapters; i++) {
           throwIfAborted()
           const chapter = selectedChapterData[i]
           setCurrentProcessingChapter(chapter.id)
+          setProgress(chapterPhaseProgress(i, totalChapters, CHAPTER_PHASE_MAX))
           setCurrentStep(t('progress.processingChapter', {
             current: i + 1,
-            total: selectedChapterData.length,
+            total: totalChapters,
             title: chapter.title
           }))
 
@@ -489,6 +516,8 @@ export function useBookProcessing() {
             chapter.content,
             processingOptions.outputLanguage
           )
+
+          throwIfAborted()
 
           const processedChapter: Chapter = {
             id: chapter.id,
@@ -505,7 +534,7 @@ export function useBookProcessing() {
             chapters: [...prev!.chapters, processedChapter]
           }))
 
-          setProgress(10 + (i + 1) * 40 / selectedChapterData.length)
+          setProgress(chapterPhaseProgress(i + 1, totalChapters, CHAPTER_PHASE_MAX))
         }
 
         setCurrentProcessingChapter('')
@@ -516,7 +545,7 @@ export function useBookProcessing() {
         if (processingMode === 'combined-mindmap') {
           throwIfAborted()
           setCurrentStep(t('progress.generatingCombinedMindMap'))
-          setProgress(60)
+          setProgress(90)
 
           // combined 使用各章 title + summary/mindmap 摘要；language 为第三参
           const chaptersForCombined = processedChapters.map((ch) => ({
@@ -591,7 +620,10 @@ export function useBookProcessing() {
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        toast.info(t('progress.cancelled') || '已取消处理')
+        setCurrentStep(t('progress.cancelled'))
+        toast.info(t('progress.cancelledHint') || '已中止。可返回配置修改设置后重新开始，或直接重新处理。', {
+          duration: 5000,
+        })
       } else {
         toast.error(error instanceof Error ? error.message : t('progress.processingError'), {
           duration: 5000,
@@ -605,7 +637,9 @@ export function useBookProcessing() {
         }
       }
     } finally {
-      abortControllerRef.current = null
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null
+      }
       setProcessing(false)
       setCurrentProcessingChapter('')
     }
@@ -616,15 +650,35 @@ export function useBookProcessing() {
     aiServiceOptions
   ])
 
-  // 取消处理
+  // 中止处理（当前章请求仍可能跑完，之后不再进入下一章）
   const cancelProcessing = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
-      abortControllerRef.current = null
     }
     setProcessing(false)
+    setCurrentProcessingChapter('')
     setCurrentStep(t('progress.cancelled'))
+    toast.info(t('progress.cancelledHint') || '已请求中止，当前章节结束后停止。可改设置后重新处理。')
   }, [t])
+
+  /**
+   * 重新开始处理：中止进行中的任务，清空结果后按当前配置再跑。
+   * 调用方应先切到结果页（或保持在结果页）。
+   */
+  const restartProcessing = useCallback(async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      // 等一拍让旧 processBook 退出，避免双跑
+      await new Promise((r) => setTimeout(r, 50))
+    }
+    setBookSummary(null)
+    setBookMindMap(null)
+    setProgress(0)
+    setCurrentStep('')
+    setExpandedChapters(new Set())
+    setCurrentViewingChapterSummary('')
+    await processBook()
+  }, [processBook])
 
   // 清除章节缓存
   const clearChapterCache = useCallback((chapterId: string) => {
@@ -911,6 +965,7 @@ export function useBookProcessing() {
     extractChapters,
     processBook,
     cancelProcessing,
+    restartProcessing,
     handleChapterSelect,
     handleSelectAll,
     handleViewChapterContent,

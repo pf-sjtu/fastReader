@@ -33,6 +33,10 @@ interface UnifiedStatusBarProps {
   onToggleView?: () => void
   onLoadFromHistory?: (record: ProcessingHistoryRecord) => Promise<boolean>
   onCancelProcessing?: () => void
+  /** 按当前配置清空结果并重新跑完整处理 */
+  onRestartProcessing?: () => void
+  /** 中止并回到配置页改设置 */
+  onAbortToConfig?: () => void
   className?: string
 }
 
@@ -54,6 +58,8 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
   onToggleView,
   onLoadFromHistory,
   onCancelProcessing,
+  onRestartProcessing,
+  onAbortToConfig,
   className
 }: UnifiedStatusBarProps) {
   const { t } = useTranslation()
@@ -163,18 +169,49 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                     <span className="text-muted-foreground truncate min-w-0">
                       {processing ? currentStep : t('statusBar.completed')}
                     </span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-muted-foreground">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-muted-foreground tabular-nums">
                         {Math.round(progress)}%
                       </span>
                       {processing && onCancelProcessing && (
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="h-7 px-2 text-xs"
+                          className="h-7 px-2 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
                           onClick={onCancelProcessing}
                         >
-                          {t('common.cancel') || '取消'}
+                          {t('progress.abort') || '中止'}
+                        </Button>
+                      )}
+                      {processing && onAbortToConfig && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs hidden sm:inline-flex"
+                          onClick={onAbortToConfig}
+                          title={t('progress.abortAndEditSettings') || '中止并返回改设置'}
+                        >
+                          {t('progress.abortAndEditSettingsShort') || '改设置'}
+                        </Button>
+                      )}
+                      {!processing && progress > 0 && progress < 100 && onRestartProcessing && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={onRestartProcessing}
+                        >
+                          {t('progress.restart') || '重新处理'}
+                        </Button>
+                      )}
+                      {!processing && progress >= 100 && onRestartProcessing && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={onRestartProcessing}
+                        >
+                          {t('progress.restart') || '重新处理'}
                         </Button>
                       )}
                     </div>
