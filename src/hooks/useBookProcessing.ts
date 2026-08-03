@@ -138,7 +138,8 @@ export function useBookProcessing() {
       let bookDataResult: (EpubBookData | PdfBookData) & { chapters: ChapterData[] }
       let chapters: ChapterData[]
 
-      if (targetFile.name.endsWith('.epub')) {
+      const fileName = (targetFile.name || '').toLowerCase()
+      if (fileName.endsWith('.epub')) {
         bookDataResult = await epubProcessor.extractBookData(
           targetFile,
           processingOptions.useSmartDetection,
@@ -149,7 +150,7 @@ export function useBookProcessing() {
           processingOptions.epubTocDepth
         )
         chapters = bookDataResult.chapters
-      } else if (targetFile.name.endsWith('.pdf')) {
+      } else if (fileName.endsWith('.pdf')) {
         bookDataResult = await pdfProcessor.extractBookData(
           targetFile,
           processingOptions.useSmartDetection,

@@ -10,7 +10,10 @@ import {
   formatChapterNumber,
   cleanChapterTitle,
   cleanAndFormatText,
-  extractContentByAnchorImproved
+  extractContentByAnchorImproved,
+  asHrefString,
+  normalizeHref,
+  hrefMatches,
 } from './epub'
 import type { ChapterData, BookData, ChapterInfo, ChapterNamingMode, ChapterDetectionMode } from './epub/types'
 import { ConcurrencyLimiter } from '../utils/async'
@@ -143,6 +146,11 @@ export class EpubProcessor {
                 return null
               }
 
+              if (!asHrefString(chapterInfo.href)) {
+                console.warn(`[EpubProcessor] 跳过无 href 的目录项: ${chapterInfo.title}`)
+                return null
+              }
+
               let chapterContent: string
               if (spineRangeEnds) {
                 chapterContent = await this.extractContentBySpineRange(
@@ -159,7 +167,7 @@ export class EpubProcessor {
                 )
               }
 
-              if (chapterContent.trim().length > 100) {
+              if ((chapterContent || '').trim().length > 100) {
                 return {
                   id: `chapter-${index + 1}`,
                   title: chapterInfo.title,
@@ -233,8 +241,9 @@ export class EpubProcessor {
 
     for (const item of toc) {
       try {
-        if (item.href) {
-          const href = preserveAnchors ? item.href : item.href.split('#')[0]
+        const rawHref = asHrefString(item?.href)
+        if (rawHref) {
+          const href = preserveAnchors ? rawHref : rawHref.split('#')[0]
 
           let chapterTitle: string
           if (chapterNamingMode === 'numbered') {
@@ -270,9 +279,11 @@ export class EpubProcessor {
     return chapterInfos
   }
 
-  private async extractContentFromHref(book: Book, href: string, subitems?: NavItem[]): Promise<string> {
+  private async extractContentFromHref(book: Book, href: unknown, subitems?: NavItem[]): Promise<string> {
     try {
-      const [cleanHref, anchor] = href.split('#')
+      const raw = asHrefString(href)
+      if (!raw) return ''
+      const [cleanHref, anchor] = raw.split('#')
       let allContent = ''
 
       const mainContent = await this.getSingleChapterContent(book, cleanHref, anchor)
@@ -282,8 +293,9 @@ export class EpubProcessor {
 
       if (subitems && subitems.length > 0) {
         for (const subitem of subitems) {
-          if (subitem.href) {
-            const [subHref, subAnchor] = subitem.href.split('#')
+          const subRaw = asHrefString(subitem?.href)
+          if (subRaw) {
+            const [subHref, subAnchor] = subRaw.split('#')
             if (cleanHref === subHref) {
               continue
             }
@@ -304,35 +316,15 @@ export class EpubProcessor {
 
   /**
    * 将 TOC href 解析为 spine 下标。兼容 Text/xxx.xhtml vs xxx.xhtml、URL 编码。
+   * 对 undefined/非字符串 href 安全（避免 endsWith 读 undefined 崩溃）。
    */
-  private resolveSpineIndex(book: Book, href: string): number {
+  private resolveSpineIndex(book: Book, href: unknown): number {
     const spineItems = book.spine?.spineItems ?? []
-    if (!href || spineItems.length === 0) return -1
-
-    let cleanHref = href.split('#')[0].replace(/^\.\//, '')
-    try {
-      cleanHref = decodeURIComponent(cleanHref)
-    } catch {
-      // keep raw
-    }
-
-    const fileName = cleanHref.split('/').pop() || cleanHref
+    const cleanHref = normalizeHref(href)
+    if (!cleanHref || spineItems.length === 0) return -1
 
     for (let i = 0; i < spineItems.length; i++) {
-      let spineHref = (spineItems[i].href || '').split('#')[0]
-      try {
-        spineHref = decodeURIComponent(spineHref)
-      } catch {
-        // keep raw
-      }
-
-      if (
-        spineHref === cleanHref ||
-        spineHref.endsWith(cleanHref) ||
-        cleanHref.endsWith(spineHref) ||
-        spineHref.endsWith('/' + fileName) ||
-        spineHref === fileName
-      ) {
+      if (hrefMatches(spineItems[i]?.href, cleanHref)) {
         return i
       }
     }
@@ -378,13 +370,15 @@ export class EpubProcessor {
    */
   private async extractContentBySpineRange(
     book: Book,
-    startHref: string,
+    startHref: unknown,
     endSpineIndexExclusive: number
   ): Promise<string> {
+    const raw = asHrefString(startHref)
+    const [cleanHref, anchor] = raw.split('#')
     try {
+      if (!raw) return ''
       const spineItems = book.spine?.spineItems ?? []
-      const [cleanHref, anchor] = startHref.split('#')
-      const startIdx = this.resolveSpineIndex(book, startHref)
+      const startIdx = this.resolveSpineIndex(book, raw)
 
       if (startIdx < 0) {
         return this.getSingleChapterContent(book, cleanHref, anchor)
@@ -414,8 +408,7 @@ export class EpubProcessor {
 
       return parts.join('\n\n')
     } catch (error) {
-      console.warn(`spine 区间提取失败 (href: ${startHref}):`, error)
-      const [cleanHref, anchor] = startHref.split('#')
+      console.warn(`spine 区间提取失败 (href: ${raw}):`, error)
       return this.getSingleChapterContent(book, cleanHref, anchor)
     }
   }
@@ -445,9 +438,9 @@ export class EpubProcessor {
     }
   }
 
-  private async getSingleChapterContent(book: Book, href: string, anchor?: string): Promise<string> {
+  private async getSingleChapterContent(book: Book, href: unknown, anchor?: string): Promise<string> {
     try {
-      const spineItems = book.spine.spineItems
+      const spineItems = book.spine?.spineItems ?? []
       const spineIndex = this.resolveSpineIndex(book, href)
 
       if (spineIndex < 0) {
@@ -460,10 +453,10 @@ export class EpubProcessor {
       // 封面-内容自动检测：如果内容为空，检查是否有 xxx_0001.xhtml 内容文件
       if (textContent.length < 100 && spineIndex >= 0 && spineIndex < spineItems.length - 1) {
         const nextSpineItem = spineItems[spineIndex + 1]
-        const nextHref = nextSpineItem.href
+        const nextHref = asHrefString(nextSpineItem?.href)
 
-        // 检查是否是 _0001.xhtml 格式的内容文件
-        if (nextHref.match(/_\d+\.xhtml$/)) {
+        // 检查是否是 _0001.xhtml 格式的内容文件（nextHref 可能为空）
+        if (nextHref && /_\d+\.xhtml$/i.test(nextHref)) {
           const nextText = await this.renderSpineItemText(book, spineIndex + 1, anchor)
           if (nextText.length > textContent.length) {
             textContent = nextText
@@ -685,13 +678,13 @@ export class EpubProcessor {
   async getSingleChapterHTML(book: Book, href: string): Promise<string> {
     try {
       let section: Section | null = null
-      const spineItems = book.spine.spineItems
+      const spineItems = book.spine?.spineItems ?? []
 
-      // 移除 anchor 后再匹配
-      const cleanHrefForMatch = href.split('#')[0]
+      // 移除 anchor 后再匹配（spineItem.href 可能为 undefined）
+      const cleanHrefForMatch = normalizeHref(href)
       for (let i = 0; i < spineItems.length; i++) {
         const spineItem = spineItems[i]
-        if (spineItem.href === cleanHrefForMatch || spineItem.href.endsWith(cleanHrefForMatch)) {
+        if (hrefMatches(spineItem?.href, cleanHrefForMatch)) {
           section = book.spine.get(i)
           break
         }

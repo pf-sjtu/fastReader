@@ -15,7 +15,10 @@ export {
   formatChapterNumber,
   escapeRegExp,
   cleanAndFormatText,
-  cleanChapterTitle
+  cleanChapterTitle,
+  asHrefString,
+  normalizeHref,
+  hrefMatches,
 } from './utils'
 
 export {

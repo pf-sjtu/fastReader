@@ -2,6 +2,38 @@
  * EPUB 处理工具函数
  */
 
+/** 安全转为字符串（spine/toc 的 href 偶发 undefined） */
+export function asHrefString(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value == null) return ''
+  return String(value)
+}
+
+/** 去 anchor、./ 前缀并尝试 decode */
+export function normalizeHref(href: unknown): string {
+  let clean = asHrefString(href).split('#')[0].replace(/^\.\//, '')
+  try {
+    clean = decodeURIComponent(clean)
+  } catch {
+    // keep raw
+  }
+  return clean
+}
+
+/**
+ * 判断 spineHref 是否指向同一资源（兼容路径前缀差异）
+ */
+export function hrefMatches(spineHref: unknown, tocHref: unknown): boolean {
+  const spine = normalizeHref(spineHref)
+  const toc = normalizeHref(tocHref)
+  if (!spine || !toc) return false
+  if (spine === toc) return true
+  if (spine.endsWith(toc) || toc.endsWith(spine)) return true
+  const fileName = toc.split('/').pop() || toc
+  if (fileName && (spine === fileName || spine.endsWith('/' + fileName))) return true
+  return false
+}
+
 /**
  * 格式化章节编号，支持补零
  */
