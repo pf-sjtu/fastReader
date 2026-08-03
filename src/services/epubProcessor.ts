@@ -84,9 +84,16 @@ export class EpubProcessor {
       try {
         let chapterInfos: ChapterInfo[] = []
 
+        // 确保 navigation 已加载（部分 epubjs 版本 ready 后 navigation 仍需 await）
+        const navigation =
+          book.navigation ??
+          (await book.loaded?.navigation?.catch?.(() => null)) ??
+          { toc: [] as NavItem[] }
+        const toc: NavItem[] = Array.isArray(navigation.toc) ? navigation.toc : []
+        const spineItems = book.spine?.spineItems ?? []
+
         if (chapterDetectionMode === 'epub-toc') {
-          const toc = book.navigation.toc
-          const estimatedTotal = Math.max(toc.length, book.spine.spineItems.length)
+          const estimatedTotal = Math.max(toc.length, spineItems.length)
           // 收集所有层级的章节信息
           chapterInfos = await this.extractChaptersFromToc(
             book, toc, 0, epubTocDepth, chapterNamingMode, estimatedTotal, true
@@ -105,13 +112,13 @@ export class EpubProcessor {
             chapterInfos = this.createFallbackChapterInfos(book, chapterNamingMode)
           }
         } else {
-          const toc = book.navigation.toc.filter(item => !item.href.includes('#'))
-          const estimatedTotal = Math.max(toc.length, book.spine.spineItems.length)
+          const tocWithoutAnchors = toc.filter(item => item.href && !item.href.includes('#'))
+          const estimatedTotal = Math.max(tocWithoutAnchors.length, spineItems.length)
           chapterInfos = await this.extractChaptersFromToc(
-            book, toc, 0, maxSubChapterDepth, chapterNamingMode, estimatedTotal
+            book, tocWithoutAnchors, 0, maxSubChapterDepth, chapterNamingMode, estimatedTotal
           )
 
-          if (toc.length <= 3) {
+          if (tocWithoutAnchors.length <= 3) {
             const fallbackChapterInfos = this.createFallbackChapterInfos(book, chapterNamingMode)
             if (fallbackChapterInfos.length >= chapterInfos.length) {
               chapterInfos = fallbackChapterInfos

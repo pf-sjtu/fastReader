@@ -3,6 +3,11 @@ import type { Book, NavItem } from '@ssshooter/epubjs'
 import { EpubProcessor } from '../../src/services/epubProcessor'
 import { formatChapterNumber } from '../../src/services/epub'
 
+// 单元测试使用 mock，避免依赖真实 EPUB 解析；realbook 测试不 mock
+vi.mock('@ssshooter/epubjs', async () => {
+  return await import('../__mocks__/@ssshooter/epubjs')
+})
+
 type ProcessorInternals = {
   shouldSkipChapter: (title: string) => boolean
   extractChaptersFromToc: (

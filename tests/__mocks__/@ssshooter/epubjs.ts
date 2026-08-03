@@ -15,12 +15,17 @@ export class Book {
       creator: 'Mock Author'
     }
   }
+  /** 与真实 epubjs 一致：同步可读 navigation.toc（避免 book.navigation 为 undefined） */
+  navigation = {
+    toc: [] as NavItem[]
+  }
   loaded = {
-    navigation: Promise.resolve({ toc: [] }),
+    navigation: Promise.resolve({ toc: [] as NavItem[] }),
     metadata: Promise.resolve({ title: 'Mock Book', creator: 'Mock Author' }),
-    spine: Promise.resolve({ items: [] }),
+    spine: Promise.resolve({ items: [] as unknown[] }),
   }
   spine = {
+    spineItems: [] as Array<{ href: string; idref?: string }>,
     each: (fn: (item: unknown, index: number) => void) => {
       void fn
     },
