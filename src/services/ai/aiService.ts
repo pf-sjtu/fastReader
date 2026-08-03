@@ -16,10 +16,12 @@ import {
   getNonFictionChapterSummaryPrompt,
   getChapterConnectionsAnalysisPrompt,
   getOverallSummaryPrompt,
+  getKeyChartsPrompt,
   getTestConnectionPrompt,
   getChapterMindMapPrompt,
   getMindMapArrowPrompt
 } from '../prompts'
+import { parseCharts, type BookCharts } from '../../charts'
 import { getLanguageInstruction } from '../prompts/utils'
 import { createAIProvider } from './factory'
 
@@ -271,6 +273,45 @@ export class AIService {
     const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n已处理的章节列表:\n${JSON.stringify(processedChapters, null, 2)}\n\n章节关联分析:\n${connectionsText}`
 
     return this.generateContent(prompt, outputLanguage)
+  }
+
+  /**
+   * 全书总结后：抽取关键图表结构化数据（人物关系 + 实体时间线）
+   * 解析失败抛错，由调用方 soft-fail。
+   */
+  async generateKeyCharts(
+    bookTitle: string,
+    chapters: Chapter[],
+    connections: string,
+    overallSummary: string,
+    outputLanguage?: SupportedLanguage
+  ): Promise<BookCharts> {
+    const basePrompt = getKeyChartsPrompt()
+    const processedChapters = prepareChapterSummariesForPostProcess(
+      chapters.filter((ch) => !this.isSkippedSummary(ch.summary || ''))
+    )
+
+    if (processedChapters.length === 0) {
+      throw new Error('没有可用的章节摘要，无法生成关键图表。')
+    }
+
+    const connectionsText = truncateText(
+      connections || '',
+      POST_PROCESS_CONNECTIONS_SOFT_LIMIT
+    )
+    const overallText = truncateText(
+      overallSummary || '',
+      POST_PROCESS_CONNECTIONS_SOFT_LIMIT
+    )
+
+    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n章节摘要:\n${JSON.stringify(processedChapters, null, 2)}\n\n章节关联分析:\n${connectionsText}\n\n全书总结:\n${overallText}`
+
+    const response = await this.generateContent(prompt, outputLanguage)
+    const charts = parseCharts(response)
+    if (!charts) {
+      throw new Error('关键图表 JSON 解析失败或无有效数据')
+    }
+    return charts
   }
 
   /**

@@ -61,6 +61,8 @@
     "processingChapter": "Processing chapter {{current}}/{{total}}: {{title}}",
     "analyzingConnections": "Analyzing chapter connections...",
     "generatingOverallSummary": "Generating overall summary...",
+    "generatingKeyCharts": "Generating key charts...",
+    "postPhaseChartsFailed": "Chapters done, but key charts generation failed",
     "mergingMindMaps": "Merging chapter mind maps...",
     "generatingCombinedMindMap": "Generating combined mind map...",
     "completed": "Processing completed!",
@@ -89,8 +91,28 @@
       "chapterSummary": "Chapter Summary",
       "connections": "Chapter Connections",
       "overallSummary": "Overall Summary",
+      "keyCharts": "Key Charts",
       "chapterMindMaps": "Chapter Mind Maps",
       "combinedMindMap": "Chapter Mind Map Integration"
+    },
+    "charts": {
+      "personGraph": "Character Graph",
+      "timeline": "Entity Timeline",
+      "generating": "Generating key charts…",
+      "failed": "Key charts generation failed",
+      "empty": "No key chart data",
+      "clearCache": "Clear charts cache",
+      "noPersonGraph": "No character graph data",
+      "noTimeline": "No timeline data",
+      "personGraphHint": "Scroll to zoom · drag canvas/nodes · click a person for details",
+      "timelineHint": "Vertical axis = time/order, horizontal = entities; click a block for details",
+      "relatedEntities": "Related entities",
+      "relations": "Relations",
+      "graphLoadError": "Failed to load graph",
+      "regenerate": "Regenerate charts",
+      "regenerated": "Key charts updated",
+      "needOverall": "Complete overall summary before generating charts",
+      "needChapters": "Chapter summaries required"
     },
     "generatingMindMap": "Generating mind map...",
     "actions": {
@@ -322,14 +344,23 @@
   "download": {
     "title": "Download Mind Map",
     "downloadAllMarkdown": "Download Complete Markdown",
+    "downloadAllPdf": "Download Complete PDF",
     "markdownDownloaded": "Markdown file downloaded",
+    "pdfDownloaded": "PDF file downloaded",
+    "pdfGenerating": "Generating PDF…",
+    "noContent": "Nothing to download",
+    "downloadFailed": "Download failed, please try again",
+    "downloadSuccess": "Download successful",
     "formats": {
       "png": "Download as PNG",
       "jpeg": "Download as JPEG",
       "svg": "Download as SVG",
       "pdf": "Download as PDF",
       "xmind": "Download as XMind",
-      "json": "Download as JSON"
+      "json": "Download as JSON",
+      "markdown": "Download as Markdown",
+      "html": "Download as HTML",
+      "webp": "Download as WEBP"
     }
   },
   "viewContent": {

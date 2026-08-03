@@ -353,6 +353,11 @@ export interface UnifiedBookSummaryData {
   chapters: ChapterSummaryData[]
   overallSummary?: string
   connections?: string
+  /**
+   * 关键图表结构化数据（序列化为 ## 关键图表 下 fenced json）
+   * 运行时为 BookCharts 对象；不强制依赖 charts 包以免循环引用
+   */
+  charts?: Record<string, unknown> | null
 }
 
 /**
@@ -364,8 +369,9 @@ export interface UnifiedBookSummaryData {
  * 3. 作者信息（如有）
  * 4. 全书总结用二级标题 `## 全书总结`
  * 5. 章节关联用二级标题 `## 章节关联分析`
- * 6. 章节摘要用二级标题 `## 章节摘要`
- * 7. 各章节用三级标题 `### 第X章 章节名`
+ * 6. 关键图表用二级标题 `## 关键图表` + fenced json（可选）
+ * 7. 章节摘要用二级标题 `## 章节摘要`
+ * 8. 各章节用三级标题 `### 第X章 章节名`
  *
  * @param data 书籍摘要数据
  * @param metadata 处理元数据（可选）
@@ -411,12 +417,22 @@ export function formatUnifiedMarkdown(
     lines.push('')
   }
 
-  // 6. 章节摘要 - 二级标题
+  // 6. 关键图表 - fenced JSON（便于云端回放）
+  if (data.charts && typeof data.charts === 'object') {
+    lines.push('## 关键图表')
+    lines.push('')
+    lines.push('```json')
+    lines.push(JSON.stringify(data.charts, null, 2))
+    lines.push('```')
+    lines.push('')
+  }
+
+  // 7. 章节摘要 - 二级标题
   if (data.chapters.length > 0) {
     lines.push('## 章节摘要')
     lines.push('')
 
-    // 7. 各章节 - 三级标题
+    // 8. 各章节 - 三级标题
     data.chapters.forEach((chapter, index) => {
       // 根据章节命名模式生成标题
       let chapterTitle: string
@@ -470,16 +486,38 @@ export function parseUnifiedMarkdown(content: string): {
     data.author = authorMatch[1].trim()
   }
 
-  // 解析全书总结（## 全书总结 和下一个 ## 之间的内容）
-  const overallSummaryMatch = cleanContent.match(/##\s+全书总结\n\n([\s\S]*?)(?=\n##|$)/)
+  // 顶层区块：仅在「标准二级标题」处切分，避免全书总结正文里的 ## 一、… 被误切
+  const SECTION_STOP = String.raw`\n##\s+(?:全书总结|章节关联分析|关键图表|章节摘要)\b`
+
+  // 解析全书总结
+  const overallSummaryMatch = cleanContent.match(
+    new RegExp(String.raw`##\s+全书总结\n\n([\s\S]*?)(?=${SECTION_STOP}|$)`)
+  )
   if (overallSummaryMatch) {
     data.overallSummary = overallSummaryMatch[1].trim()
   }
 
   // 解析章节关联分析
-  const connectionsMatch = cleanContent.match(/##\s+章节关联分析\n\n([\s\S]*?)(?=\n##|$)/)
+  const connectionsMatch = cleanContent.match(
+    new RegExp(String.raw`##\s+章节关联分析\n\n([\s\S]*?)(?=${SECTION_STOP}|$)`)
+  )
   if (connectionsMatch) {
     data.connections = connectionsMatch[1].trim()
+  }
+
+  // 解析关键图表（## 关键图表 下的 json fence）
+  const chartsSectionMatch = cleanContent.match(
+    /##\s+关键图表\n\n```(?:json)?\s*([\s\S]*?)```/
+  )
+  if (chartsSectionMatch) {
+    try {
+      const parsed = JSON.parse(chartsSectionMatch[1].trim()) as Record<string, unknown>
+      if (parsed && typeof parsed === 'object') {
+        data.charts = parsed
+      }
+    } catch {
+      // 忽略损坏的图表 JSON
+    }
   }
 
   // 解析章节摘要（从 ## 章节摘要 到文件末尾或下一个一级/二级标题）

@@ -16,9 +16,9 @@ import { toast } from 'sonner'
 import type { MindElixirData } from 'mind-elixir'
 
 import { webdavService } from '@/services/webdavService'
-import { metadataFormatter } from '@/services/metadataFormatter'
-import { prepareMarkdownForRender } from '@/lib/markdown'
 import { scrollToTop } from '@/utils/index'
+import { downloadSummaryMarkdown, downloadSummaryPdf } from '@/utils/exportSummary'
+import { triggerTextDownload } from '@/utils/download'
 import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -92,6 +92,7 @@ function App() {
     clearChapterCache,
     clearChapterMindMapCache,
     clearSpecificCache,
+    regenerateKeyCharts,
     clearBookCache,
     increasePreviewFontSize,
     decreasePreviewFontSize,
@@ -145,76 +146,81 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 下载所有 Markdown
+  // 下载完整 Markdown（不依赖本地 File：历史/云缓存加载后也可导出）
   const downloadAllMarkdown = useCallback(() => {
-    if (!bookSummary || !file) return
-
-    const chapters = bookSummary.chapters.map((chapter) => ({
-      id: chapter.id,
-      title: chapter.title,
-      summary: chapter.summary || ''
-    }))
-
-    const bookDataForExport = {
-      title: bookSummary.title,
-      author: bookSummary.author,
-      chapters: chapters,
-      overallSummary: bookSummary.overallSummary,
-      connections: bookSummary.connections
+    if (!bookSummary) {
+      toast.error(t('download.noContent'))
+      return
     }
+    try {
+      downloadSummaryMarkdown({
+        bookSummary,
+        fileName: file?.name,
+        model: aiConfig.model,
+        chapterDetectionMode: processingOptions.chapterDetectionMode,
+        chapterNamingMode: processingOptions.chapterNamingMode,
+        epubTocDepth: processingOptions.epubTocDepth,
+      })
+      toast.success(t('download.markdownDownloaded'))
+    } catch (error) {
+      console.error('Markdown 下载失败:', error)
+      toast.error(t('download.downloadFailed'))
+    }
+  }, [
+    bookSummary,
+    file,
+    aiConfig.model,
+    processingOptions.chapterDetectionMode,
+    processingOptions.chapterNamingMode,
+    processingOptions.epubTocDepth,
+    t,
+  ])
 
-    const originalCharCount = bookSummary.chapters.reduce(
-      (total: number, chapter) => total + (chapter.content?.length || 0), 0
-    )
-
-    const processedCharCount = bookSummary.chapters.reduce(
-      (total: number, chapter) => total + (chapter.summary?.length || 0), 0
-    )
-
-    const selectedChapterIndices = bookSummary.chapters
-      .map((_, index) => index + 1)
-      .filter((_, index) => bookSummary.chapters[index]?.summary)
-
-    const metadata = metadataFormatter.generate({
-      fileName: file.name,
-      bookTitle: bookSummary.title,
-      model: aiConfig.model,
-      chapterDetectionMode: processingOptions.chapterDetectionMode,
-      selectedChapters: selectedChapterIndices,
-      chapterCount: bookSummary.chapters.length,
-      originalCharCount: originalCharCount,
-      processedCharCount: processedCharCount
-    })
-
-    let markdownContent = metadataFormatter.formatUnified(bookDataForExport, metadata, processingOptions.chapterNamingMode)
-    markdownContent = prepareMarkdownForRender(markdownContent)
-
-    const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    const baseFileName = file.name.replace(/\.[^/.]+$/, '')
-    link.download = `${baseFileName}_总结.md`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-
-    toast.success(t('download.downloadSuccess'))
-  }, [bookSummary, file, aiConfig.model, processingOptions.chapterDetectionMode, processingOptions.chapterNamingMode, t])
+  // 下载完整 PDF
+  const downloadAllPdf = useCallback(async () => {
+    if (!bookSummary) {
+      toast.error(t('download.noContent'))
+      return
+    }
+    const toastId = toast.loading(t('download.pdfGenerating'))
+    try {
+      await downloadSummaryPdf({
+        bookSummary,
+        fileName: file?.name,
+        model: aiConfig.model,
+        chapterDetectionMode: processingOptions.chapterDetectionMode,
+        chapterNamingMode: processingOptions.chapterNamingMode,
+        epubTocDepth: processingOptions.epubTocDepth,
+      })
+      toast.success(t('download.pdfDownloaded'), { id: toastId })
+    } catch (error) {
+      console.error('PDF 下载失败:', error)
+      toast.error(t('download.downloadFailed'), { id: toastId })
+    }
+  }, [
+    bookSummary,
+    file,
+    aiConfig.model,
+    processingOptions.chapterDetectionMode,
+    processingOptions.chapterNamingMode,
+    processingOptions.epubTocDepth,
+    t,
+  ])
 
   // 导出思维导图 JSON（MindElixir Desktop 入口已下线）
   const downloadMindMap = useCallback((mindMapData: MindElixirData, title?: string) => {
-    const blob = new Blob([JSON.stringify(mindMapData, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${title || 'mindmap'}.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-    toast.success(t('download.downloadSuccess') || '已导出 JSON')
+    try {
+      triggerTextDownload(
+        JSON.stringify(mindMapData, null, 2),
+        `${title || 'mindmap'}.json`,
+        'application/json;charset=utf-8',
+        false
+      )
+      toast.success(t('download.markdownDownloaded'))
+    } catch (error) {
+      console.error('思维导图 JSON 导出失败:', error)
+      toast.error(t('download.downloadFailed'))
+    }
   }, [t])
 
   // 开始处理并切换到结果页
@@ -496,7 +502,9 @@ function App() {
                     if (chapter) handleViewChapterContent(chapter)
                   }}
                   onDownloadAllMarkdown={downloadAllMarkdown}
+                  onDownloadAllPdf={downloadAllPdf}
                   onDownloadMindMap={downloadMindMap}
+                  onRegenerateKeyCharts={regenerateKeyCharts}
                 />
               ) : (
                 <Card>

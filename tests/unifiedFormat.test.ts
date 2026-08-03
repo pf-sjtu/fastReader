@@ -27,7 +27,14 @@ const testBookData: UnifiedBookSummaryData = {
     { id: '3', title: '第三章：结局', summary: '这是第三章的总结内容' }
   ],
   overallSummary: '这是全书的总结',
-  connections: '各章节之间的关联分析内容'
+  connections: '各章节之间的关联分析内容',
+  charts: {
+    version: 1,
+    personGraph: {
+      nodes: [{ id: 'a', name: '甲' }],
+      edges: [],
+    },
+  },
 }
 
 const testMetadataInput: ProcessResultInfo = {
@@ -162,9 +169,47 @@ describe('统一格式 Markdown 测试', () => {
       expect(parsed.data.author).toBe('测试作者')
       expect(parsed.data.overallSummary).toBe('这是全书的总结')
       expect(parsed.data.connections).toBe('各章节之间的关联分析内容')
+      expect(parsed.data.charts).toBeTruthy()
+      expect((parsed.data.charts as { personGraph?: { nodes: unknown[] } })?.personGraph?.nodes).toHaveLength(1)
       expect(parsed.data.chapters).toHaveLength(3)
       expect(parsed.data.chapters[0].title).toBe('第一章：开始')
       expect(parsed.data.chapters[0].summary).toBe('这是第一章的总结内容')
+    })
+
+    it('应序列化并回读关键图表 JSON 段', () => {
+      const markdown = formatUnifiedMarkdown(testBookData, metadata, 'auto')
+      expect(markdown).toContain('## 关键图表')
+      expect(markdown).toContain('```json')
+      const parsed = parseUnifiedMarkdown(markdown)
+      expect(parsed.data.charts).toMatchObject({ version: 1 })
+    })
+
+    it('全书总结正文含 ## 子标题时不应被截断', () => {
+      const md = `# 书
+
+## 全书总结
+
+总起
+
+## 一、子节
+
+子节内容很长
+
+## 章节关联分析
+
+关联全文
+
+## 章节摘要
+
+### 第一章
+
+章摘要
+`
+      const parsed = parseUnifiedMarkdown(md)
+      expect(parsed.data.overallSummary).toContain('## 一、子节')
+      expect(parsed.data.overallSummary).toContain('子节内容很长')
+      expect(parsed.data.connections).toBe('关联全文')
+      expect(parsed.data.chapters).toHaveLength(1)
     })
 
     it('应该正确处理没有元数据的 Markdown', () => {

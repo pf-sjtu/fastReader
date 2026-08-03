@@ -23,6 +23,16 @@ export {
   sanitizeFileName
 } from './file'
 
+// 下载 / 导出
+export { triggerBlobDownload, triggerTextDownload } from './download'
+export {
+  buildSummaryMarkdown,
+  downloadSummaryMarkdown,
+  downloadSummaryPdf,
+  getSummaryExportBaseName,
+  markdownToPrintableHtml,
+} from './exportSummary'
+
 // URL处理工具
 export {
   buildAiProxyTarget,

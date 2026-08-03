@@ -1,5 +1,6 @@
 import { webdavService } from './webdavService'
 import { useConfigStore } from '../stores/configStore'
+import { metadataFormatter } from './metadataFormatter'
 
 /**
  * 云端缓存文件信息
@@ -279,63 +280,22 @@ export class CloudCacheService {
     overallSummary: string
     connections: string
     chapters: Array<{ title: string; summary: string }>
+    charts: Record<string, unknown> | null
   } {
-    // 解析元数据
-    const metadata = this.parseMetadata(content)
-    
-    // 移除元数据，获取纯内容
-    const cleanContent = this.stripMetadata(content)
-    
-    const result = {
+    // 与 metadataFormatter 统一解析，避免两套规则漂移
+    const { metadata, data } = metadataFormatter.parseUnified(content)
+    return {
       metadata,
-      title: '',
-      author: '',
-      overallSummary: '',
-      connections: '',
-      chapters: [] as Array<{ title: string; summary: string }>
+      title: data.title || '',
+      author: data.author || '',
+      overallSummary: data.overallSummary || '',
+      connections: data.connections || '',
+      chapters: data.chapters.map((ch) => ({
+        title: ch.title,
+        summary: ch.summary,
+      })),
+      charts: (data.charts as Record<string, unknown> | null) || null,
     }
-
-    // 解析书名（一级标题）
-    const titleMatch = cleanContent.match(/^#\s+(.+)$/m)
-    if (titleMatch) {
-      result.title = titleMatch[1].trim()
-    }
-
-    // 解析作者
-    const authorMatch = cleanContent.match(/\*\*作者\*\*:\s*(.+)$/m)
-    if (authorMatch) {
-      result.author = authorMatch[1].trim()
-    }
-
-    // 解析全书总结（## 全书总结 和下一个 ## 之间的内容）
-    const overallSummaryMatch = cleanContent.match(/##\s+全书总结\n\n([\s\S]*?)(?=\n##|$)/)
-    if (overallSummaryMatch) {
-      result.overallSummary = overallSummaryMatch[1].trim()
-    }
-
-    // 解析章节关联分析
-    const connectionsMatch = cleanContent.match(/##\s+章节关联分析\n\n([\s\S]*?)(?=\n##|$)/)
-    if (connectionsMatch) {
-      result.connections = connectionsMatch[1].trim()
-    }
-
-    // 解析章节摘要（从 ## 章节摘要 到文件末尾或下一个一级/二级标题）
-    const chaptersSectionMatch = cleanContent.match(/##\s+章节摘要\n\n([\s\S]*$)/)
-    if (chaptersSectionMatch) {
-      const chaptersContent = chaptersSectionMatch[1]
-      
-      // 匹配各章节（### 标题）
-      const chapterRegex = /###\s+(.+?)\n\n([\s\S]*?)(?=\n###|\n##|\n#|$)/g
-      let match
-      while ((match = chapterRegex.exec(chaptersContent)) !== null) {
-        result.chapters.push({
-          title: match[1].trim(),
-          summary: match[2].trim()
-        })
-      }
-    }
-
-    return result
   }
 
   /**

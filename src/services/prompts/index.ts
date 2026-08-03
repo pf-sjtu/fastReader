@@ -14,6 +14,10 @@ export {
   getOverallSummaryPrompt
 } from './overallSummary'
 
+export {
+  getKeyChartsPrompt
+} from './keyCharts'
+
 // 测试连接的prompt - 从YAML配置加载
 export const getTestConnectionPrompt = () => getSystemPrompt('testConnection')
 

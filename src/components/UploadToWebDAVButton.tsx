@@ -98,7 +98,10 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
       author: bookSummary.author,
       chapters: chapters,
       overallSummary: bookSummary.overallSummary,
-      connections: bookSummary.connections
+      connections: bookSummary.connections,
+      charts: bookSummary.charts
+        ? (bookSummary.charts as unknown as Record<string, unknown>)
+        : null,
     }
 
     // 生成元数据

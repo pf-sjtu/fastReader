@@ -1,12 +1,14 @@
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Download, BookOpen, Network } from 'lucide-react'
+import { useState } from 'react'
+import { Download, FileText, BookOpen, Network, Loader2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FontSizeControl } from '@/components/FontSizeControl'
 import { MarkdownCard } from '@/components/MarkdownCard'
 import { MindMapCard } from '@/components/MindMapCard'
 import { UploadToWebDAVButton } from '@/components/UploadToWebDAVButton'
+import { ChartsPanel } from '@/charts'
 import type { MindElixirData, Options } from 'mind-elixir'
 import type { Chapter, BookSummary, BookMindMap, ProcessingMode } from '@/hooks/useBookProcessing'
 
@@ -24,7 +26,9 @@ interface ResultsSectionProps {
   onChapterExpandChange: (chapterId: string, isExpanded: boolean) => void
   onReadChapter: (chapterId: string) => void
   onDownloadAllMarkdown: () => void
+  onDownloadAllPdf?: () => void | Promise<void>
   onDownloadMindMap?: (mindMapData: MindElixirData, title?: string) => void
+  onRegenerateKeyCharts?: () => void | Promise<void>
 }
 
 export function ResultsSection({
@@ -39,9 +43,22 @@ export function ResultsSection({
   onChapterExpandChange,
   onReadChapter,
   onDownloadAllMarkdown,
-  onDownloadMindMap
+  onDownloadAllPdf,
+  onDownloadMindMap,
+  onRegenerateKeyCharts,
 }: ResultsSectionProps) {
   const { t } = useTranslation()
+  const [pdfExporting, setPdfExporting] = useState(false)
+
+  const handleDownloadPdf = async () => {
+    if (!onDownloadAllPdf || pdfExporting) return
+    setPdfExporting(true)
+    try {
+      await onDownloadAllPdf()
+    } finally {
+      setPdfExporting(false)
+    }
+  }
 
   if (!bookSummary && !bookMindMap) {
     return null
@@ -68,22 +85,40 @@ export function ResultsSection({
           <div className="flex flex-wrap items-center gap-1.5 shrink-0">
             <FontSizeControl variant="compact" showLabel={false} />
             {processingMode === 'summary' && bookSummary && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onDownloadAllMarkdown}
-                className="flex items-center gap-1.5 h-8 min-h-8 text-xs"
-              >
-                <Download className="h-3.5 w-3.5" />
-                MD
-              </Button>
-            )}
-            {processingMode === 'summary' && bookSummary && (
-              <UploadToWebDAVButton
-                bookSummary={bookSummary}
-                file={file}
-                chapterNamingMode="numbered"
-              />
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onDownloadAllMarkdown}
+                  className="flex items-center gap-1.5 h-8 min-h-8 text-xs"
+                  title={t('download.downloadAllMarkdown')}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  MD
+                </Button>
+                {onDownloadAllPdf && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDownloadPdf}
+                    disabled={pdfExporting}
+                    className="flex items-center gap-1.5 h-8 min-h-8 text-xs"
+                    title={t('download.downloadAllPdf')}
+                  >
+                    {pdfExporting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <FileText className="h-3.5 w-3.5" />
+                    )}
+                    PDF
+                  </Button>
+                )}
+                <UploadToWebDAVButton
+                  bookSummary={bookSummary}
+                  file={file}
+                  chapterNamingMode="numbered"
+                />
+              </>
             )}
           </div>
         </div>
@@ -91,7 +126,7 @@ export function ResultsSection({
       <CardContent className="min-w-0">
         {processingMode === 'summary' && bookSummary ? (
           <Tabs defaultValue="chapters" className="w-full min-w-0">
-            <TabsList className="grid w-full grid-cols-3 h-auto">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
               <TabsTrigger value="chapters" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
                 {t('results.tabs.chapterSummary')}
               </TabsTrigger>
@@ -100,6 +135,9 @@ export function ResultsSection({
               </TabsTrigger>
               <TabsTrigger value="overall" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
                 {t('results.tabs.overallSummary')}
+              </TabsTrigger>
+              <TabsTrigger value="charts" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                {t('results.tabs.keyCharts', '关键图表')}
               </TabsTrigger>
             </TabsList>
 
@@ -146,6 +184,20 @@ export function ResultsSection({
                 showViewContent={false}
                 showCopyButton={true}
                 onClearCache={() => onClearSpecificCache('overall_summary')}
+              />
+            </TabsContent>
+
+            <TabsContent value="charts" className="min-w-0">
+              <ChartsPanel
+                charts={bookSummary.charts}
+                chartsError={bookSummary.chartsError}
+                onClearCache={() => onClearSpecificCache('key_charts')}
+                onRegenerate={onRegenerateKeyCharts}
+                canRegenerate={
+                  !!bookSummary.overallSummary &&
+                  !bookSummary.overallSummary.startsWith('【全书总结失败】') &&
+                  bookSummary.chapters.length > 0
+                }
               />
             </TabsContent>
           </Tabs>

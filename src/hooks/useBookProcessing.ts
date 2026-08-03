@@ -14,6 +14,11 @@ import { useProcessingHistoryStore } from '@/stores/processingHistory'
 import { toast } from 'sonner'
 import { matchesDefaultUnselectTitle } from '@/services/constants'
 import { detectBookFormat } from '@/utils/file'
+import {
+  deserializeCharts,
+  serializeCharts,
+  type BookCharts,
+} from '@/charts'
 
 const epubProcessor = new EpubProcessor()
 const pdfProcessor = new PdfProcessor()
@@ -34,6 +39,9 @@ export interface BookSummary {
   chapters: Chapter[]
   connections: string
   overallSummary: string
+  /** 关键图表结构化数据（人物关系 + 时间线等） */
+  charts?: BookCharts | null
+  chartsError?: string | null
 }
 
 export interface BookMindMap {
@@ -247,6 +255,12 @@ export function useBookProcessing() {
         return false
       }
 
+      // parseUnified 可能已返回 charts 对象；再过 zod 校验
+      let charts: BookCharts | null = null
+      if (parsed.charts) {
+        charts = deserializeCharts(JSON.stringify(parsed.charts))
+      }
+
       const summary: BookSummary = {
         title: parsed.title || file?.name.replace(/\.[^/.]+$/, '') || '',
         author: parsed.author || '',
@@ -258,7 +272,9 @@ export function useBookProcessing() {
           processed: true
         })),
         connections: parsed.connections,
-        overallSummary: parsed.overallSummary
+        overallSummary: parsed.overallSummary,
+        charts,
+        chartsError: null,
       }
 
       setBookSummary(summary)
@@ -474,7 +490,7 @@ export function useBookProcessing() {
         try {
           throwIfAborted()
           setCurrentStep(t('progress.generatingOverallSummary'))
-          setProgress(92)
+          setProgress(90)
           overallSummary = await aiService.generateOverallSummary(
             bookData?.title || '',
             processedChapters,
@@ -489,6 +505,36 @@ export function useBookProcessing() {
           toast.warning(t('progress.postPhaseOverallFailed') || '章节已完成，但全书总结失败')
         }
 
+        // —— 关键图表（仅全书总结成功时自动抽取，soft-fail）——
+        let charts: BookCharts | null = null
+        let chartsError: string | null = null
+        const overallOk =
+          overallSummary &&
+          !overallSummary.startsWith('【全书总结失败】') &&
+          overallSummary.trim().length > 0
+
+        if (overallOk) {
+          try {
+            throwIfAborted()
+            setCurrentStep(t('progress.generatingKeyCharts') || '正在生成关键图表…')
+            setProgress(96)
+            charts = await aiService.generateKeyCharts(
+              bookData?.title || '',
+              processedChapters,
+              connections.startsWith('【关联分析失败】') ? '' : connections,
+              overallSummary,
+              processingOptions.outputLanguage
+            )
+            cacheService.setCache(file.name, 'key_charts', serializeCharts(charts))
+          } catch (postErr) {
+            throwIfAborted()
+            console.error('[processBook] 关键图表失败:', postErr)
+            chartsError = postErr instanceof Error ? postErr.message : '未知错误'
+            postPhaseWarning = true
+            toast.warning(t('progress.postPhaseChartsFailed') || '章节已完成，但关键图表生成失败')
+          }
+        }
+
         throwIfAborted()
 
         const summary: BookSummary = {
@@ -496,7 +542,9 @@ export function useBookProcessing() {
           author: bookData?.author || '',
           chapters: processedChapters,
           connections,
-          overallSummary
+          overallSummary,
+          charts,
+          chartsError,
         }
 
         setBookSummary(summary)
@@ -782,18 +830,85 @@ export function useBookProcessing() {
   const clearSpecificCache = useCallback((cacheType: string) => {
     if (!file) return
 
-    cacheService.clearCache(file.name, cacheType as any)
+    cacheService.clearSpecificCache(
+      file.name,
+      cacheType as 'connections' | 'overall_summary' | 'key_charts' | 'combined_mindmap' | 'merged_mindmap' | 'selected_chapters'
+    )
 
     if (cacheType === 'connections' && bookSummary) {
       setBookSummary({ ...bookSummary, connections: '' })
     } else if (cacheType === 'overall_summary' && bookSummary) {
       setBookSummary({ ...bookSummary, overallSummary: '' })
+    } else if (cacheType === 'key_charts' && bookSummary) {
+      setBookSummary({ ...bookSummary, charts: null, chartsError: null })
     } else if (cacheType === 'combined_mindmap' && bookMindMap) {
       setBookMindMap({ ...bookMindMap, combinedMindMap: null })
     }
 
     toast.success(t('cache.specificCleared'))
   }, [file, bookSummary, bookMindMap, t])
+
+  /**
+   * 手动重新生成关键图表（依赖已有章节摘要 + 关联 + 全书总结）
+   */
+  const regenerateKeyCharts = useCallback(async () => {
+    if (!bookSummary?.overallSummary || bookSummary.overallSummary.startsWith('【全书总结失败】')) {
+      toast.error(t('results.charts.needOverall', '请先完成全书总结后再生成图表'))
+      return
+    }
+    if (!bookSummary.chapters?.length) {
+      toast.error(t('results.charts.needChapters', '缺少章节摘要'))
+      return
+    }
+
+    setBookSummary((prev) =>
+      prev ? { ...prev, chartsError: null } : prev
+    )
+    const toastId = toast.loading(t('progress.generatingKeyCharts') || '正在生成关键图表…')
+
+    try {
+      const aiService = new AIService(aiConfig, getPromptConfig, {
+        onTokenUsage: addTokenUsage,
+        ...aiServiceOptions,
+      })
+
+      const charts = await aiService.generateKeyCharts(
+        bookSummary.title || '',
+        bookSummary.chapters,
+        bookSummary.connections?.startsWith('【关联分析失败】')
+          ? ''
+          : bookSummary.connections || '',
+        bookSummary.overallSummary,
+        processingOptions.outputLanguage
+      )
+
+      if (file) {
+        cacheService.setCache(file.name, 'key_charts', serializeCharts(charts))
+      }
+      setBookSummary((prev) =>
+        prev ? { ...prev, charts, chartsError: null } : prev
+      )
+      toast.success(t('results.charts.regenerated', '关键图表已更新'), { id: toastId })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '未知错误'
+      console.error('[regenerateKeyCharts]', err)
+      setBookSummary((prev) =>
+        prev ? { ...prev, chartsError: msg } : prev
+      )
+      toast.error(t('results.charts.failed', '关键图表生成失败') + `: ${msg}`, {
+        id: toastId,
+      })
+    }
+  }, [
+    bookSummary,
+    file,
+    t,
+    aiConfig,
+    getPromptConfig,
+    addTokenUsage,
+    aiServiceOptions,
+    processingOptions.outputLanguage,
+  ])
 
   // 清除书籍缓存
   const clearBookCache = useCallback(() => {
@@ -967,6 +1082,11 @@ export function useBookProcessing() {
         return false
       }
 
+      let charts: BookCharts | null = null
+      if (parsed.charts) {
+        charts = deserializeCharts(JSON.stringify(parsed.charts))
+      }
+
       // 转换为 BookSummary 格式
       const summary: BookSummary = {
         title: parsed.title || fileName.replace(/\.[^/.]+$/, ''),
@@ -979,7 +1099,9 @@ export function useBookProcessing() {
           processed: true
         })),
         connections: parsed.connections,
-        overallSummary: parsed.overallSummary
+        overallSummary: parsed.overallSummary,
+        charts,
+        chartsError: null,
       }
 
       // 重置状态并设置结果
@@ -1045,6 +1167,7 @@ export function useBookProcessing() {
     clearChapterCache,
     clearChapterMindMapCache,
     clearSpecificCache,
+    regenerateKeyCharts,
     clearBookCache,
     increasePreviewFontSize,
     decreasePreviewFontSize,

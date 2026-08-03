@@ -9,6 +9,7 @@ export type CacheKeyType =
   // 书籍级缓存
   | 'connections'      // 章节关联分析
   | 'overall_summary'  // 全书总结
+  | 'key_charts'       // 关键图表 JSON（人物关系 + 时间线）
   | 'combined_mindmap' // 整书思维导图（直接从整书内容生成）
   | 'merged_mindmap'   // 合并思维导图（从章节思维导图合并生成）
   | 'mindmap_arrows'   // 思维导图箭头
@@ -412,7 +413,7 @@ export class CacheService {
   }
 
   // 清除特定类型缓存
-  clearSpecificCache(fileName: string, cacheType: 'connections' | 'overall_summary' | 'combined_mindmap' | 'merged_mindmap' | 'selected_chapters'): boolean {
+  clearSpecificCache(fileName: string, cacheType: 'connections' | 'overall_summary' | 'key_charts' | 'combined_mindmap' | 'merged_mindmap' | 'selected_chapters'): boolean {
     const type: CacheKeyType = cacheType
     return this.deleteCache(fileName, type)
   }
@@ -430,6 +431,7 @@ export class CacheService {
       if (this.deleteCache(fileName, 'summary')) deletedCount++
       if (this.deleteCache(fileName, 'connections')) deletedCount++
       if (this.deleteCache(fileName, 'overall_summary')) deletedCount++
+      if (this.deleteCache(fileName, 'key_charts')) deletedCount++
       if (this.deleteCache(fileName, 'mindmap_arrows')) deletedCount++
       if (this.deleteCache(fileName, 'merged_mindmap')) deletedCount++
       if (this.deleteCache(fileName, 'combined_mindmap')) deletedCount++
@@ -448,9 +450,10 @@ export class CacheService {
     }
 
     if (processingMode === 'summary') {
-      // 文字总结模式：清除章节总结、章节关联、全书总结相关缓存
+      // 文字总结模式：清除章节总结、章节关联、全书总结、关键图表
       if (this.deleteCache(fileName, 'connections')) deletedCount++
       if (this.deleteCache(fileName, 'overall_summary')) deletedCount++
+      if (this.deleteCache(fileName, 'key_charts')) deletedCount++
 
       // 清除所有章节的总结缓存
       const stats = this.getStats()

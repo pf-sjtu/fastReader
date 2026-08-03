@@ -15,6 +15,7 @@ interface BookSummary {
   }>
   connections: string
   overallSummary: string
+  charts?: unknown
 }
 
 interface BookMindMap {
@@ -200,7 +201,10 @@ export class AutoSyncService {
       author: bookSummary.author,
       chapters: chapters,
       overallSummary: bookSummary.overallSummary,
-      connections: bookSummary.connections
+      connections: bookSummary.connections,
+      charts: bookSummary.charts
+        ? (bookSummary.charts as unknown as Record<string, unknown>)
+        : null,
     }
 
     // 计算原始内容字符数

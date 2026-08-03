@@ -434,6 +434,38 @@ export class BatchProcessingEngine {
         }
       }
 
+      // 关键图表（仅 summary 且全书总结成功）
+      let charts: import('@/charts').BookCharts | null = null
+      if (
+        mode === 'summary' &&
+        overallSummary &&
+        !overallSummary.startsWith('【全书总结失败】')
+      ) {
+        if (this.shouldStop) {
+          throw new Error('用户停止处理')
+        }
+        this.callbacks.onItemProgress?.(item.id, 93, '生成关键图表...')
+        try {
+          const aiService = this.getAIServiceOrThrow('关键图表')
+          const chapterObjects = chapterSummaries.map((ch) => ({
+            id: ch.id,
+            title: ch.title,
+            content: '',
+            summary: ch.summary,
+          }))
+          charts = await aiService.generateKeyCharts(
+            bookTitle,
+            chapterObjects,
+            connections.startsWith('【关联分析失败】') ? '' : connections,
+            overallSummary,
+            processingOptions.outputLanguage
+          )
+        } catch (error) {
+          console.error('[BatchProcessingEngine] 关键图表生成失败:', error)
+          charts = null
+        }
+      }
+
       // 5. 生成最终内容
       this.callbacks.onItemProgress?.(item.id, 95, '保存结果...')
 
@@ -471,7 +503,8 @@ export class BatchProcessingEngine {
         author: '',
         chapters: chapterSummaries,
         overallSummary,
-        connections
+        connections,
+        charts: charts as unknown as Record<string, unknown> | null,
       }
 
       const finalContent = metadataFormatter.formatUnified(
