@@ -286,7 +286,7 @@ function App() {
   ) : null
 
   return (
-    <div className="min-h-screen bg-background px-2 py-3 sm:p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
+    <div className="min-h-screen bg-background px-1.5 py-2.5 sm:p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
       <Toaster />
       <WebDAVFileBrowser
         isOpen={isWebDAVBrowserOpen}

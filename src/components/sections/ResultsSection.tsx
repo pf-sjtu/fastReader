@@ -57,8 +57,8 @@ export function ResultsSection({
   }
 
   return (
-    <Card className="min-w-0 gap-2 sm:gap-4 py-2.5 sm:py-4">
-      <CardHeader className="overflow-hidden px-2.5 sm:px-4">
+    <Card className="min-w-0 gap-2 sm:gap-4 py-2 sm:py-4">
+      <CardHeader className="overflow-hidden px-2 sm:px-4">
         <CardTitle className="min-w-0">
           <div className="truncate text-base sm:text-lg">
             {processingMode === 'summary' ? (
@@ -98,8 +98,8 @@ export function ResultsSection({
           </div>
         </div>
       </CardHeader>
-      {/* 内容区移动端更窄边距，避免外层 Card + 章节 Card 双重 padding 挤内容 */}
-      <CardContent className="min-w-0 px-2 sm:px-4">
+      {/* 内容区移动端几乎贴边；真正内边距留给章节卡本身 */}
+      <CardContent className="min-w-0 px-1 sm:px-4">
         {processingMode === 'summary' && bookSummary ? (
           <Tabs
             value={summaryTab}

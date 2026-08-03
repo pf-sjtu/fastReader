@@ -77,19 +77,24 @@ export function EntityTimelineChart({ charts }: Props) {
   }
 
   const { config, entities, timeRows, entityColor } = layout
+  // 冻结列/行用实色底，避免滚动时透出
+  const stickyColBg = theme.isDark ? 'hsl(var(--card))' : 'var(--card, #fff)'
 
   return (
     <>
-      <div className="w-full overflow-auto border border-border rounded-lg bg-card">
+      <div className="w-full max-h-[min(70vh,720px)] overflow-auto border border-border rounded-lg bg-card relative">
         <div className="min-w-max" style={{ width: Math.max(layout.width, 320) }}>
-          {/* 表头：实体名 + 简介（截断）；悬停展示全文 */}
+          {/* 表头行：纵向 sticky；「时间」角格同时横向 sticky */}
           <div
-            className="flex border-b border-border sticky top-0 z-10 bg-card/95 backdrop-blur-sm"
+            className="flex border-b border-border sticky top-0 z-30"
             style={{ minHeight: config.headerHeight }}
           >
             <div
-              className="shrink-0 border-r border-border px-2 py-2 text-xs text-muted-foreground flex items-end"
-              style={{ width: config.labelWidth }}
+              className="shrink-0 border-r border-border px-2 py-2 text-xs text-muted-foreground flex items-end sticky left-0 z-40 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]"
+              style={{
+                width: config.labelWidth,
+                background: stickyColBg,
+              }}
             >
               {t('results.charts.timelineTime', '时间')}
             </div>
@@ -105,6 +110,7 @@ export function EntityTimelineChart({ charts }: Props) {
                 blurb && blurb !== ent.type ? blurb : '',
               ].filter(Boolean)
               const tip = tipLines.join('\n')
+              const headerBg = `color-mix(in oklab, ${color} 18%, var(--card))`
 
               return (
                 <Tooltip key={ent.id} delayDuration={200}>
@@ -113,7 +119,7 @@ export function EntityTimelineChart({ charts }: Props) {
                       className="shrink-0 px-1.5 py-1.5 flex flex-col items-center justify-center text-center border-r border-border/50 last:border-r-0 cursor-default"
                       style={{
                         width: config.colWidth,
-                        background: `color-mix(in oklab, ${color} 18%, var(--card))`,
+                        background: headerBg,
                       }}
                     >
                       <span className="text-[11px] font-medium text-foreground leading-snug line-clamp-2 w-full break-words">
@@ -137,7 +143,7 @@ export function EntityTimelineChart({ charts }: Props) {
             })}
           </div>
 
-          {/* 数据行：高度随内容自适应，色块文字完整换行 */}
+          {/* 数据行：首列（时间）横向 sticky */}
           {timeRows.map((row, rowIndex) => {
             const rowItems = itemsByRow.get(rowIndex) || []
             return (
@@ -147,8 +153,11 @@ export function EntityTimelineChart({ charts }: Props) {
                 style={{ minHeight: row.height }}
               >
                 <div
-                  className="shrink-0 border-r border-border px-2 py-2 flex items-center justify-end"
-                  style={{ width: config.labelWidth }}
+                  className="shrink-0 border-r border-border px-2 py-2 flex items-center justify-end sticky left-0 z-20 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
+                  style={{
+                    width: config.labelWidth,
+                    background: stickyColBg,
+                  }}
                 >
                   <span className="text-[10px] text-muted-foreground text-right leading-snug break-words whitespace-normal w-full">
                     {row.timeLabel}
@@ -204,7 +213,7 @@ export function EntityTimelineChart({ charts }: Props) {
       <p className="text-xs text-muted-foreground mt-2">
         {t(
           'results.charts.timelineHint',
-          '纵轴为时间/事件顺序，横轴为实体；点击色块查看详情'
+          '纵轴为时间/事件顺序，横轴为实体；表头与时间列已冻结，可滚动查看；点击色块查看详情'
         )}
       </p>
 

@@ -88,7 +88,7 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
   return (
     <Card
       id={`chapter-summary-${id}`}
-      className={cn('gap-2 min-w-0 py-2.5 sm:py-4', className)}
+      className={cn('gap-2 min-w-0 py-2 sm:py-4', className)}
     >
       <CardHeader className="space-y-2 px-2.5 sm:px-4">
         <CardTitle className="text-base sm:text-lg flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -160,7 +160,7 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
         </CardTitle>
       </CardHeader>
       {!actualIsCollapsed && (
-        <CardContent className="min-w-0 px-2.5 sm:px-4">
+        <CardContent className="min-w-0 px-2.5 sm:px-4 pt-0">
           <div className="markdown-card-content prose prose-sm max-w-none overflow-x-auto">
             {/*
               强调作用域：micromark (CommonMark delimiter run) + remark-cjk-friendly

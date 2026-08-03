@@ -167,12 +167,13 @@
     line-height: 1.6;
   }
   
-  /* 确保CardContent内的内容也应用字体缩放 */
+  /* 确保 CardContent 内文字应用字体缩放。
+     切勿在此写 padding（尤其 !important）——会盖掉组件 Tailwind 的 px/py，
+     导致移动端「收紧边距」永远不生效。水平/垂直内边距由 card.tsx 与各卡片控制。 */
   [data-slot="card-content"] {
     font-size: calc(var(--base-font-size) * var(--font-scale)) !important;
     width: 100% !important;
     max-width: none !important;
-    padding: 1.5rem !important;
   }
   
   [data-slot="card-content"] .prose {
