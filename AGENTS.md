@@ -18,6 +18,58 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 <!-- OPENSPEC:END -->
 # 操作守则
 - 使用中文回复和撰写文档，特别是openspec文档
+- 有实质代码/配置改动时，**必须**按下方「修改 → 测试 → 提交 → 推送」流程收尾，不得只改代码不验证、不落地版本库
+
+## 修改 → 测试 → 提交 → 推送（强制流程）
+
+完成可交付改动后，按顺序执行；任一步失败则先修复再继续，不得跳过。
+
+### 1. 修改（Modify）
+- 先读相关实现与本文件约束，沿用现有模式，只改必要范围
+- 不碰无关文件；工作树已有他人/用户改动不擅自回滚
+- 禁止直接编辑 `.env`；密钥不入库
+
+### 2. 测试（Test）
+改动涉及前端/逻辑时，至少跑通与改动相关的检查（按改动面取子集，**有测试体系时优先真实测试**）：
+
+| 改动类型 | 最低要求 |
+|---------|----------|
+| 业务逻辑 / store / services | `pnpm test`（或针对相关文件的 vitest） |
+| UI / 样式 / 布局 | `pnpm build` 或等价 Vite 构建通过；能本地 dev 时说明关键路径已自测 |
+| 类型 / 接口变更 | 构建含类型检查通过（`pnpm build` 内含 `tsc`） |
+| 仅文档 / AGENTS 文案 | 可跳过自动化测试，仍须 commit |
+
+- 测试失败必须先修再提交；无法跑通时在回复中标明 **未验证项与风险**
+- 长期/关键链路测试放 `tests/`（含 `tests/circuit/` 若有）
+
+### 3. 提交（Commit）
+测试通过后：
+
+```bash
+git status
+git diff
+git log -5 --oneline   # 对齐既有 message 风格
+git add <相关文件>     # 不 stage 无关改动、密钥、大体积产物
+git commit -m "..."    # 中文或项目既有风格；写清动机与主要改动
+```
+
+- 提交信息聚焦「为什么」与关键改动，避免空泛 `update` / `fix`
+- 不使用 `git commit --amend` 改写已推送历史，除非用户明确要求
+
+### 4. 推送（Push）
+提交成功后推送到远程跟踪分支：
+
+```bash
+git push -u origin HEAD
+```
+
+- **默认执行 push**（本项目约定：改动闭环含远程同步）
+- 禁止 force-push 到 `master` / `main` 等共享分支
+- push 失败（冲突/权限）须报告并协助解决，不得假装已推送
+- 若用户当轮明确说「先不要 push」，可停在 commit，并在回复中注明
+
+### 5. 收尾汇报
+回复中简要写明：改了什么、跑了哪些测试、commit hash、是否已 push。
 
 
 # Project Context (Architecture)
