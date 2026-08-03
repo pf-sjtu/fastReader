@@ -115,16 +115,17 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
 
   return (
     <>
-      <Card className={cn("w-full min-w-0", className)}>
-        <CardContent className="p-3 sm:p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Card 默认带 py-4，状态栏再叠 p-4 会虚高；此处 py-0 + 紧凑内边距 */}
+      <Card className={cn('w-full min-w-0 gap-0 py-0 shadow-sm', className)}>
+        <CardContent className="px-3 py-2 sm:px-4 sm:py-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             {/* 切换按钮 + 模型信息（移动端同一行） */}
             <div className="flex items-center justify-between gap-2 sm:justify-start sm:gap-3 shrink-0">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={onToggleView}
-                className="flex items-center gap-1.5 min-h-9"
+                className="flex items-center gap-1.5 h-8 min-h-8"
               >
                 {currentView === 'config' ? (
                   <>
