@@ -61,8 +61,10 @@ function isAllowedMethod(method) {
 }
 
 function resolveUpstreamUrl(baseUrl, path) {
+  // base 必须带尾斜杠，否则 new URL 会把最后一段路径当文件名替换掉
+  const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
   const trimmedPath = path ? path.replace(/^\//, '') : ''
-  return new URL(trimmedPath, baseUrl).toString()
+  return new URL(trimmedPath, base).toString()
 }
 
 function filterRequestHeaders(headers) {

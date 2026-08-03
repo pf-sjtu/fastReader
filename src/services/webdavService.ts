@@ -53,6 +53,11 @@ function buildHeaderPath(config: WebDAVConfig, path: string): string {
 export class WebDAVService {
   private client: WebDAVClient | null = null
   private config: WebDAVConfig | null = null
+  /**
+   * 串行化所有依赖 X-WebDAV-Path 的请求。
+   * 代理模式用共享 client 的可变 header 传真实路径，并发 Promise.all 会互相覆盖导致错读/假 404。
+   */
+  private opChain: Promise<unknown> = Promise.resolve()
 
   /**
    * 设置 WebDAV 请求头（自动编码路径）
@@ -65,6 +70,16 @@ export class WebDAVService {
       'X-WebDAV-Path': encodeDavHeaderPath(path),
       'X-Request-Origin': window.location.origin
     })
+  }
+
+  /** 在同一时刻只跑一个 DAV 操作，避免 header 竞态 */
+  private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.opChain.then(fn, fn)
+    this.opChain = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
   }
 
   /**
@@ -138,54 +153,54 @@ export class WebDAVService {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
 
-    try {
-      const headerPath = '/'
-      this.setDavHeader(headerPath)
-      await this.client.getDirectoryContents('/')
+    return this.runExclusive(async () => {
+      try {
+        const headerPath = '/'
+        this.setDavHeader(headerPath)
+        await this.client!.getDirectoryContents('/')
 
-      if (this.config?.syncPath) {
-        const normalizedSyncPath = normalizeDavPath(this.config.syncPath)
-        if (normalizedSyncPath !== '/') {
-          this.setDavHeader(normalizedSyncPath)
+        if (this.config?.syncPath) {
+          const normalizedSyncPath = normalizeDavPath(this.config.syncPath)
+          if (normalizedSyncPath !== '/') {
+            this.setDavHeader(normalizedSyncPath)
 
-          const exists = await this.client.exists('/')
-          if (!exists) {
-            await this.client.createDirectory('/')
+            const exists = await this.client!.exists('/')
+            if (!exists) {
+              await this.client!.createDirectory('/')
+            }
           }
         }
-      }
 
-      return { success: true, data: true }
+        return { success: true, data: true }
+      } catch (error) {
+        let errorMessage = '连接失败'
 
-    } catch (error) {
-      let errorMessage = '连接失败'
-
-      if (error instanceof Error) {
-        
-        if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-          errorMessage = '认证失败，请检查用户名和密码'
-        } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
-          errorMessage = '访问被拒绝，可能是权限问题或移动端兼容性问题'
-        } else if (error.message.includes('404') || error.message.includes('Not Found')) {
-          errorMessage = '服务器地址不正确'
-        } else if (error.message.includes('405') || error.message.includes('Method Not Allowed')) {
-          errorMessage = '请求方法不被支持，可能是代理配置问题'
-        } else if (error.message.includes('ENOTFOUND') || error.message.includes('Network')) {
-          errorMessage = '网络连接失败，请检查服务器地址'
-        } else if (error.message.includes('CORS')) {
-          errorMessage = 'CORS错误，请检查服务器配置'
-        } else if (error.message.includes('invalid response')) {
-          errorMessage = '响应格式无效，可能是代理服务器问题'
+        if (error instanceof Error) {
+          if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+            errorMessage = '认证失败，请检查用户名和密码'
+          } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
+            errorMessage = '访问被拒绝，可能是权限问题或移动端兼容性问题'
+          } else if (error.message.includes('404') || error.message.includes('Not Found')) {
+            errorMessage = '服务器地址不正确'
+          } else if (error.message.includes('405') || error.message.includes('Method Not Allowed')) {
+            errorMessage = '请求方法不被支持，可能是代理配置问题'
+          } else if (error.message.includes('ENOTFOUND') || error.message.includes('Network')) {
+            errorMessage = '网络连接失败，请检查服务器地址'
+          } else if (error.message.includes('CORS')) {
+            errorMessage = 'CORS错误，请检查服务器配置'
+          } else if (error.message.includes('invalid response')) {
+            errorMessage = '响应格式无效，可能是代理服务器问题'
+          } else {
+            errorMessage = `连接失败: ${error.message}`
+          }
         } else {
-          errorMessage = `连接失败: ${error.message}`
+          console.error('WebDAV连接测试失败 - 未知错误:', error)
+          errorMessage = '连接失败: 未知错误'
         }
-      } else {
-        console.error('WebDAV连接测试失败 - 未知错误:', error)
-        errorMessage = '连接失败: 未知错误'
+
+        return { success: false, error: errorMessage }
       }
-      
-      return { success: false, error: errorMessage }
-    }
+    })
   }
 
   /**
@@ -201,6 +216,7 @@ export class WebDAVService {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
 
+    return this.runExclusive(async () => {
     try {
       const rawPath = path || this.config?.browsePath || '/'
       const normalizedPath = normalizeDavPath(rawPath)
@@ -208,7 +224,7 @@ export class WebDAVService {
 
       this.setDavHeader(headerPath)
 
-      const contents = await this.client.getDirectoryContents('/', { deep })
+      const contents = await this.client!.getDirectoryContents('/', { deep })
 
       
       const contentList = Array.isArray(contents) ? contents : [contents]
@@ -248,6 +264,7 @@ export class WebDAVService {
         error: `获取目录内容失败: ${error instanceof Error ? error.message : '未知错误'}`
       }
     }
+    })
   }
 
   /**
@@ -284,47 +301,47 @@ export class WebDAVService {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
 
-    try {
-      if (!this.config) {
-        return { success: false, error: 'WebDAV配置未找到' }
-      }
+    return this.runExclusive(async () => {
+      try {
+        if (!this.config) {
+          return { success: false, error: 'WebDAV配置未找到' }
+        }
 
-      const normalizedPath = normalizeDavPath(filePath)
-      const headerPath = buildHeaderPath(this.config, normalizedPath)
+        const normalizedPath = normalizeDavPath(filePath)
+        const headerPath = buildHeaderPath(this.config, normalizedPath)
 
-      this.setDavHeader(headerPath)
+        this.setDavHeader(headerPath)
 
-      if (format === 'text') {
-        const content = await this.client.getFileContents('/', {
-          format: 'text',
+        if (format === 'text') {
+          const content = await this.client!.getFileContents('/', {
+            format: 'text',
+            headers: { 'Cache-Control': 'no-store, no-cache', 'Pragma': 'no-cache' }
+          }) as string
+          return { success: true, data: content }
+        }
+
+        const binaryContent = await this.client!.getFileContents('/', {
+          format: 'binary',
           headers: { 'Cache-Control': 'no-store, no-cache', 'Pragma': 'no-cache' }
-        }) as string
-        return { success: true, data: content }
+        })
+
+        const arrayBuffer = await this.normalizeToArrayBuffer(binaryContent)
+
+        return { success: true, data: arrayBuffer }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        // 缓存未命中是常见情况（无完整摘要），用 warn 而非 error
+        if (msg.includes('404') || msg.includes('Not Found') || msg.includes('Invalid response: 404')) {
+          console.warn('[WebDAV] 文件不存在 (404):', filePath)
+        } else {
+          console.error('获取文件内容失败:', error)
+        }
+        return {
+          success: false,
+          error: `下载文件失败: ${msg}`
+        }
       }
-
-      const binaryContent = await this.client.getFileContents('/', {
-        format: 'binary',
-        headers: { 'Cache-Control': 'no-store, no-cache', 'Pragma': 'no-cache' }
-      })
-      console.log('WebDAV客户端返回的内容类型:', typeof binaryContent, binaryContent.constructor.name)
-
-      const arrayBuffer = await this.normalizeToArrayBuffer(binaryContent)
-
-      return { success: true, data: arrayBuffer }
-
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
-      // 缓存未命中是常见情况（无完整摘要），用 warn 而非 error
-      if (msg.includes('404') || msg.includes('Not Found') || msg.includes('Invalid response: 404')) {
-        console.warn('[WebDAV] 文件不存在 (404):', filePath)
-      } else {
-        console.error('获取文件内容失败:', error)
-      }
-      return {
-        success: false,
-        error: `下载文件失败: ${msg}`
-      }
-    }
+    })
   }
 
   /**
@@ -376,32 +393,37 @@ export class WebDAVService {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
 
-    try {
-      const normalizedPath = normalizeDavPath(filePath)
+    return this.runExclusive(async () => {
+      try {
+        const normalizedPath = normalizeDavPath(filePath)
 
-      const dirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
-      if (dirPath && dirPath !== '/') {
-        const dirHeaderPath = buildHeaderPath(this.config!, dirPath)
-        this.setDavHeader(dirHeaderPath)
-        const dirExists = await this.client.exists('/')
-        if (!dirExists) {
+        const dirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
+        if (dirPath && dirPath !== '/') {
+          const dirHeaderPath = buildHeaderPath(this.config!, dirPath)
           this.setDavHeader(dirHeaderPath)
-          await this.client.createDirectory('/')
+          const dirExists = await this.client!.exists('/')
+          if (!dirExists) {
+            this.setDavHeader(dirHeaderPath)
+            await this.client!.createDirectory('/')
+          }
+        }
+
+        const headerPath = buildHeaderPath(this.config!, normalizedPath)
+        this.setDavHeader(headerPath)
+        const result = await this.client!.putFileContents(
+          '/',
+          data as string | Buffer | ArrayBuffer | Blob,
+          { overwrite }
+        )
+
+        return { success: true, data: result }
+      } catch (error) {
+        return {
+          success: false,
+          error: `上传文件失败: ${error instanceof Error ? error.message : '未知错误'}`
         }
       }
-
-      const headerPath = buildHeaderPath(this.config!, normalizedPath)
-      this.setDavHeader(headerPath)
-      const result = await this.client.putFileContents('/', data as string | Buffer | ArrayBuffer | Blob, { overwrite })
-
-      return { success: true, data: result }
-
-    } catch (error) {
-      return {
-        success: false,
-        error: `上传文件失败: ${error instanceof Error ? error.message : '未知错误'}`
-      }
-    }
+    })
   }
 
   /**
@@ -427,18 +449,20 @@ export class WebDAVService {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
 
-    try {
-      const normalizedPath = normalizeDavPath(path)
-      const headerPath = buildHeaderPath(this.config!, normalizedPath)
-      this.setDavHeader(headerPath)
-      await this.client.createDirectory('/')
-      return { success: true, data: true }
-    } catch (error) {
-      return {
-        success: false,
-        error: `创建目录失败: ${error instanceof Error ? error.message : '未知错误'}`
+    return this.runExclusive(async () => {
+      try {
+        const normalizedPath = normalizeDavPath(path)
+        const headerPath = buildHeaderPath(this.config!, normalizedPath)
+        this.setDavHeader(headerPath)
+        await this.client!.createDirectory('/')
+        return { success: true, data: true }
+      } catch (error) {
+        return {
+          success: false,
+          error: `创建目录失败: ${error instanceof Error ? error.message : '未知错误'}`
+        }
       }
-    }
+    })
   }
 
 
@@ -451,18 +475,20 @@ export class WebDAVService {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
 
-    try {
-      const normalizedPath = normalizeDavPath(filePath)
-      const headerPath = buildHeaderPath(this.config!, normalizedPath)
-      this.setDavHeader(headerPath)
-      await this.client.deleteFile('/')
-      return { success: true, data: true }
-    } catch (error) {
-      return {
-        success: false,
-        error: `删除文件失败: ${error instanceof Error ? error.message : '未知错误'}`
+    return this.runExclusive(async () => {
+      try {
+        const normalizedPath = normalizeDavPath(filePath)
+        const headerPath = buildHeaderPath(this.config!, normalizedPath)
+        this.setDavHeader(headerPath)
+        await this.client!.deleteFile('/')
+        return { success: true, data: true }
+      } catch (error) {
+        return {
+          success: false,
+          error: `删除文件失败: ${error instanceof Error ? error.message : '未知错误'}`
+        }
       }
-    }
+    })
   }
 
 
@@ -475,18 +501,20 @@ export class WebDAVService {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
 
-    try {
-      const normalizedPath = normalizeDavPath(dirPath)
-      const headerPath = buildHeaderPath(this.config!, normalizedPath)
-      this.setDavHeader(headerPath)
-      await this.client.deleteFile('/')
-      return { success: true, data: true }
-    } catch (error) {
-      return {
-        success: false,
-        error: `删除目录失败: ${error instanceof Error ? error.message : '未知错误'}`
+    return this.runExclusive(async () => {
+      try {
+        const normalizedPath = normalizeDavPath(dirPath)
+        const headerPath = buildHeaderPath(this.config!, normalizedPath)
+        this.setDavHeader(headerPath)
+        await this.client!.deleteFile('/')
+        return { success: true, data: true }
+      } catch (error) {
+        return {
+          success: false,
+          error: `删除目录失败: ${error instanceof Error ? error.message : '未知错误'}`
+        }
       }
-    }
+    })
   }
 
 
@@ -499,26 +527,28 @@ export class WebDAVService {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
 
-    try {
-      const normalizedPath = normalizeDavPath(path)
-      const headerPath = buildHeaderPath(this.config!, normalizedPath)
+    return this.runExclusive(async () => {
+      try {
+        const normalizedPath = normalizeDavPath(path)
+        const headerPath = buildHeaderPath(this.config!, normalizedPath)
 
-      this.setDavHeader(headerPath)
+        this.setDavHeader(headerPath)
 
-      const exists = await this.client.exists('/')
+        const exists = await this.client!.exists('/')
 
-      return { success: true, data: exists }
-    } catch (error) {
-      // 对于 404 错误，返回 false 而不是错误
-      if (error instanceof Error && error.message.includes('404')) {
-        return { success: true, data: false }
+        return { success: true, data: exists }
+      } catch (error) {
+        // 对于 404 错误，返回 false 而不是错误
+        if (error instanceof Error && error.message.includes('404')) {
+          return { success: true, data: false }
+        }
+        console.error('检查路径失败:', error)
+        return {
+          success: false,
+          error: `检查路径失败: ${error instanceof Error ? error.message : '未知错误'}`
+        }
       }
-      console.error('检查路径失败:', error)
-      return {
-        success: false,
-        error: `检查路径失败: ${error instanceof Error ? error.message : '未知错误'}`
-      }
-    }
+    })
   }
 
 
@@ -542,30 +572,38 @@ export class WebDAVService {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
 
-    try {
-      const normalizedPath = normalizeDavPath(path)
-      const headerPath = buildHeaderPath(this.config!, normalizedPath)
-      this.setDavHeader(headerPath)
-      const stat = await this.client.stat('/')
-      
-      const statRecord = stat as Record<string, unknown>
-      const fileInfo: WebDAVFileInfo = {
-        filename: normalizedPath,
-        basename: typeof statRecord.basename === 'string' ? statRecord.basename : normalizedPath.split('/').pop() || '',
-        lastmod: typeof statRecord.lastmod === 'string' ? statRecord.lastmod : new Date().toISOString(),
-        size: typeof statRecord.size === 'number' ? statRecord.size : 0,
-        type: statRecord.type === 'directory' ? 'directory' : 'file',
-        etag: typeof statRecord.etag === 'string' ? statRecord.etag : '',
-        mime: typeof statRecord.mime === 'string' ? statRecord.mime : ''
-      }
+    return this.runExclusive(async () => {
+      try {
+        const normalizedPath = normalizeDavPath(path)
+        const headerPath = buildHeaderPath(this.config!, normalizedPath)
+        this.setDavHeader(headerPath)
+        const stat = await this.client!.stat('/')
 
-      return { success: true, data: fileInfo }
-    } catch (error) {
-      return {
-        success: false,
-        error: `获取文件信息失败: ${error instanceof Error ? error.message : '未知错误'}`
+        const statRecord = stat as Record<string, unknown>
+        const fileInfo: WebDAVFileInfo = {
+          filename: normalizedPath,
+          basename:
+            typeof statRecord.basename === 'string'
+              ? statRecord.basename
+              : normalizedPath.split('/').pop() || '',
+          lastmod:
+            typeof statRecord.lastmod === 'string'
+              ? statRecord.lastmod
+              : new Date().toISOString(),
+          size: typeof statRecord.size === 'number' ? statRecord.size : 0,
+          type: statRecord.type === 'directory' ? 'directory' : 'file',
+          etag: typeof statRecord.etag === 'string' ? statRecord.etag : '',
+          mime: typeof statRecord.mime === 'string' ? statRecord.mime : ''
+        }
+
+        return { success: true, data: fileInfo }
+      } catch (error) {
+        return {
+          success: false,
+          error: `获取文件信息失败: ${error instanceof Error ? error.message : '未知错误'}`
+        }
       }
-    }
+    })
   }
 
 

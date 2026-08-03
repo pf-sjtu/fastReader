@@ -153,9 +153,18 @@ export class CloudCacheService {
       console.log(`[CloudCache] 读取图表 JSON: ${path}`)
       const result = await this.webdavService.getFileContents(path, 'text')
       if (!result.success || result.data == null) {
+        const err = result.error || ''
+        // 404 是正常「尚未生成」，不抬到 error
+        if (err.includes('404') || err.includes('Not Found')) {
+          console.log(`[CloudCache] 图表 JSON 不存在 (404): ${path}`)
+        } else if (err) {
+          console.warn(`[CloudCache] 读取图表 JSON 失败: ${path}`, err)
+        }
         return { found: false, content: null, error: result.error }
       }
-      return { found: true, content: String(result.data) }
+      const text = String(result.data)
+      console.log(`[CloudCache] 图表 JSON 已读取: ${path}, ${text.length} chars`)
+      return { found: true, content: text }
     } catch (error) {
       console.warn('[CloudCache] 读取图表 JSON 失败:', error)
       return {
@@ -203,11 +212,14 @@ export class CloudCacheService {
       const cachePath = this.getCacheFilePath(fileName)
       console.log(`[CloudCache] 读取缓存: ${cachePath}`)
 
-      // MD 与图表 JSON 并行
-      const [downloadResult, chartsResult] = await Promise.all([
-        this.webdavService.getFileContents(cachePath, 'text'),
-        this.readChartsJson(fileName),
-      ])
+      // 串行：先 MD 后 JSON（WebDAV 代理用共享 header 传路径，并发会竞态）
+      const downloadResult = await this.webdavService.getFileContents(cachePath, 'text')
+      const chartsResult = await this.readChartsJson(fileName)
+
+      console.log(
+        `[CloudCache] 图表 JSON: found=${chartsResult.found}, len=${chartsResult.content?.length ?? 0}` +
+          (chartsResult.error ? `, err=${chartsResult.error}` : '')
+      )
 
       if (!downloadResult.success || !downloadResult.data) {
         return {
