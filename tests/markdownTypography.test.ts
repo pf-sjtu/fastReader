@@ -97,4 +97,31 @@ describe('prepareMarkdownForRender', () => {
     expect(out).toContain('`***`')
     expect(out).toContain('**粗体**')
   })
+
+  /**
+   * 回归：前文有 **…。** 时，后文 *1970年代* 被拆成 * 1970年代*
+   * （单 * 扫描把 ** 拆成 *+* 再误配）
+   */
+  it('前文 **标点粗体** 不得拆坏后文 *斜体数字*', () => {
+    const input =
+      '**远离成人控制、自主定义目标与边界，是我少年时期最核心的成长驱动力。** 我们。*1970年代*相对宽松，***给予我探索世界的自主权***。'
+    const out = prepareMarkdownForRender(input)
+    expect(out).toContain('*1970年代*')
+    expect(out).not.toMatch(/\* 1970/)
+    expect(out).toContain('***给予我探索世界的自主权***')
+    // 粗体块仍成对
+    expect(out).toMatch(/\*\*[^*]+\*\*/)
+  })
+
+  it('连续多个 CJK 斜体与 *** 共存', () => {
+    const input =
+      '在*奥林匹克国家森林*与*冰川峰荒野*徒步。*1971年6月*，全程约*80公里*。***折返就意味着放弃。*** 我是少数派。'
+    const out = prepareMarkdownForRender(input)
+    expect(out).toContain('*奥林匹克国家森林*')
+    expect(out).toContain('*冰川峰荒野*')
+    expect(out).toContain('*1971年6月*')
+    expect(out).toContain('*80公里*')
+    expect(out).toContain('***折返就意味着放弃。***')
+    expect(out).not.toMatch(/\* \d/)
+  })
 })

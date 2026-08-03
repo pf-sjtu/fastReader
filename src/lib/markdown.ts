@@ -63,9 +63,10 @@ function mapExactRunMarker(
 
     const openRun = runLen(input, i)
     if (openRun !== len) {
-      // 更长或更短 run：逐字吐出第一个，避免吞掉 *** 的第三颗 *
-      result += input[i]
-      i += 1
+      // 整段 run 原样输出。切勿逐字吐出，否则 ** 会被拆成 *+* 再被单星误配
+      // （典型症状：`**粗体。** … *1970年代*` → `* 1970年代*`）
+      result += input.slice(i, i + openRun)
+      i += openRun
       continue
     }
 
@@ -88,8 +89,9 @@ function mapExactRunMarker(
     }
 
     if (closeAt === -1) {
-      result += input[i]
-      i += 1
+      // 未配对：整段 open run 原样输出，避免拆碎多星号
+      result += input.slice(i, i + openRun)
+      i += openRun
       continue
     }
 
@@ -174,8 +176,9 @@ function padOutsideForMarker(input: string, marker: string): string {
 
     const openRun = runLen(input, i)
     if (openRun !== len) {
-      result += input[i]
-      i += 1
+      // 与 mapExactRunMarker 相同：整段跳过，禁止 ** 被 * 拆配
+      result += input.slice(i, i + openRun)
+      i += openRun
       continue
     }
 
@@ -196,8 +199,8 @@ function padOutsideForMarker(input: string, marker: string): string {
     }
 
     if (closeAt === -1) {
-      result += input[i]
-      i += 1
+      result += input.slice(i, i + openRun)
+      i += openRun
       continue
     }
 
