@@ -14,6 +14,42 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "../src"),
+      "https-proxy-agent": resolve(__dirname, "../src/shims/empty-module.ts"),
+      "agent-base": resolve(__dirname, "../src/shims/empty-module.ts"),
+    },
+  },
+  build: {
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return
+          if (id.includes("cytoscape")) return "cytoscape"
+          if (id.includes("pdfjs-dist")) return "pdfjs"
+          if (id.includes("mind-elixir")) return "mind-elixir"
+          if (id.includes("@ssshooter/epubjs") || id.includes("epubjs")) return "epubjs"
+          if (id.includes("react-dom") || id.includes("/react/") || id.includes("\\react\\"))
+            return "react-vendor"
+          if (id.includes("i18next")) return "i18n"
+          if (id.includes("@radix-ui")) return "radix"
+          if (id.includes("lucide-react")) return "icons"
+          if (
+            id.includes("react-markdown") ||
+            id.includes("remark-") ||
+            id.includes("/mdast") ||
+            id.includes("micromark")
+          )
+            return "markdown"
+          if (id.includes("webdav") || id.includes("jszip")) return "files"
+          if (
+            id.includes("@google/generative-ai") ||
+            id.includes("@ai-sdk") ||
+            id.includes("openrouter") ||
+            id.includes("zod")
+          )
+            return "ai"
+        },
+      },
     },
   },
   server: {

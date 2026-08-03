@@ -13,6 +13,12 @@ const hooksDir = path.join(root, 'scripts', 'git-hooks')
 const preCommit = path.join(hooksDir, 'pre-commit')
 
 function main() {
+  // Cloudflare Pages / CI 无需安装本地 git hooks
+  if (process.env.CI || process.env.CF_PAGES || process.env.CF_PAGES_COMMIT_SHA) {
+    console.log('[install-git-hooks] CI/CF Pages detected; skip')
+    return
+  }
+
   if (!fs.existsSync(preCommit)) {
     console.error('[install-git-hooks] missing pre-commit hook file')
     process.exit(1)
