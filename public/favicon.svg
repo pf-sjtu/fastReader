@@ -2,65 +2,65 @@
   <!-- 橙色圆角底 #F97316 -->
   <rect width="64" height="64" rx="14" fill="#F97316"/>
 
-  <!-- 白色主图形：高填充，边距约 10% -->
+  <!-- 白色主图形：更高填充（边距约 6–8%） -->
   <g fill="#FFFFFF">
     <!-- 速度线（贴近书本，粗实） -->
-    <rect x="4" y="20" width="10" height="4" rx="2"/>
-    <rect x="3" y="27.5" width="12" height="4" rx="2"/>
-    <rect x="4.5" y="35" width="9" height="4" rx="2"/>
-    <rect x="6" y="42.5" width="6.5" height="3.2" rx="1.6" opacity="0.72"/>
+    <rect x="2.5" y="17.5" width="10.5" height="4.4" rx="2.2"/>
+    <rect x="1.5" y="25.5" width="12.5" height="4.4" rx="2.2"/>
+    <rect x="3" y="33.5" width="9.5" height="4.4" rx="2.2"/>
+    <rect x="4.5" y="41.5" width="7" height="3.6" rx="1.8" opacity="0.72"/>
 
-    <!-- 开书：底部中心 V，更像书而非卡片 -->
+    <!-- 开书：放大，底部中心 V -->
     <path d="
-      M16.5 15.2
-      C16.5 13.4 18 12 19.8 12
-      H32.2
-      V51.2
-      C29 49.2 25.2 48.2 21.5 48.2
-      C19.4 48.2 17.6 48.5 16.5 48.9
+      M13.5 12.5
+      C13.5 10.5 15.2 8.8 17.2 8.8
+      H32.0
+      V55.0
+      C28.5 52.6 24.4 51.4 20.4 51.4
+      C18.0 51.4 15.9 51.7 13.5 52.2
       Z
     "/>
     <path d="
-      M32.2 12
-      H44.6
-      C46.4 12 47.9 13.4 47.9 15.2
-      V48.9
-      C46.8 48.5 45 48.2 42.9 48.2
-      C39.2 48.2 35.4 49.2 32.2 51.2
+      M32.0 8.8
+      H46.8
+      C48.8 8.8 50.5 10.5 50.5 12.5
+      V52.2
+      C48.1 51.7 46.0 51.4 43.6 51.4
+      C39.6 51.4 35.5 52.6 32.0 55.0
       Z
     "/>
   </g>
 
   <!-- 书脊 -->
-  <path d="M32.2 13.2 V50" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round"/>
+  <path d="M32.0 10.2 V53.5" fill="none" stroke="#F97316" stroke-width="2.2" stroke-linecap="round"/>
 
   <!-- 左页行（镂空） -->
   <g fill="#F97316">
-    <rect x="20" y="19" width="9.5" height="3" rx="1.5"/>
-    <rect x="20" y="25" width="8" height="3" rx="1.5"/>
-    <rect x="20" y="31" width="9" height="3" rx="1.5"/>
+    <rect x="18.2" y="16.5" width="11" height="3.4" rx="1.7"/>
+    <rect x="18.2" y="23.2" width="9.2" height="3.4" rx="1.7"/>
+    <rect x="18.2" y="29.9" width="10.4" height="3.4" rx="1.7"/>
   </g>
 
   <!-- 右页 AI 节点（镂空） -->
-  <g fill="#F97316" stroke="#F97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="37.2" cy="20.5" r="2" stroke="none"/>
-    <circle cx="45.2" cy="23.5" r="2" stroke="none"/>
-    <circle cx="36.5" cy="36.5" r="2" stroke="none"/>
-    <circle cx="45.5" cy="34.5" r="2" stroke="none"/>
-    <path d="M37.2 20.5 L40.8 27 L45.2 23.5" fill="none"/>
-    <path d="M40.8 27 L36.5 36.5" fill="none"/>
-    <path d="M40.8 27 L45.5 34.5" fill="none"/>
+  <g fill="#F97316" stroke="#F97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="37.0" cy="18.2" r="2.3" stroke="none"/>
+    <circle cx="46.2" cy="21.5" r="2.3" stroke="none"/>
+    <circle cx="36.2" cy="38.5" r="2.3" stroke="none"/>
+    <circle cx="46.5" cy="36.2" r="2.3" stroke="none"/>
+    <path d="M37.0 18.2 L41.0 27.0 L46.2 21.5" fill="none"/>
+    <path d="M41.0 27.0 L36.2 38.5" fill="none"/>
+    <path d="M41.0 27.0 L46.5 36.2" fill="none"/>
     <path fill="#F97316" stroke="none" d="
-      M40.8 24.2
-      L41.85 26.95
-      L44.8 27.1
-      L42.5 28.95
-      L43.25 31.85
-      L40.8 30.3
-      L38.35 31.85
-      L39.1 28.95
-      L36.8 27.1
-      L39.75 26.95
+      M41.0 23.6
+      L42.2 26.8
+      L45.6 27.0
+      L42.9 29.2
+      L43.8 32.6
+      L41.0 30.8
+      L38.2 32.6
+      L39.1 29.2
+      L36.4 27.0
+      L39.8 26.8
       Z
     "/>
   </g>
