@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Core, EventObject } from 'cytoscape'
 import type { BookCharts, PersonGraphNode } from '../../types'
 import { toCytoscapeElements, nodeSize } from './toCytoscape'
+import { readChartTheme, subscribeThemeChange, type ChartThemeColors } from '../../theme'
 import {
   Sheet,
   SheetContent,
@@ -17,7 +18,96 @@ interface Props {
 
 interface SelectedNode {
   node: PersonGraphNode
-  edges: { relation: string; otherName: string; direction: 'in' | 'out'; description?: string }[]
+  edges: {
+    relation: string
+    otherName: string
+    direction: 'in' | 'out'
+    description?: string
+  }[]
+}
+
+// cytoscape 样式对象（动态主题）
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildStyles(theme: ChartThemeColors): any[] {
+  return [
+    {
+      selector: 'node',
+      style: {
+        label: 'data(label)',
+        // 标签放节点下方 + 背景衬底，亮/暗都清晰
+        'text-valign': 'bottom',
+        'text-halign': 'center',
+        'text-margin-y': 8,
+        'background-color': theme.primary,
+        'background-opacity': theme.isDark ? 0.92 : 0.88,
+        color: theme.foreground,
+        'font-size': 12,
+        'font-weight': 500,
+        'text-wrap': 'wrap',
+        'text-max-width': 96,
+        'text-background-color': theme.card,
+        'text-background-opacity': 0.92,
+        'text-background-padding': '3px',
+        'text-background-shape': 'roundrectangle',
+        'text-border-width': 1,
+        'text-border-color': theme.border,
+        'text-border-opacity': 0.6,
+        width: (ele: { data: (k: string) => number }) => nodeSize(ele.data('importance')),
+        height: (ele: { data: (k: string) => number }) => nodeSize(ele.data('importance')),
+        'border-width': 2,
+        'border-color': theme.border,
+        'border-opacity': 0.9,
+      },
+    },
+    {
+      selector: 'node:selected',
+      style: {
+        'background-color': theme.accent,
+        'border-color': theme.primary,
+        'border-width': 3,
+        color: theme.accentForeground,
+        'text-background-color': theme.card,
+      },
+    },
+    {
+      selector: 'node:active',
+      style: {
+        'overlay-opacity': 0.08,
+        'overlay-color': theme.primary,
+      },
+    },
+    {
+      selector: 'edge',
+      style: {
+        width: 1.5,
+        'line-color': theme.mutedForeground,
+        'target-arrow-color': theme.mutedForeground,
+        'target-arrow-shape': 'triangle',
+        'arrow-scale': 0.9,
+        'curve-style': 'bezier',
+        label: 'data(label)',
+        'font-size': 10,
+        'font-weight': 500,
+        color: theme.foreground,
+        'text-rotation': 'autorotate',
+        'text-margin-y': -10,
+        'text-background-color': theme.card,
+        'text-background-opacity': 0.88,
+        'text-background-padding': '2px',
+        'text-background-shape': 'roundrectangle',
+        opacity: 0.85,
+      },
+    },
+    {
+      selector: 'edge:selected',
+      style: {
+        width: 2.5,
+        'line-color': theme.primary,
+        'target-arrow-color': theme.primary,
+        opacity: 1,
+      },
+    },
+  ]
 }
 
 export function PersonGraphChart({ charts }: Props) {
@@ -27,11 +117,30 @@ export function PersonGraphChart({ charts }: Props) {
   const graph = charts.personGraph
   const [selected, setSelected] = useState<SelectedNode | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [themeTick, setThemeTick] = useState(0)
 
   const elements = useMemo(
     () => (graph ? toCytoscapeElements(graph) : []),
     [graph]
   )
+
+  const applyTheme = useCallback((cy: Core) => {
+    const theme = readChartTheme(containerRef.current)
+    cy.style().fromJson(buildStyles(theme)).update()
+    // 画布背景随 card
+    if (containerRef.current) {
+      containerRef.current.style.backgroundColor = theme.card
+    }
+  }, [])
+
+  useEffect(() => {
+    return subscribeThemeChange(() => setThemeTick((n) => n + 1))
+  }, [])
+
+  useEffect(() => {
+    const cy = cyRef.current
+    if (cy) applyTheme(cy)
+  }, [themeTick, applyTheme])
 
   useEffect(() => {
     if (!containerRef.current || !graph || elements.length === 0) return
@@ -44,58 +153,20 @@ export function PersonGraphChart({ charts }: Props) {
         const cytoscape = (await import('cytoscape')).default
         if (cancelled || !containerRef.current) return
 
+        const theme = readChartTheme(containerRef.current)
+        containerRef.current.style.backgroundColor = theme.card
+
         cy = cytoscape({
           container: containerRef.current,
           elements,
-          style: [
-            {
-              selector: 'node',
-              style: {
-                label: 'data(label)',
-                'text-valign': 'center',
-                'text-halign': 'center',
-                'background-color': '#3b82f6',
-                color: '#fff',
-                'font-size': 11,
-                'text-wrap': 'wrap',
-                'text-max-width': 72,
-                width: (ele: { data: (k: string) => number }) =>
-                  nodeSize(ele.data('importance')),
-                height: (ele: { data: (k: string) => number }) =>
-                  nodeSize(ele.data('importance')),
-                'border-width': 2,
-                'border-color': '#1d4ed8',
-              },
-            },
-            {
-              selector: 'node:selected',
-              style: {
-                'background-color': '#f59e0b',
-                'border-color': '#d97706',
-              },
-            },
-            {
-              selector: 'edge',
-              style: {
-                width: 1.5,
-                'line-color': '#94a3b8',
-                'target-arrow-color': '#94a3b8',
-                'target-arrow-shape': 'triangle',
-                'curve-style': 'bezier',
-                label: 'data(label)',
-                'font-size': 9,
-                color: '#64748b',
-                'text-rotation': 'autorotate',
-                'text-margin-y': -8,
-              },
-            },
-          ],
+          style: buildStyles(theme),
           layout: {
             name: 'cose',
             animate: false,
-            padding: 24,
-            nodeRepulsion: () => 6000,
-            idealEdgeLength: () => 100,
+            padding: 36,
+            nodeRepulsion: () => 7000,
+            idealEdgeLength: () => 110,
+            nodeOverlap: 24,
           } as object,
           minZoom: 0.3,
           maxZoom: 3,
@@ -115,25 +186,25 @@ export function PersonGraphChart({ charts }: Props) {
             importance: n.data('importance'),
           }
           const edges: SelectedNode['edges'] = []
-          n.connectedEdges().forEach((edge: { data: (k: string) => string; source: () => { id: () => string }; target: () => { id: () => string } }) => {
-            const src = edge.source().id()
-            const tgt = edge.target().id()
-            const otherId = src === id ? tgt : src
-            const other = cy!.getElementById(otherId)
-            edges.push({
-              relation: edge.data('relation') || edge.data('label'),
-              otherName: other.data('name') || other.data('label') || otherId,
-              direction: src === id ? 'out' : 'in',
-              description: edge.data('description') || undefined,
-            })
-          })
+          n.connectedEdges().forEach(
+            (edge: {
+              data: (k: string) => string
+              source: () => { id: () => string }
+              target: () => { id: () => string }
+            }) => {
+              const src = edge.source().id()
+              const tgt = edge.target().id()
+              const otherId = src === id ? tgt : src
+              const other = cy!.getElementById(otherId)
+              edges.push({
+                relation: edge.data('relation') || edge.data('label'),
+                otherName: other.data('name') || other.data('label') || otherId,
+                direction: src === id ? 'out' : 'in',
+                description: edge.data('description') || undefined,
+              })
+            }
+          )
           setSelected({ node: nodeData, edges })
-        })
-
-        cy.on('tap', (evt: EventObject) => {
-          if (evt.target === cy) {
-            // 点空白不关详情，避免误触
-          }
         })
       } catch (err) {
         console.error('[PersonGraphChart]', err)
@@ -145,9 +216,7 @@ export function PersonGraphChart({ charts }: Props) {
 
     return () => {
       cancelled = true
-      if (cy) {
-        cy.destroy()
-      }
+      if (cy) cy.destroy()
       cyRef.current = null
     }
   }, [graph, elements])
@@ -172,7 +241,7 @@ export function PersonGraphChart({ charts }: Props) {
     <>
       <div
         ref={containerRef}
-        className="w-full h-[min(60vh,640px)] min-h-[280px] border rounded-lg bg-card"
+        className="w-full h-[min(60vh,640px)] min-h-[280px] border border-border rounded-lg bg-card"
       />
       <p className="text-xs text-muted-foreground mt-2">
         {t(
@@ -186,7 +255,12 @@ export function PersonGraphChart({ charts }: Props) {
           <SheetHeader>
             <SheetTitle>{selected?.node.name}</SheetTitle>
             <SheetDescription>
-              {[selected?.node.type, selected?.node.importance != null ? `重要度 ${selected.node.importance}` : '']
+              {[
+                selected?.node.type,
+                selected?.node.importance != null
+                  ? `重要度 ${selected.node.importance}`
+                  : '',
+              ]
                 .filter(Boolean)
                 .join(' · ') || ' '}
             </SheetDescription>
@@ -209,7 +283,9 @@ export function PersonGraphChart({ charts }: Props) {
                         {e.direction === 'out' ? '→' : '←'} {e.otherName}
                       </span>
                       {e.description && (
-                        <p className="text-xs text-muted-foreground mt-1">{e.description}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {e.description}
+                        </p>
                       )}
                     </li>
                   ))}

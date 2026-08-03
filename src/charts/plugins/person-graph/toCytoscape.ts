@@ -37,8 +37,8 @@ export function toCytoscapeElements(graph: PersonGraph): CyElement[] {
   return [...nodes, ...edges]
 }
 
-/** 按 importance 映射节点尺寸 */
+/** 按 importance 映射节点尺寸（标签在节点外，圆可略小） */
 export function nodeSize(importance: number): number {
   const imp = Math.min(10, Math.max(1, importance || 5))
-  return 28 + imp * 3
+  return 26 + imp * 2.5
 }

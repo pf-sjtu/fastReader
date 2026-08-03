@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BookCharts } from '../../types'
 import { layoutEntityTimeline } from './layout'
+import { readChartTheme, subscribeThemeChange } from '../../theme'
 import {
   Sheet,
   SheetContent,
@@ -9,6 +10,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { cn } from '@/lib/utils'
 
 interface Props {
   charts: BookCharts
@@ -17,16 +19,48 @@ interface Props {
 export function EntityTimelineChart({ charts }: Props) {
   const { t } = useTranslation()
   const data = charts.entityTimeline
-  const layout = useMemo(
-    () => (data ? layoutEntityTimeline(data) : null),
-    [data]
-  )
+  const [themeTick, setThemeTick] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  useEffect(() => subscribeThemeChange(() => setThemeTick((n) => n + 1)), [])
+
+  const theme = useMemo(() => {
+    void themeTick
+    return readChartTheme()
+  }, [themeTick])
+
+  const layout = useMemo(
+    () =>
+      data
+        ? layoutEntityTimeline(data, {
+            colWidth: 132,
+            labelWidth: 104,
+            headerHeight: 48,
+            pad: 8,
+            fontSize: 11,
+            lineHeight: 15,
+            minRowHeight: 48,
+            palette: theme.palette,
+          })
+        : null,
+    [data, theme.palette]
+  )
 
   const selected = useMemo(() => {
     if (!selectedId || !data) return null
     return data.events.find((e) => e.id === selectedId) || null
   }, [selectedId, data])
+
+  const itemsByRow = useMemo(() => {
+    const m = new Map<number, NonNullable<typeof layout>['items']>()
+    if (!layout) return m
+    for (const it of layout.items) {
+      const list = m.get(it.row) || []
+      list.push(it)
+      m.set(it.row, list)
+    }
+    return m
+  }, [layout])
 
   if (!data || !layout || layout.timeRows.length === 0) {
     return (
@@ -36,129 +70,111 @@ export function EntityTimelineChart({ charts }: Props) {
     )
   }
 
-  const { config, entities, timeRows, items, width, height, entityColor } = layout
-  const chipW = config.colWidth - config.pad * 2
-  const chipH = config.rowHeight - config.pad * 2
+  const { config, entities, timeRows, entityColor } = layout
 
   return (
     <>
-      <div className="w-full overflow-auto border rounded-lg bg-card">
-        <svg
-          width={Math.max(width, 320)}
-          height={Math.max(height, 200)}
-          className="min-w-full"
-          role="img"
-          aria-label={t('results.charts.timeline', '实体时间线')}
-        >
-          {/* 表头：实体名 */}
-          {entities.map((ent, col) => {
-            const x = config.labelWidth + col * config.colWidth
-            const color = entityColor.get(ent.id) || '#888'
-            return (
-              <g key={ent.id}>
-                <rect
-                  x={x}
-                  y={0}
-                  width={config.colWidth}
-                  height={config.headerHeight}
-                  fill={color}
-                  opacity={0.15}
-                />
-                <text
-                  x={x + config.colWidth / 2}
-                  y={config.headerHeight / 2 + 4}
-                  textAnchor="middle"
-                  className="fill-foreground text-[11px] font-medium"
-                  style={{ fontSize: 11 }}
-                >
-                  {ent.name.length > 8 ? ent.name.slice(0, 7) + '…' : ent.name}
-                </text>
-              </g>
-            )
-          })}
-
-          {/* 色带背景列 */}
-          {entities.map((ent, col) => {
-            const x = config.labelWidth + col * config.colWidth
-            const color = entityColor.get(ent.id) || '#888'
-            return (
-              <rect
-                key={`band-${ent.id}`}
-                x={x + 2}
-                y={config.headerHeight}
-                width={config.colWidth - 4}
-                height={timeRows.length * config.rowHeight}
-                fill={color}
-                opacity={0.08}
-                rx={4}
-              />
-            )
-          })}
-
-          {/* 纵轴时间标签 + 横线 */}
-          {timeRows.map((row, i) => {
-            const y = config.headerHeight + i * config.rowHeight
-            return (
-              <g key={`row-${row.order}`}>
-                <line
-                  x1={config.labelWidth}
-                  y1={y}
-                  x2={width}
-                  y2={y}
-                  stroke="currentColor"
-                  opacity={0.08}
-                />
-                <text
-                  x={config.labelWidth - 6}
-                  y={y + config.rowHeight / 2 + 4}
-                  textAnchor="end"
-                  style={{ fontSize: 10 }}
-                  className="fill-muted-foreground"
-                >
-                  {row.timeLabel.length > 10
-                    ? row.timeLabel.slice(0, 9) + '…'
-                    : row.timeLabel}
-                </text>
-              </g>
-            )
-          })}
-
-          {/* 事件色块 */}
-          {items.map((item) => (
-            <g
-              key={`${item.event.id}-${item.entityId}`}
-              transform={`translate(${item.x},${item.y})`}
-              className="cursor-pointer"
-              onClick={() => setSelectedId(item.event.id)}
+      <div className="w-full overflow-auto border border-border rounded-lg bg-card">
+        <div className="min-w-max" style={{ width: Math.max(layout.width, 320) }}>
+          {/* 表头：完整实体名，换行不截断 */}
+          <div
+            className="flex border-b border-border sticky top-0 z-10 bg-card/95 backdrop-blur-sm"
+            style={{ minHeight: config.headerHeight }}
+          >
+            <div
+              className="shrink-0 border-r border-border px-2 py-2 text-xs text-muted-foreground flex items-end"
+              style={{ width: config.labelWidth }}
             >
-              <title>
-                {item.event.label}
-                {item.event.description ? `\n${item.event.description}` : ''}
-              </title>
-              <rect
-                width={chipW}
-                height={Math.min(chipH, 44)}
-                rx={6}
-                fill={item.color}
-                opacity={0.85}
-              />
-              <text
-                x={chipW / 2}
-                y={Math.min(chipH, 44) / 2 + 4}
-                textAnchor="middle"
-                fill="#fff"
-                style={{ fontSize: 10, fontWeight: 500 }}
+              {t('results.charts.timelineTime', '时间')}
+            </div>
+            {entities.map((ent) => {
+              const color = entityColor.get(ent.id) || theme.palette[0]
+              return (
+                <div
+                  key={ent.id}
+                  className="shrink-0 px-1.5 py-2 flex items-center justify-center text-center border-r border-border/50 last:border-r-0"
+                  style={{
+                    width: config.colWidth,
+                    background: `color-mix(in oklab, ${color} 18%, var(--card))`,
+                  }}
+                >
+                  <span className="text-[11px] font-medium text-foreground leading-snug break-words whitespace-normal w-full">
+                    {ent.name}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* 数据行：高度随内容自适应，色块文字完整换行 */}
+          {timeRows.map((row, rowIndex) => {
+            const rowItems = itemsByRow.get(rowIndex) || []
+            return (
+              <div
+                key={`row-${row.order}`}
+                className="flex border-b border-border/40 last:border-b-0"
+                style={{ minHeight: row.height }}
               >
-                {item.event.label.length > 10
-                  ? item.event.label.slice(0, 9) + '…'
-                  : item.event.label}
-              </text>
-            </g>
-          ))}
-        </svg>
+                <div
+                  className="shrink-0 border-r border-border px-2 py-2 flex items-center justify-end"
+                  style={{ width: config.labelWidth }}
+                >
+                  <span className="text-[10px] text-muted-foreground text-right leading-snug break-words whitespace-normal w-full">
+                    {row.timeLabel}
+                  </span>
+                </div>
+                {entities.map((ent, col) => {
+                  const color = entityColor.get(ent.id) || theme.palette[0]
+                  const cellItems = rowItems.filter((it) => it.col === col)
+                  return (
+                    <div
+                      key={`${row.order}-${ent.id}`}
+                      className="shrink-0 px-1 py-1.5 flex flex-col gap-1 justify-center border-r border-border/30 last:border-r-0"
+                      style={{
+                        width: config.colWidth,
+                        background: `color-mix(in oklab, ${color} 8%, transparent)`,
+                      }}
+                    >
+                      {cellItems.map((item) => (
+                        <button
+                          key={`${item.event.id}-${item.entityId}`}
+                          type="button"
+                          onClick={() => setSelectedId(item.event.id)}
+                          title={
+                            item.event.description
+                              ? `${item.event.label}\n${item.event.description}`
+                              : item.event.label
+                          }
+                          className={cn(
+                            'w-full rounded-md px-1.5 py-1.5 text-left transition-opacity hover:opacity-100 opacity-95',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                            'text-white'
+                          )}
+                          style={{
+                            backgroundColor: item.color,
+                            textShadow: theme.isDark
+                              ? '0 1px 2px rgba(0,0,0,0.65)'
+                              : '0 1px 1px rgba(0,0,0,0.4)',
+                          }}
+                        >
+                          <span className="block text-[11px] font-medium leading-snug break-words whitespace-normal">
+                            {item.event.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
       </div>
       <p className="text-xs text-muted-foreground mt-2">
-        {t('results.charts.timelineHint', '纵轴为时间/事件顺序，横轴为实体；点击色块查看详情')}
+        {t(
+          'results.charts.timelineHint',
+          '纵轴为时间/事件顺序，横轴为实体；点击色块查看详情'
+        )}
       </p>
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>

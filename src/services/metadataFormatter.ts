@@ -453,6 +453,71 @@ export function formatUnifiedMarkdown(
 }
 
 /**
+ * 从统一 Markdown 中提取关键图表 JSON（云存档回放用）
+ */
+export function extractChartsFromMarkdown(
+  cleanContent: string
+): Record<string, unknown> | null {
+  // 1) ## 关键图表 + ```json ... ```
+  const fence = cleanContent.match(
+    /##[ \t]+关键图表\s*\n+```(?:json)?\s*\n?([\s\S]*?)```/i
+  )
+  if (fence?.[1]) {
+    try {
+      const parsed = JSON.parse(fence[1].trim()) as unknown
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  // 2) ## 关键图表 到下一标准二级标题之间的首个 {…}
+  const section = cleanContent.match(
+    /##[ \t]+关键图表\s*\n+([\s\S]*?)(?=\n##[ \t]+(?:全书总结|章节关联分析|章节摘要)|$)/i
+  )
+  if (section?.[1]) {
+    const body = section[1].trim()
+    const start = body.indexOf('{')
+    if (start >= 0) {
+      let depth = 0
+      let inStr = false
+      let esc = false
+      for (let i = start; i < body.length; i++) {
+        const ch = body[i]
+        if (inStr) {
+          if (esc) esc = false
+          else if (ch === '\\') esc = true
+          else if (ch === '"') inStr = false
+          continue
+        }
+        if (ch === '"') {
+          inStr = true
+          continue
+        }
+        if (ch === '{') depth++
+        else if (ch === '}') {
+          depth--
+          if (depth === 0) {
+            try {
+              const parsed = JSON.parse(body.slice(start, i + 1)) as unknown
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                return parsed as Record<string, unknown>
+              }
+            } catch {
+              break
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+/**
  * 解析统一格式的 Markdown 内容
  *
  * @param content Markdown 内容
@@ -506,20 +571,8 @@ export function parseUnifiedMarkdown(content: string): {
     data.connections = connectionsMatch[1].trim()
   }
 
-  // 解析关键图表（## 关键图表 下的 json fence）
-  const chartsSectionMatch = cleanContent.match(
-    /##\s+关键图表\n\n```(?:json)?\s*([\s\S]*?)```/
-  )
-  if (chartsSectionMatch) {
-    try {
-      const parsed = JSON.parse(chartsSectionMatch[1].trim()) as Record<string, unknown>
-      if (parsed && typeof parsed === 'object') {
-        data.charts = parsed
-      }
-    } catch {
-      // 忽略损坏的图表 JSON
-    }
-  }
+  // 解析关键图表（## 关键图表 下 fenced json，或区块内裸 JSON）
+  data.charts = extractChartsFromMarkdown(cleanContent)
 
   // 解析章节摘要（从 ## 章节摘要 到文件末尾或下一个一级/二级标题）
   const chaptersSectionMatch = cleanContent.match(/##\s+章节摘要\n\n([\s\S]*$)/)
@@ -575,5 +628,6 @@ export const metadataFormatter = {
   registerModelPricing,
   // 统一的 Markdown 格式化函数
   formatUnified: formatUnifiedMarkdown,
-  parseUnified: parseUnifiedMarkdown
+  parseUnified: parseUnifiedMarkdown,
+  extractCharts: extractChartsFromMarkdown,
 }

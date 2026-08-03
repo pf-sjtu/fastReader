@@ -182,6 +182,37 @@ describe('统一格式 Markdown 测试', () => {
       expect(markdown).toContain('```json')
       const parsed = parseUnifiedMarkdown(markdown)
       expect(parsed.data.charts).toMatchObject({ version: 1 })
+      expect(
+        (parsed.data.charts as { personGraph?: { nodes: { name: string }[] } })
+          ?.personGraph?.nodes?.[0]?.name
+      ).toBe('甲')
+    })
+
+    it('云存档格式：宽松空白仍可解析关键图表', () => {
+      const md = `# 书
+
+## 全书总结
+
+总
+
+## 关键图表
+
+\`\`\`json
+{"version":1,"personGraph":{"nodes":[{"id":"p1","name":"甲"}],"edges":[]}}
+\`\`\`
+
+## 章节摘要
+
+### 第一章
+
+章
+`
+      const parsed = parseUnifiedMarkdown(md)
+      expect(parsed.data.charts).toMatchObject({ version: 1 })
+      expect(
+        (parsed.data.charts as { personGraph: { nodes: { id: string }[] } })
+          .personGraph.nodes[0].id
+      ).toBe('p1')
     })
 
     it('全书总结正文含 ## 子标题时不应被截断', () => {

@@ -255,7 +255,7 @@ export function useBookProcessing() {
         return false
       }
 
-      // parseUnified 可能已返回 charts 对象；再过 zod 校验
+      // 云端 ## 关键图表 → zod 校验后写入结果态与本地缓存
       let charts: BookCharts | null = null
       if (parsed.charts) {
         charts = deserializeCharts(JSON.stringify(parsed.charts))
@@ -279,7 +279,23 @@ export function useBookProcessing() {
 
       setBookSummary(summary)
 
+      // 本地缓存：章节/关联/全书/图表一并落盘，刷新后可复用
       if (file) {
+        summary.chapters.forEach((ch) => {
+          if (ch.summary) {
+            cacheService.setCache(file.name, 'summary', ch.summary, ch.id)
+          }
+        })
+        if (summary.connections) {
+          cacheService.setCache(file.name, 'connections', summary.connections)
+        }
+        if (summary.overallSummary) {
+          cacheService.setCache(file.name, 'overall_summary', summary.overallSummary)
+        }
+        if (charts) {
+          cacheService.setCache(file.name, 'key_charts', serializeCharts(charts))
+        }
+
         useProcessingHistoryStore.getState().addRecord({
           bookTitle: summary.title,
           fileName: file.name,
@@ -289,7 +305,11 @@ export function useBookProcessing() {
         })
       }
 
-      toast.success(t('cloudCache.loaded'))
+      toast.success(
+        charts
+          ? t('cloudCache.loadedWithCharts', '已加载云端缓存（含关键图表）')
+          : t('cloudCache.loaded')
+      )
       return true
     } catch (e) {
       console.error('加载云端缓存失败:', e)
@@ -882,12 +902,31 @@ export function useBookProcessing() {
         processingOptions.outputLanguage
       )
 
+      const nextSummary: BookSummary = {
+        ...bookSummary,
+        charts,
+        chartsError: null,
+      }
+
       if (file) {
         cacheService.setCache(file.name, 'key_charts', serializeCharts(charts))
       }
-      setBookSummary((prev) =>
-        prev ? { ...prev, charts, chartsError: null } : prev
-      )
+      setBookSummary(nextSummary)
+
+      // 重新生成后回写云端完整摘要（含 ## 关键图表），与自动同步策略一致
+      if (file) {
+        try {
+          const baseName = file.name.replace(/\.[^/.]+$/, '')
+          await autoSyncService.syncSummary(
+            nextSummary,
+            baseName,
+            chapterNamingMode
+          )
+        } catch (syncErr) {
+          console.warn('[regenerateKeyCharts] 云端同步失败:', syncErr)
+        }
+      }
+
       toast.success(t('results.charts.regenerated', '关键图表已更新'), { id: toastId })
     } catch (err) {
       const msg = err instanceof Error ? err.message : '未知错误'
@@ -908,6 +947,7 @@ export function useBookProcessing() {
     addTokenUsage,
     aiServiceOptions,
     processingOptions.outputLanguage,
+    chapterNamingMode,
   ])
 
   // 清除书籍缓存
@@ -1107,6 +1147,22 @@ export function useBookProcessing() {
       // 重置状态并设置结果
       resetState()
       setBookSummary(summary)
+
+      // 历史加载同样写入本地图表缓存
+      summary.chapters.forEach((ch) => {
+        if (ch.summary) {
+          cacheService.setCache(fileName, 'summary', ch.summary, ch.id)
+        }
+      })
+      if (summary.connections) {
+        cacheService.setCache(fileName, 'connections', summary.connections)
+      }
+      if (summary.overallSummary) {
+        cacheService.setCache(fileName, 'overall_summary', summary.overallSummary)
+      }
+      if (charts) {
+        cacheService.setCache(fileName, 'key_charts', serializeCharts(charts))
+      }
 
       // 更新历史位置（移到最顶部）
       useProcessingHistoryStore.getState().addRecord({

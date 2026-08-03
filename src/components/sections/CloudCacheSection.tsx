@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Loader2, CheckCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,12 @@ export function CloudCacheSection({
 }: CloudCacheSectionProps) {
   const { t } = useTranslation()
 
+  const includesKeyCharts = useMemo(
+    // 中文后勿用 \b
+    () => !!cloudCacheContent && /##[ \t]+关键图表(?:\s|$)/m.test(cloudCacheContent),
+    [cloudCacheContent]
+  )
+
   if (isCheckingCloudCache) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -46,6 +53,9 @@ export function CloudCacheSection({
           <p>{t('cloudCache.processedAt')}: {new Date(cloudCacheMetadata.processedAt).toLocaleString()}</p>
           <p>{t('cloudCache.model')}: {cloudCacheMetadata.model}</p>
           <p>{t('cloudCache.chapterCount')}: {cloudCacheMetadata.chapterCount}</p>
+          {includesKeyCharts && (
+            <p className="text-foreground/80">{t('cloudCache.includesKeyCharts', '含关键图表')}</p>
+          )}
           {cloudCacheMetadata.costUSD && cloudCacheMetadata.costUSD > 0 && (
             <p>{t('cloudCache.cost')}: ${cloudCacheMetadata.costUSD.toFixed(4)} / ¥{cloudCacheMetadata.costRMB?.toFixed(2)}</p>
           )}

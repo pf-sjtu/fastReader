@@ -40,4 +40,28 @@ describe('layoutEntityTimeline', () => {
     const xb = layout.items.find((i) => i.entityId === 'b' && i.event.id === 'e2')!.x
     expect(xb).toBeGreaterThan(xa)
   })
+
+  it('长标签换行并抬高行高，不截断省略', () => {
+    const layout = layoutEntityTimeline(
+      {
+        entities: [{ id: 'a', name: '比尔·盖兹' }],
+        events: [
+          {
+            id: 'e1',
+            label: 'Altair BASIC 完成并创立 Micro-Soft 公司',
+            timeLabel: '1975年2-3月/第十三章',
+            order: 1,
+            entityIds: ['a'],
+          },
+        ],
+      },
+      { colWidth: 100, labelWidth: 80, headerHeight: 40, pad: 8, fontSize: 11, lineHeight: 15, minRowHeight: 40 }
+    )
+    const item = layout.items[0]
+    expect(item.labelLines.length).toBeGreaterThan(1)
+    expect(item.labelLines.join('')).toContain('Altair BASIC')
+    expect(item.labelLines.join('')).not.toContain('…')
+    expect(layout.timeRows[0].height).toBeGreaterThan(40)
+    expect(layout.timeRows[0].labelLines.join('')).toContain('1975')
+  })
 })
