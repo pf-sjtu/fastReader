@@ -1,6 +1,7 @@
 import { EpubProcessor } from './epubProcessor'
 import { PdfProcessor } from './pdfProcessor'
 import type { ChapterData } from './epubProcessor'
+import { detectBookFormat } from '../utils/file'
 
 export class ChapterPreviewService {
   private static instance: ChapterPreviewService
@@ -24,7 +25,8 @@ export class ChapterPreviewService {
     try {
       let chapters: ChapterData[] = []
 
-      if (file.name.endsWith('.epub')) {
+      const format = detectBookFormat(file)
+      if (format === 'epub') {
         const epubProcessor = new EpubProcessor()
         const bookData = await epubProcessor.parseEpub(file)
         chapters = await epubProcessor.extractChapters(
@@ -36,7 +38,7 @@ export class ChapterPreviewService {
           chapterDetectionMode,
           epubTocDepth
         )
-      } else if (file.name.endsWith('.pdf')) {
+      } else if (format === 'pdf') {
         const pdfProcessor = new PdfProcessor()
         chapters = await pdfProcessor.extractChapters(
           file,
@@ -47,6 +49,8 @@ export class ChapterPreviewService {
           chapterDetectionMode,
           epubTocDepth
         )
+      } else {
+        return []
       }
 
       // 限制预览数量并生成预览文本

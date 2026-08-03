@@ -34,7 +34,10 @@
     "fileExistsMessage": "文件 \"{fileName}\" 在WebDAV云端已存在，是否要覆盖它？",
     "overwrite": "覆盖",
     "clickToOverwrite": "点击覆盖上传",
-    "reupload": "重新上传"
+    "reupload": "重新上传",
+    "unsupportedFormat": "不支持的文件格式，请选择 EPUB 或 PDF",
+    "chaptersExtracted": "已提取 {{count}} 个章节",
+    "extractError": "获取章节失败"
   },
   "chapters": {
     "title": "章节选择",

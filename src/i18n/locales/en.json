@@ -34,7 +34,10 @@
     "fileExistsMessage": "File \"{fileName}\" already exists on WebDAV cloud, do you want to overwrite it?",
     "overwrite": "Overwrite",
     "clickToOverwrite": "Click to Upload and Overwrite",
-    "reupload": "Re-upload"
+    "reupload": "Re-upload",
+    "unsupportedFormat": "Unsupported format. Please choose EPUB or PDF.",
+    "chaptersExtracted": "Extracted {{count}} chapters",
+    "extractError": "Failed to extract chapters"
   },
   "chapters": {
     "title": "Chapter Selection",

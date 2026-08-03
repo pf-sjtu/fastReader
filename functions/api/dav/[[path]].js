@@ -4,6 +4,7 @@ import { isValidUpstreamBase } from '../../../src/services/webdavProxyUtils'
 function getAllowedOrigins(env) {
   const defaultOrigins = [
     'https://fast-read.pages.dev',
+    'https://read-app.navira.blog',
     'http://localhost:3000',
     'http://localhost:5173',
     'http://127.0.0.1:5173'
@@ -37,7 +38,7 @@ function corsHeaders(origin, requestOrigin, allowedOrigins) {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'OPTIONS, PROPFIND, GET, PUT, POST, DELETE, MKCOL, MOVE, COPY, HEAD',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type, Depth, If-Match, If-None-Match, Range, X-Requested-With',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, Depth, If-Match, If-None-Match, Range, X-Requested-With, X-WebDAV-Base, X-WebDAV-Path, X-Request-Origin',
     'Access-Control-Max-Age': '86400',
     'Cache-Control': 'no-store, no-cache, must-revalidate',
     'Pragma': 'no-cache'

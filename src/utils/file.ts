@@ -3,10 +3,25 @@
  */
 
 /**
+ * 识别电子书格式（兼容全角点、MIME、大小写）
+ */
+export function detectBookFormat(file: File): 'epub' | 'pdf' | null {
+  const name = (file?.name || '')
+    .toLowerCase()
+    .trim()
+    .replace(/．/g, '.') // 全角点
+  const type = (file?.type || '').toLowerCase()
+
+  if (name.endsWith('.epub') || type.includes('epub')) return 'epub'
+  if (name.endsWith('.pdf') || type === 'application/pdf') return 'pdf'
+  return null
+}
+
+/**
  * 根据文件名获取MIME类型
  */
 export function getMimeType(fileName: string): string {
-  const extension = fileName.toLowerCase().split('.').pop()
+  const extension = fileName.toLowerCase().replace(/．/g, '.').split('.').pop()
 
   switch (extension) {
     case 'pdf':

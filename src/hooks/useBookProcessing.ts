@@ -13,6 +13,7 @@ import { useConfigStore } from '@/stores/configStore'
 import { useProcessingHistoryStore } from '@/stores/processingHistory'
 import { toast } from 'sonner'
 import { matchesDefaultUnselectTitle } from '@/services/constants'
+import { detectBookFormat } from '@/utils/file'
 
 const epubProcessor = new EpubProcessor()
 const pdfProcessor = new PdfProcessor()
@@ -138,8 +139,8 @@ export function useBookProcessing() {
       let bookDataResult: (EpubBookData | PdfBookData) & { chapters: ChapterData[] }
       let chapters: ChapterData[]
 
-      const fileName = (targetFile.name || '').toLowerCase()
-      if (fileName.endsWith('.epub')) {
+      const format = detectBookFormat(targetFile)
+      if (format === 'epub') {
         bookDataResult = await epubProcessor.extractBookData(
           targetFile,
           processingOptions.useSmartDetection,
@@ -150,7 +151,7 @@ export function useBookProcessing() {
           processingOptions.epubTocDepth
         )
         chapters = bookDataResult.chapters
-      } else if (fileName.endsWith('.pdf')) {
+      } else if (format === 'pdf') {
         bookDataResult = await pdfProcessor.extractBookData(
           targetFile,
           processingOptions.useSmartDetection,
@@ -162,7 +163,10 @@ export function useBookProcessing() {
         )
         chapters = bookDataResult.chapters
       } else {
-        throw new Error(t('upload.unsupportedFormat'))
+        const hint = targetFile.name
+          ? `不支持的文件格式: ${targetFile.name}（仅支持 .epub / .pdf）`
+          : '不支持的文件格式（仅支持 .epub / .pdf）'
+        throw new Error(t('upload.unsupportedFormat', { defaultValue: hint }))
       }
 
       setFullBookData(bookDataResult)

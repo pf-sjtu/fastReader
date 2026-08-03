@@ -41,11 +41,34 @@ function getProcessedUrl(originalUrl: string): string {
 }
 
 
+/**
+ * 组装代理用的 X-WebDAV-Path。
+ * 业务路径已是 WebDAV 根下的绝对路径时，勿再拼 browsePath，
+ * 否则 /fastReader + /fastReader/a.md → /fastReader/fastReader/a.md → 404。
+ */
 function buildHeaderPath(config: WebDAVConfig, path: string): string {
-  return buildWebdavPath({
-    folder: config.browsePath || '/',
-    path
-  })
+  const normalizedPath = normalizeDavPath(path)
+  const folder = normalizeDavPath(config.browsePath || '/')
+  const sync = normalizeDavPath(config.syncPath || '/')
+
+  const alreadyAbsolute =
+    normalizedPath !== '/' &&
+    (folder === '/' ||
+      normalizedPath === folder ||
+      normalizedPath.startsWith(`${folder}/`) ||
+      (sync !== '/' &&
+        (normalizedPath === sync || normalizedPath.startsWith(`${sync}/`))))
+
+  if (alreadyAbsolute) {
+    return encodeDavHeaderPath(normalizedPath)
+  }
+
+  return encodeDavHeaderPath(
+    buildWebdavPath({
+      folder,
+      path: normalizedPath,
+    })
+  )
 }
 
 // WebDAV客户端封装类
@@ -288,8 +311,9 @@ export class WebDAVService {
         return { success: false, error: 'WebDAV配置未找到' }
       }
 
+      // 文件路径一律按 WebDAV 根绝对路径处理，避免 browsePath 二次拼接
       const normalizedPath = normalizeDavPath(filePath)
-      const headerPath = buildHeaderPath(this.config, normalizedPath)
+      const headerPath = encodeDavHeaderPath(normalizedPath)
 
       this.setDavHeader(headerPath)
 
@@ -312,10 +336,16 @@ export class WebDAVService {
       return { success: true, data: arrayBuffer }
 
     } catch (error) {
-      console.error('获取文件内容失败:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      // 缓存未命中是常见情况，降级为 warn，避免控制台刷红
+      if (msg.includes('404') || msg.includes('Not Found') || msg.includes('Invalid response: 404')) {
+        console.warn('获取文件内容未找到 (404):', filePath)
+      } else {
+        console.error('获取文件内容失败:', error)
+      }
       return {
         success: false,
-        error: `下载文件失败: ${error instanceof Error ? error.message : '未知错误'}`
+        error: `下载文件失败: ${msg}`
       }
     }
   }
