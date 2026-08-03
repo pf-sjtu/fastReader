@@ -32,7 +32,7 @@ interface FileUploadCardProps {
   onExtractChapters: () => void
   onClearCache: () => void
   onOpenWebDAVBrowser: () => void
-  onLoadFromCloudCache: () => void
+  onLoadFromCloudCache: () => void | Promise<void>
 }
 
 export function FileUploadCard({

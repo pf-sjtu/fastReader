@@ -2,17 +2,17 @@ import { z } from 'zod'
 import { CHART_LIMITS } from './types'
 
 const entityNodeSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
+  id: z.coerce.string().min(1),
+  name: z.coerce.string().min(1),
   type: z.string().optional(),
   description: z.string().optional(),
-  importance: z.number().min(0).max(10).optional(),
+  importance: z.coerce.number().min(0).max(10).optional(),
 })
 
 const entityEdgeSchema = z.object({
-  source: z.string().min(1),
-  target: z.string().min(1),
-  relation: z.string().min(1),
+  source: z.coerce.string().min(1),
+  target: z.coerce.string().min(1),
+  relation: z.coerce.string().min(1),
   description: z.string().optional(),
 })
 
@@ -22,18 +22,18 @@ const entityGraphSchema = z.object({
 })
 
 const timelineEntitySchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
+  id: z.coerce.string().min(1),
+  name: z.coerce.string().min(1),
   color: z.string().optional(),
   type: z.string().optional(),
 })
 
 const timelineEventSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1),
-  timeLabel: z.string().default(''),
-  order: z.number(),
-  entityIds: z.array(z.string()).default([]),
+  id: z.coerce.string().min(1),
+  label: z.coerce.string().min(1),
+  timeLabel: z.coerce.string().default(''),
+  order: z.coerce.number(),
+  entityIds: z.array(z.coerce.string()).default([]),
   description: z.string().optional(),
   chapterHint: z.string().optional(),
 })
@@ -44,7 +44,11 @@ const entityTimelineSchema = z.object({
 })
 
 export const bookChartsSchema = z.object({
-  version: z.literal(1).default(1),
+  // 云存档 version 可能是 1 / "1" / 缺失
+  version: z.preprocess(
+    (v) => (v == null || v === '' ? 1 : Number(v)),
+    z.literal(1)
+  ).default(1),
   /** 新字段 */
   entityGraph: entityGraphSchema.optional(),
   /** 旧云存档 / 旧模型输出 */

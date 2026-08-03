@@ -99,18 +99,49 @@ export function serializeCharts(charts: BookCharts): string {
   return JSON.stringify(charts)
 }
 
-/** 从缓存字符串恢复 */
+/** 从缓存字符串恢复（同名 JSON 文件 / localStorage） */
 export function deserializeCharts(raw: string | null | undefined): BookCharts | null {
   if (!raw || !raw.trim()) return null
   try {
-    const obj = JSON.parse(raw)
-    const result = bookChartsSchema.safeParse(
-      obj?.version == null ? { version: 1, ...obj } : obj
-    )
-    if (!result.success) return null
+    let text = raw.trim()
+    // 去掉可能的 UTF-8 BOM
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1)
+
+    let obj: unknown
+    try {
+      obj = JSON.parse(text)
+    } catch {
+      // 非纯 JSON 时走 extract（兼容被包了 fence 的情况）
+      return parseCharts(text)
+    }
+
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      return parseCharts(text)
+    }
+
+    const record = { ...(obj as Record<string, unknown>) }
+    // 统一 version
+    record.version = 1
+
+    const result = bookChartsSchema.safeParse(record)
+    if (!result.success) {
+      console.warn(
+        '[deserializeCharts] schema 失败，尝试宽松 parseCharts:',
+        result.error.issues?.slice(0, 3)
+      )
+      return parseCharts(text)
+    }
     const limited = enforceChartLimits(result.data as BookChartsParsed)
+    const hasGraph =
+      (limited.entityGraph?.nodes.length ?? 0) > 0 ||
+      (limited.personGraph?.nodes.length ?? 0) > 0
+    const hasTimeline =
+      (limited.entityTimeline?.entities.length ?? 0) > 0 ||
+      (limited.entityTimeline?.events.length ?? 0) > 0
+    if (!hasGraph && !hasTimeline) return null
     return limited as BookCharts
-  } catch {
+  } catch (e) {
+    console.warn('[deserializeCharts] 失败:', e)
     return null
   }
 }

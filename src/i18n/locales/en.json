@@ -438,6 +438,7 @@
     "includesKeyChartsJson": "Includes key charts (sidecar JSON)",
     "noKeyChartsYet": "No key-charts JSON yet; regenerate after load",
     "chartsMissingHint": "No key-charts JSON on cloud; use Regenerate charts to create and save",
+    "chartsParseFailed": "Cloud charts JSON exists but failed to parse; regenerate manually if needed",
     "skipProcessing": "Cloud cache found, you can skip processing and view results directly",
     "reprocessHint": "To reprocess, click the \"Extract Chapters\" button",
     "parseError": "Failed to parse cloud cache"

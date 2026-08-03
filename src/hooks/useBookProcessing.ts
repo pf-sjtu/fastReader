@@ -296,7 +296,8 @@ export function useBookProcessing() {
   )
 
   // 从云端缓存加载（写入结果态，与历史加载对齐）
-  const loadFromCloudCache = useCallback((): boolean => {
+  // 异步：加载时再拉一次同名 JSON，避免仅依赖可能过期的 state
+  const loadFromCloudCache = useCallback(async (): Promise<boolean> => {
     if (!cloudCacheContent) return false
 
     try {
@@ -307,9 +308,32 @@ export function useBookProcessing() {
       }
 
       const cacheKey = file?.name || null
+
+      // 优先现场读取同名 JSON（不依赖 check 阶段写入的 state）
+      let chartsJson = cloudChartsJson
+      let chartsFileFound = cloudChartsFileFound
+      if (cacheKey) {
+        try {
+          const fresh = await cloudCacheService.readChartsJson(cacheKey)
+          if (fresh.found) {
+            chartsFileFound = true
+            if (fresh.content?.trim()) {
+              chartsJson = fresh.content
+              setCloudChartsJson(fresh.content)
+            }
+          }
+          setCloudChartsFileFound(fresh.found)
+          console.log(
+            `[loadFromCloudCache] charts JSON path try: found=${fresh.found}, len=${fresh.content?.length ?? 0}`
+          )
+        } catch (e) {
+          console.warn('[loadFromCloudCache] 再读图表 JSON 失败:', e)
+        }
+      }
+
       const charts = resolveChartsFromCloudSources(
         cloudCacheContent,
-        cloudChartsJson,
+        chartsJson,
         cacheKey
       )
 
@@ -358,16 +382,27 @@ export function useBookProcessing() {
       }
 
       if (charts) {
+        // 已有图表：禁止自动再生成
+        pendingAutoChartsRef.current = false
         toast.success(t('cloudCache.loadedWithCharts', '已加载云端缓存（含关键图表）'))
+      } else if (chartsFileFound) {
+        // JSON 文件在但解析失败：不自动重跑，避免覆盖好文件
+        pendingAutoChartsRef.current = false
+        toast.success(t('cloudCache.loaded'))
+        toast.warning(
+          t(
+            'cloudCache.chartsParseFailed',
+            '云端图表 JSON 存在但解析失败，可手动点「重新生成图表」'
+          )
+        )
       } else {
         toast.success(t('cloudCache.loaded'))
         const canAuto =
           !!summary.overallSummary &&
           !summary.overallSummary.startsWith('【全书总结失败】') &&
           summary.chapters.length > 0
-        if (canAuto) {
-          pendingAutoChartsRef.current = true
-        }
+        // 仅当确认云端无 JSON 文件时才自动生成
+        pendingAutoChartsRef.current = canAuto
       }
       return true
     } catch (e) {
@@ -378,6 +413,7 @@ export function useBookProcessing() {
   }, [
     cloudCacheContent,
     cloudChartsJson,
+    cloudChartsFileFound,
     cloudCacheMetadata,
     file,
     processingMode,
@@ -1257,6 +1293,7 @@ export function useBookProcessing() {
         result.chartsJson,
         fileName
       )
+      const chartsFileFound = !!result.chartsFileFound
 
       // 转换为 BookSummary 格式
       const summary: BookSummary = {
@@ -1280,7 +1317,7 @@ export function useBookProcessing() {
       setBookSummary(summary)
       setCloudCacheContent(result.content)
       setCloudChartsJson(result.chartsJson ?? null)
-      setCloudChartsFileFound(!!result.chartsFileFound)
+      setCloudChartsFileFound(chartsFileFound)
 
       // 历史加载同样写入本地图表缓存
       summary.chapters.forEach((ch) => {
@@ -1296,12 +1333,22 @@ export function useBookProcessing() {
       }
       if (charts) {
         cacheService.setCache(fileName, 'key_charts', serializeCharts(charts))
+        pendingAutoChartsRef.current = false
+      } else if (chartsFileFound) {
+        // 有文件但解析失败：不自动覆盖
+        pendingAutoChartsRef.current = false
+        toast.warning(
+          t(
+            'cloudCache.chartsParseFailed',
+            '云端图表 JSON 存在但解析失败，可手动点「重新生成图表」'
+          )
+        )
       } else {
         const canAuto =
           !!summary.overallSummary &&
           !summary.overallSummary.startsWith('【全书总结失败】') &&
           summary.chapters.length > 0
-        if (canAuto) pendingAutoChartsRef.current = true
+        pendingAutoChartsRef.current = canAuto
       }
 
       // 更新历史位置（移到最顶部）

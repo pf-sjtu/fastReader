@@ -402,9 +402,10 @@ function App() {
                 onClearCache={clearBookCache}
                 onOpenWebDAVBrowser={openWebDAVBrowser}
                 onLoadFromCloudCache={() => {
-                  if (loadFromCloudCache()) {
-                    setCurrentStepIndex(2)
-                  }
+                  void (async () => {
+                    const ok = await loadFromCloudCache()
+                    if (ok) setCurrentStepIndex(2)
+                  })()
                 }}
               />
 

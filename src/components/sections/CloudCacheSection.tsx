@@ -13,7 +13,7 @@ interface CloudCacheSectionProps {
   file: File | null
   webdavEnabled: boolean
   webdavInitialized: boolean
-  onLoadFromCloudCache: () => void
+  onLoadFromCloudCache: () => void | Promise<void>
 }
 
 export function CloudCacheSection({
