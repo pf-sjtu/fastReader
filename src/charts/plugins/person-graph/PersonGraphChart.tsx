@@ -177,7 +177,8 @@ export function PersonGraphChart({ charts }: Props) {
           } as object,
           minZoom: 0.3,
           maxZoom: 3,
-          wheelSensitivity: 0.25,
+          // 默认约 0.25；按需求 ×3 提高滚轮缩放灵敏度
+          wheelSensitivity: 0.75,
         })
 
         cyRef.current = cy
