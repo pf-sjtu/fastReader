@@ -115,8 +115,97 @@ export function downloadSummaryMarkdown(
   return { fileName }
 }
 
+const TABLE_STYLE =
+  'width:100%;border-collapse:collapse;margin:12px 0 16px;font-size:12px;line-height:1.45;table-layout:auto;'
+const TH_STYLE =
+  'border:1px solid #dddddd;background:#f5f5f5;padding:6px 8px;text-align:left;font-weight:600;color:#111111;vertical-align:top;'
+const TD_STYLE =
+  'border:1px solid #dddddd;padding:6px 8px;text-align:left;color:#222222;vertical-align:top;word-break:break-word;'
+const HR_STYLE =
+  'border:none;border-top:1px solid #dddddd;margin:18px 0;height:0;'
+
+function splitMarkdownTableCells(line: string): string[] {
+  let t = line.trim()
+  if (t.startsWith('|')) t = t.slice(1)
+  if (t.endsWith('|')) t = t.slice(0, -1)
+  return t.split('|').map((c) => c.trim())
+}
+
+/** 是否为 GFM 表头分隔行：|---|:---|---:| */
+function isMarkdownTableSeparator(line: string): boolean {
+  const t = line.trim()
+  if (!t || !t.includes('-') || !t.includes('|')) return false
+  const cells = splitMarkdownTableCells(t)
+  if (cells.length < 2) return false
+  // 每个单元格仅为 --- / :--- / ---: / :---:
+  return cells.every((c) => /^:?-{1,}:?$/.test(c))
+}
+
+/** 是否像表格数据行（含 |，且不是分隔行） */
+function isMarkdownTableRow(line: string): boolean {
+  const t = line.trim()
+  if (!t.includes('|')) return false
+  if (isMarkdownTableSeparator(t)) return false
+  // 至少两列
+  return splitMarkdownTableCells(t).length >= 2
+}
+
+/**
+ * 将连续 GFM 表格块转为 HTML table（行内样式，兼容 html2canvas）
+ */
+export function convertMarkdownTables(text: string): string {
+  const lines = text.split('\n')
+  const out: string[] = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+    const next = i + 1 < lines.length ? lines[i + 1] : ''
+
+    if (isMarkdownTableRow(line) && isMarkdownTableSeparator(next)) {
+      const headerCells = splitMarkdownTableCells(line)
+      i += 2 // skip header + separator
+      const bodyRows: string[][] = []
+      while (i < lines.length && isMarkdownTableRow(lines[i])) {
+        bodyRows.push(splitMarkdownTableCells(lines[i]))
+        i += 1
+      }
+
+      const thead = `<thead><tr>${headerCells
+        .map((c) => `<th style="${TH_STYLE}">${c}</th>`)
+        .join('')}</tr></thead>`
+      const tbody = `<tbody>${bodyRows
+        .map((cells) => {
+          // 列数对齐表头
+          const padded = headerCells.map((_, idx) => cells[idx] ?? '')
+          return `<tr>${padded
+            .map((c) => `<td style="${TD_STYLE}">${c}</td>`)
+            .join('')}</tr>`
+        })
+        .join('')}</tbody>`
+
+      out.push(`<table style="${TABLE_STYLE}">${thead}${tbody}</table>`)
+      continue
+    }
+
+    out.push(line)
+    i += 1
+  }
+
+  return out.join('\n')
+}
+
+/** 水平线 / 常见分页分隔符 --- *** ___ */
+export function convertMarkdownHorizontalRules(text: string): string {
+  return text.replace(
+    /^[ \t]*([-*_])\1{2,}[ \t]*$/gm,
+    `<hr style="${HR_STYLE}" />`
+  )
+}
+
 /**
  * 将统一 Markdown 转成适合打印的简易 HTML（支持常见 GFM 结构）
+ * 含：标题、粗斜体、引用、列表、**表格**、**水平线**
  */
 export function markdownToPrintableHtml(markdown: string): string {
   // 去掉文件头 HTML 注释元数据
@@ -139,42 +228,74 @@ export function markdownToPrintableHtml(markdown: string): string {
     return `\u0000CODE${idx}\u0000`
   })
 
-  // 行内 code
-  text = text.replace(/`([^`\n]+)`/g, '<code style="background:#f0f0f0;padding:1px 4px;border-radius:3px;font-size:0.9em;">$1</code>')
+  // 行内 code（在表格转换前，避免 `a|b` 被拆）
+  text = text.replace(
+    /`([^`\n]+)`/g,
+    '<code style="background:#f0f0f0;padding:1px 4px;border-radius:3px;font-size:0.9em;">$1</code>'
+  )
 
   // 标题
   text = text
-    .replace(/^### (.+)$/gm, '<h3 style="font-size:15px;margin:18px 0 8px;color:#222;">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 style="font-size:17px;margin:22px 0 10px;border-bottom:1px solid #e5e5e5;padding-bottom:4px;color:#111;">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 style="font-size:22px;margin:0 0 12px;color:#000;">$1</h1>')
+    .replace(
+      /^### (.+)$/gm,
+      '<h3 style="font-size:15px;margin:18px 0 8px;color:#222222;">$1</h3>'
+    )
+    .replace(
+      /^## (.+)$/gm,
+      '<h2 style="font-size:17px;margin:22px 0 10px;border-bottom:1px solid #e5e5e5;padding-bottom:4px;color:#111111;">$1</h2>'
+    )
+    .replace(
+      /^# (.+)$/gm,
+      '<h1 style="font-size:22px;margin:0 0 12px;color:#000000;">$1</h1>'
+    )
 
-  // 粗体 / 斜体（简化）
+  // 粗体 / 斜体（表格单元格内一并处理）
   text = text
     .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
 
+  // GFM 表格（须在段落 <br> 化之前）
+  text = convertMarkdownTables(text)
+
+  // 水平线 --- *** ___（须在列表 `- item` 之前）
+  text = convertMarkdownHorizontalRules(text)
+
   // 引用
   text = text.replace(
     /^&gt;\s?(.*)$/gm,
-    '<blockquote style="margin:8px 0;padding:6px 12px;border-left:3px solid #ccc;color:#444;background:#fafafa;">$1</blockquote>'
+    '<blockquote style="margin:8px 0;padding:6px 12px;border-left:3px solid #cccccc;color:#444444;background:#fafafa;">$1</blockquote>'
   )
 
-  // 无序列表
+  // 无序列表（- / * 后须有空白，避免吃掉 ---）
   text = text.replace(/^[-*]\s+(.+)$/gm, '<li style="margin:2px 0;">$1</li>')
   text = text.replace(/(<li[\s\S]*?<\/li>\n?)+/g, (block) => {
     return `<ul style="margin:8px 0;padding-left:1.4em;">${block}</ul>`
   })
 
-  // 段落：双换行
+  // 段落：双换行；已是块级 HTML 的不包 <p>
   text = text
     .split(/\n{2,}/)
     .map((para) => {
       const trimmed = para.trim()
       if (!trimmed) return ''
-      if (/^<(h[1-3]|ul|ol|li|pre|blockquote)/.test(trimmed)) return trimmed
-      // 单换行转 <br>
-      return `<p style="margin:8px 0;line-height:1.7;color:#222;">${trimmed.replace(/\n/g, '<br/>')}</p>`
+      if (/^<(h[1-3]|ul|ol|li|pre|blockquote|table|hr)\b/i.test(trimmed)) {
+        return trimmed
+      }
+      // 块内若混有 table/hr，按行保留块级元素
+      if (/<(table|hr)\b/i.test(trimmed)) {
+        return trimmed
+          .split('\n')
+          .map((line) => {
+            const l = line.trim()
+            if (!l) return ''
+            if (/^<(h[1-3]|ul|ol|li|pre|blockquote|table|hr)\b/i.test(l)) return l
+            return `<p style="margin:8px 0;line-height:1.7;color:#222222;">${l}</p>`
+          })
+          .filter(Boolean)
+          .join('\n')
+      }
+      return `<p style="margin:8px 0;line-height:1.7;color:#222222;">${trimmed.replace(/\n/g, '<br/>')}</p>`
     })
     .join('\n')
 

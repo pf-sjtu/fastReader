@@ -103,6 +103,43 @@ describe('exportSummary', () => {
       expect(html).not.toContain('source:')
       expect(html).toContain('书名')
     })
+
+    it('渲染 GFM 表格为 HTML table（非管道原文）', () => {
+      const md = [
+        '成长的四层架构',
+        '',
+        '| 层次 | 内容 | 关键章节 |',
+        '|------|------|----------|',
+        '| 认知根基 | 加米的牌桌训练 | 序言—第四章 |',
+        '| 天赋与工具相遇 | 电传打字机、BASIC | 第五章—第七章 |',
+        '',
+        '核心概念',
+      ].join('\n')
+      const html = markdownToPrintableHtml(md)
+      expect(html).toContain('<table')
+      expect(html).toContain('<th')
+      expect(html).toContain('<td')
+      expect(html).toContain('认知根基')
+      expect(html).toContain('关键章节')
+      // 不应再以原始管道行展示
+      expect(html).not.toMatch(/\| 层次 \| 内容 \|/)
+      expect(html).not.toMatch(/\|------\|/)
+    })
+
+    it('渲染 --- 为水平线而非原文', () => {
+      const html = markdownToPrintableHtml('上一段\n\n---\n\n下一段')
+      expect(html).toContain('<hr')
+      expect(html).not.toMatch(/>---</)
+      // 段落中不应残留独立 --- 文本节点的常见形态
+      expect(html).not.toMatch(/<p[^>]*>---<\/p>/)
+    })
+
+    it('表格单元格内加粗仍生效', () => {
+      const md = '| A | B |\n|---|---|\n| **粗** | 细 |'
+      const html = markdownToPrintableHtml(md)
+      expect(html).toContain('<strong>粗</strong>')
+      expect(html).toContain('<td')
+    })
   })
 
   describe('downloadSummaryMarkdown', () => {

@@ -31,6 +31,8 @@ export {
   downloadSummaryPdf,
   getSummaryExportBaseName,
   markdownToPrintableHtml,
+  convertMarkdownTables,
+  convertMarkdownHorizontalRules,
 } from './exportSummary'
 
 // URL处理工具
