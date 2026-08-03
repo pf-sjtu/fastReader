@@ -65,7 +65,10 @@
     "successfullyExtracted": "成功提取 {{count}} 个章节",
     "processingError": "处理过程中发生错误",
     "extractionError": "章节提取过程中发生错误",
-    "bookProcessing": "书籍处理"
+    "bookProcessing": "书籍处理",
+    "cancelled": "已取消处理",
+    "generatingSummaries": "生成章节总结",
+    "generatingMindMaps": "生成思维导图"
   },
   "results": {
     "title": "处理结果",
@@ -153,10 +156,9 @@
     "fiction": "小说类",
     "nonFiction": "社科类",
     "summary": "总结模式",
-    "mindmap": "思维导图模式",
+    "mindmap": "思维导图",
     "combinedMindmap": "整书思维导图",
     "chapterSummary": "章节总结",
-    "mindmap": "思维导图",
     "connectionAnalysis": "章节关联分析",
     "overallSummary": "全书总结",
     "chapterSummaryPrompt": "章节总结提示词",
@@ -375,7 +377,8 @@
     "noCache": "云端暂无缓存，将进行新处理",
     "loaded": "已加载云端缓存，可直接查看处理结果",
     "skipProcessing": "发现云端缓存，可跳过处理直接查看结果",
-    "reprocessHint": "如需重新处理，请点击「提取章节」按钮"
+    "reprocessHint": "如需重新处理，请点击「提取章节」按钮",
+    "parseError": "云端缓存解析失败"
   },
   "webdav": {
     "fileSelected": "已选择文件: {{name}}",

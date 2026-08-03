@@ -65,7 +65,10 @@
     "successfullyExtracted": "Successfully extracted {{count}} chapters",
     "processingError": "An error occurred during processing",
     "extractionError": "An error occurred during chapter extraction",
-    "bookProcessing": "Book Processing"
+    "bookProcessing": "Book Processing",
+    "cancelled": "Processing cancelled",
+    "generatingSummaries": "Generating summaries",
+    "generatingMindMaps": "Generating mind maps"
   },
   "results": {
     "summaryTitle": "Analysis Results for \"{{title}}\"",
@@ -188,10 +191,9 @@
     "fiction": "Fiction",
     "nonFiction": "Non-Fiction",
     "summary": "Summary Mode",
-    "mindmap": "Mindmap Mode",
+    "mindmap": "Mindmap",
     "combinedMindmap": "Book Mindmap",
     "chapterSummary": "Chapter Summary",
-    "mindmap": "Mindmap",
     "connectionAnalysis": "Connection Analysis",
     "overallSummary": "Overall Summary",
     "chapterSummaryPrompt": "Chapter Summary Prompt",
@@ -386,7 +388,8 @@
     "noCache": "No cloud cache found, will process from scratch",
     "loaded": "Cloud cache loaded, ready to view results",
     "skipProcessing": "Cloud cache found, you can skip processing and view results directly",
-    "reprocessHint": "To reprocess, click the \"Extract Chapters\" button"
+    "reprocessHint": "To reprocess, click the \"Extract Chapters\" button",
+    "parseError": "Failed to parse cloud cache"
   },
   "webdav": {
     "fileSelected": "File selected: {{name}}",

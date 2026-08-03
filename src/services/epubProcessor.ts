@@ -4,11 +4,12 @@
  */
 
 import ePub, { Book, type NavItem } from '@ssshooter/epubjs'
-import { SKIP_CHAPTER_KEYWORDS } from './constants'
+import { matchesSkipChapterTitle } from './constants'
 import type Section from '@ssshooter/epubjs/types/section'
 import {
   formatChapterNumber,
   cleanChapterTitle,
+  cleanAndFormatText,
   extractContentByAnchorImproved
 } from './epub'
 import type { ChapterData, BookData, ChapterInfo, ChapterNamingMode, ChapterDetectionMode } from './epub/types'
@@ -505,7 +506,8 @@ export class EpubProcessor {
         textContent = body.textContent || ''
       }
 
-      return cleanChapterTitle(textContent)
+      // 正文保留换行；标题清洗会把 \s+ 压成单空格
+      return cleanAndFormatText(textContent)
     } catch {
       return this.extractTextWithRegex(xhtmlContent, anchor)
     }
@@ -594,14 +596,11 @@ export class EpubProcessor {
 
     const bodyMatch = cleanContent.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
     const textContent = bodyMatch ? bodyMatch[1] : cleanContent
-    return cleanChapterTitle(textContent.replace(/<[^>]*>/g, ' '))
+    return cleanAndFormatText(textContent.replace(/<[^>]*>/g, ' '))
   }
 
   private shouldSkipChapter(title: string): boolean {
-    if (!title) return false
-    return SKIP_CHAPTER_KEYWORDS.some(keyword =>
-      title.toLowerCase().includes(keyword.toLowerCase())
-    )
+    return matchesSkipChapterTitle(title)
   }
 
   private detectChapters(chapters: ChapterData[], useSmartDetection: boolean, chapterNamingMode: ChapterNamingMode = 'auto'): ChapterData[] {

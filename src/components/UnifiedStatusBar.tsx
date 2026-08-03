@@ -28,9 +28,18 @@ interface UnifiedStatusBarProps {
   currentStep?: string
   currentModel?: string
   tokenUsage?: number
+  hasApiKey?: boolean
+  processingMode?: 'summary' | 'mindmap' | 'combined-mindmap'
   onToggleView?: () => void
   onLoadFromHistory?: (record: ProcessingHistoryRecord) => Promise<boolean>
+  onCancelProcessing?: () => void
   className?: string
+}
+
+const MODE_LABEL: Record<string, string> = {
+  summary: '总结',
+  mindmap: '章节导图',
+  'combined-mindmap': '整书导图',
 }
 
 export const UnifiedStatusBar = memo(function UnifiedStatusBar({
@@ -40,8 +49,11 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
   currentStep = '',
   currentModel = '',
   tokenUsage = 0,
+  hasApiKey = true,
+  processingMode,
   onToggleView,
   onLoadFromHistory,
+  onCancelProcessing,
   className
 }: UnifiedStatusBarProps) {
   const { t } = useTranslation()
@@ -151,9 +163,21 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                     <span className="text-muted-foreground truncate min-w-0">
                       {processing ? currentStep : t('statusBar.completed')}
                     </span>
-                    <span className="text-muted-foreground shrink-0">
-                      {Math.round(progress)}%
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-muted-foreground">
+                        {Math.round(progress)}%
+                      </span>
+                      {processing && onCancelProcessing && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={onCancelProcessing}
+                        >
+                          {t('common.cancel') || '取消'}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <Progress value={progress} className="h-2" />
                 </div>
@@ -223,8 +247,18 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
               )}
             </div>
 
-            {/* 右侧：模型和token信息（桌面） */}
-            <div className="hidden sm:flex items-center gap-3 shrink-0">
+            {/* 右侧：模式 / Key / 模型（桌面） */}
+            <div className="hidden sm:flex items-center gap-2 shrink-0">
+              {processingMode && (
+                <Badge variant="outline" className="text-xs font-normal">
+                  {MODE_LABEL[processingMode] || processingMode}
+                </Badge>
+              )}
+              {!hasApiKey && (
+                <Badge variant="destructive" className="text-xs font-normal">
+                  未配置 API Key
+                </Badge>
+              )}
               {currentModel && (
                 <Badge variant="secondary" className="flex items-center gap-1 max-w-[14rem]">
                   {getModelIcon(currentModel)}

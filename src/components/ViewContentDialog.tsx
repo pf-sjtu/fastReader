@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkCjkFriendly from "remark-cjk-friendly";
-import { normalizeMarkdownTypography } from '@/lib/markdown'
+import { prepareMarkdownForRender } from '@/lib/markdown'
 
 interface ViewContentDialogProps {
   title: string
@@ -24,7 +24,7 @@ export function ViewContentDialog({ title, content, chapterIndex, contentType = 
         return (
           <div className="markdown-card-content prose prose-sm">
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]}>
-              {normalizeMarkdownTypography(content)}
+              {prepareMarkdownForRender(content)}
             </ReactMarkdown>
           </div>
         )

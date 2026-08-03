@@ -12,6 +12,7 @@ import type { MindElixirData } from 'mind-elixir'
 import { useConfigStore } from '@/stores/configStore'
 import { useProcessingHistoryStore } from '@/stores/processingHistory'
 import { toast } from 'sonner'
+import { matchesDefaultUnselectTitle } from '@/services/constants'
 
 const epubProcessor = new EpubProcessor()
 const pdfProcessor = new PdfProcessor()
@@ -125,24 +126,19 @@ export function useBookProcessing() {
     resetTokenUsage()
   }, [resetTokenUsage])
 
-  // 设置文件
-  const handleFileSelect = useCallback((selectedFile: File) => {
-    setFile(selectedFile)
-    resetState()
-  }, [resetState])
-
-  // 提取章节
-  const extractChapters = useCallback(async () => {
-    if (!file) return
+  // 提取章节（可传入 file，避免 setState 异步导致闭包拿到旧文件）
+  const extractChapters = useCallback(async (overrideFile?: File) => {
+    const targetFile = overrideFile || file
+    if (!targetFile) return
 
     setExtractingChapters(true)
     try {
       let bookDataResult: (EpubBookData | PdfBookData) & { chapters: ChapterData[] }
       let chapters: ChapterData[]
 
-      if (file.name.endsWith('.epub')) {
+      if (targetFile.name.endsWith('.epub')) {
         bookDataResult = await epubProcessor.extractBookData(
-          file,
+          targetFile,
           processingOptions.useSmartDetection,
           processingOptions.skipNonEssentialChapters,
           processingOptions.maxSubChapterDepth,
@@ -151,9 +147,9 @@ export function useBookProcessing() {
           processingOptions.epubTocDepth
         )
         chapters = bookDataResult.chapters
-      } else if (file.name.endsWith('.pdf')) {
+      } else if (targetFile.name.endsWith('.pdf')) {
         bookDataResult = await pdfProcessor.extractBookData(
-          file,
+          targetFile,
           processingOptions.useSmartDetection,
           processingOptions.skipNonEssentialChapters,
           processingOptions.maxSubChapterDepth,
@@ -173,8 +169,13 @@ export function useBookProcessing() {
         author: bookDataResult.author
       })
 
-      // 默认选择所有章节
-      setSelectedChapters(new Set(chapters.map(ch => ch.id)))
+      // 默认勾选正文类；忽略类关键词（作者简介/致谢/版权等）默认不勾选
+      const defaultSelected = chapters
+        .filter((ch) => !matchesDefaultUnselectTitle(ch.title))
+        .map((ch) => ch.id)
+      setSelectedChapters(
+        new Set(defaultSelected.length > 0 ? defaultSelected : chapters.map((ch) => ch.id))
+      )
 
       toast.success(t('upload.chaptersExtracted', { count: chapters.length }))
     } catch (error) {
@@ -184,6 +185,20 @@ export function useBookProcessing() {
       setExtractingChapters(false)
     }
   }, [file, processingOptions, t])
+
+  // 设置文件后自动检查云缓存并提取章节
+  const handleFileSelect = useCallback(async (selectedFile: File) => {
+    setFile(selectedFile)
+    resetState()
+    setFile(selectedFile)
+
+    // 先查云缓存（有缓存时仍自动取章，用户可选择直接用缓存）
+    if (webdavConfig.enabled && webdavService.isInitialized()) {
+      await checkCloudCache(selectedFile.name)
+    }
+
+    await extractChapters(selectedFile)
+  }, [resetState, webdavConfig.enabled, extractChapters])
 
   // 检查云端缓存
   const checkCloudCache = useCallback(async (fileName: string) => {
@@ -214,30 +229,50 @@ export function useBookProcessing() {
     }
   }, [webdavConfig.enabled])
 
-  // 从云端缓存加载
-  const loadFromCloudCache = useCallback(() => {
-    if (!cloudCacheContent) return
+  // 从云端缓存加载（写入结果态，与历史加载对齐）
+  const loadFromCloudCache = useCallback((): boolean => {
+    if (!cloudCacheContent) return false
 
-    // 解析缓存内容并记录到处理历史
     try {
       const parsed = cloudCacheService.parseUnifiedContent(cloudCacheContent)
-      if (file && (parsed.chapters.length || parsed.overallSummary)) {
+      if (!parsed.chapters.length && !parsed.overallSummary) {
+        toast.error(t('cloudCache.parseError') || t('history.cacheParseError'))
+        return false
+      }
+
+      const summary: BookSummary = {
+        title: parsed.title || file?.name.replace(/\.[^/.]+$/, '') || '',
+        author: parsed.author || '',
+        chapters: parsed.chapters.map((ch, index) => ({
+          id: `cloud-${index}`,
+          title: ch.title,
+          content: '',
+          summary: ch.summary,
+          processed: true
+        })),
+        connections: parsed.connections,
+        overallSummary: parsed.overallSummary
+      }
+
+      setBookSummary(summary)
+
+      if (file) {
         useProcessingHistoryStore.getState().addRecord({
-          bookTitle: parsed.title || file.name.replace(/\.[^/.]+$/, ''),
+          bookTitle: summary.title,
           fileName: file.name,
           processingMode,
           model: cloudCacheMetadata?.model || aiConfig.model,
           chapterCount: parsed.chapters.length
         })
       }
-    } catch (e) {
-      console.error('记录缓存访问历史失败:', e)
-    }
 
-    toast.info(t('cloudCache.loaded'))
-    toast.info(t('cloudCache.skipProcessing'), {
-      description: t('cloudCache.reprocessHint')
-    })
+      toast.success(t('cloudCache.loaded'))
+      return true
+    } catch (e) {
+      console.error('加载云端缓存失败:', e)
+      toast.error(t('cloudCache.parseError') || t('history.cacheParseError'))
+      return false
+    }
   }, [cloudCacheContent, cloudCacheMetadata, file, processingMode, aiConfig.model, t])
 
   // 章节选择处理
@@ -297,6 +332,16 @@ export function useBookProcessing() {
   const processBook = useCallback(async () => {
     if (!file || !extractedChapters || selectedChapters.size === 0) return
 
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+    const throwIfAborted = () => {
+      if (controller.signal.aborted) {
+        const err = new Error('Aborted')
+        err.name = 'AbortError'
+        throw err
+      }
+    }
+
     setProcessing(true)
     setProgress(0)
 
@@ -326,6 +371,7 @@ export function useBookProcessing() {
         setBookSummary(initialSummary)
 
         for (let i = 0; i < selectedChapterData.length; i++) {
+          throwIfAborted()
           const chapter = selectedChapterData[i]
           setCurrentProcessingChapter(chapter.id)
           setCurrentStep(t('progress.processingChapter', {
@@ -428,24 +474,27 @@ export function useBookProcessing() {
         setBookMindMap(initialMindMap)
 
         for (let i = 0; i < selectedChapterData.length; i++) {
+          throwIfAborted()
           const chapter = selectedChapterData[i]
+          setCurrentProcessingChapter(chapter.id)
           setCurrentStep(t('progress.processingChapter', {
             current: i + 1,
             total: selectedChapterData.length,
             title: chapter.title
           }))
 
+          // 签名：(title, content, language) — 勿把 content 当 title
           const mindMap = await aiService.generateChapterMindMap(
+            chapter.title,
             chapter.content,
-            processingOptions.outputLanguage,
-            customPrompt
+            processingOptions.outputLanguage
           )
 
           const processedChapter: Chapter = {
             id: chapter.id,
             title: chapter.title,
             content: chapter.content,
-            mindMap,
+            mindMap: mindMap ?? undefined,
             processed: true
           }
 
@@ -459,17 +508,31 @@ export function useBookProcessing() {
           setProgress(10 + (i + 1) * 40 / selectedChapterData.length)
         }
 
+        setCurrentProcessingChapter('')
+
         // 生成整书思维导图
         let combinedMindMap: MindElixirData | null = null
 
         if (processingMode === 'combined-mindmap') {
+          throwIfAborted()
           setCurrentStep(t('progress.generatingCombinedMindMap'))
           setProgress(60)
 
+          // combined 使用各章 title + summary/mindmap 摘要；language 为第三参
+          const chaptersForCombined = processedChapters.map((ch) => ({
+            ...ch,
+            summary:
+              ch.summary ||
+              (ch.mindMap && typeof ch.mindMap === 'object' && 'nodeData' in ch.mindMap
+                ? String((ch.mindMap as { nodeData?: { topic?: string } }).nodeData?.topic || '')
+                : '') ||
+              ch.title
+          }))
+
           combinedMindMap = await aiService.generateCombinedMindMap(
             bookData?.title || '',
-            processedChapters,
-            customPrompt
+            chaptersForCombined,
+            processingOptions.outputLanguage
           )
         }
 
@@ -527,19 +590,24 @@ export function useBookProcessing() {
         )
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('progress.processingError'), {
-        duration: 5000,
-        position: 'top-center',
-      })
+      if (error instanceof Error && error.name === 'AbortError') {
+        toast.info(t('progress.cancelled') || '已取消处理')
+      } else {
+        toast.error(error instanceof Error ? error.message : t('progress.processingError'), {
+          duration: 5000,
+          position: 'top-center',
+        })
 
-      // 发送错误通知
-      if (processingOptions.enableNotification) {
-        await notificationService.sendErrorNotification(
-          error instanceof Error ? error.message : t('progress.processingError')
-        )
+        if (processingOptions.enableNotification) {
+          await notificationService.sendErrorNotification(
+            error instanceof Error ? error.message : t('progress.processingError')
+          )
+        }
       }
     } finally {
+      abortControllerRef.current = null
       setProcessing(false)
+      setCurrentProcessingChapter('')
     }
   }, [
     file, extractedChapters, selectedChapters, bookData, aiConfig,
@@ -697,7 +765,7 @@ export function useBookProcessing() {
     setIsWebDAVBrowserOpen(true)
   }, [webdavConfig.enabled])
 
-  // 章节总结导航
+  // 章节总结导航（滚动容器为 .scroll-container，非 window）
   const handleChapterSummaryNavigation = useCallback((chapterId: string) => {
     setCurrentViewingChapterSummary(chapterId)
     setExpandedChapters(new Set([chapterId]))
@@ -705,30 +773,23 @@ export function useBookProcessing() {
     const scrollToChapter = (attempt = 1) => {
       setTimeout(() => {
         const element = document.getElementById(`chapter-summary-${chapterId}`)
-        if (element) {
-          const contentElement = element.querySelector('[class*="CardContent"]')
-          const isActuallyExpanded = contentElement &&
-            contentElement.getAttribute('style') !== 'display: none' &&
-            !contentElement.classList.contains('hidden')
+        if (!element) return
 
-          if (isActuallyExpanded) {
-            const headerOffset = 80
-            const elementPosition = element.getBoundingClientRect().top
-            const offsetPosition = elementPosition + window.pageYOffset - headerOffset
+        const container = document.querySelector('.scroll-container') as HTMLElement | null
+        const headerOffset = 80
 
-            window.scrollTo({
-              top: offsetPosition,
-              behavior: 'smooth'
-            })
-          } else if (attempt < 3) {
-            scrollToChapter(attempt + 1)
-          } else {
-            element.scrollIntoView({
-              behavior: 'smooth',
-              block: 'start',
-              inline: 'nearest'
-            })
-          }
+        if (container) {
+          const containerRect = container.getBoundingClientRect()
+          const elRect = element.getBoundingClientRect()
+          const top = container.scrollTop + (elRect.top - containerRect.top) - headerOffset
+          container.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+        } else {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+
+        // 折叠动画未完成时重试
+        if (attempt < 3) {
+          scrollToChapter(attempt + 1)
         }
       }, attempt * 200)
     }

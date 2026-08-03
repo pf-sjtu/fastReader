@@ -3,7 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 if (typeof window !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url).toString()
 }
-import { SKIP_CHAPTER_KEYWORDS } from './constants'
+import { matchesSkipChapterTitle } from './constants'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { ConcurrencyLimiter } from '../utils/async'
 
@@ -490,10 +490,7 @@ export class PdfProcessor {
 
   // 检查是否应该跳过某个章节
   private shouldSkipChapter(title: string): boolean {
-    const normalizedTitle = title.toLowerCase().trim()
-    return SKIP_CHAPTER_KEYWORDS.some(keyword =>
-      normalizedTitle.includes(keyword.toLowerCase())
-    )
+    return matchesSkipChapterTitle(title)
   }
 
   // 新增方法：获取PDF页面的渲染内容（用于阅读器显示）

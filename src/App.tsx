@@ -17,7 +17,7 @@ import type { MindElixirData } from 'mind-elixir'
 
 import { webdavService } from '@/services/webdavService'
 import { metadataFormatter } from '@/services/metadataFormatter'
-import { normalizeMarkdownTypography } from '@/lib/markdown'
+import { prepareMarkdownForRender } from '@/lib/markdown'
 import { scrollToTop } from '@/utils/index'
 import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
@@ -82,6 +82,7 @@ function App() {
     handleFileSelect,
     extractChapters,
     processBook,
+    cancelProcessing,
     handleChapterSelect,
     handleSelectAll,
     handleViewChapterContent,
@@ -185,7 +186,7 @@ function App() {
     })
 
     let markdownContent = metadataFormatter.formatUnified(bookDataForExport, metadata, processingOptions.chapterNamingMode)
-    markdownContent = normalizeMarkdownTypography(markdownContent)
+    markdownContent = prepareMarkdownForRender(markdownContent)
 
     const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -341,8 +342,11 @@ function App() {
           currentStep={currentStep}
           currentModel={aiConfig.model}
           tokenUsage={tokenUsage}
+          hasApiKey={Boolean(aiConfig.apiKey?.trim())}
+          processingMode={processingMode}
           onToggleView={() => setCurrentStepIndex(currentStepIndex === 1 ? 2 : 1)}
           onLoadFromHistory={handleLoadFromHistory}
+          onCancelProcessing={cancelProcessing}
         />
 
         {/* 批量处理队列面板 */}
@@ -398,7 +402,11 @@ function App() {
                 onExtractChapters={extractChapters}
                 onClearCache={clearBookCache}
                 onOpenWebDAVBrowser={openWebDAVBrowser}
-                onLoadFromCloudCache={loadFromCloudCache}
+                onLoadFromCloudCache={() => {
+                  if (loadFromCloudCache()) {
+                    setCurrentStepIndex(2)
+                  }
+                }}
               />
 
               {extractedChapters && bookData && (

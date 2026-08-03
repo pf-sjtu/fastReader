@@ -6,7 +6,7 @@ import { Trash2, BookOpen, ChevronDown, ChevronUp } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkCjkFriendly from "remark-cjk-friendly";
-import { normalizeMarkdownTypography } from '@/lib/markdown'
+import { prepareMarkdownForRender } from '@/lib/markdown'
 import { CopyButton } from '@/components/ui/copy-button'
 import { ViewContentDialog } from './ViewContentDialog'
 import { useTranslation } from 'react-i18next'
@@ -158,8 +158,8 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
       {!actualIsCollapsed && (
         <CardContent className="min-w-0">
           <div className="markdown-card-content prose prose-sm max-w-none overflow-x-auto">
-            <ReactMarkdown remarkPlugins={[remarkGfm,remarkCjkFriendly]}>
-              {normalizeMarkdownTypography(markdownContent)}
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]}>
+              {prepareMarkdownForRender(markdownContent)}
             </ReactMarkdown>
           </div>
         </CardContent>
