@@ -3,7 +3,12 @@ import { useTranslation } from 'react-i18next'
 import type { Core, EventObject } from 'cytoscape'
 import type { BookCharts, EntityGraphNode } from '../../types'
 import { getEntityGraph } from '../../types'
-import { toCytoscapeElements, nodeSize } from './toCytoscape'
+import {
+  toCytoscapeElements,
+  nodeSize,
+  nodeLabelMaxWidth,
+  forceLayoutOptions,
+} from './toCytoscape'
 import { readChartTheme, subscribeThemeChange, type ChartThemeColors } from '../../theme'
 import {
   Sheet,
@@ -12,6 +17,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { Slider } from '@/components/ui/slider'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import { RefreshCw } from 'lucide-react'
 
 interface Props {
   charts: BookCharts
@@ -27,60 +36,56 @@ interface SelectedNode {
   }[]
 }
 
-// cytoscape 样式：颜色必须是 #rrggbb（theme 层已转换）
+const DEFAULT_FORCE = 55
+
+// cytoscape 样式：名字居中写在球上
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildStyles(theme: ChartThemeColors): any[] {
   const nodeFill = theme.primary
-  // 标签在节点外：用前景色 + 卡片底（色值已是 #rrggbb）
-  const labelColor = theme.foreground
-  const labelBg = theme.card
+  const onNodeText = theme.primaryForeground
   const edgeColor = theme.mutedForeground
+  const labelBg = theme.card
+  const edgeLabelColor = theme.foreground
 
   return [
     {
       selector: 'node',
       style: {
         label: 'data(label)',
-        'text-valign': 'bottom',
+        'text-valign': 'center',
         'text-halign': 'center',
-        'text-margin-y': 8,
+        'text-margin-y': 0,
         'background-color': nodeFill,
         'background-opacity': 1,
-        color: labelColor,
-        'font-size': 12,
-        'font-weight': 500,
+        color: onNodeText,
+        'font-size': 11,
+        'font-weight': 600,
         'text-wrap': 'wrap',
-        'text-max-width': 96,
-        'text-background-color': labelBg,
-        'text-background-opacity': 0.95,
-        'text-background-padding': '3px',
-        'text-background-shape': 'roundrectangle',
-        'text-border-width': 1,
-        'text-border-color': theme.border,
-        'text-border-opacity': 0.7,
+        'text-max-width': (ele: { data: (k: string) => number }) =>
+          nodeLabelMaxWidth(ele.data('importance')),
         'text-outline-width': 0,
+        'text-background-opacity': 0,
         width: (ele: { data: (k: string) => number }) => nodeSize(ele.data('importance')),
         height: (ele: { data: (k: string) => number }) => nodeSize(ele.data('importance')),
         'border-width': 2,
         'border-color': theme.border,
         'border-opacity': 1,
+        'min-zoomed-font-size': 7,
       },
     },
     {
       selector: 'node:selected',
       style: {
         'background-color': theme.accent,
-        'border-color': theme.primary,
+        'border-color': onNodeText,
         'border-width': 3,
         color: theme.accentForeground,
-        'text-background-color': labelBg,
-        'text-background-opacity': 0.98,
       },
     },
     {
       selector: 'node:active',
       style: {
-        'overlay-opacity': 0.1,
+        'overlay-opacity': 0.12,
         'overlay-color': theme.primary,
       },
     },
@@ -91,19 +96,19 @@ function buildStyles(theme: ChartThemeColors): any[] {
         'line-color': edgeColor,
         'target-arrow-color': edgeColor,
         'target-arrow-shape': 'triangle',
-        'arrow-scale': 0.9,
+        'arrow-scale': 0.85,
         'curve-style': 'bezier',
         label: 'data(label)',
         'font-size': 10,
         'font-weight': 500,
-        color: labelColor,
+        color: edgeLabelColor,
         'text-rotation': 'autorotate',
-        'text-margin-y': -10,
+        'text-margin-y': -8,
         'text-background-color': labelBg,
-        'text-background-opacity': 0.95,
+        'text-background-opacity': 0.92,
         'text-background-padding': '2px',
         'text-background-shape': 'roundrectangle',
-        opacity: 0.9,
+        opacity: 0.88,
       },
     },
     {
@@ -122,20 +127,40 @@ export function PersonGraphChart({ charts }: Props) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
+  const layoutRef = useRef<{ stop?: () => void } | null>(null)
   const graph = getEntityGraph(charts)
   const [selected, setSelected] = useState<SelectedNode | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [themeTick, setThemeTick] = useState(0)
+  /** 力导向强度 0–100，类似 Obsidian 斥力 */
+  const [force, setForce] = useState(DEFAULT_FORCE)
+  const forceRef = useRef(force)
+  forceRef.current = force
 
   const elements = useMemo(
     () => (graph ? toCytoscapeElements(graph) : []),
     [graph]
   )
 
+  const runForceLayout = useCallback((cy: Core, forceValue: number, randomize = false) => {
+    try {
+      layoutRef.current?.stop?.()
+    } catch {
+      /* ignore */
+    }
+    const opts = {
+      ...forceLayoutOptions(forceValue),
+      randomize,
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const layout = cy.layout(opts as any)
+    layoutRef.current = layout
+    layout.run()
+  }, [])
+
   const applyTheme = useCallback((cy: Core) => {
     const theme = readChartTheme(containerRef.current)
     cy.style().fromJson(buildStyles(theme)).update()
-    // 画布背景随 card
     if (containerRef.current) {
       containerRef.current.style.backgroundColor = theme.card
     }
@@ -150,6 +175,16 @@ export function PersonGraphChart({ charts }: Props) {
     if (cy) applyTheme(cy)
   }, [themeTick, applyTheme])
 
+  // 滑块变化：防抖后重跑力导向，节点散开/收拢
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy) return
+    const timer = window.setTimeout(() => {
+      runForceLayout(cy, force, false)
+    }, 180)
+    return () => window.clearTimeout(timer)
+  }, [force, runForceLayout])
+
   useEffect(() => {
     if (!containerRef.current || !graph || elements.length === 0) return
 
@@ -159,6 +194,15 @@ export function PersonGraphChart({ charts }: Props) {
     ;(async () => {
       try {
         const cytoscape = (await import('cytoscape')).default
+        const fcose = (await import('cytoscape-fcose')).default
+        // 避免 HMR 重复 register
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (!(cytoscape as any).__fcoseRegistered) {
+          cytoscape.use(fcose)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(cytoscape as any).__fcoseRegistered = true
+        }
+
         if (cancelled || !containerRef.current) return
 
         const theme = readChartTheme(containerRef.current)
@@ -168,21 +212,18 @@ export function PersonGraphChart({ charts }: Props) {
           container: containerRef.current,
           elements,
           style: buildStyles(theme),
-          layout: {
-            name: 'cose',
-            animate: false,
-            padding: 36,
-            nodeRepulsion: () => 7000,
-            idealEdgeLength: () => 110,
-            nodeOverlap: 24,
-          } as object,
-          minZoom: 0.3,
-          maxZoom: 3,
-          // 默认约 0.25；按需求 ×3 提高滚轮缩放灵敏度
+          layout: { name: 'null' },
+          minZoom: 0.25,
+          maxZoom: 3.5,
           wheelSensitivity: 0.75,
+          // 可拖节点；松开后保持位置（力再跑时会重新散开）
+          autoungrabify: false,
+          boxSelectionEnabled: false,
         })
 
         cyRef.current = cy
+        // 初次：略随机种子 + 力导向散开
+        runForceLayout(cy, forceRef.current, true)
 
         cy.on('tap', 'node', (evt: EventObject) => {
           const n = evt.target
@@ -215,6 +256,16 @@ export function PersonGraphChart({ charts }: Props) {
           )
           setSelected({ node: nodeData, edges })
         })
+
+        // 拖完节点后轻微再平衡（保持 Obsidian 感）
+        cy.on('dragfree', 'node', () => {
+          if (!cy) return
+          window.setTimeout(() => {
+            if (cyRef.current === cy) {
+              runForceLayout(cy, forceRef.current, false)
+            }
+          }, 80)
+        })
       } catch (err) {
         console.error('[PersonGraphChart]', err)
         if (!cancelled) {
@@ -225,10 +276,15 @@ export function PersonGraphChart({ charts }: Props) {
 
     return () => {
       cancelled = true
+      try {
+        layoutRef.current?.stop?.()
+      } catch {
+        /* ignore */
+      }
       if (cy) cy.destroy()
       cyRef.current = null
     }
-  }, [graph, elements])
+  }, [graph, elements, runForceLayout])
 
   if (!graph || (graph.nodes?.length ?? 0) === 0) {
     return (
@@ -248,6 +304,39 @@ export function PersonGraphChart({ charts }: Props) {
 
   return (
     <>
+      {/* 力导向强度：类似 Obsidian 散开程度 */}
+      <div className="flex flex-wrap items-center gap-3 mb-2 px-0.5">
+        <Label
+          htmlFor="graph-force"
+          className="text-xs text-muted-foreground shrink-0 whitespace-nowrap"
+        >
+          {t('results.charts.forceStrength', '相互作用力')}
+        </Label>
+        <Slider
+          id="graph-force"
+          className="w-[min(100%,220px)] flex-1 max-w-xs"
+          min={0}
+          max={100}
+          step={1}
+          value={[force]}
+          onValueChange={(v) => setForce(v[0] ?? DEFAULT_FORCE)}
+        />
+        <span className="text-xs tabular-nums text-muted-foreground w-8">{force}</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs"
+          onClick={() => {
+            const cy = cyRef.current
+            if (cy) runForceLayout(cy, force, true)
+          }}
+        >
+          <RefreshCw className="h-3 w-3 mr-1" />
+          {t('results.charts.relayout', '重新排布')}
+        </Button>
+      </div>
+
       <div
         ref={containerRef}
         className="w-full h-[min(60vh,640px)] min-h-[280px] border border-border rounded-lg bg-card"
@@ -255,7 +344,7 @@ export function PersonGraphChart({ charts }: Props) {
       <p className="text-xs text-muted-foreground mt-2">
         {t(
           'results.charts.entityGraphHint',
-          '滚轮缩放 · 拖动画布/节点 · 点击实体查看详情'
+          '滚轮缩放 · 拖动画布/节点 · 点击实体查看详情 · 滑块调节节点斥力'
         )}
       </p>
 

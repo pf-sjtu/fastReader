@@ -54,6 +54,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "cytoscape": "^3.34.0",
+    "cytoscape-fcose": "^2.2.0",
     "embla-carousel-react": "^8.6.0",
     "https-proxy-agent": "^7.0.6",
     "i18next": "^25.3.6",
