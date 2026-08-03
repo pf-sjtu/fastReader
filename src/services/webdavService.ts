@@ -49,6 +49,37 @@ function buildHeaderPath(config: WebDAVConfig, path: string): string {
   })
 }
 
+function ensureTrailingSlash(url: string): string {
+  return url.endsWith('/') ? url : `${url}/`
+}
+
+function basicAuthHeader(username: string, password: string): string {
+  // btoa 仅支持 latin1；密码含非 ASCII 时用 URI 转义兜底
+  const raw = `${username}:${password}`
+  try {
+    return 'Basic ' + btoa(raw)
+  } catch {
+    const bin = encodeURIComponent(raw).replace(/%([0-9A-F]{2})/g, (_, p1) =>
+      String.fromCharCode(parseInt(p1, 16))
+    )
+    return 'Basic ' + btoa(bin)
+  }
+}
+
+function toUploadBody(data: string | ArrayBuffer | Blob): {
+  body: BodyInit
+  byteLength?: number
+} {
+  if (typeof data === 'string') {
+    const bytes = new TextEncoder().encode(data)
+    return { body: bytes, byteLength: bytes.byteLength }
+  }
+  if (data instanceof ArrayBuffer) {
+    return { body: data, byteLength: data.byteLength }
+  }
+  return { body: data }
+}
+
 // WebDAV客户端封装类
 export class WebDAVService {
   private client: WebDAVClient | null = null
@@ -82,20 +113,73 @@ export class WebDAVService {
     return run
   }
 
+  /** 浏览器是否走同源 /api/dav 代理 */
+  private isBrowserProxyMode(): boolean {
+    return typeof window !== 'undefined'
+  }
+
+  /**
+   * 浏览器代理直连：不依赖 webdav 库「始终请求 /」的路径模型，
+   * 把真实路径放在 X-WebDAV-Path，避免 PUT/GET 与库内部 header 合并出问题。
+   */
+  private async proxyFetch(
+    method: string,
+    filePath: string,
+    options?: {
+      body?: BodyInit | null
+      extraHeaders?: Record<string, string>
+    }
+  ): Promise<Response> {
+    if (!this.config) {
+      throw new Error('WebDAV配置未找到')
+    }
+    const normalizedPath = normalizeDavPath(filePath)
+    const headerPath = buildHeaderPath(this.config, normalizedPath)
+    const headers: Record<string, string> = {
+      Authorization: basicAuthHeader(this.config.username, this.config.password),
+      'X-WebDAV-Base': ensureTrailingSlash(this.config.serverUrl),
+      'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+      'X-Request-Origin': window.location.origin,
+      'Cache-Control': 'no-store, no-cache',
+      Pragma: 'no-cache',
+      ...(options?.extraHeaders || {}),
+    }
+    console.log(
+      `[WebDAV:proxy] ${method} path=${headerPath} enc=${headers['X-WebDAV-Path'].slice(0, 80)}…`
+    )
+    return fetch('/api/dav/', {
+      method,
+      headers,
+      body: options?.body ?? null,
+    })
+  }
+
   /**
    * 初始化WebDAV客户端
    * @param config WebDAV配置
    */
   async initialize(config: WebDAVConfig): Promise<WebDAVOperationResult<boolean>> {
     try {
-      this.config = config
-      
       if (!config.serverUrl || !config.username || !config.password) {
         return {
           success: false,
           error: 'WebDAV_CONFIG_INCOMPLETE'
         }
       }
+
+      // 已用相同凭据连上：跳过重建，避免处理中途 re-init 把 client 置空
+      if (
+        this.client &&
+        this.config &&
+        this.config.serverUrl === config.serverUrl &&
+        this.config.username === config.username &&
+        this.config.password === config.password
+      ) {
+        this.config = { ...this.config, ...config }
+        return { success: true, data: true }
+      }
+
+      this.config = config
 
       // 获取处理后的URL（根据环境自动选择代理模式）
       const processedUrl = getProcessedUrl(config.serverUrl)
@@ -119,8 +203,8 @@ export class WebDAVService {
         'Accept': 'application/xml, text/xml, */*',
         'Cache-Control': 'no-store, no-cache',
         'Pragma': 'no-cache',
-        'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`),
-        'X-WebDAV-Base': config.serverUrl
+        'Authorization': basicAuthHeader(config.username, config.password),
+        'X-WebDAV-Base': ensureTrailingSlash(config.serverUrl)
       }
 
       if (isMobile) {
@@ -297,7 +381,7 @@ export class WebDAVService {
     filePath: string, 
     format: 'text' | 'binary' = 'binary'
   ): Promise<WebDAVOperationResult<string | ArrayBuffer>> {
-    if (!this.client) {
+    if (!this.config && !this.client) {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
 
@@ -307,20 +391,46 @@ export class WebDAVService {
           return { success: false, error: 'WebDAV配置未找到' }
         }
 
+        // 浏览器：同源代理直连 GET（路径只在 header，避免库内部 header 竞态）
+        if (this.isBrowserProxyMode()) {
+          const res = await this.proxyFetch('GET', filePath, {
+            extraHeaders: { Accept: format === 'text' ? 'text/plain, */*' : '*/*' },
+          })
+          if (res.status === 404) {
+            console.warn('[WebDAV] 文件不存在 (404):', filePath)
+            return { success: false, error: `下载文件失败: Invalid response: 404 Not Found` }
+          }
+          if (!res.ok) {
+            const t = await res.text().catch(() => '')
+            return {
+              success: false,
+              error: `下载文件失败: Invalid response: ${res.status} ${res.statusText}${t ? ` ${t.slice(0, 80)}` : ''}`,
+            }
+          }
+          if (format === 'text') {
+            return { success: true, data: await res.text() }
+          }
+          return { success: true, data: await res.arrayBuffer() }
+        }
+
+        if (!this.client) {
+          return { success: false, error: 'WebDAV客户端未初始化' }
+        }
+
         const normalizedPath = normalizeDavPath(filePath)
         const headerPath = buildHeaderPath(this.config, normalizedPath)
 
         this.setDavHeader(headerPath)
 
         if (format === 'text') {
-          const content = await this.client!.getFileContents('/', {
+          const content = await this.client.getFileContents('/', {
             format: 'text',
             headers: { 'Cache-Control': 'no-store, no-cache', 'Pragma': 'no-cache' }
           }) as string
           return { success: true, data: content }
         }
 
-        const binaryContent = await this.client!.getFileContents('/', {
+        const binaryContent = await this.client.getFileContents('/', {
           format: 'binary',
           headers: { 'Cache-Control': 'no-store, no-cache', 'Pragma': 'no-cache' }
         })
@@ -389,28 +499,85 @@ export class WebDAVService {
     data: string | ArrayBuffer | Blob,
     overwrite: boolean = true
   ): Promise<WebDAVOperationResult<boolean>> {
-    if (!this.client) {
+    if (!this.config && !this.client) {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
 
     return this.runExclusive(async () => {
       try {
+        if (!this.config) {
+          return { success: false, error: 'WebDAV配置未找到' }
+        }
+
         const normalizedPath = normalizeDavPath(filePath)
 
-        const dirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
-        if (dirPath && dirPath !== '/') {
-          const dirHeaderPath = buildHeaderPath(this.config!, dirPath)
-          this.setDavHeader(dirHeaderPath)
-          const dirExists = await this.client!.exists('/')
-          if (!dirExists) {
-            this.setDavHeader(dirHeaderPath)
-            await this.client!.createDirectory('/')
+        // 浏览器：代理直连 PUT（UTF-8 字节体 + 正确 Content-Length）
+        if (this.isBrowserProxyMode()) {
+          // 确保父目录存在（仍走 webdav 库的 MKCOL，失败不挡 PUT）
+          const dirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
+          if (dirPath && dirPath !== '/' && this.client) {
+            try {
+              const dirHeaderPath = buildHeaderPath(this.config, dirPath)
+              this.setDavHeader(dirHeaderPath)
+              const dirExists = await this.client.exists('/')
+              if (!dirExists) {
+                this.setDavHeader(dirHeaderPath)
+                await this.client.createDirectory('/')
+              }
+            } catch (e) {
+              console.warn('[WebDAV] 确保目录存在失败（继续 PUT）:', dirPath, e)
+            }
+          }
+
+          const { body, byteLength } = toUploadBody(data)
+          const extraHeaders: Record<string, string> = {
+            'Content-Type': 'application/octet-stream',
+          }
+          if (typeof byteLength === 'number') {
+            extraHeaders['Content-Length'] = String(byteLength)
+          }
+          if (!overwrite) {
+            extraHeaders['If-None-Match'] = '*'
+          }
+
+          const res = await this.proxyFetch('PUT', normalizedPath, {
+            body,
+            extraHeaders,
+          })
+          // 201 Created / 204 No Content / 200 OK 均视为成功
+          if (res.status === 201 || res.status === 204 || res.status === 200 || res.ok) {
+            console.log(`[WebDAV:proxy] PUT ok status=${res.status} path=${normalizedPath}`)
+            return { success: true, data: true }
+          }
+          const errText = await res.text().catch(() => '')
+          console.warn(
+            `[WebDAV:proxy] PUT fail status=${res.status} path=${normalizedPath}`,
+            errText.slice(0, 200)
+          )
+          return {
+            success: false,
+            error: `上传文件失败: Invalid response: ${res.status} ${res.statusText}${errText ? ` ${errText.slice(0, 120)}` : ''}`,
           }
         }
 
-        const headerPath = buildHeaderPath(this.config!, normalizedPath)
+        if (!this.client) {
+          return { success: false, error: 'WebDAV客户端未初始化' }
+        }
+
+        const dirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
+        if (dirPath && dirPath !== '/') {
+          const dirHeaderPath = buildHeaderPath(this.config, dirPath)
+          this.setDavHeader(dirHeaderPath)
+          const dirExists = await this.client.exists('/')
+          if (!dirExists) {
+            this.setDavHeader(dirHeaderPath)
+            await this.client.createDirectory('/')
+          }
+        }
+
+        const headerPath = buildHeaderPath(this.config, normalizedPath)
         this.setDavHeader(headerPath)
-        const result = await this.client!.putFileContents(
+        const result = await this.client.putFileContents(
           '/',
           data as string | Buffer | ArrayBuffer | Blob,
           { overwrite }

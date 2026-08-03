@@ -204,19 +204,27 @@ export class CloudCacheService {
         console.warn(`[CloudCache] 图表 JSON 上传失败: ${path}`, upload.error)
         return { success: false, error: upload.error || '上传图表 JSON 失败' }
       }
-      // 回读校验，避免「上传假成功」
+      // 回读校验：优先 GET；失败则用 exists 兜底（部分网盘写后瞬间 GET 不稳）
       const verify = await this.webdavService.getFileContents(path, 'text')
-      if (!verify.success || verify.data == null) {
-        console.warn(`[CloudCache] 图表 JSON 上传后回读失败: ${path}`, verify.error)
-        return {
-          success: false,
-          error: verify.error || '上传后回读失败（可能未真正写入）',
-        }
+      if (verify.success && verify.data != null) {
+        console.log(
+          `[CloudCache] 图表 JSON 已上传并校验: ${path}, ${String(verify.data).length} chars`
+        )
+        return { success: true, path }
       }
-      console.log(
-        `[CloudCache] 图表 JSON 已上传并校验: ${path}, ${String(verify.data).length} chars`
+      const exists = await this.webdavService.fileExists(path)
+      if (exists) {
+        console.log(`[CloudCache] 图表 JSON 已上传 (exists 校验): ${path}`)
+        return { success: true, path }
+      }
+      console.warn(
+        `[CloudCache] 图表 JSON 上传后校验失败: ${path}`,
+        verify.error
       )
-      return { success: true, path }
+      return {
+        success: false,
+        error: verify.error || '上传后校验失败（可能未真正写入）',
+      }
     } catch (error) {
       return {
         success: false,

@@ -75,15 +75,10 @@ export class AutoSyncService {
         return false
       }
 
+      // initialize 内已做连通性检测；相同凭据会跳过重建
       const initResult = await webdavService.initialize(webdavConfig)
       if (!initResult.success) {
         console.error('WebDAV初始化失败:', initResult.error)
-        return false
-      }
-
-      const connectionTest = await webdavService.testConnection()
-      if (!connectionTest.success) {
-        console.error('WebDAV连接失败:', connectionTest.error)
         return false
       }
 
@@ -144,15 +139,10 @@ export class AutoSyncService {
         return { success: false, error: '无图表数据' }
       }
 
-      // 与 cloudCacheService / 读缓存共用同一单例，禁止另起 client
+      // 与 cloudCacheService / 读缓存共用同一单例；已连接则跳过重建与二次 test
       const initResult = await webdavService.initialize(webdavConfig)
       if (!initResult.success) {
         return { success: false, error: initResult.error || 'WebDAV 初始化失败' }
-      }
-
-      const connectionTest = await webdavService.testConnection()
-      if (!connectionTest.success) {
-        return { success: false, error: connectionTest.error || 'WebDAV 连接失败' }
       }
 
       const up = await cloudCacheService.uploadChartsJson(fileName, charts)

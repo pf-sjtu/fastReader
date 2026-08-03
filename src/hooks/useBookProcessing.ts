@@ -107,6 +107,11 @@ export function useBookProcessing() {
   const chartsAutoGenRef = useRef(false)
   /** 标记：刚从云/历史加载且缺图表，待 bookSummary 落地后自动生成 */
   const pendingAutoChartsRef = useRef(false)
+  /**
+   * 云端存档文件名键（与 getCacheFilePath 入参一致，通常是 epub 原名或历史记录 fileName）。
+   * 历史加载时本地可能没有 File，必须靠此 ref 才能自动上传图表 JSON。
+   */
+  const cloudCacheKeyRef = useRef<string | null>(null)
 
   // 右侧面板状态
   const [rightPanelContent, setRightPanelContent] = useState<RightPanelContent | null>(null)
@@ -228,12 +233,13 @@ export function useBookProcessing() {
     await extractChapters(selectedFile)
   }, [resetState, webdavConfig.enabled, extractChapters])
 
-  // 检查云端缓存（MD + 同名 JSON 并行）
+  // 检查云端缓存（MD + 同名 JSON）
   const checkCloudCache = useCallback(async (fileName: string) => {
     setCloudCacheMetadata(null)
     setCloudCacheContent(null)
     setCloudChartsJson(null)
     setCloudChartsFileFound(false)
+    cloudCacheKeyRef.current = fileName
 
     if (!webdavConfig.enabled || !webdavService.isInitialized()) {
       return false
@@ -1050,8 +1056,14 @@ export function useBookProcessing() {
           chartsError: null,
         }
 
-        const cacheName = options?.cacheFileName || file?.name
+        const cacheName =
+          options?.cacheFileName ||
+          file?.name ||
+          cloudCacheKeyRef.current ||
+          cloudCacheMetadata?.fileName ||
+          null
         if (cacheName) {
+          cloudCacheKeyRef.current = cacheName
           cacheService.setCache(cacheName, 'key_charts', serializeCharts(charts))
         }
         setBookSummary((prev) => {
@@ -1065,14 +1077,23 @@ export function useBookProcessing() {
 
         // 云端：JSON 必传（不依赖 autoSync）；MD 用 force 尽量一并更新
         let chartsCloudOk = false
-        if (cacheName && webdavConfig.enabled) {
+        let chartsCloudErr: string | undefined
+        if (!cacheName) {
+          console.warn(
+            '[runKeyChartsGeneration] 无 cacheName，跳过云端 JSON 上传（本地仍有图表）'
+          )
+        } else if (!webdavConfig.enabled) {
+          console.log('[runKeyChartsGeneration] WebDAV 未启用，跳过云端上传')
+        } else {
           try {
+            console.log('[runKeyChartsGeneration] 开始上传图表 JSON, cacheName=', cacheName)
             const chartsOnly = await autoSyncService.syncChartsJson(cacheName, charts)
             chartsCloudOk = chartsOnly.success
+            chartsCloudErr = chartsOnly.error
             if (!chartsCloudOk) {
               console.warn('[runKeyChartsGeneration] JSON 保存失败:', chartsOnly.error)
             }
-            // 顺带 force 写 MD（内嵌/元数据），失败不挡 JSON 成功态
+            // 顺带 force 写 MD（内嵌图表兜底），失败不挡 JSON 成功态
             await autoSyncService.syncSummary(
               nextSummary,
               cacheName,
@@ -1080,6 +1101,8 @@ export function useBookProcessing() {
               { force: true }
             )
           } catch (syncErr) {
+            chartsCloudErr =
+              syncErr instanceof Error ? syncErr.message : String(syncErr)
             console.warn('[runKeyChartsGeneration] 云端同步失败:', syncErr)
           }
         }
@@ -1098,12 +1121,13 @@ export function useBookProcessing() {
               : t('results.charts.regenerated', '关键图表已更新'),
             { id: toastId }
           )
-          if (cacheName && webdavConfig.enabled) {
+          if (webdavConfig.enabled) {
+            const reason = !cacheName
+              ? t('progress.chartsNoCacheKey', '缺少文件名，无法定位云端路径')
+              : chartsCloudErr || t('progress.chartsCloudSaveFailed', '云端 JSON 保存失败')
             toast.warning(
-              t(
-                'progress.chartsCloudSaveFailed',
-                '关键图表已生成，但云端 JSON 保存失败（可点重新生成或云端上传）'
-              )
+              t('progress.chartsCloudSaveFailed', '关键图表已生成，但云端 JSON 保存失败') +
+                `: ${reason}`
             )
           }
         }
@@ -1131,6 +1155,7 @@ export function useBookProcessing() {
       file,
       webdavConfig.enabled,
       chapterNamingMode,
+      cloudCacheMetadata?.fileName,
     ]
   )
 
@@ -1292,6 +1317,9 @@ export function useBookProcessing() {
         return false
       }
 
+      // 历史记录里的 fileName 即云端缓存键（可能没有本地 File）
+      cloudCacheKeyRef.current = fileName
+
       // 确保 WebDAV 已初始化
       if (!webdavService.isInitialized()) {
         const initResult = await webdavService.initialize(config)
@@ -1413,11 +1441,20 @@ export function useBookProcessing() {
       return
     }
     pendingAutoChartsRef.current = false
+    const cacheFileName =
+      file?.name || cloudCacheKeyRef.current || cloudCacheMetadata?.fileName || null
+    console.log('[autoCharts] 触发自动生成, cacheFileName=', cacheFileName)
     void runKeyChartsGeneration(bookSummary, {
       silent: true,
-      cacheFileName: file?.name,
+      cacheFileName,
     })
-  }, [bookSummary, chartsGenerating, runKeyChartsGeneration, file?.name])
+  }, [
+    bookSummary,
+    chartsGenerating,
+    runKeyChartsGeneration,
+    file?.name,
+    cloudCacheMetadata?.fileName,
+  ])
 
   return {
     // 状态
