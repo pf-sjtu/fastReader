@@ -104,4 +104,35 @@ describe('enforceChartLimits', () => {
       limited.personGraph!.nodes.at(-1)!.importance ?? 0
     )
   })
+
+  it('从 personGraph 回填时间线缺失实体', () => {
+    const limited = enforceChartLimits({
+      version: 1,
+      personGraph: {
+        nodes: [
+          { id: 'p1', name: '甲', importance: 10 },
+          { id: 'p8', name: '乙', importance: 6 },
+        ],
+        edges: [],
+      },
+      entityTimeline: {
+        entities: [{ id: 'p1', name: '甲' }],
+        events: [
+          {
+            id: 'e1',
+            label: '相遇',
+            timeLabel: '早期',
+            order: 1,
+            entityIds: ['p1', 'p8'],
+          },
+        ],
+      },
+    })
+    const ids = limited.entityTimeline!.entities.map((e) => e.id)
+    expect(ids).toContain('p1')
+    expect(ids).toContain('p8')
+    expect(limited.entityTimeline!.events[0].entityIds).toEqual(
+      expect.arrayContaining(['p1', 'p8'])
+    )
+  })
 })

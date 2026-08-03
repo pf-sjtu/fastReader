@@ -51,15 +51,16 @@ export const bookChartsSchema = z.object({
 
 export type BookChartsParsed = z.infer<typeof bookChartsSchema>
 
-/** 裁剪超限数据，保证可视化可读 */
+/** 裁剪超限数据，保证可视化可读；补齐时间线缺失实体（从 personGraph 回填） */
 export function enforceChartLimits(data: BookChartsParsed): BookChartsParsed {
   const out: BookChartsParsed = { version: 1 }
+  const personNodes: Array<{ id: string; name: string; type?: string; importance?: number }> = []
 
   if (data.personGraph) {
     let nodes = [...data.personGraph.nodes]
-    // 按 importance 降序保留
     nodes.sort((a, b) => (b.importance ?? 5) - (a.importance ?? 5))
     nodes = nodes.slice(0, CHART_LIMITS.maxNodes)
+    personNodes.push(...nodes)
     const nodeIds = new Set(nodes.map((n) => n.id))
 
     let edges = data.personGraph.edges.filter(
@@ -73,20 +74,42 @@ export function enforceChartLimits(data: BookChartsParsed): BookChartsParsed {
   }
 
   if (data.entityTimeline) {
-    let entities = data.entityTimeline.entities.slice(0, CHART_LIMITS.maxEntities)
+    let entities = [...(data.entityTimeline.entities || [])]
+    const entityById = new Map(entities.map((e) => [e.id, e]))
+    const personById = new Map(personNodes.map((n) => [n.id, n]))
+
+    // 统计事件引用；从 personGraph 补齐缺失实体
+    const refCount = new Map<string, number>()
+    for (const ev of data.entityTimeline.events || []) {
+      for (const id of ev.entityIds || []) {
+        refCount.set(id, (refCount.get(id) || 0) + 1)
+        if (!entityById.has(id)) {
+          const pn = personById.get(id)
+          if (pn) {
+            const ent = { id: pn.id, name: pn.name, type: pn.type || '人物' }
+            entityById.set(id, ent)
+            entities.push(ent)
+          }
+        }
+      }
+    }
+
+    if (entities.length > CHART_LIMITS.maxEntities) {
+      entities.sort((a, b) => (refCount.get(b.id) || 0) - (refCount.get(a.id) || 0))
+      entities = entities.slice(0, CHART_LIMITS.maxEntities)
+    }
     const entityIds = new Set(entities.map((e) => e.id))
 
-    let events = [...data.entityTimeline.events]
+    let events = [...(data.entityTimeline.events || [])]
       .map((ev) => ({
         ...ev,
         entityIds: (ev.entityIds || []).filter((id) => entityIds.has(id)),
       }))
-      .filter((ev) => ev.entityIds.length > 0 || entities.length === 0)
+      .filter((ev) => ev.entityIds.length > 0)
       .sort((a, b) => a.order - b.order)
       .slice(0, CHART_LIMITS.maxEvents)
 
-    // 若事件引用了不存在的实体但实体列表为空，仍保留事件（退化展示）
-    if (entities.length === 0 && data.entityTimeline.events.length > 0) {
+    if (events.length === 0 && (data.entityTimeline.events?.length || 0) > 0) {
       events = [...data.entityTimeline.events]
         .sort((a, b) => a.order - b.order)
         .slice(0, CHART_LIMITS.maxEvents)

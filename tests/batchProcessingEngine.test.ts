@@ -82,6 +82,11 @@ vi.mock('../src/services/aiService', () => {
     summarizeChapter = vi.fn().mockResolvedValue('章节摘要')
     analyzeConnections = vi.fn().mockResolvedValue('章节关联')
     generateOverallSummary = vi.fn().mockResolvedValue('全书总结')
+    generateKeyCharts = vi.fn().mockResolvedValue({
+      version: 1,
+      personGraph: { nodes: [{ id: 'p1', name: '测试' }], edges: [] },
+      entityTimeline: { entities: [{ id: 'p1', name: '测试' }], events: [] },
+    })
 
     static isSkippedSummary(summary: string): boolean {
       return summary.startsWith('【已跳过】')

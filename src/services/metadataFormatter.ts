@@ -487,11 +487,12 @@ export function parseUnifiedMarkdown(content: string): {
   }
 
   // 顶层区块：仅在「标准二级标题」处切分，避免全书总结正文里的 ## 一、… 被误切
-  const SECTION_STOP = String.raw`\n##\s+(?:全书总结|章节关联分析|关键图表|章节摘要)\b`
+  // 注意：中文后勿用 \b（JS 的 \b 只认 [A-Za-z0-9_]，对中文标题会失效）
+  const SECTION_STOP = String.raw`\n##[ \t]+(?:全书总结|章节关联分析|关键图表|章节摘要)(?:\s|$)`
 
   // 解析全书总结
   const overallSummaryMatch = cleanContent.match(
-    new RegExp(String.raw`##\s+全书总结\n\n([\s\S]*?)(?=${SECTION_STOP}|$)`)
+    new RegExp(String.raw`##[ \t]+全书总结\s*\n+([\s\S]*?)(?=${SECTION_STOP}|$)`)
   )
   if (overallSummaryMatch) {
     data.overallSummary = overallSummaryMatch[1].trim()
@@ -499,7 +500,7 @@ export function parseUnifiedMarkdown(content: string): {
 
   // 解析章节关联分析
   const connectionsMatch = cleanContent.match(
-    new RegExp(String.raw`##\s+章节关联分析\n\n([\s\S]*?)(?=${SECTION_STOP}|$)`)
+    new RegExp(String.raw`##[ \t]+章节关联分析\s*\n+([\s\S]*?)(?=${SECTION_STOP}|$)`)
   )
   if (connectionsMatch) {
     data.connections = connectionsMatch[1].trim()
