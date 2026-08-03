@@ -50,10 +50,10 @@ export function ResultsSection({
   }
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader className="overflow-hidden">
         <CardTitle className="min-w-0">
-          <div className="truncate">
+          <div className="truncate text-base sm:text-lg">
             {processingMode === 'summary' ? (
               <><BookOpen className="h-5 w-5 inline-block mr-2" />{t('results.summaryTitle', { title: bookSummary?.title })}</>
             ) : processingMode === 'mindmap' ? (
@@ -63,18 +63,18 @@ export function ResultsSection({
             )}
           </div>
         </CardTitle>
-        <div className="flex items-center justify-between -mt-1 min-w-0">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between -mt-1 min-w-0">
           <CardDescription className="truncate min-w-0">
             {t('results.author', { author: bookSummary?.author || bookMindMap?.author })} | {t('results.chapterCount', { count: bookSummary?.chapters.length || bookMindMap?.chapters.length })}
           </CardDescription>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
             <FontSizeControl variant="compact" showLabel={false} />
             {processingMode === 'summary' && bookSummary && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={onDownloadAllMarkdown}
-                className="flex items-center gap-1.5 h-7 text-xs"
+                className="flex items-center gap-1.5 h-8 min-h-8 text-xs"
               >
                 <Download className="h-3.5 w-3.5" />
                 MD
@@ -90,13 +90,19 @@ export function ResultsSection({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="min-w-0">
         {processingMode === 'summary' && bookSummary ? (
-          <Tabs defaultValue="chapters" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="chapters">{t('results.tabs.chapterSummary')}</TabsTrigger>
-              <TabsTrigger value="connections">{t('results.tabs.connections')}</TabsTrigger>
-              <TabsTrigger value="overall">{t('results.tabs.overallSummary')}</TabsTrigger>
+          <Tabs defaultValue="chapters" className="w-full min-w-0">
+            <TabsList className="grid w-full grid-cols-3 h-auto">
+              <TabsTrigger value="chapters" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                {t('results.tabs.chapterSummary')}
+              </TabsTrigger>
+              <TabsTrigger value="connections" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                {t('results.tabs.connections')}
+              </TabsTrigger>
+              <TabsTrigger value="overall" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                {t('results.tabs.overallSummary')}
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="chapters" className="grid grid-cols-1 gap-4">
@@ -146,10 +152,14 @@ export function ResultsSection({
             </TabsContent>
           </Tabs>
         ) : processingMode === 'mindmap' && bookMindMap ? (
-          <Tabs defaultValue="chapters" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="chapters">{t('results.tabs.chapterMindMaps')}</TabsTrigger>
-              <TabsTrigger value="combined">{t('results.tabs.combinedMindMap')}</TabsTrigger>
+          <Tabs defaultValue="chapters" className="w-full min-w-0">
+            <TabsList className="grid w-full grid-cols-2 h-auto">
+              <TabsTrigger value="chapters" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                {t('results.tabs.chapterMindMaps')}
+              </TabsTrigger>
+              <TabsTrigger value="combined" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                {t('results.tabs.combinedMindMap')}
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="chapters" className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -186,7 +196,7 @@ export function ResultsSection({
                   showClearCache={true}
                   showViewContent={false}
                   showCopyButton={false}
-                  mindMapClassName="w-full h-[600px] mx-auto"
+                  mindMapClassName="w-full h-[min(60vh,600px)] min-h-[240px] mx-auto"
                   mindElixirOptions={mindElixirOptions}
                 />
               ) : (
@@ -214,7 +224,7 @@ export function ResultsSection({
               showClearCache={true}
               showViewContent={false}
               showCopyButton={false}
-              mindMapClassName="w-full h-[600px] mx-auto"
+              mindMapClassName="w-full h-[min(60vh,600px)] min-h-[240px] mx-auto"
               mindElixirOptions={mindElixirOptions}
             />
           ) : (

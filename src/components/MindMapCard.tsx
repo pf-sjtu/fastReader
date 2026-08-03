@@ -62,28 +62,29 @@ export const MindMapCard: React.FC<MindMapCardProps> = ({
   showOpenInMindElixir = true,
   showDownloadButton = true,
   className = '',
-  mindMapClassName = 'aspect-square w-full max-w-full mx-auto',
+  mindMapClassName = 'aspect-square w-full max-w-full mx-auto min-h-[240px] max-h-[min(100vw,480px)] sm:max-h-none',
   mindElixirOptions = { direction: 1, alignment: 'nodes' }
 }) => {
   const { t } = useTranslation()
   const localMindElixirRef = React.useRef<MindElixirReactRef | null>(null)
 
   return (
-    <Card className={`gap-2 ${className}`}>
+    <Card className={`gap-2 min-w-0 ${className}`}>
       <CardHeader>
-        <CardTitle className="text-lg w-full overflow-hidden">
+        <CardTitle className="text-base sm:text-lg w-full overflow-hidden">
           <div className="truncate w-full">
             {title}
           </div>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
             {showOpenInMindElixir && onOpenInMindElixir && (
               <Button
                 variant="outline"
                 size="sm"
+                className="h-8 w-8 p-0"
                 onClick={() => onOpenInMindElixir(mindMapData, title)}
                 title={t('common.openInMindElixir')}
               >
-                <ExternalLink className="h-4 w-4 mr-1" />
+                <ExternalLink className="h-4 w-4" />
               </Button>
             )}
             {showDownloadButton && onDownloadMindMap && (
@@ -104,6 +105,7 @@ export const MindMapCard: React.FC<MindMapCardProps> = ({
               <Button
                 variant="outline"
                 size="sm"
+                className="h-8 w-8 p-0"
                 onClick={() => onClearCache(id)}
                 title={t('common.clearCache')}
               >
@@ -120,8 +122,8 @@ export const MindMapCard: React.FC<MindMapCardProps> = ({
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="border rounded-lg">
+      <CardContent className="min-w-0">
+        <div className="border rounded-lg overflow-hidden">
           <MindElixirReact
             ref={localMindElixirRef}
             data={mindMapData}

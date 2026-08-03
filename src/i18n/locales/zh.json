@@ -336,10 +336,18 @@
   },
   "statusBar": {
     "enterProcessing": "进入处理界面",
+    "enterProcessingShort": "结果",
     "backToConfig": "返回配置",
+    "backToConfigShort": "配置",
     "readyToProcess": "准备就绪，可以开始处理",
     "viewingResults": "查看处理结果",
     "completed": "已完成"
+  },
+  "mobile": {
+    "chapters": "章节",
+    "chaptersDescription": "选择章节以定位或查看进度",
+    "preview": "预览",
+    "previewDescription": "查看章节原文内容"
   },
   "history": {
     "dialogTitle": "处理历史",

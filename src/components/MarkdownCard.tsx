@@ -85,60 +85,79 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
   }
 
   return (
-    <Card id={`chapter-summary-${id}`} className={`gap-2 ${className}`}>
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center justify-between gap-2">
-          <Badge variant="outline"># {index + 1}</Badge>
-          <div className="truncate flex-1 w-1" title={title}>
-            {title}
-          </div>
-          {showCopyButton && (
-            <CopyButton
-              content={markdownContent}
-              successMessage={t('common.copiedToClipboard')}
-              title={t('common.copyChapterSummary')}
-            />
-          )}
-          {showClearCache && onClearCache && (
+    <Card id={`chapter-summary-${id}`} className={`gap-2 min-w-0 ${className}`}>
+      <CardHeader className="space-y-2">
+        <CardTitle className="text-base sm:text-lg flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <Badge variant="outline" className="shrink-0"># {index + 1}</Badge>
+            <div className="truncate min-w-0 flex-1" title={title}>
+              {title}
+            </div>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              onClick={() => onClearCache(id)}
-              title={t('common.clearCache')}
+              onClick={handleToggleCollapse}
+              className="shrink-0 h-8 w-8 p-0 sm:hidden"
+              title={actualIsCollapsed ? t('common.expand') : t('common.collapse')}
             >
-              <Trash2 className="h-4 w-4" />
+              {actualIsCollapsed ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronUp className="h-4 w-4" />
+              )}
             </Button>
-          )}
-          {showReadButton && onReadChapter && (
-            <Button variant="outline" size="sm" onClick={onReadChapter}>
-              <BookOpen className="h-3 w-3" />
-            </Button>
-          )}
-          {showViewContent && (
-            <ViewContentDialog
-              title={title}
-              content={content}
-              chapterIndex={index}
-              contentType="text"
-            />
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleToggleCollapse}
-            title={actualIsCollapsed ? t('common.expand') : t('common.collapse')}
-          >
-            {actualIsCollapsed ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronUp className="h-4 w-4" />
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+            {showCopyButton && (
+              <CopyButton
+                content={markdownContent}
+                successMessage={t('common.copiedToClipboard')}
+                title={t('common.copyChapterSummary')}
+              />
             )}
-          </Button>
+            {showClearCache && onClearCache && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onClearCache(id)}
+                title={t('common.clearCache')}
+                className="h-8 w-8 p-0"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+            {showReadButton && onReadChapter && (
+              <Button variant="outline" size="sm" onClick={onReadChapter} className="h-8 w-8 p-0">
+                <BookOpen className="h-3 w-3" />
+              </Button>
+            )}
+            {showViewContent && (
+              <ViewContentDialog
+                title={title}
+                content={content}
+                chapterIndex={index}
+                contentType="text"
+              />
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleToggleCollapse}
+              className="hidden sm:inline-flex h-8 w-8 p-0"
+              title={actualIsCollapsed ? t('common.expand') : t('common.collapse')}
+            >
+              {actualIsCollapsed ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronUp className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </CardTitle>
       </CardHeader>
       {!actualIsCollapsed && (
-        <CardContent>
-          <div className="markdown-card-content prose prose-sm">
+        <CardContent className="min-w-0">
+          <div className="markdown-card-content prose prose-sm max-w-none overflow-x-auto">
             <ReactMarkdown remarkPlugins={[remarkGfm,remarkCjkFriendly]}>
               {normalizeMarkdownTypography(markdownContent)}
             </ReactMarkdown>

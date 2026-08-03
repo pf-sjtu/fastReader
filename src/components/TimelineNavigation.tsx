@@ -1,7 +1,8 @@
 import { memo } from 'react'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, Circle, Loader2, BookOpen } from 'lucide-react'
+import { Loader2, BookOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 
 interface TimelineNavigationProps {
   chapters: Array<{
@@ -16,6 +17,9 @@ interface TimelineNavigationProps {
   onChapterClick: (chapterId: string) => void
   processing: boolean
   currentProcessingChapter?: string
+  /** sidebar: 桌面侧栏；sheet: 移动端抽屉内全高 */
+  variant?: 'sidebar' | 'sheet'
+  className?: string
 }
 
 export const TimelineNavigation = memo(function TimelineNavigation({
@@ -24,7 +28,9 @@ export const TimelineNavigation = memo(function TimelineNavigation({
   processingMode,
   onChapterClick,
   processing,
-  currentProcessingChapter
+  currentProcessingChapter,
+  variant = 'sidebar',
+  className
 }: TimelineNavigationProps) {
   const { t } = useTranslation()
 
@@ -34,11 +40,18 @@ export const TimelineNavigation = memo(function TimelineNavigation({
 
   const processedCount = chapters.filter(ch => ch.processed).length
   const progressPct = chapters.length > 0 ? (processedCount / chapters.length) * 100 : 0
+  const isSheet = variant === 'sheet'
 
   return (
     <div
-      className="w-60 sticky top-4 flex flex-col bg-card border rounded-lg overflow-hidden"
-      style={{ maxHeight: 'calc(100vh - 8rem)' }}
+      className={cn(
+        'flex flex-col bg-card overflow-hidden',
+        isSheet
+          ? 'w-full h-full border-0 rounded-none'
+          : 'w-60 sticky top-4 border rounded-lg',
+        className
+      )}
+      style={isSheet ? undefined : { maxHeight: 'calc(100vh - 8rem)' }}
     >
       {/* 进度头部 */}
       <div className="px-3 py-2.5 border-b shrink-0 space-y-1.5">

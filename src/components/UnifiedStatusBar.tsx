@@ -92,75 +92,119 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
     recentRecords.length > 0 &&
     onLoadFromHistory
 
+  // 窄屏只展示最近 1 条历史，避免挤爆
+  const mobileRecentRecords = recentRecords.slice(0, 1)
+
   return (
     <>
-      <Card className={cn("w-full", className)}>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            {/* 左侧：切换按钮 */}
-            <div className="flex items-center gap-3">
+      <Card className={cn("w-full min-w-0", className)}>
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* 切换按钮 + 模型信息（移动端同一行） */}
+            <div className="flex items-center justify-between gap-2 sm:justify-start sm:gap-3 shrink-0">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={onToggleView}
-                className="flex items-center gap-2"
+                className="flex items-center gap-1.5 min-h-9"
               >
                 {currentView === 'config' ? (
                   <>
-                    <Brain className="h-4 w-4" />
-                    {t('statusBar.enterProcessing')}
-                    <ArrowRight className="h-4 w-4" />
+                    <Brain className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline">{t('statusBar.enterProcessing')}</span>
+                    <span className="sm:hidden">{t('statusBar.enterProcessingShort')}</span>
+                    <ArrowRight className="h-4 w-4 shrink-0" />
                   </>
                 ) : (
                   <>
-                    <ArrowLeft className="h-4 w-4" />
-                    {t('statusBar.backToConfig')}
-                    <Settings className="h-4 w-4" />
+                    <ArrowLeft className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline">{t('statusBar.backToConfig')}</span>
+                    <span className="sm:hidden">{t('statusBar.backToConfigShort')}</span>
+                    <Settings className="h-4 w-4 shrink-0" />
                   </>
                 )}
               </Button>
+
+              <div className="flex items-center gap-2 sm:hidden">
+                {currentModel && (
+                  <Badge variant="secondary" className="flex items-center gap-1 max-w-[10rem]">
+                    {getModelIcon(currentModel)}
+                    <span className="text-xs truncate">{currentModel}</span>
+                    {tokenUsage > 0 && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        ({formatTokenCount(tokenUsage)})
+                      </span>
+                    )}
+                  </Badge>
+                )}
+                {processing && (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
             </div>
 
             {/* 中间：进度条 / 最近历史 / 状态信息 */}
-            <div className="flex-1 mx-6">
+            <div className="flex-1 min-w-0 mx-0 sm:mx-6">
               {processing || progress > 0 ? (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-muted-foreground truncate min-w-0">
                       {processing ? currentStep : t('statusBar.completed')}
                     </span>
-                    <span className="text-muted-foreground">
+                    <span className="text-muted-foreground shrink-0">
                       {Math.round(progress)}%
                     </span>
                   </div>
                   <Progress value={progress} className="h-2" />
                 </div>
               ) : showRecentHistory ? (
-                <div className="flex items-center justify-center gap-3">
+                <div className="flex items-center gap-2 sm:justify-center overflow-x-auto">
                   <History className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div className="flex items-center gap-2 text-sm">
-                    {recentRecords.map((record) => (
-                      <Button
-                        key={record.fileName}
-                        variant="ghost"
-                        size="sm"
-                        className="h-auto py-0.5 px-2 text-sm text-muted-foreground hover:text-foreground"
-                        onClick={() => handleHistorySelect(record)}
-                        disabled={loadingFileName !== null}
-                      >
-                        {loadingFileName === record.fileName ? (
-                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                        ) : (
-                          <ExternalLink className="h-3 w-3 mr-1" />
-                        )}
-                        <span className="truncate max-w-[120px]">{record.bookTitle}</span>
-                      </Button>
-                    ))}
+                  <div className="flex items-center gap-1.5 text-sm min-w-0">
+                    {/* 桌面显示 2 条，移动显示 1 条 */}
+                    <div className="hidden sm:flex items-center gap-2">
+                      {recentRecords.map((record) => (
+                        <Button
+                          key={record.fileName}
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto py-0.5 px-2 text-sm text-muted-foreground hover:text-foreground"
+                          onClick={() => handleHistorySelect(record)}
+                          disabled={loadingFileName !== null}
+                        >
+                          {loadingFileName === record.fileName ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          ) : (
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                          )}
+                          <span className="truncate max-w-[120px]">{record.bookTitle}</span>
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="flex sm:hidden items-center gap-1.5 min-w-0">
+                      {mobileRecentRecords.map((record) => (
+                        <Button
+                          key={record.fileName}
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto py-0.5 px-2 text-sm text-muted-foreground hover:text-foreground min-w-0"
+                          onClick={() => handleHistorySelect(record)}
+                          disabled={loadingFileName !== null}
+                        >
+                          {loadingFileName === record.fileName ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin shrink-0" />
+                          ) : (
+                            <ExternalLink className="h-3 w-3 mr-1 shrink-0" />
+                          )}
+                          <span className="truncate max-w-[8rem]">{record.bookTitle}</span>
+                        </Button>
+                      ))}
+                    </div>
                     {hasMore && (
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-auto py-0.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        className="h-auto py-0.5 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
                         onClick={() => setHistoryDialogOpen(true)}
                       >
                         {t('history.viewMore')}
@@ -179,14 +223,16 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
               )}
             </div>
 
-            {/* 右侧：模型和token信息 */}
-            <div className="flex items-center gap-3">
+            {/* 右侧：模型和token信息（桌面） */}
+            <div className="hidden sm:flex items-center gap-3 shrink-0">
               {currentModel && (
-                <Badge variant="secondary" className="flex items-center gap-1">
+                <Badge variant="secondary" className="flex items-center gap-1 max-w-[14rem]">
                   {getModelIcon(currentModel)}
-                  <span className="text-xs">{currentModel}</span>
+                  <span className="text-xs truncate">{currentModel}</span>
                   {tokenUsage > 0 && (
-                    <span className="text-xs text-muted-foreground">({formatTokenCount(tokenUsage)})</span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      ({formatTokenCount(tokenUsage)})
+                    </span>
                   )}
                 </Badge>
               )}

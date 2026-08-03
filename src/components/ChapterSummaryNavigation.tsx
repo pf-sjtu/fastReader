@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface ChapterSummaryNavigationProps {
   chapters: Array<{
@@ -15,6 +16,9 @@ interface ChapterSummaryNavigationProps {
   processing: boolean
   currentProcessingChapter?: string
   currentViewingChapter?: string
+  /** sidebar: 桌面侧栏；sheet: 移动端抽屉内全高 */
+  variant?: 'sidebar' | 'sheet'
+  className?: string
 }
 
 export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
@@ -23,7 +27,9 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
   processingMode,
   onChapterClick,
   currentProcessingChapter,
-  currentViewingChapter
+  currentViewingChapter,
+  variant = 'sidebar',
+  className
 }: ChapterSummaryNavigationProps) {
   if (currentStepIndex !== 2 || processingMode !== 'summary' || chapters.length === 0) {
     return null
@@ -31,11 +37,18 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
 
   const processedCount = chapters.filter(ch => ch.processed).length
   const progressPct = chapters.length > 0 ? (processedCount / chapters.length) * 100 : 0
+  const isSheet = variant === 'sheet'
 
   return (
     <div
-      className="w-52 sticky top-4 flex flex-col bg-card border rounded-lg overflow-hidden"
-      style={{ maxHeight: 'calc(100vh - 8rem)' }}
+      className={cn(
+        'flex flex-col bg-card overflow-hidden',
+        isSheet
+          ? 'w-full h-full border-0 rounded-none'
+          : 'w-52 sticky top-4 border rounded-lg',
+        className
+      )}
+      style={isSheet ? undefined : { maxHeight: 'calc(100vh - 8rem)' }}
     >
       {/* 进度头部 */}
       <div className="px-3 py-2.5 border-b shrink-0 space-y-1.5">

@@ -347,10 +347,18 @@
   },
   "statusBar": {
     "enterProcessing": "Enter Processing",
+    "enterProcessingShort": "Results",
     "backToConfig": "Back to Config",
+    "backToConfigShort": "Config",
     "readyToProcess": "Ready to process",
     "viewingResults": "Viewing results",
     "completed": "Completed"
+  },
+  "mobile": {
+    "chapters": "Chapters",
+    "chaptersDescription": "Select a chapter to jump or check progress",
+    "preview": "Preview",
+    "previewDescription": "View original chapter content"
   },
   "history": {
     "dialogTitle": "Processing History",

@@ -1,8 +1,16 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { BookOpen, Brain, ChevronUp } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet'
+import { BookOpen, Brain, ChevronUp, List, Eye } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
 import type { MindElixirData } from 'mind-elixir'
@@ -13,6 +21,7 @@ import { normalizeMarkdownTypography } from '@/lib/markdown'
 import { scrollToTop } from '@/utils/index'
 import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
+import { useIsMobile } from '@/hooks/use-mobile'
 import type { ProcessingHistoryRecord } from '@/stores/processingHistory'
 
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
@@ -22,8 +31,6 @@ import { WebDAVFileBrowser } from '@/components/project/WebDAVFileBrowser'
 import { BatchQueuePanel } from '@/components/project/BatchQueuePanel'
 import { ChapterSummaryNavigation } from '@/components/ChapterSummaryNavigation'
 import { TimelineNavigation } from '@/components/TimelineNavigation'
-import { EpubReader } from '@/components/EpubReader'
-import { PdfReader } from '@/components/PdfReader'
 
 import { FileUploadCard } from '@/components/sections/FileUploadCard'
 import { ChapterSelectionSection } from '@/components/sections/ChapterSelectionSection'
@@ -33,10 +40,13 @@ import { ResultsSection } from '@/components/sections/ResultsSection'
 function App() {
   const { t } = useTranslation()
   const { aiConfig, processingOptions, webdavConfig } = useConfigStore()
+  const isMobile = useIsMobile()
 
   // 页面步骤状态 (1: 配置, 2: 结果)
   const [currentStepIndex, setCurrentStepIndex] = useState(1)
   const [showBackToTop, setShowBackToTop] = useState(false)
+  const [navSheetOpen, setNavSheetOpen] = useState(false)
+  const [previewSheetOpen, setPreviewSheetOpen] = useState(false)
 
   // 使用 book processing hook
   const {
@@ -224,8 +234,72 @@ function App() {
     return success
   }, [loadFromHistoryRecord])
 
+  // 移动端：打开原文预览时自动弹出预览 Sheet
+  useEffect(() => {
+    if (isMobile && rightPanelContent) {
+      setPreviewSheetOpen(true)
+    } else if (!rightPanelContent) {
+      setPreviewSheetOpen(false)
+    }
+  }, [isMobile, rightPanelContent])
+
+  // 切换步骤时关闭移动端抽屉
+  useEffect(() => {
+    setNavSheetOpen(false)
+  }, [currentStepIndex])
+
+  const handleMobileChapterSummaryClick = useCallback((chapterId: string) => {
+    handleChapterSummaryNavigation(chapterId)
+    setNavSheetOpen(false)
+  }, [handleChapterSummaryNavigation])
+
+  const handleMobileChapterNavClick = useCallback((chapterId: string) => {
+    handleChapterNavigation(chapterId)
+    setNavSheetOpen(false)
+  }, [handleChapterNavigation])
+
+  // 关闭 Sheet 时保留 rightPanelContent，便于「预览」按钮再次打开
+  const handlePreviewSheetOpenChange = useCallback((open: boolean) => {
+    setPreviewSheetOpen(open)
+  }, [])
+
+  const summaryNavChapters = bookSummary?.chapters || []
+  const mindmapNavChapters = bookMindMap?.chapters || []
+  const showSummaryNav =
+    currentStepIndex === 2 &&
+    processingMode === 'summary' &&
+    summaryNavChapters.length > 0
+  const showMindmapNav =
+    currentStepIndex === 2 &&
+    processingMode !== 'summary' &&
+    (processing || mindmapNavChapters.length > 0)
+  const showMobileNavTrigger = isMobile && (showSummaryNav || showMindmapNav)
+
+  const processedNavCount = showSummaryNav
+    ? summaryNavChapters.filter((ch) => ch.processed).length
+    : mindmapNavChapters.filter((ch) => ch.processed).length
+  const totalNavCount = showSummaryNav
+    ? summaryNavChapters.length
+    : mindmapNavChapters.length
+
+  const desktopPreview = !isMobile && rightPanelContent ? (
+    <PreviewPanel
+      chapter={rightPanelContent.chapter}
+      title={rightPanelContent.title}
+      fileName={file?.name || ''}
+      bookData={fullBookData}
+      fontSize={previewFontSize}
+      isFullscreen={isPreviewFullscreen}
+      onClose={handleCloseRightPanel}
+      onIncreaseFontSize={increasePreviewFontSize}
+      onDecreaseFontSize={decreasePreviewFontSize}
+      onToggleFullscreen={togglePreviewFullscreen}
+      variant="sidebar"
+    />
+  ) : null
+
   return (
-    <div className="min-h-screen bg-background p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container">
+    <div className="min-h-screen bg-background p-3 sm:p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
       <Toaster />
       <WebDAVFileBrowser
         isOpen={isWebDAVBrowserOpen}
@@ -233,18 +307,29 @@ function App() {
         onFileSelect={handleWebDAVFileSelect}
       />
 
-      <div className="max-w-full xl:max-w-7xl space-y-4 w-full flex-1">
+      <div className="max-w-full xl:max-w-7xl space-y-3 sm:space-y-4 w-full flex-1 min-w-0">
         {/* Header */}
-        <div className="text-center space-y-2 relative">
-          <div className="absolute top-0 right-0 flex items-center gap-2">
-            <LanguageSwitcher />
-            <DarkModeToggle />
+        <div className="flex flex-col gap-2 sm:block sm:relative sm:space-y-2 sm:text-center">
+          <div className="flex items-center justify-between gap-2 sm:absolute sm:top-0 sm:right-0 sm:justify-end">
+            <div className="sm:hidden flex-1 min-w-0">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 truncate">
+                <BookOpen className="h-6 w-6 text-primary shrink-0" />
+                <span className="truncate">{t('app.title')}</span>
+              </h1>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <LanguageSwitcher />
+              <DarkModeToggle />
+            </div>
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 flex items-center justify-center gap-2">
-            <BookOpen className="h-8 w-8 text-primary" />
-            {t('app.title')}
-          </h1>
-          <p className="text-gray-600 dark:text-gray-300">{t('app.description')}</p>
+          <div className="hidden sm:block text-center space-y-2">
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 flex items-center justify-center gap-2">
+              <BookOpen className="h-8 w-8 text-primary" />
+              {t('app.title')}
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300">{t('app.description')}</p>
+          </div>
+          <p className="sm:hidden text-sm text-gray-600 dark:text-gray-300">{t('app.description')}</p>
         </div>
 
         {/* 统一状态栏 */}
@@ -262,11 +347,43 @@ function App() {
         {/* 批量处理队列面板 */}
         <BatchQueuePanel />
 
+        {/* 移动端：章节导航 / 预览 触发条 */}
+        {(showMobileNavTrigger || (isMobile && rightPanelContent)) && (
+          <div className="flex items-center gap-2 md:hidden">
+            {showMobileNavTrigger && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-9 flex-1 justify-center gap-2"
+                onClick={() => setNavSheetOpen(true)}
+              >
+                <List className="h-4 w-4" />
+                {t('mobile.chapters')}
+                {totalNavCount > 0 && (
+                  <Badge variant="secondary" className="text-xs font-normal">
+                    {processedNavCount}/{totalNavCount}
+                  </Badge>
+                )}
+              </Button>
+            )}
+            {isMobile && rightPanelContent && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-9 flex-1 justify-center gap-2"
+                onClick={() => setPreviewSheetOpen(true)}
+              >
+                <Eye className="h-4 w-4" />
+                {t('mobile.preview')}
+              </Button>
+            )}
+          </div>
+        )}
+
         {currentStepIndex === 1 ? (
           // 配置步骤
-          <div className="flex gap-4">
-            {/* 配置界面 */}
-            <div className="flex-1 space-y-4">
+          <div className="flex flex-col md:flex-row gap-3 md:gap-4 min-w-0">
+            <div className="flex-1 space-y-4 min-w-0">
               <FileUploadCard
                 file={file}
                 processing={processing}
@@ -300,29 +417,15 @@ function App() {
               )}
             </div>
 
-            {/* 右侧预览区域 */}
-            {rightPanelContent && (
-              <PreviewPanel
-                chapter={rightPanelContent.chapter}
-                title={rightPanelContent.title}
-                fileName={file?.name || ''}
-                bookData={fullBookData}
-                fontSize={previewFontSize}
-                isFullscreen={isPreviewFullscreen}
-                onClose={handleCloseRightPanel}
-                onIncreaseFontSize={increasePreviewFontSize}
-                onDecreaseFontSize={decreasePreviewFontSize}
-                onToggleFullscreen={togglePreviewFullscreen}
-              />
-            )}
+            {desktopPreview}
           </div>
         ) : (
           // 结果步骤
-          <div className="flex gap-4">
-            {/* 左侧导航 */}
-            {processingMode === 'summary' ? (
+          <div className="flex flex-col md:flex-row gap-3 md:gap-4 min-w-0">
+            {/* 桌面：左侧导航 */}
+            {!isMobile && processingMode === 'summary' && (
               <ChapterSummaryNavigation
-                chapters={bookSummary?.chapters || []}
+                chapters={summaryNavChapters}
                 totalChapters={extractedChapters?.length || 0}
                 currentStepIndex={currentStepIndex}
                 processingMode={processingMode}
@@ -330,20 +433,23 @@ function App() {
                 processing={processing}
                 currentProcessingChapter={currentProcessingChapter}
                 currentViewingChapter={currentViewingChapterSummary}
+                variant="sidebar"
               />
-            ) : (
+            )}
+            {!isMobile && processingMode !== 'summary' && (
               <TimelineNavigation
-                chapters={bookMindMap?.chapters || []}
+                chapters={mindmapNavChapters}
                 currentStepIndex={currentStepIndex}
                 processingMode={processingMode}
                 onChapterClick={handleChapterNavigation}
                 processing={processing}
                 currentProcessingChapter={currentProcessingChapter}
+                variant="sidebar"
               />
             )}
 
             {/* 中间结果展示 */}
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               {(bookSummary || bookMindMap) ? (
                 <ResultsSection
                   processingMode={processingMode}
@@ -382,7 +488,55 @@ function App() {
               )}
             </div>
 
-            {/* 右侧预览区域 */}
+            {desktopPreview}
+          </div>
+        )}
+
+        {/* 移动端：章节导航 Sheet */}
+        <Sheet open={navSheetOpen} onOpenChange={setNavSheetOpen}>
+          <SheetContent side="left" className="w-[min(100%,20rem)] p-0 gap-0">
+            <SheetHeader className="sr-only">
+              <SheetTitle>{t('mobile.chapters')}</SheetTitle>
+              <SheetDescription>{t('mobile.chaptersDescription')}</SheetDescription>
+            </SheetHeader>
+            <div className="h-full pt-2">
+              {processingMode === 'summary' ? (
+                <ChapterSummaryNavigation
+                  chapters={summaryNavChapters}
+                  totalChapters={extractedChapters?.length || 0}
+                  currentStepIndex={currentStepIndex}
+                  processingMode={processingMode}
+                  onChapterClick={handleMobileChapterSummaryClick}
+                  processing={processing}
+                  currentProcessingChapter={currentProcessingChapter}
+                  currentViewingChapter={currentViewingChapterSummary}
+                  variant="sheet"
+                />
+              ) : (
+                <TimelineNavigation
+                  chapters={mindmapNavChapters}
+                  currentStepIndex={currentStepIndex}
+                  processingMode={processingMode}
+                  onChapterClick={handleMobileChapterNavClick}
+                  processing={processing}
+                  currentProcessingChapter={currentProcessingChapter}
+                  variant="sheet"
+                />
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* 移动端：原文预览 Sheet */}
+        <Sheet open={previewSheetOpen && !!rightPanelContent} onOpenChange={handlePreviewSheetOpenChange}>
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-md p-0 gap-0 flex flex-col"
+          >
+            <SheetHeader className="sr-only">
+              <SheetTitle>{rightPanelContent?.title || t('mobile.preview')}</SheetTitle>
+              <SheetDescription>{t('mobile.previewDescription')}</SheetDescription>
+            </SheetHeader>
             {rightPanelContent && (
               <PreviewPanel
                 chapter={rightPanelContent.chapter}
@@ -391,20 +545,21 @@ function App() {
                 bookData={fullBookData}
                 fontSize={previewFontSize}
                 isFullscreen={isPreviewFullscreen}
-                onClose={handleCloseRightPanel}
+                onClose={() => handlePreviewSheetOpenChange(false)}
                 onIncreaseFontSize={increasePreviewFontSize}
                 onDecreaseFontSize={decreasePreviewFontSize}
                 onToggleFullscreen={togglePreviewFullscreen}
+                variant="sheet"
               />
             )}
-          </div>
-        )}
+          </SheetContent>
+        </Sheet>
 
         {/* 回到顶部按钮 */}
         {showBackToTop && (
           <Button
             onClick={scrollToTop}
-            className="fixed bottom-6 right-6 z-50 rounded-full w-12 h-12 shadow-lg hover:shadow-xl transition-all duration-300 bg-primary hover:bg-primary/90 text-primary-foreground"
+            className="fixed z-50 rounded-full w-12 h-12 shadow-lg hover:shadow-xl transition-all duration-300 bg-primary hover:bg-primary/90 text-primary-foreground right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))]"
             size="icon"
             aria-label={t('common.backToTop')}
           >

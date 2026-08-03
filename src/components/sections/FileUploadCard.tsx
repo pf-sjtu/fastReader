@@ -66,19 +66,19 @@ export function FileUploadCard({
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="file">{t('upload.selectFile')}</Label>
-          <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50 dark:bg-gray-800 gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg bg-gray-50 dark:bg-gray-800 gap-3">
             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 min-w-0 flex-1 overflow-hidden">
               <FileText className="h-4 w-4 shrink-0" />
               <span className="truncate block">{file?.name || t('upload.noFileSelected')}</span>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={triggerFileInput}
                 disabled={processing}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 min-h-9"
               >
                 <Upload className="h-4 w-4" />
                 {t('upload.localUpload')}
@@ -89,7 +89,7 @@ export function FileUploadCard({
                 size="sm"
                 onClick={onOpenWebDAVBrowser}
                 disabled={processing}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 min-h-9"
               >
                 <Network className="h-4 w-4" />
                 WebDAV
@@ -108,39 +108,37 @@ export function FileUploadCard({
           />
         </div>
 
-        <div className="flex items-center justify-end overflow-x-auto">
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              onClick={onExtractChapters}
-              disabled={!file || extractingChapters || processing}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              {extractingChapters ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {t('upload.extractingChapters')}
-                </>
-              ) : (
-                <>
-                  <List className="h-4 w-4" />
-                  {t('upload.extractChapters')}
-                </>
-              )}
-            </Button>
-            <ConfigDialog processing={processing} file={file} />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onClearCache}
-              disabled={processing}
-              className="flex items-center gap-1 text-red-500 hover:text-red-700 hover:bg-red-50"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              {t('upload.clearCache')}
-            </Button>
-          </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            onClick={onExtractChapters}
+            disabled={!file || extractingChapters || processing}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2 min-h-9"
+          >
+            {extractingChapters ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {t('upload.extractingChapters')}
+              </>
+            ) : (
+              <>
+                <List className="h-4 w-4" />
+                {t('upload.extractChapters')}
+              </>
+            )}
+          </Button>
+          <ConfigDialog processing={processing} file={file} />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClearCache}
+            disabled={processing}
+            className="flex items-center gap-1 min-h-9 text-red-500 hover:text-red-700 hover:bg-red-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {t('upload.clearCache')}
+          </Button>
         </div>
 
         {/* 云端缓存提示 */}

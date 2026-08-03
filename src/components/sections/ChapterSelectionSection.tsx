@@ -250,11 +250,11 @@ export function ChapterSelectionSection({
 
               {/* 首尾章节选择 */}
               {selectAllMode === 'range' && (
-                <div className="flex items-center gap-3 px-1 mt-1">
-                  <div className="flex-1">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-1 mt-1">
+                  <div className="flex-1 min-w-0">
                     <Label className="text-xs text-muted-foreground mb-1 block">起始章节</Label>
                     <Select value={startChapterId} onValueChange={handleStartChapterChange}>
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full min-h-9">
                         <SelectValue placeholder="选择起始章节" />
                       </SelectTrigger>
                       <SelectContent>
@@ -267,12 +267,12 @@ export function ChapterSelectionSection({
                     </Select>
                   </div>
 
-                  <ArrowRight className="h-4 w-4 text-muted-foreground mt-5" />
+                  <ArrowRight className="h-4 w-4 text-muted-foreground hidden sm:block sm:mt-5 shrink-0" />
 
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <Label className="text-xs text-muted-foreground mb-1 block">结束章节</Label>
                     <Select value={endChapterId} onValueChange={handleEndChapterChange}>
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full min-h-9">
                         <SelectValue placeholder="选择结束章节" />
                       </SelectTrigger>
                       <SelectContent>
