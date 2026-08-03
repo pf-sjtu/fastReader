@@ -53,6 +53,7 @@ git add <相关文件>     # 不 stage 无关改动、密钥、大体积产物
 git commit -m "..."    # 中文或项目既有风格；写清动机与主要改动
 ```
 
+- **构建号**：`src/buildInfo.ts` 的 `BUILD_VERSION`（`YYYYMMDD.bN`）由 `pre-commit` hook 自动 bump；首次 clone 后执行 `pnpm hooks:install`（或 `pnpm install` 触发 `prepare`）。若 hook 未生效，提交前手动 `node scripts/bump-build.mjs` 并 `git add src/buildInfo.ts`
 - 提交信息聚焦「为什么」与关键改动，避免空泛 `update` / `fix`
 - 不使用 `git commit --amend` 改写已推送历史，除非用户明确要求
 

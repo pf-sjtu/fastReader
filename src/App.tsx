@@ -24,6 +24,7 @@ import { useBookProcessing } from '@/hooks/useBookProcessing'
 import { useIsMobile } from '@/hooks/use-mobile'
 import type { ProcessingHistoryRecord } from '@/stores/processingHistory'
 
+import { BUILD_VERSION } from '@/buildInfo'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { UnifiedStatusBar } from '@/components/UnifiedStatusBar'
@@ -554,6 +555,14 @@ function App() {
             )}
           </SheetContent>
         </Sheet>
+
+        {/* 构建号：YYYYMMDD.bN，提交前自动 bump */}
+        <p
+          className="pt-6 pb-1 text-center text-[10px] leading-none text-muted-foreground/40 select-all tabular-nums tracking-wide"
+          title="build version"
+        >
+          {BUILD_VERSION}
+        </p>
 
         {/* 回到顶部按钮 */}
         {showBackToTop && (

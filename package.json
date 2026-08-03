@@ -11,7 +11,10 @@
     "lint:all": "npm run lint && npm run lint:css",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bump-build": "node scripts/bump-build.mjs",
+    "hooks:install": "node scripts/install-git-hooks.mjs",
+    "prepare": "node scripts/install-git-hooks.mjs"
   },
   "dependencies": {
     "@ai-sdk/cerebras": "^2.0.14",
