@@ -130,11 +130,32 @@ export abstract class BaseAIProvider implements AIProvider {
           throw lastError
         }
 
-        // 其他错误，计算延迟后重试
-        const retryDelay = calculateRetryDelay(attempt, this.options.baseRetryDelay)
+        // 上下文过长 / 请求体过大：重试无意义，立即失败
+        const msg = (lastError?.message || String(error || '')).toLowerCase()
+        const status = (error as { status?: number })?.status
+        if (
+          status === 413 ||
+          (status === 400 &&
+            (msg.includes('context') ||
+              msg.includes('token') ||
+              msg.includes('too long') ||
+              msg.includes('maximum'))) ||
+          msg.includes('context length') ||
+          msg.includes('context_length') ||
+          msg.includes('maximum context') ||
+          msg.includes('too many tokens') ||
+          msg.includes('prompt is too long')
+        ) {
+          console.error(`[AI服务] ${operationName} - 上下文/长度错误，不再重试:`, lastError?.message)
+          throw lastError
+        }
+
+        // 其他错误：用较短退避（默认 baseRetryDelay 常为 60s，会像卡死）
+        const base = Math.min(this.options.baseRetryDelay || 2000, 5000)
+        const retryDelay = calculateRetryDelay(attempt, base)
         console.log(
           `[AI服务] ${operationName} - 第 ${attempt} 次尝试失败，${retryDelay / 1000}秒后重试...`,
-          error?.message || error
+          (error as Error)?.message || error
         )
         await sleep(retryDelay)
       }

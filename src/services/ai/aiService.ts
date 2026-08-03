@@ -26,6 +26,37 @@ import { createAIProvider } from './factory'
 // 已跳过章节的标记前缀
 const SKIPPED_SUMMARY_PREFIX = '【已跳过】'
 
+/** 后处理（关联/全书总结）输入总预算，避免 16 章长摘要撑爆上下文 */
+const POST_PROCESS_SUMMARY_BUDGET = 28_000
+const POST_PROCESS_SUMMARY_MAX_PER = 2_000
+const POST_PROCESS_CONNECTIONS_MAX = 6_000
+
+function truncateText(text: string, maxLen: number): string {
+  const s = (text || '').trim()
+  if (s.length <= maxLen) return s
+  return `${s.slice(0, Math.max(0, maxLen - 1))}…`
+}
+
+/**
+ * 将章节摘要压到可放入后处理 prompt 的体量。
+ * 按章均分总预算，并设单章上限。
+ */
+function compactChapterSummaries(
+  chapters: Array<{ title: string; summary?: string }>,
+  budget = POST_PROCESS_SUMMARY_BUDGET,
+  maxPer = POST_PROCESS_SUMMARY_MAX_PER
+): Array<{ index: number; title: string; summary: string }> {
+  const valid = chapters.filter((ch) => (ch.summary || '').trim().length > 0)
+  if (valid.length === 0) return []
+
+  const per = Math.max(200, Math.min(maxPer, Math.floor(budget / valid.length)))
+  return valid.map((chapter, index) => ({
+    index: index + 1,
+    title: chapter.title,
+    summary: truncateText(chapter.summary || '', per),
+  }))
+}
+
 export class AIService {
   private config: AIProviderConfig | (() => AIProviderConfig)
   private promptConfig: PromptConfig | (() => PromptConfig)
@@ -171,6 +202,7 @@ export class AIService {
 
   /**
    * 分析章节关联
+   * 注意：只送压缩后的摘要，避免全书长摘要叠加导致上下文溢出 / 请求失败。
    */
   async analyzeConnections(
     chapters: Chapter[],
@@ -180,19 +212,15 @@ export class AIService {
     const basePrompt =
       promptConfig.connectionAnalysis || getChapterConnectionsAnalysisPrompt()
 
-    const processedChapters = chapters
-      .filter(ch => !this.isSkippedSummary(ch.summary || ''))
-      .map((chapter, index) => ({
-        index: index + 1,
-        title: chapter.title,
-        summary: chapter.summary
-      }))
+    const processedChapters = compactChapterSummaries(
+      chapters.filter((ch) => !this.isSkippedSummary(ch.summary || ''))
+    )
 
     if (processedChapters.length < 2) {
       return '章节数量不足，无法分析关联。'
     }
 
-    const prompt = `${basePrompt}\n\n已处理的章节列表:\n${JSON.stringify(processedChapters, null, 2)}`
+    const prompt = `${basePrompt}\n\n已处理的章节列表（摘要已截断以控制长度）:\n${JSON.stringify(processedChapters, null, 2)}`
 
     return this.generateContent(prompt, outputLanguage)
   }
@@ -209,15 +237,17 @@ export class AIService {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.overallSummary || getOverallSummaryPrompt()
 
-    const processedChapters = chapters
-      .filter(ch => !this.isSkippedSummary(ch.summary || ''))
-      .map((chapter, index) => ({
-        index: index + 1,
-        title: chapter.title,
-        summary: chapter.summary
-      }))
+    const processedChapters = compactChapterSummaries(
+      chapters.filter((ch) => !this.isSkippedSummary(ch.summary || ''))
+    )
 
-    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n已处理的章节列表:\n${JSON.stringify(processedChapters, null, 2)}\n\n章节关联分析:\n${connections}`
+    if (processedChapters.length === 0) {
+      return '没有可用的章节摘要，无法生成全书总结。'
+    }
+
+    const compactConnections = truncateText(connections || '', POST_PROCESS_CONNECTIONS_MAX)
+
+    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n已处理的章节列表（摘要已截断以控制长度）:\n${JSON.stringify(processedChapters, null, 2)}\n\n章节关联分析:\n${compactConnections}`
 
     return this.generateContent(prompt, outputLanguage)
   }
@@ -296,15 +326,22 @@ export class AIService {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.mindmap.combined || getChapterMindMapPrompt()
 
-    const processedChapters = chapters
-      .filter(ch => !this.isSkippedSummary(ch.summary || ''))
-      .map((chapter, index) => ({
-        index: index + 1,
-        title: chapter.title,
-        summary: chapter.summary
-      }))
+    const processedChapters = compactChapterSummaries(
+      chapters
+        .filter((ch) => !this.isSkippedSummary(ch.summary || ''))
+        .map((chapter) => ({
+          title: chapter.title,
+          summary: chapter.summary || chapter.title,
+        })),
+      16_000,
+      800
+    )
 
-    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n章节列表:\n${JSON.stringify(processedChapters, null, 2)}`
+    if (processedChapters.length === 0) {
+      return null
+    }
+
+    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n章节列表（摘要已截断）:\n${JSON.stringify(processedChapters, null, 2)}`
 
     const response = await this.generateContent(prompt, outputLanguage)
 

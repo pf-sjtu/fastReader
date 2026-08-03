@@ -70,6 +70,8 @@ export function useBookProcessing() {
   const [currentStep, setCurrentStep] = useState('')
   const [currentProcessingChapter, setCurrentProcessingChapter] = useState('')
   const abortControllerRef = useRef<AbortController | null>(null)
+  /** 处理代数：重启/新开跑时递增，防止旧任务完成后覆盖新状态 */
+  const processGenerationRef = useRef(0)
 
   // 数据状态
   const [file, setFile] = useState<File | null>(null)
@@ -343,15 +345,18 @@ export function useBookProcessing() {
   const processBook = useCallback(async () => {
     if (!file || !extractedChapters || selectedChapters.size === 0) return
 
-    // 若仍有未结束的任务，先中止
+    // 新开跑：作废旧任务
+    const generation = ++processGenerationRef.current
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
 
     const controller = new AbortController()
     abortControllerRef.current = controller
+    const isCurrentRun = () =>
+      generation === processGenerationRef.current && !controller.signal.aborted
     const throwIfAborted = () => {
-      if (controller.signal.aborted) {
+      if (!isCurrentRun()) {
         const err = new Error('Aborted')
         err.name = 'AbortError'
         throw err
@@ -371,9 +376,10 @@ export function useBookProcessing() {
       })
       const selectedChapterData = extractedChapters.filter(ch => selectedChapters.has(ch.id))
       const totalChapters = selectedChapterData.length
+      let postPhaseWarning = false
 
       if (processingMode === 'summary') {
-        // 章节总结：0–80%；关联 80–90%；全书总结 90–100%
+        // 章节总结：0–80%；关联/全书为后处理（失败不丢章）
         const CHAPTER_PHASE_MAX = 80
         setCurrentStep(t('progress.generatingSummaries'))
         setProgress(0)
@@ -401,13 +407,22 @@ export function useBookProcessing() {
             title: chapter.title
           }))
 
-          const summary = await aiService.summarizeChapter(
-            chapter.title,
-            chapter.content,
-            bookType,
-            processingOptions.outputLanguage,
-            customPrompt
-          )
+          let summary: string
+          try {
+            summary = await aiService.summarizeChapter(
+              chapter.title,
+              chapter.content,
+              bookType,
+              processingOptions.outputLanguage,
+              customPrompt
+            )
+          } catch (chapterErr) {
+            throwIfAborted()
+            // 单章失败：记错误摘要并继续，避免整本卡死在某一章
+            console.error(`[processBook] 章节失败: ${chapter.title}`, chapterErr)
+            summary = `【处理失败】${chapterErr instanceof Error ? chapterErr.message : '未知错误'}`
+            postPhaseWarning = true
+          }
 
           throwIfAborted()
 
@@ -431,27 +446,45 @@ export function useBookProcessing() {
 
         setCurrentProcessingChapter('')
 
-        // 生成章节关联分析
+        // —— 后处理：关联 + 全书总结（独立容错，失败仍保留章节结果）——
+        let connections = ''
+        let overallSummary = ''
+
+        try {
+          throwIfAborted()
+          setCurrentStep(t('progress.analyzingConnections'))
+          setProgress(85)
+          connections = await aiService.analyzeConnections(
+            processedChapters,
+            processingOptions.outputLanguage
+          )
+        } catch (postErr) {
+          throwIfAborted()
+          console.error('[processBook] 关联分析失败:', postErr)
+          connections = `【关联分析失败】${postErr instanceof Error ? postErr.message : '未知错误'}`
+          postPhaseWarning = true
+          toast.warning(t('progress.postPhaseConnectionsFailed') || '章节已完成，但关联分析失败')
+        }
+
+        try {
+          throwIfAborted()
+          setCurrentStep(t('progress.generatingOverallSummary'))
+          setProgress(92)
+          overallSummary = await aiService.generateOverallSummary(
+            bookData?.title || '',
+            processedChapters,
+            connections,
+            processingOptions.outputLanguage
+          )
+        } catch (postErr) {
+          throwIfAborted()
+          console.error('[processBook] 全书总结失败:', postErr)
+          overallSummary = `【全书总结失败】${postErr instanceof Error ? postErr.message : '未知错误'}`
+          postPhaseWarning = true
+          toast.warning(t('progress.postPhaseOverallFailed') || '章节已完成，但全书总结失败')
+        }
+
         throwIfAborted()
-        setCurrentStep(t('progress.analyzingConnections'))
-        setProgress(85)
-
-        const connections = await aiService.analyzeConnections(
-          processedChapters,
-          processingOptions.outputLanguage
-        )
-
-        // 生成全书总结
-        throwIfAborted()
-        setCurrentStep(t('progress.generatingOverallSummary'))
-        setProgress(92)
-
-        const overallSummary = await aiService.generateOverallSummary(
-          bookData?.title || '',
-          processedChapters,
-          connections,
-          processingOptions.outputLanguage
-        )
 
         const summary: BookSummary = {
           title: bookData?.title || '',
@@ -465,23 +498,24 @@ export function useBookProcessing() {
 
         // 保存缓存
         processedChapters.forEach(chapter => {
-          if (chapter.summary) {
+          if (chapter.summary && !chapter.summary.startsWith('【处理失败】')) {
             cacheService.setCache(file.name, 'summary', chapter.summary, chapter.id)
           }
         })
-        if (connections) {
+        if (connections && !connections.startsWith('【关联分析失败】')) {
           cacheService.setCache(file.name, 'connections', connections)
         }
-        if (overallSummary) {
+        if (overallSummary && !overallSummary.startsWith('【全书总结失败】')) {
           cacheService.setCache(file.name, 'overall_summary', overallSummary)
         }
 
-        // 自动同步到WebDAV
+        // 自动同步到WebDAV（失败不影响主流程完成态）
         try {
           const fileName = file.name.replace(/\.[^/.]+$/, '')
           await autoSyncService.syncSummary(summary, fileName, chapterNamingMode)
         } catch (error) {
           console.error('自动同步失败:', error)
+          toast.warning(t('progress.syncFailed') || '结果已生成，但云端同步失败')
         }
       } else if (processingMode === 'mindmap' || processingMode === 'combined-mindmap') {
         // 章节导图：0–85%；整书导图 85–100%
@@ -510,12 +544,18 @@ export function useBookProcessing() {
             title: chapter.title
           }))
 
-          // 签名：(title, content, language) — 勿把 content 当 title
-          const mindMap = await aiService.generateChapterMindMap(
-            chapter.title,
-            chapter.content,
-            processingOptions.outputLanguage
-          )
+          let mindMap: MindElixirData | null = null
+          try {
+            mindMap = await aiService.generateChapterMindMap(
+              chapter.title,
+              chapter.content,
+              processingOptions.outputLanguage
+            )
+          } catch (chapterErr) {
+            throwIfAborted()
+            console.error(`[processBook] 导图章节失败: ${chapter.title}`, chapterErr)
+            postPhaseWarning = true
+          }
 
           throwIfAborted()
 
@@ -539,31 +579,39 @@ export function useBookProcessing() {
 
         setCurrentProcessingChapter('')
 
-        // 生成整书思维导图
+        // 生成整书思维导图（容错）
         let combinedMindMap: MindElixirData | null = null
 
         if (processingMode === 'combined-mindmap') {
-          throwIfAborted()
-          setCurrentStep(t('progress.generatingCombinedMindMap'))
-          setProgress(90)
+          try {
+            throwIfAborted()
+            setCurrentStep(t('progress.generatingCombinedMindMap'))
+            setProgress(90)
 
-          // combined 使用各章 title + summary/mindmap 摘要；language 为第三参
-          const chaptersForCombined = processedChapters.map((ch) => ({
-            ...ch,
-            summary:
-              ch.summary ||
-              (ch.mindMap && typeof ch.mindMap === 'object' && 'nodeData' in ch.mindMap
-                ? String((ch.mindMap as { nodeData?: { topic?: string } }).nodeData?.topic || '')
-                : '') ||
-              ch.title
-          }))
+            const chaptersForCombined = processedChapters.map((ch) => ({
+              ...ch,
+              summary:
+                ch.summary ||
+                (ch.mindMap && typeof ch.mindMap === 'object' && 'nodeData' in ch.mindMap
+                  ? String((ch.mindMap as { nodeData?: { topic?: string } }).nodeData?.topic || '')
+                  : '') ||
+                ch.title
+            }))
 
-          combinedMindMap = await aiService.generateCombinedMindMap(
-            bookData?.title || '',
-            chaptersForCombined,
-            processingOptions.outputLanguage
-          )
+            combinedMindMap = await aiService.generateCombinedMindMap(
+              bookData?.title || '',
+              chaptersForCombined,
+              processingOptions.outputLanguage
+            )
+          } catch (postErr) {
+            throwIfAborted()
+            console.error('[processBook] 整书导图失败:', postErr)
+            postPhaseWarning = true
+            toast.warning(t('progress.postPhaseCombinedFailed') || '章节导图已完成，但整书导图失败')
+          }
         }
+
+        throwIfAborted()
 
         const mindMapResult: BookMindMap = {
           title: bookData?.title || '',
@@ -574,7 +622,6 @@ export function useBookProcessing() {
 
         setBookMindMap(mindMapResult)
 
-        // 保存缓存
         processedChapters.forEach(chapter => {
           if (chapter.mindMap) {
             cacheService.setCache(file.name, 'mindmap', chapter.mindMap, chapter.id)
@@ -584,19 +631,22 @@ export function useBookProcessing() {
           cacheService.setCache(file.name, 'combined_mindmap', combinedMindMap)
         }
 
-        // 自动同步到WebDAV
         try {
           const fileName = file.name.replace(/\.[^/.]+$/, '')
           await autoSyncService.syncMindMap(mindMapResult, fileName)
         } catch (error) {
           console.error('自动同步失败:', error)
+          toast.warning(t('progress.syncFailed') || '结果已生成，但云端同步失败')
         }
+      } else {
+        throw new Error(`未知处理模式: ${processingMode}`)
       }
+
+      if (!isCurrentRun()) return
 
       setProgress(100)
       setCurrentStep(t('progress.completed'))
 
-      // 记录处理历史
       try {
         useProcessingHistoryStore.getState().addRecord({
           bookTitle: bookData?.title || file.name.replace(/\.[^/.]+$/, ''),
@@ -609,9 +659,12 @@ export function useBookProcessing() {
         console.error('记录处理历史失败:', e)
       }
 
-      toast.success(t('progress.processingCompleted'))
+      if (postPhaseWarning) {
+        toast.success(t('progress.completedWithWarnings') || '处理完成（部分后处理失败，章节结果已保留）')
+      } else {
+        toast.success(t('progress.processingCompleted'))
+      }
 
-      // 发送任务完成通知
       if (processingOptions.enableNotification) {
         await notificationService.sendTaskCompleteNotification(
           t('progress.bookProcessing'),
@@ -619,6 +672,10 @@ export function useBookProcessing() {
         )
       }
     } catch (error) {
+      // 被更新一轮处理取代：静默退出
+      if (generation !== processGenerationRef.current) {
+        return
+      }
       if (error instanceof Error && error.name === 'AbortError') {
         setCurrentStep(t('progress.cancelled'))
         toast.info(t('progress.cancelledHint') || '已中止。可返回配置修改设置后重新开始，或直接重新处理。', {
@@ -637,11 +694,13 @@ export function useBookProcessing() {
         }
       }
     } finally {
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null
+      if (generation === processGenerationRef.current) {
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null
+        }
+        setProcessing(false)
+        setCurrentProcessingChapter('')
       }
-      setProcessing(false)
-      setCurrentProcessingChapter('')
     }
   }, [
     file, extractedChapters, selectedChapters, bookData, aiConfig,
