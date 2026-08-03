@@ -980,27 +980,59 @@ export function useBookProcessing() {
     }
   }, [file, t])
 
-  // 清除特定缓存
+  // 清除特定缓存（不依赖本地 File：历史/云端加载后也能清内存与 localStorage）
   const clearSpecificCache = useCallback((cacheType: string) => {
-    if (!file) return
+    const cacheKey =
+      file?.name || cloudCacheKeyRef.current || cloudCacheMetadata?.fileName || null
 
-    cacheService.clearSpecificCache(
-      file.name,
-      cacheType as 'connections' | 'overall_summary' | 'key_charts' | 'combined_mindmap' | 'merged_mindmap' | 'selected_chapters'
-    )
+    if (cacheKey) {
+      cacheService.clearSpecificCache(
+        cacheKey,
+        cacheType as
+          | 'connections'
+          | 'overall_summary'
+          | 'key_charts'
+          | 'combined_mindmap'
+          | 'merged_mindmap'
+          | 'selected_chapters'
+      )
+      // 兼容：云端键与 epub 名不一致时多清一次
+      if (file?.name && cloudCacheKeyRef.current && file.name !== cloudCacheKeyRef.current) {
+        cacheService.clearSpecificCache(
+          cloudCacheKeyRef.current,
+          cacheType as
+            | 'connections'
+            | 'overall_summary'
+            | 'key_charts'
+            | 'combined_mindmap'
+            | 'merged_mindmap'
+            | 'selected_chapters'
+        )
+      }
+    }
 
     if (cacheType === 'connections' && bookSummary) {
       setBookSummary({ ...bookSummary, connections: '' })
     } else if (cacheType === 'overall_summary' && bookSummary) {
       setBookSummary({ ...bookSummary, overallSummary: '' })
-    } else if (cacheType === 'key_charts' && bookSummary) {
-      setBookSummary({ ...bookSummary, charts: null, chartsError: null })
+    } else if (cacheType === 'key_charts') {
+      // 始终清内存态，否则 UI 看起来「按钮无反应」
+      if (bookSummary) {
+        setBookSummary({ ...bookSummary, charts: null, chartsError: null })
+      }
+      setCloudChartsJson(null)
+      setCloudChartsFileFound(false)
+      // 避免立刻被「缺图自动生成」又写回来
+      pendingAutoChartsRef.current = false
+      chartsAutoGenRef.current = false
     } else if (cacheType === 'combined_mindmap' && bookMindMap) {
+      setBookMindMap({ ...bookMindMap, combinedMindMap: null })
+    } else if (cacheType === 'merged_mindmap' && bookMindMap) {
       setBookMindMap({ ...bookMindMap, combinedMindMap: null })
     }
 
-    toast.success(t('cache.specificCleared'))
-  }, [file, bookSummary, bookMindMap, t])
+    toast.success(t('cache.specificCleared', '已清除缓存'))
+  }, [file, bookSummary, bookMindMap, cloudCacheMetadata?.fileName, t])
 
   /**
    * 生成关键图表（可传入 summary 快照，避免 setState 异步导致用旧数据）
