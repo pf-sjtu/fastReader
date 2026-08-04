@@ -1624,6 +1624,7 @@ export function useBookProcessing() {
     setIsWebDAVBrowserOpen,
     setBookSummary,
     setBookMindMap,
+    setCurrentViewingChapterSummary,
     fullBookData
   }
 }

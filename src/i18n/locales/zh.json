@@ -393,6 +393,10 @@
     "viewingResults": "查看处理结果",
     "completed": "已完成"
   },
+  "nav": {
+    "processingProgress": "处理进度",
+    "readingProgress": "阅读进度"
+  },
   "mobile": {
     "chapters": "章节",
     "chaptersDescription": "选择章节以定位或查看进度",

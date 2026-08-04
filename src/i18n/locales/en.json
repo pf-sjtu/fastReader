@@ -404,6 +404,10 @@
     "viewingResults": "Viewing results",
     "completed": "Completed"
   },
+  "nav": {
+    "processingProgress": "Processing",
+    "readingProgress": "Reading"
+  },
   "mobile": {
     "chapters": "Chapters",
     "chaptersDescription": "Select a chapter to jump or check progress",

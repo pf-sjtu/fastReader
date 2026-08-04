@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -21,6 +21,7 @@ import { downloadSummaryMarkdown } from '@/utils/exportSummary'
 import { triggerTextDownload } from '@/utils/download'
 import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
+import { useChapterScrollSpy } from '@/hooks/useChapterScrollSpy'
 import { useIsMobile } from '@/hooks/use-mobile'
 import type { ProcessingHistoryRecord } from '@/stores/processingHistory'
 
@@ -109,6 +110,7 @@ function App() {
     // 设置器
     setCustomPrompt,
     setIsWebDAVBrowserOpen,
+    setCurrentViewingChapterSummary,
   } = useBookProcessing()
 
   // 监听滚动事件
@@ -235,11 +237,6 @@ function App() {
     setNavSheetOpen(false)
   }, [currentStepIndex])
 
-  const handleMobileChapterSummaryClick = useCallback((chapterId: string) => {
-    handleChapterSummaryNavigation(chapterId)
-    setNavSheetOpen(false)
-  }, [handleChapterSummaryNavigation])
-
   const handleMobileChapterNavClick = useCallback((chapterId: string) => {
     handleChapterNavigation(chapterId)
     setNavSheetOpen(false)
@@ -262,8 +259,47 @@ function App() {
     (processing || mindmapNavChapters.length > 0)
   const showMobileNavTrigger = isMobile && (showSummaryNav || showMindmapNav)
 
+  const summaryChapterIds = useMemo(
+    () => summaryNavChapters.map((ch) => ch.id),
+    [summaryNavChapters]
+  )
+
+  // 目录跟随主内容滚动：更新当前阅读章节
+  const { lock: lockScrollSpy } = useChapterScrollSpy({
+    chapterIds: summaryChapterIds,
+    enabled: showSummaryNav,
+    idPrefix: 'chapter-summary-',
+    containerSelector: '.scroll-container',
+    onChapterChange: setCurrentViewingChapterSummary,
+  })
+
+  const handleSummaryNavClick = useCallback(
+    (chapterId: string) => {
+      lockScrollSpy()
+      handleChapterSummaryNavigation(chapterId)
+    },
+    [lockScrollSpy, handleChapterSummaryNavigation]
+  )
+
+  const handleMobileChapterSummaryClick = useCallback(
+    (chapterId: string) => {
+      lockScrollSpy()
+      handleChapterSummaryNavigation(chapterId)
+      setNavSheetOpen(false)
+    },
+    [lockScrollSpy, handleChapterSummaryNavigation]
+  )
+
+  // 移动端角标：处理中=处理进度，完成后=阅读进度
+  const viewingNavIndex = currentViewingChapterSummary
+    ? summaryNavChapters.findIndex((ch) => ch.id === currentViewingChapterSummary)
+    : -1
   const processedNavCount = showSummaryNav
-    ? summaryNavChapters.filter((ch) => ch.processed).length
+    ? processing
+      ? summaryNavChapters.filter((ch) => ch.processed).length
+      : viewingNavIndex >= 0
+        ? viewingNavIndex + 1
+        : 0
     : mindmapNavChapters.filter((ch) => ch.processed).length
   const totalNavCount = showSummaryNav
     ? summaryNavChapters.length
@@ -438,7 +474,7 @@ function App() {
                 totalChapters={extractedChapters?.length || 0}
                 currentStepIndex={currentStepIndex}
                 processingMode={processingMode}
-                onChapterClick={handleChapterSummaryNavigation}
+                onChapterClick={handleSummaryNavClick}
                 processing={processing}
                 currentProcessingChapter={currentProcessingChapter}
                 currentViewingChapter={currentViewingChapterSummary}
