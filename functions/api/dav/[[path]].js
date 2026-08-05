@@ -50,10 +50,15 @@ function isAllowedOrigin(origin, requestOrigin, allowedOrigins) {
   const normalizedOrigin = origin ? normalizeDomain(origin) : ''
   const normalizedRequestOrigin = requestOrigin ? normalizeDomain(requestOrigin) : ''
 
-  if (normalizedOrigin && normalizedAllowed.includes(normalizedOrigin)) {
-    return true
+  // 优先信任浏览器 Origin；两者同时存在时以 Origin 为准，忽略可伪造的 X-Request-Origin
+  if (normalizedOrigin) {
+    return normalizedAllowed.includes(normalizedOrigin)
   }
-  return normalizedAllowed.includes(normalizedRequestOrigin)
+  // 无 Origin（部分同源/非浏览器场景）时才回退 X-Request-Origin 白名单
+  if (normalizedRequestOrigin) {
+    return normalizedAllowed.includes(normalizedRequestOrigin)
+  }
+  return false
 }
 
 function isAllowedMethod(method) {

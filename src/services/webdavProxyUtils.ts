@@ -81,6 +81,46 @@ export function buildWebdavProxyUrl(params: {
   return `/api/dav?base=${encodeURIComponent(params.baseUrl)}&path=${encodeURIComponent(fullPath)}`
 }
 
+/**
+ * 是否为禁止作为 WebDAV 上游的主机名（防 SSRF：本机 / 私网 / 链路本地）
+ */
+export function isBlockedUpstreamHostname(hostname: string): boolean {
+  const h = (hostname || '').toLowerCase().replace(/^\[|\]$/g, '')
+  if (!h) return true
+
+  if (
+    h === 'localhost' ||
+    h.endsWith('.localhost') ||
+    h.endsWith('.local') ||
+    h.endsWith('.internal') ||
+    h.endsWith('.intranet') ||
+    h === '0.0.0.0'
+  ) {
+    return true
+  }
+
+  // IPv4
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (m) {
+    const parts = m.slice(1).map((x) => Number(x))
+    if (parts.some((n) => n > 255)) return true
+    const [a, b] = parts
+    if (a === 0 || a === 10 || a === 127) return true
+    if (a === 169 && b === 254) return true // link-local / cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return true
+    if (a === 192 && b === 168) return true
+    if (a === 100 && b >= 64 && b <= 127) return true // CGNAT
+    if (a >= 224) return true // multicast / reserved
+    return false
+  }
+
+  // IPv6 本地与 ULA
+  if (h === '::1' || h === '0:0:0:0:0:0:0:1') return true
+  if (h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80')) return true
+
+  return false
+}
+
 export function isValidUpstreamBase(baseUrl: string): boolean {
   try {
     const url = new URL(baseUrl)
@@ -88,6 +128,9 @@ export function isValidUpstreamBase(baseUrl: string): boolean {
       return false
     }
     if (url.username || url.password) {
+      return false
+    }
+    if (isBlockedUpstreamHostname(url.hostname)) {
       return false
     }
     return true

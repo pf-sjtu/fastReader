@@ -67,6 +67,11 @@ export interface ProcessingOptions {
   enableNotification: boolean
   chapterDetectionMode: 'normal' | 'smart' | 'epub-toc'
   epubTocDepth: number
+  /**
+   * 章节级 AI 并行上限（1–10）。默认 3。
+   * 并行执行时结果仍按章节选择顺序提交/呈现。
+   */
+  chapterConcurrency: number
 }
 
 // WebDAV配置接口

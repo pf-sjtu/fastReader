@@ -58,6 +58,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
     setEnableNotification,
     setChapterDetectionMode,
     setEpubTocDepth,
+    setChapterConcurrency,
     setMaxRetries,
     setBaseRetryDelay
   } = useConfigStore()
@@ -73,7 +74,8 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
     chapterNamingMode,
     enableNotification,
     chapterDetectionMode,
-    epubTocDepth
+    epubTocDepth,
+    chapterConcurrency = 3,
   } = processingOptions
 
   // 从AI服务选项中解构状态值
@@ -824,6 +826,33 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
                 </Select>
                 <p className="text-xs text-gray-600">
                   {t('config.recursionDepthDescription')}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-sky-50 dark:bg-sky-950/50 rounded-lg border dark:border-sky-800">
+              <div className="space-y-2">
+                <Label htmlFor="chapter-concurrency" className="text-sm font-medium">
+                  {t('config.chapterConcurrency')}
+                </Label>
+                <Select
+                  value={String(chapterConcurrency ?? 3)}
+                  onValueChange={(value) => setChapterConcurrency(parseInt(value, 10))}
+                  disabled={processing}
+                >
+                  <SelectTrigger id="chapter-concurrency">
+                    <SelectValue placeholder={t('config.selectChapterConcurrency')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {t('config.chapterConcurrencyValue', { count: n })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  {t('config.chapterConcurrencyDescription')}
                 </p>
               </div>
             </div>

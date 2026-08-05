@@ -64,7 +64,8 @@ const defaultProcessingOptions: ProcessingOptions = {
   chapterNamingMode: 'auto',
   enableNotification: true,
   chapterDetectionMode: 'normal',
-  epubTocDepth: 1
+  epubTocDepth: 1,
+  chapterConcurrency: 3,
 }
 
 const defaultWebDAVConfig: WebDAVConfig = {
@@ -128,6 +129,7 @@ export interface ConfigState {
   setEnableNotification: (enabled: boolean) => void
   setChapterDetectionMode: (mode: 'normal' | 'smart' | 'epub-toc') => void
   setEpubTocDepth: (depth: number) => void
+  setChapterConcurrency: (concurrency: number) => void
 
   // WebDAV配置
   webdavConfig: WebDAVConfig
@@ -355,6 +357,10 @@ export const useConfigStore = create<ConfigState>()(
       },
       setEpubTocDepth: (epubTocDepth) => {
         useProcessingStore.getState().setEpubTocDepth(epubTocDepth)
+        set({ processingOptions: useProcessingStore.getState().processingOptions })
+      },
+      setChapterConcurrency: (chapterConcurrency) => {
+        useProcessingStore.getState().setChapterConcurrency(chapterConcurrency)
         set({ processingOptions: useProcessingStore.getState().processingOptions })
       },
 

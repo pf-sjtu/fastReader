@@ -14,6 +14,8 @@ import { useProcessingHistoryStore } from '@/stores/processingHistory'
 import { toast } from 'sonner'
 import { matchesDefaultUnselectTitle } from '@/services/constants'
 import { detectBookFormat } from '@/utils/file'
+import { clampConcurrency, mapPoolOrdered } from '@/utils/async'
+import { logger } from '@/lib/logger'
 import {
   deserializeCharts,
   serializeCharts,
@@ -536,13 +538,16 @@ export function useBookProcessing() {
       const totalChapters = selectedChapterData.length
       let postPhaseWarning = false
 
+      // 章节并行上限（可配置，默认 3）；结果按选择顺序有序提交，不扰乱呈现
+      const chapterConcurrency = clampConcurrency(
+        processingOptions.chapterConcurrency ?? 3
+      )
+
       if (processingMode === 'summary') {
         // 章节总结：0–80%；关联/全书为后处理（失败不丢章）
         const CHAPTER_PHASE_MAX = 80
         setCurrentStep(t('progress.generatingSummaries'))
         setProgress(0)
-
-        const processedChapters: Chapter[] = []
 
         const initialSummary: BookSummary = {
           title: bookData?.title || '',
@@ -553,55 +558,73 @@ export function useBookProcessing() {
         }
         setBookSummary(initialSummary)
 
-        for (let i = 0; i < totalChapters; i++) {
-          throwIfAborted()
-          const chapter = selectedChapterData[i]
-          setCurrentProcessingChapter(chapter.id)
-          // 进入第 i+1 章时，进度反映「已完成 i 章」
-          setProgress(chapterPhaseProgress(i, totalChapters, CHAPTER_PHASE_MAX))
-          setCurrentStep(t('progress.processingChapter', {
-            current: i + 1,
-            total: totalChapters,
-            title: chapter.title
-          }))
+        let orderedDone = 0
+        let anyChapterFailed = false
 
-          let summary: string
-          try {
-            summary = await aiService.summarizeChapter(
-              chapter.title,
-              chapter.content,
-              bookType,
-              processingOptions.outputLanguage,
-              customPrompt
-            )
-          } catch (chapterErr) {
+        const processedChapters = await mapPoolOrdered(
+          selectedChapterData,
+          async (chapter) => {
             throwIfAborted()
-            // 单章失败：记错误摘要并继续，避免整本卡死在某一章
-            console.error(`[processBook] 章节失败: ${chapter.title}`, chapterErr)
-            summary = `【处理失败】${chapterErr instanceof Error ? chapterErr.message : '未知错误'}`
-            postPhaseWarning = true
+            setCurrentProcessingChapter(chapter.id)
+            setCurrentStep(
+              t('progress.processingChapter', {
+                current: orderedDone + 1,
+                total: totalChapters,
+                title: chapter.title,
+              })
+            )
+
+            let summary: string
+            try {
+              summary = await aiService.summarizeChapter(
+                chapter.title,
+                chapter.content,
+                bookType,
+                processingOptions.outputLanguage,
+                customPrompt
+              )
+            } catch (chapterErr) {
+              throwIfAborted()
+              logger.error(`[processBook] 章节失败: ${chapter.title}`, chapterErr)
+              summary = `【处理失败】${chapterErr instanceof Error ? chapterErr.message : '未知错误'}`
+              anyChapterFailed = true
+            }
+
+            throwIfAborted()
+            return {
+              id: chapter.id,
+              title: chapter.title,
+              content: chapter.content,
+              summary,
+              processed: true,
+            } as Chapter
+          },
+          {
+            concurrency: chapterConcurrency,
+            onOrderedResult: (processedChapter, index) => {
+              orderedDone = index + 1
+              setBookSummary((prev) => ({
+                ...prev!,
+                chapters: [...(prev?.chapters ?? []), processedChapter],
+              }))
+              setProgress(
+                chapterPhaseProgress(orderedDone, totalChapters, CHAPTER_PHASE_MAX)
+              )
+              setCurrentStep(
+                t('progress.processingChapter', {
+                  current: Math.min(orderedDone + 1, totalChapters),
+                  total: totalChapters,
+                  title:
+                    selectedChapterData[
+                      Math.min(orderedDone, totalChapters - 1)
+                    ]?.title ?? processedChapter.title,
+                })
+              )
+            },
           }
+        )
 
-          throwIfAborted()
-
-          const processedChapter: Chapter = {
-            id: chapter.id,
-            title: chapter.title,
-            content: chapter.content,
-            summary,
-            processed: true
-          }
-
-          processedChapters.push(processedChapter)
-
-          setBookSummary(prev => ({
-            ...prev!,
-            chapters: [...prev!.chapters, processedChapter]
-          }))
-
-          setProgress(chapterPhaseProgress(i + 1, totalChapters, CHAPTER_PHASE_MAX))
-        }
-
+        if (anyChapterFailed) postPhaseWarning = true
         setCurrentProcessingChapter('')
 
         // —— 后处理：关联 + 全书总结（独立容错，失败仍保留章节结果）——
@@ -713,11 +736,11 @@ export function useBookProcessing() {
         if (charts && davOn) {
           cloudCacheKeyRef.current = file.name
           try {
-            console.log('[processBook] → syncChartsJson', file.name)
+            logger.debug('[processBook] → syncChartsJson', file.name)
             const chartsSaved = await autoSyncService.syncChartsJson(file.name, charts)
-            console.log('[processBook] ← syncChartsJson', chartsSaved)
+            logger.debug('[processBook] ← syncChartsJson', chartsSaved)
             if (!chartsSaved.success) {
-              console.warn('[processBook] 图表 JSON 未保存到云端:', chartsSaved.error)
+              logger.warn('[processBook] 图表 JSON 未保存到云端:', chartsSaved.error)
               toast.warning(
                 t(
                   'progress.chartsCloudSaveFailed',
@@ -726,7 +749,7 @@ export function useBookProcessing() {
               )
             }
           } catch (e) {
-            console.warn('[processBook] 图表 JSON 保存异常:', e)
+            logger.warn('[processBook] 图表 JSON 保存异常:', e)
             toast.warning(
               t(
                 'progress.chartsCloudSaveFailed',
@@ -735,15 +758,13 @@ export function useBookProcessing() {
             )
           }
         } else {
-          console.log('[processBook] skip charts upload', { hasCharts: !!charts, davOn })
+          logger.debug('[processBook] skip charts upload', { hasCharts: !!charts, davOn })
         }
       } else if (processingMode === 'mindmap' || processingMode === 'combined-mindmap') {
         // 章节导图：0–85%；整书导图 85–100%
         const CHAPTER_PHASE_MAX = processingMode === 'combined-mindmap' ? 85 : 95
         setCurrentStep(t('progress.generatingMindMaps'))
         setProgress(0)
-
-        const processedChapters: Chapter[] = []
 
         const initialMindMap: BookMindMap = {
           title: bookData?.title || '',
@@ -753,50 +774,70 @@ export function useBookProcessing() {
         }
         setBookMindMap(initialMindMap)
 
-        for (let i = 0; i < totalChapters; i++) {
-          throwIfAborted()
-          const chapter = selectedChapterData[i]
-          setCurrentProcessingChapter(chapter.id)
-          setProgress(chapterPhaseProgress(i, totalChapters, CHAPTER_PHASE_MAX))
-          setCurrentStep(t('progress.processingChapter', {
-            current: i + 1,
-            total: totalChapters,
-            title: chapter.title
-          }))
+        let orderedDone = 0
+        let anyChapterFailed = false
 
-          let mindMap: MindElixirData | null = null
-          try {
-            mindMap = await aiService.generateChapterMindMap(
-              chapter.title,
-              chapter.content,
-              processingOptions.outputLanguage
-            )
-          } catch (chapterErr) {
+        const processedChapters = await mapPoolOrdered(
+          selectedChapterData,
+          async (chapter) => {
             throwIfAborted()
-            console.error(`[processBook] 导图章节失败: ${chapter.title}`, chapterErr)
-            postPhaseWarning = true
+            setCurrentProcessingChapter(chapter.id)
+            setCurrentStep(
+              t('progress.processingChapter', {
+                current: orderedDone + 1,
+                total: totalChapters,
+                title: chapter.title,
+              })
+            )
+
+            let mindMap: MindElixirData | null = null
+            try {
+              mindMap = await aiService.generateChapterMindMap(
+                chapter.title,
+                chapter.content,
+                processingOptions.outputLanguage
+              )
+            } catch (chapterErr) {
+              throwIfAborted()
+              logger.error(`[processBook] 导图章节失败: ${chapter.title}`, chapterErr)
+              anyChapterFailed = true
+            }
+
+            throwIfAborted()
+            return {
+              id: chapter.id,
+              title: chapter.title,
+              content: chapter.content,
+              mindMap: mindMap ?? undefined,
+              processed: true,
+            } as Chapter
+          },
+          {
+            concurrency: chapterConcurrency,
+            onOrderedResult: (processedChapter, index) => {
+              orderedDone = index + 1
+              setBookMindMap((prev) => ({
+                ...prev!,
+                chapters: [...(prev?.chapters ?? []), processedChapter],
+              }))
+              setProgress(
+                chapterPhaseProgress(orderedDone, totalChapters, CHAPTER_PHASE_MAX)
+              )
+              setCurrentStep(
+                t('progress.processingChapter', {
+                  current: Math.min(orderedDone + 1, totalChapters),
+                  total: totalChapters,
+                  title:
+                    selectedChapterData[
+                      Math.min(orderedDone, totalChapters - 1)
+                    ]?.title ?? processedChapter.title,
+                })
+              )
+            },
           }
+        )
 
-          throwIfAborted()
-
-          const processedChapter: Chapter = {
-            id: chapter.id,
-            title: chapter.title,
-            content: chapter.content,
-            mindMap: mindMap ?? undefined,
-            processed: true
-          }
-
-          processedChapters.push(processedChapter)
-
-          setBookMindMap(prev => ({
-            ...prev!,
-            chapters: [...prev!.chapters, processedChapter]
-          }))
-
-          setProgress(chapterPhaseProgress(i + 1, totalChapters, CHAPTER_PHASE_MAX))
-        }
-
+        if (anyChapterFailed) postPhaseWarning = true
         setCurrentProcessingChapter('')
 
         // 生成整书思维导图（容错）

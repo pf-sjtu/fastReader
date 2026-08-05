@@ -252,7 +252,10 @@ export function BatchProcessingDialog({
       bookType: processingOptions.bookType || 'non-fiction',
       processingMode: processingOptions.processingMode || 'summary',
       chapterDetectionMode: processingOptions.chapterDetectionMode || 'normal',
-      outputLanguage: processingOptions.outputLanguage || 'auto'
+      outputLanguage: processingOptions.outputLanguage || 'auto',
+      // 与全局「章节并行」一致：文件级与章级默认 max=3，可配置
+      fileConcurrency: processingOptions.chapterConcurrency ?? 3,
+      chapterConcurrency: processingOptions.chapterConcurrency ?? 3,
     })
 
     // Add to queue

@@ -16,7 +16,8 @@ const defaultProcessingOptions: ProcessingOptions = {
   chapterNamingMode: 'auto',
   enableNotification: true,
   chapterDetectionMode: 'normal',
-  epubTocDepth: 1
+  epubTocDepth: 1,
+  chapterConcurrency: 3,
 }
 
 const defaultAIServiceOptions: AIServiceOptions = {
@@ -79,6 +80,17 @@ export const useProcessingStore = create<ProcessingState>()(
       setEpubTocDepth: (epubTocDepth) =>
         set((state) => ({
           processingOptions: { ...state.processingOptions, epubTocDepth }
+        })),
+
+      setChapterConcurrency: (chapterConcurrency) =>
+        set((state) => ({
+          processingOptions: {
+            ...state.processingOptions,
+            chapterConcurrency: Math.min(
+              10,
+              Math.max(1, Math.floor(chapterConcurrency) || 3)
+            ),
+          },
         })),
 
       // AI服务选项设置方法

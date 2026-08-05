@@ -20,6 +20,8 @@ export interface ProcessingOptions {
   enableNotification: boolean
   chapterDetectionMode: ChapterDetectionMode
   epubTocDepth: number
+  /** 章节 AI 并行上限，默认 3，结果按序呈现 */
+  chapterConcurrency: number
 }
 
 export interface AIServiceOptions {
@@ -42,6 +44,7 @@ export interface ProcessingState {
   setEnableNotification: (enabled: boolean) => void
   setChapterDetectionMode: (mode: ChapterDetectionMode) => void
   setEpubTocDepth: (depth: number) => void
+  setChapterConcurrency: (concurrency: number) => void
 
   // AI服务选项设置方法
   setMaxRetries: (maxRetries: number) => void

@@ -32,7 +32,8 @@ const {
       chapterNamingMode: 'auto',
       chapterDetectionMode: 'normal',
       epubTocDepth: 1,
-      enableNotification: false
+      enableNotification: false,
+      chapterConcurrency: 3,
     },
     config: {
       requestThrottleMs: 0

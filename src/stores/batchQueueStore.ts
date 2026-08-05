@@ -43,6 +43,10 @@ export interface BatchProcessingConfig {
   chapterDetectionMode: 'normal' | 'smart' | 'epub-toc'
   outputLanguage: string
   requestThrottleMs?: number
+  /** 文件级并行上限，默认 3 */
+  fileConcurrency?: number
+  /** 单文件内章节 AI 并行上限，默认跟随 processingOptions.chapterConcurrency */
+  chapterConcurrency?: number
 }
 
 /**

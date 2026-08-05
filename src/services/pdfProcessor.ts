@@ -248,17 +248,16 @@ export class PdfProcessor {
 
         const pagePromises = Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => {
           return pageLimiter.execute(async () => {
-            console.log(`📖 [DEBUG] 处理第 ${pageNum}/${totalPages} 页`)
-
             try {
               const page = await pdf.getPage(pageNum)
-              const textContent = await page.getTextContent()
-
-              // 提取页面文本
-              const pageText = this.extractTextFromItems(textContent.items as unknown[])
-
-              allPageTexts[pageNum - 1] = pageText
-              console.log(`📄 [DEBUG] 第${pageNum}页文本长度: ${pageText.length} 字符`)
+              try {
+                const textContent = await page.getTextContent()
+                const pageText = this.extractTextFromItems(textContent.items as unknown[])
+                allPageTexts[pageNum - 1] = pageText
+              } finally {
+                // 尽快释放页面资源，降低大 PDF 峰值内存
+                page.cleanup?.()
+              }
             } catch (pageError) {
               console.warn(`❌ [DEBUG] 跳过第${pageNum}页:`, pageError)
               allPageTexts[pageNum - 1] = ''
@@ -303,6 +302,9 @@ export class PdfProcessor {
           // 使用检测到的章节
           chapters.push(...detectedChapters)
         }
+
+        // 章节文本已拷贝到 chapters，释放整本页缓冲
+        allPageTexts.length = 0
       }
 
       console.log(`📊 [DEBUG] 最终提取到 ${chapters.length} 个章节`)

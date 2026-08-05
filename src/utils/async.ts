@@ -74,13 +74,28 @@ export async function withRetry<T>(
 }
 
 /**
+ * 规范化并发上限：默认 3，范围 [1, maxCap]
+ */
+export function clampConcurrency(
+  value: unknown,
+  defaultValue = 3,
+  maxCap = 10
+): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return defaultValue
+  return Math.min(maxCap, Math.max(1, Math.floor(n)))
+}
+
+/**
  * 并发限制器
  */
 export class ConcurrencyLimiter {
   private running = 0
   private queue: Array<() => void> = []
 
-  constructor(private maxConcurrency: number) {}
+  constructor(private maxConcurrency: number) {
+    this.maxConcurrency = clampConcurrency(maxConcurrency, 1, 100)
+  }
 
   /**
    * 在并发限制下执行函数
@@ -113,6 +128,59 @@ export class ConcurrencyLimiter {
   async executeBatch<T>(items: Array<() => Promise<T>>): Promise<T[]> {
     return Promise.all(items.map(item => this.execute(item)))
   }
+}
+
+export interface MapPoolOrderedOptions<T> {
+  /** 最大并发，默认 3 */
+  concurrency?: number
+  /**
+   * 按索引顺序提交结果（完成乱序不影响呈现顺序）。
+   * 仅当 index 之前的项均已完成时才会连续触发。
+   */
+  onOrderedResult?: (result: T, index: number) => void
+  /** 任意一项完成时（可能乱序） */
+  onItemSettled?: (result: T, index: number) => void
+}
+
+/**
+ * 有限并发 map：任务可并行执行，结果数组与 onOrderedResult 严格按输入索引顺序。
+ * 呈现顺序不受完成先后影响。
+ */
+export async function mapPoolOrdered<TItem, TResult>(
+  items: readonly TItem[],
+  mapper: (item: TItem, index: number) => Promise<TResult>,
+  options: MapPoolOrderedOptions<TResult> = {}
+): Promise<TResult[]> {
+  const n = items.length
+  if (n === 0) return []
+
+  const concurrency = clampConcurrency(options.concurrency ?? 3)
+  const limiter = new ConcurrencyLimiter(concurrency)
+  const slots: Array<TResult | undefined> = new Array(n)
+  let nextToCommit = 0
+
+  const commitReady = () => {
+    while (nextToCommit < n && slots[nextToCommit] !== undefined) {
+      const result = slots[nextToCommit] as TResult
+      options.onOrderedResult?.(result, nextToCommit)
+      nextToCommit++
+    }
+  }
+
+  await Promise.all(
+    items.map((item, index) =>
+      limiter.execute(async () => {
+        const result = await mapper(item, index)
+        slots[index] = result
+        options.onItemSettled?.(result, index)
+        // 同步推进有序提交（JS 单线程，无需锁）
+        commitReady()
+        return result
+      })
+    )
+  )
+
+  return slots as TResult[]
 }
 
 /**

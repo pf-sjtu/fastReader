@@ -14,7 +14,8 @@ const defaultProcessingOptions: ProcessingOptions = {
   chapterNamingMode: 'auto',
   enableNotification: true,
   chapterDetectionMode: 'normal',
-  epubTocDepth: 1
+  epubTocDepth: 1,
+  chapterConcurrency: 3,
 }
 
 export interface ProcessingState {
@@ -31,6 +32,7 @@ export interface ProcessingState {
   setEnableNotification: (enabled: boolean) => void
   setChapterDetectionMode: (mode: 'normal' | 'smart' | 'epub-toc') => void
   setEpubTocDepth: (depth: number) => void
+  setChapterConcurrency: (concurrency: number) => void
 
   // 批量更新
   updateProcessingOptions: (options: Partial<ProcessingOptions>) => void
@@ -94,6 +96,14 @@ export const useProcessingStore = create<ProcessingState>()(
           processingOptions: { ...state.processingOptions, epubTocDepth }
         })),
 
+      setChapterConcurrency: (chapterConcurrency) =>
+        set((state) => ({
+          processingOptions: {
+            ...state.processingOptions,
+            chapterConcurrency: Math.min(10, Math.max(1, Math.floor(chapterConcurrency) || 3)),
+          },
+        })),
+
       updateProcessingOptions: (options) =>
         set((state) => ({
           processingOptions: { ...state.processingOptions, ...options }
@@ -106,7 +116,24 @@ export const useProcessingStore = create<ProcessingState>()(
       name: 'ebook-processing-options',
       partialize: (state) => ({
         processingOptions: state.processingOptions
-      })
+      }),
+      // 旧持久化缺省字段补全
+      merge: (persisted, current) => {
+        const p = persisted as Partial<ProcessingState> | undefined
+        const po = p?.processingOptions
+        return {
+          ...current,
+          ...p,
+          processingOptions: {
+            ...current.processingOptions,
+            ...po,
+            chapterConcurrency:
+              typeof po?.chapterConcurrency === 'number'
+                ? Math.min(10, Math.max(1, Math.floor(po.chapterConcurrency) || 3))
+                : current.processingOptions.chapterConcurrency,
+          },
+        }
+      },
     }
   )
 )

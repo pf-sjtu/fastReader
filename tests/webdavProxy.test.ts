@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { buildWebdavProxyUrl, buildWebdavPath, normalizeDavPath, isValidUpstreamBase, encodeDavHeaderPath } from '../src/services/webdavProxyUtils'
+import {
+  buildWebdavProxyUrl,
+  buildWebdavPath,
+  normalizeDavPath,
+  isValidUpstreamBase,
+  isBlockedUpstreamHostname,
+  encodeDavHeaderPath,
+} from '../src/services/webdavProxyUtils'
 
 describe('WebDAV proxy URL helpers', () => {
   it('normalizes legacy webdav prefixes', () => {
@@ -89,5 +96,21 @@ describe('Cloudflare WebDAV proxy guards', () => {
     expect(isValidUpstreamBase('https://user:pass@example.com/dav/')).toBe(false)
     expect(isValidUpstreamBase('not-a-url')).toBe(false)
   })
+
+  it('blocks private / localhost upstream hosts (SSRF)', () => {
+    expect(isBlockedUpstreamHostname('localhost')).toBe(true)
+    expect(isBlockedUpstreamHostname('127.0.0.1')).toBe(true)
+    expect(isBlockedUpstreamHostname('10.0.0.5')).toBe(true)
+    expect(isBlockedUpstreamHostname('192.168.1.1')).toBe(true)
+    expect(isBlockedUpstreamHostname('172.16.0.1')).toBe(true)
+    expect(isBlockedUpstreamHostname('169.254.169.254')).toBe(true)
+    expect(isBlockedUpstreamHostname('dav.jianguoyun.com')).toBe(false)
+
+    expect(isValidUpstreamBase('https://127.0.0.1/dav/')).toBe(false)
+    expect(isValidUpstreamBase('https://192.168.0.10/dav/')).toBe(false)
+    expect(isValidUpstreamBase('https://localhost/dav/')).toBe(false)
+    expect(isValidUpstreamBase('https://dav.jianguoyun.com/dav/')).toBe(true)
+  })
 })
+
 

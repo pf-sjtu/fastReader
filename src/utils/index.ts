@@ -6,10 +6,13 @@ export {
   sleep,
   withRetry,
   calculateRetryDelay,
+  clampConcurrency,
   ConcurrencyLimiter,
+  mapPoolOrdered,
   debounce,
   throttle,
-  type RetryOptions
+  type RetryOptions,
+  type MapPoolOrderedOptions,
 } from './async'
 
 // 文件处理工具

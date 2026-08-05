@@ -13,7 +13,8 @@ import type { ChapterData } from './epubProcessor'
 import { useConfigStore } from '../stores/configStore'
 import type { BatchQueueItem, BatchProcessingConfig } from '../stores/batchQueueStore'
 import type { SupportedLanguage } from './prompts/utils'
-import { ConcurrencyLimiter } from '../utils/async'
+import { clampConcurrency, mapPoolOrdered } from '../utils/async'
+import { logger } from '../lib/logger'
 
 // 回调接口
 export interface BatchProcessingCallbacks {
@@ -129,7 +130,7 @@ export class BatchProcessingEngine {
     this.isPaused = false
     this.startTime = Date.now()
 
-    console.log(`[BatchEngine] 开始批量处理，共 ${queueItems.length} 个文件`)
+    logger.info(`[BatchEngine] 开始批量处理，共 ${queueItems.length} 个文件`)
     const results: BatchProcessingResult[] = []
 
     try {
@@ -139,19 +140,21 @@ export class BatchProcessingEngine {
         ? await cloudCacheService.fetchCacheFileNames()
         : undefined
 
-      // 创建并发限制器（默认2个并发，避免内存和API限制）
-      const limiter = new ConcurrencyLimiter(2)
+      // 文件级并行（可配置，默认 3）；结果数组与完成回调按队列顺序提交
+      const fileConcurrency = clampConcurrency(
+        config.fileConcurrency ??
+          useConfigStore.getState().processingOptions.chapterConcurrency ??
+          3
+      )
 
-      // 创建所有处理任务
-      const processingPromises = queueItems.map((item, index) => {
-        return limiter.execute(async () => {
-          // 检查是否需要停止
+      const processedResults = await mapPoolOrdered(
+        queueItems,
+        async (item, index) => {
           if (this.shouldStop) {
-            console.log('[BatchEngine] 用户停止处理')
+            logger.info('[BatchEngine] 用户停止处理')
             return null
           }
 
-          // 检查是否暂停（忙等待直到继续或停止）
           while (this.isPaused && !this.shouldStop) {
             await this.sleep(1000)
           }
@@ -160,34 +163,36 @@ export class BatchProcessingEngine {
             return null
           }
 
-          console.log(`[BatchEngine] 处理文件 ${index + 1}/${queueItems.length}: ${item.fileName}`)
+          logger.info(
+            `[BatchEngine] 处理文件 ${index + 1}/${queueItems.length}: ${item.fileName}`
+          )
 
           try {
-            const result = await this.processItem(item, config, cachedFileNames)
-
+            return await this.processItem(item, config, cachedFileNames)
+          } catch (error) {
+            return {
+              success: false,
+              fileName: item.fileName,
+              error: error instanceof Error ? error.message : '未知错误',
+            } as BatchProcessingResult
+          }
+        },
+        {
+          concurrency: fileConcurrency,
+          onOrderedResult: (result, index) => {
+            if (!result) return
+            const item = queueItems[index]
             if (result.success) {
               this.callbacks.onItemComplete?.(item, result)
             } else {
               this.callbacks.onItemError?.(item, result.error || '处理失败')
             }
-
-            return result
-          } catch (error) {
-            const errorResult: BatchProcessingResult = {
-              success: false,
-              fileName: item.fileName,
-              error: error instanceof Error ? error.message : '未知错误'
-            }
-            this.callbacks.onItemError?.(item, errorResult.error || '处理失败')
-            return errorResult
-          }
-        })
-      })
-
-      // 等待所有任务完成（保持结果顺序）
-      const processedResults = await Promise.all(processingPromises)
-      results.push(...processedResults.filter((r): r is BatchProcessingResult => r !== null))
-
+          },
+        }
+      )
+      results.push(
+        ...processedResults.filter((r): r is BatchProcessingResult => r !== null)
+      )
     } finally {
       this.isRunning = false
     }
@@ -320,43 +325,69 @@ export class BatchProcessingEngine {
       const mode = processingOptions.processingMode
       const requestThrottleMs = this.getRequestThrottleMs(config)
 
-      // 章节摘要：summary / combined-mindmap
+      // 章节摘要：summary / combined-mindmap（并行 + 按章节序号有序提交）
       if (mode === 'summary' || mode === 'combined-mindmap') {
-        for (let i = 0; i < chapters.length; i++) {
-          if (this.shouldStop) {
-            throw new Error('用户停止处理')
+        const selectedList = chapters
+          .map((chapter, i) => ({ chapter, originalIndex: i }))
+          .filter(({ originalIndex }) => selectedChapters.includes(originalIndex + 1))
+
+        selectedChapterCount = selectedList.length
+        const chapterConcurrency = clampConcurrency(
+          config.chapterConcurrency ??
+            processingOptions.chapterConcurrency ??
+            3
+        )
+        let orderedDone = 0
+
+        const orderedSummaries = await mapPoolOrdered(
+          selectedList,
+          async ({ chapter }, idx) => {
+            if (this.shouldStop) {
+              throw new Error('用户停止处理')
+            }
+
+            const summary = await this.processChapterSummary(
+              chapter,
+              processingOptions.bookType,
+              processingOptions.outputLanguage
+            )
+
+            if (requestThrottleMs > 0) {
+              await this.sleep(requestThrottleMs)
+            }
+
+            return {
+              id: chapter.id || `chapter-${idx + 1}`,
+              title: chapter.title,
+              summary,
+            }
+          },
+          {
+            concurrency: chapterConcurrency,
+            onOrderedResult: (row, index) => {
+              orderedDone = index + 1
+              if (AIService.isSkippedSummary(row.summary)) {
+                skippedChapters++
+              }
+              chapterSummaries.push(row)
+              const progress =
+                10 +
+                Math.floor(
+                  (orderedDone / Math.max(selectedList.length, 1)) * 55
+                )
+              this.callbacks.onItemProgress?.(
+                item.id,
+                progress,
+                `生成章节摘要 (${orderedDone}/${selectedList.length}): ${row.title}`
+              )
+            },
           }
+        )
 
-          const chapter = chapters[i]
-          if (!selectedChapters.includes(i + 1)) {
-            continue
-          }
-
-          selectedChapterCount += 1
-          const progress = 10 + Math.floor((selectedChapterCount / Math.max(selectedChapters.length, 1)) * 55)
-          this.callbacks.onItemProgress?.(
-            item.id,
-            progress,
-            `生成章节摘要 (${selectedChapterCount}): ${chapter.title}`
-          )
-
-          const summary = await this.processChapterSummary(
-            chapter,
-            processingOptions.bookType,
-            processingOptions.outputLanguage
-          )
-
-          if (AIService.isSkippedSummary(summary)) {
-            skippedChapters++
-          }
-
-          chapterSummaries.push({
-            id: chapter.id || `chapter-${selectedChapterCount}`,
-            title: chapter.title,
-            summary,
-          })
-
-          await this.sleep(requestThrottleMs)
+        // 若 onOrderedResult 未覆盖（理论不会），保证数组完整有序
+        if (chapterSummaries.length !== orderedSummaries.length) {
+          chapterSummaries.length = 0
+          chapterSummaries.push(...orderedSummaries)
         }
       }
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -29,15 +29,23 @@ import { BUILD_VERSION } from '@/buildInfo'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { UnifiedStatusBar } from '@/components/UnifiedStatusBar'
-import { WebDAVFileBrowser } from '@/components/project/WebDAVFileBrowser'
-import { BatchQueuePanel } from '@/components/project/BatchQueuePanel'
 import { ChapterSummaryNavigation } from '@/components/ChapterSummaryNavigation'
 import { TimelineNavigation } from '@/components/TimelineNavigation'
 
 import { FileUploadCard } from '@/components/sections/FileUploadCard'
 import { ChapterSelectionSection } from '@/components/sections/ChapterSelectionSection'
 import { PreviewPanel } from '@/components/sections/PreviewPanel'
-import { ResultsSection } from '@/components/sections/ResultsSection'
+
+// 重型面板懒加载，降低首屏解析体积
+const ResultsSection = lazy(() =>
+  import('@/components/sections/ResultsSection').then((m) => ({ default: m.ResultsSection }))
+)
+const WebDAVFileBrowser = lazy(() =>
+  import('@/components/project/WebDAVFileBrowser').then((m) => ({ default: m.WebDAVFileBrowser }))
+)
+const BatchQueuePanel = lazy(() =>
+  import('@/components/project/BatchQueuePanel').then((m) => ({ default: m.BatchQueuePanel }))
+)
 
 function App() {
   const { t } = useTranslation()
@@ -324,11 +332,13 @@ function App() {
   return (
     <div className="min-h-screen bg-background px-1.5 py-2.5 sm:p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
       <Toaster />
-      <WebDAVFileBrowser
-        isOpen={isWebDAVBrowserOpen}
-        onClose={() => setIsWebDAVBrowserOpen(false)}
-        onFileSelect={handleWebDAVFileSelect}
-      />
+      <Suspense fallback={null}>
+        <WebDAVFileBrowser
+          isOpen={isWebDAVBrowserOpen}
+          onClose={() => setIsWebDAVBrowserOpen(false)}
+          onFileSelect={handleWebDAVFileSelect}
+        />
+      </Suspense>
 
       <div className="max-w-full xl:max-w-7xl space-y-2.5 sm:space-y-4 w-full flex-1 min-w-0">
         {/* Header */}
@@ -384,7 +394,9 @@ function App() {
         />
 
         {/* 批量处理队列面板 */}
-        <BatchQueuePanel />
+        <Suspense fallback={null}>
+          <BatchQueuePanel />
+        </Suspense>
 
         {/* 移动端：章节导航 / 预览 触发条 */}
         {(showMobileNavTrigger || (isMobile && rightPanelContent)) && (
@@ -496,25 +508,35 @@ function App() {
             {/* 中间结果展示 */}
             <div className="flex-1 min-w-0">
               {(bookSummary || bookMindMap) ? (
-                <ResultsSection
-                  processingMode={processingMode}
-                  bookSummary={bookSummary}
-                  bookMindMap={bookMindMap}
-                  file={file}
-                  expandedChapters={expandedChapters}
-                  currentViewingChapterSummary={currentViewingChapterSummary}
-                  onClearChapterCache={clearChapterCache}
-                  onClearSpecificCache={clearSpecificCache}
-                  onChapterExpandChange={handleChapterExpandChange}
-                  onReadChapter={(chapterId) => {
-                    const chapter = extractedChapters?.find(ch => ch.id === chapterId)
-                    if (chapter) handleViewChapterContent(chapter)
-                  }}
-                  onDownloadAllMarkdown={downloadAllMarkdown}
-                  onDownloadMindMap={downloadMindMap}
-                  onRegenerateKeyCharts={regenerateKeyCharts}
-                  chartsGenerating={chartsGenerating}
-                />
+                <Suspense
+                  fallback={
+                    <Card>
+                      <CardContent className="py-12 text-center text-muted-foreground">
+                        {t('progress.loading') || '加载中…'}
+                      </CardContent>
+                    </Card>
+                  }
+                >
+                  <ResultsSection
+                    processingMode={processingMode}
+                    bookSummary={bookSummary}
+                    bookMindMap={bookMindMap}
+                    file={file}
+                    expandedChapters={expandedChapters}
+                    currentViewingChapterSummary={currentViewingChapterSummary}
+                    onClearChapterCache={clearChapterCache}
+                    onClearSpecificCache={clearSpecificCache}
+                    onChapterExpandChange={handleChapterExpandChange}
+                    onReadChapter={(chapterId) => {
+                      const chapter = extractedChapters?.find(ch => ch.id === chapterId)
+                      if (chapter) handleViewChapterContent(chapter)
+                    }}
+                    onDownloadAllMarkdown={downloadAllMarkdown}
+                    onDownloadMindMap={downloadMindMap}
+                    onRegenerateKeyCharts={regenerateKeyCharts}
+                    chartsGenerating={chartsGenerating}
+                  />
+                </Suspense>
               ) : (
                 <Card>
                   <CardContent className="py-12 text-center">
