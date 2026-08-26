@@ -809,7 +809,7 @@ export function useBookProcessing() {
               title: chapter.title,
               content: chapter.content,
               mindMap: mindMap ?? undefined,
-              processed: true,
+              processed: mindMap != null,
             } as Chapter
           },
           {

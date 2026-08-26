@@ -7,15 +7,21 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   hasError: boolean
+  message: string
 }
 
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = {
-    hasError: false
+    hasError: false,
+    message: ''
   }
 
-  static getDerivedStateFromError(): ErrorBoundaryState {
-    return { hasError: true }
+  static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      hasError: true,
+      message: message.trim() || '未知错误'
+    }
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -33,6 +39,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <div className="max-w-md w-full rounded-lg border bg-card p-6 text-center space-y-3">
             <h1 className="text-lg font-semibold text-foreground">页面发生错误</h1>
             <p className="text-sm text-muted-foreground">请刷新页面后重试。</p>
+            <p className="text-xs font-mono text-left break-all rounded-md bg-muted p-3 text-foreground">
+              {this.state.message}
+            </p>
             <Button type="button" onClick={this.handleReload}>
               刷新页面
             </Button>

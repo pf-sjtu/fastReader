@@ -8,6 +8,26 @@ import { BaseAIProvider } from './baseProvider'
 import { isBrowser, getHttpsProxyAgent } from './utils'
 import type { GenerativeModel } from '@google/generative-ai'
 
+export function formatGeminiResponseParseError(parseErr: unknown, body: string): string {
+  const reason = parseErr instanceof Error ? parseErr.message : '未知错误'
+  const snippet = body.replace(/\s+/g, ' ').trim().slice(0, 200)
+  return snippet
+    ? `Gemini API 响应解析失败: ${reason}; body=${snippet}`
+    : `Gemini API 响应解析失败: ${reason}`
+}
+
+/** Node 代理仅在 agent 可用时走 HTTP 代理；缺失时必须 SDK 直连，禁止递归。 */
+export function shouldUseGeminiNodeProxy(input: {
+  proxyEnabled?: boolean
+  proxyUrl?: string
+  isBrowser: boolean
+  proxyAgentAvailable: boolean
+}): boolean {
+  return Boolean(
+    input.proxyEnabled && input.proxyUrl && !input.isBrowser && input.proxyAgentAvailable
+  )
+}
+
 export class GeminiProvider extends BaseAIProvider {
   readonly type = 'gemini' as const
   readonly name = 'Gemini'
@@ -37,13 +57,35 @@ export class GeminiProvider extends BaseAIProvider {
     // Gemini 不支持系统提示，合并到用户提示中
     const finalPrompt = systemPrompt ? `${prompt}\n\n**${systemPrompt}**` : prompt
 
-    // 如果启用代理且不在浏览器环境，使用代理请求
-    if (this.config.proxyEnabled && this.config.proxyUrl && !isBrowser) {
-      return this.generateWithProxy(finalPrompt, temperature)
+    const proxyAgent =
+      this.config.proxyEnabled && this.config.proxyUrl && !isBrowser
+        ? await getHttpsProxyAgent()
+        : null
+
+    if (
+      shouldUseGeminiNodeProxy({
+        proxyEnabled: this.config.proxyEnabled,
+        proxyUrl: this.config.proxyUrl,
+        isBrowser,
+        proxyAgentAvailable: Boolean(proxyAgent),
+      }) &&
+      proxyAgent
+    ) {
+      return this.generateWithProxy(finalPrompt, temperature, proxyAgent)
     }
 
-    // 标准 Gemini API 调用
-    const result = await this.generativeModel.generateContent(finalPrompt, {
+    if (this.config.proxyEnabled && this.config.proxyUrl && !isBrowser && !proxyAgent) {
+      console.warn('代理模块不可用，使用直接连接')
+    }
+
+    return this.generateWithSdk(finalPrompt, temperature)
+  }
+
+  private async generateWithSdk(
+    prompt: string,
+    temperature?: number
+  ): Promise<GenerateContentResponse> {
+    const result = await this.generativeModel.generateContent(prompt, {
       generationConfig: {
         temperature: temperature ?? this.temperature
       }
@@ -51,7 +93,6 @@ export class GeminiProvider extends BaseAIProvider {
 
     const response = await result.response
 
-    // 统计 token 使用量
     try {
       const usage = result.response?.usageMetadata
       if (usage?.totalTokenCount) {
@@ -68,18 +109,14 @@ export class GeminiProvider extends BaseAIProvider {
   }
 
   /**
-   * 使用代理请求 Gemini API
+   * 使用代理请求 Gemini API。
+   * ponytail: 禁止回退到 doGenerateContent，代理模块缺失时会无限递归。
    */
   private async generateWithProxy(
     prompt: string,
-    temperature?: number
+    temperature: number | undefined,
+    HttpsProxyAgent: new (url: string) => { destroy: () => void }
   ): Promise<GenerateContentResponse> {
-    const HttpsProxyAgent = await getHttpsProxyAgent()
-    if (!HttpsProxyAgent) {
-      console.warn('代理模块不可用，使用直接连接')
-      return this.doGenerateContent({ prompt, temperature })
-    }
-
     const { default: https } = await import('node:https')
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.config.apiKey}`
     const parsedUrl = new URL(url)
@@ -159,8 +196,8 @@ export class GeminiProvider extends BaseAIProvider {
                 tokenCount,
                 finishReason: response.candidates?.[0]?.finishReason
               })
-            } catch {
-              reject(new Error('Gemini API 响应解析失败'))
+            } catch (parseErr) {
+              reject(new Error(formatGeminiResponseParseError(parseErr, body)))
             }
           } else {
             const error = new Error(

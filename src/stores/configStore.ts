@@ -14,6 +14,7 @@ import type {
 } from './types'
 import type { SupportedLanguage } from '../services/prompts/utils'
 import { ConfigExportService } from '../services/configExportService'
+import { logger } from '../lib/logger'
 
 // 从子store导入内部函数
 import { computeAIConfig } from './ai-config'
@@ -518,6 +519,7 @@ export const useConfigStore = create<ConfigState>()(
 
           return { success: true }
         } catch (error) {
+          logger.error('[ConfigStore] 导入配置失败:', error)
           return {
             success: false,
             error: error instanceof Error ? error.message : '导入配置时发生未知错误'

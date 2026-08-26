@@ -170,6 +170,7 @@ export class BatchProcessingEngine {
           try {
             return await this.processItem(item, config, cachedFileNames)
           } catch (error) {
+            logger.error(`[BatchEngine] 条目未预期失败: ${item.fileName}`, error)
             return {
               success: false,
               fileName: item.fileName,
@@ -603,6 +604,7 @@ export class BatchProcessingEngine {
       }
 
     } catch (error) {
+      logger.error(`[BatchEngine] 下载文件失败: ${filePath}`, error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '下载文件失败'
