@@ -6,6 +6,7 @@ if (typeof window !== 'undefined') {
 import { matchesSkipChapterTitle } from './constants'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { ConcurrencyLimiter } from '../utils/async'
+import { logger } from '../lib/logger'
 
 // 格式化章节编号，支持补零
 const formatChapterNumber = (index: number, total: number = 99): string => {
@@ -62,7 +63,7 @@ export class PdfProcessor {
     try {
       await pdf.destroy()
     } catch (destroyError) {
-      console.warn(`⚠️ [DEBUG] 释放PDF资源失败 (${context}):`, destroyError)
+      logger.warn(`⚠️ [DEBUG] 释放PDF资源失败 (${context}):`, destroyError)
     }
   }
 
@@ -71,7 +72,7 @@ export class PdfProcessor {
     let keepPdfForCaller = false
 
     try {
-      console.log('[DEBUG] PdfProcessor.parsePdf 开始解析:', {
+      logger.debug('[DEBUG] PdfProcessor.parsePdf 开始解析:', {
         fileName: file.name,
         fileSize: file.size,
         timestamp: Date.now()
@@ -80,7 +81,7 @@ export class PdfProcessor {
       // 将File转换为ArrayBuffer
       const arrayBuffer = await file.arrayBuffer()
 
-      console.log('[DEBUG] PdfProcessor.parsePdf arrayBuffer 读取完成:', {
+      logger.debug('[DEBUG] PdfProcessor.parsePdf arrayBuffer 读取完成:', {
         fileName: file.name,
         arrayBufferSize: arrayBuffer.byteLength,
         timestamp: Date.now()
@@ -89,7 +90,7 @@ export class PdfProcessor {
       // 使用PDF.js解析PDF文件
       pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
 
-      console.log('[DEBUG] PdfProcessor.parsePdf pdfjsLib.getDocument 完成:', {
+      logger.debug('[DEBUG] PdfProcessor.parsePdf pdfjsLib.getDocument 完成:', {
         fileName: file.name,
         totalPages: pdf.numPages,
         timestamp: Date.now()
@@ -97,12 +98,12 @@ export class PdfProcessor {
 
       // 获取PDF元数据
       const metadata = await pdf.getMetadata()
-      console.log('[DEBUG] PdfProcessor.parsePdf metadata:', metadata)
+      logger.debug('[DEBUG] PdfProcessor.parsePdf metadata:', metadata)
       const metadataInfo = metadata.info as PdfMetadataInfo | undefined
       const title = metadataInfo?.Title || file.name.replace('.pdf', '') || '未知标题'
       const author = metadataInfo?.Author || '未知作者'
 
-      console.log(`[DEBUG] PDF解析完成:`, {
+      logger.debug(`[DEBUG] PDF解析完成:`, {
         fileName: file.name,
         extractedTitle: title,
         extractedAuthor: author,
@@ -126,14 +127,14 @@ export class PdfProcessor {
   }
 
   async extractBookData(file: File, useSmartDetection: boolean = false, skipNonEssentialChapters: boolean = true, maxSubChapterDepth: number = 0, chapterNamingMode: 'auto' | 'numbered' = 'auto', chapterDetectionMode: 'normal' | 'smart' | 'epub-toc' = 'normal', epubTocDepth: number = 1): Promise<BookData & { chapters: ChapterData[] }> {
-    console.log('[DEBUG] PdfProcessor.extractBookData 开始:', {
+    logger.debug('[DEBUG] PdfProcessor.extractBookData 开始:', {
       fileName: file.name,
       timestamp: Date.now()
     })
 
     const bookData = await this.parsePdf(file)
 
-    console.log('[DEBUG] PdfProcessor.parsePdf 完成:', {
+    logger.debug('[DEBUG] PdfProcessor.parsePdf 完成:', {
       fileName: file.name,
       bookTitle: bookData.title,
       timestamp: Date.now()
@@ -150,7 +151,7 @@ export class PdfProcessor {
       bookData.pdfDocument as PDFDocumentProxy | undefined
     )
 
-    console.log('[DEBUG] PdfProcessor.extractChapters 完成:', {
+    logger.debug('[DEBUG] PdfProcessor.extractChapters 完成:', {
       fileName: file.name,
       bookTitle: bookData.title,
       chapterCount: chapters.length,
@@ -181,18 +182,18 @@ export class PdfProcessor {
       const chapters: ChapterData[] = []
       const totalPages = pdf.numPages
 
-      console.log(`📚 [DEBUG] 开始提取PDF内容，总页数: ${totalPages}`)
+      logger.debug(`📚 [DEBUG] 开始提取PDF内容，总页数: ${totalPages}`)
 
       // 首先尝试使用PDF的outline（书签/目录）来获取章节
       try {
         const outline = await pdf.getOutline()
-        console.log(`📚 [DEBUG] 获取到PDF目录:`, outline)
+        logger.debug(`📚 [DEBUG] 获取到PDF目录:`, outline)
         if (outline && outline.length > 0) {
           // 获取章节信息
           // 估算总章节数，用于补零格式化
           const estimatedTotal = Math.max(outline.length, 50) // 至少估算50个章节
           const chapterInfos = await this.extractChaptersFromOutline(pdf, outline, 0, maxSubChapterDepth, chapterNamingMode, estimatedTotal)
-          console.log(chapterInfos, 'chapterInfos')
+          logger.debug(chapterInfos, 'chapterInfos')
           if (chapterInfos.length > 0) {
             // 根据章节信息提取内容（使用并发控制）
             const limiter = new ConcurrencyLimiter(3) // 最多3个并发
@@ -201,7 +202,7 @@ export class PdfProcessor {
               return limiter.execute(async () => {
                 // 检查是否需要跳过此章节
                 if (skipNonEssentialChapters && this.shouldSkipChapter(chapterInfo.title)) {
-                  console.log(`⏭️ [DEBUG] 跳过无关键内容章节: "${chapterInfo.title}"`)
+                  logger.debug(`⏭️ [DEBUG] 跳过无关键内容章节: "${chapterInfo.title}"`)
                   return null
                 }
 
@@ -210,7 +211,7 @@ export class PdfProcessor {
                 const startPage = chapterInfo.pageIndex + 1
                 const endPage = nextChapterInfo ? nextChapterInfo.pageIndex : totalPages
 
-                console.log(`📄 [DEBUG] 提取章节 "${chapterInfo.title}" (第${startPage}-${endPage}页)`)
+                logger.debug(`📄 [DEBUG] 提取章节 "${chapterInfo.title}" (第${startPage}-${endPage}页)`)
 
                 const chapterContent = await this.extractTextFromPages(pdf, startPage, endPage)
 
@@ -235,12 +236,12 @@ export class PdfProcessor {
           }
         }
       } catch (outlineError) {
-        console.warn(`⚠️ [DEBUG] 无法获取PDF目录:`, outlineError)
+        logger.warn(`⚠️ [DEBUG] 无法获取PDF目录:`, outlineError)
       }
 
       // 如果没有从outline获取到章节，使用备用方法
       if (chapters.length === 0) {
-        console.log(`📖 [DEBUG] 使用备用分章节方法，智能检测: ${useSmartDetection}`)
+        logger.debug(`📖 [DEBUG] 使用备用分章节方法，智能检测: ${useSmartDetection}`)
 
         // 获取所有页面的文本内容（使用并发控制）
         const allPageTexts: string[] = new Array(totalPages).fill('')
@@ -259,7 +260,7 @@ export class PdfProcessor {
                 page.cleanup?.()
               }
             } catch (pageError) {
-              console.warn(`❌ [DEBUG] 跳过第${pageNum}页:`, pageError)
+              logger.warn(`❌ [DEBUG] 跳过第${pageNum}页:`, pageError)
               allPageTexts[pageNum - 1] = ''
             }
           })
@@ -273,7 +274,7 @@ export class PdfProcessor {
         const shouldUseSmartDetection = chapterDetectionMode === 'smart' || (chapterDetectionMode !== 'normal' && useSmartDetection)
         
         if (shouldUseSmartDetection) {
-          console.log(`🧠 [DEBUG] 启用智能章节检测 (模式: ${chapterDetectionMode})`)
+          logger.debug(`🧠 [DEBUG] 启用智能章节检测 (模式: ${chapterDetectionMode})`)
           detectedChapters = this.detectChapters(allPageTexts, chapterNamingMode)
         }
 
@@ -307,7 +308,7 @@ export class PdfProcessor {
         allPageTexts.length = 0
       }
 
-      console.log(`📊 [DEBUG] 最终提取到 ${chapters.length} 个章节`)
+      logger.debug(`📊 [DEBUG] 最终提取到 ${chapters.length} 个章节`)
 
       if (chapters.length === 0) {
         throw new Error('未找到有效的章节内容')
@@ -315,7 +316,7 @@ export class PdfProcessor {
 
       return chapters
     } catch (error) {
-      console.error(`❌ [DEBUG] 提取章节失败:`, error)
+      logger.error(`❌ [DEBUG] 提取章节失败:`, error)
       throw new Error(`提取章节失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       if (shouldDestroyPdf) {
@@ -347,10 +348,10 @@ export class PdfProcessor {
             pageIndex: await this.getDestinationPageIndex(pdf, item.dest)
           })
 
-          console.log(`📖 [DEBUG] 章节: "${item.title}" -> 第${chapterInfos[chapterInfos.length - 1].pageIndex + 1}页`)
+          logger.debug(`📖 [DEBUG] 章节: "${item.title}" -> 第${chapterInfos[chapterInfos.length - 1].pageIndex + 1}页`)
         }
       } catch (error) {
-        console.warn(`⚠️ [DEBUG] 跳过章节 "${item.title}":`, error)
+        logger.warn(`⚠️ [DEBUG] 跳过章节 "${item.title}":`, error)
       }
     }
 
@@ -380,7 +381,7 @@ export class PdfProcessor {
       }
       return 0 // 默认返回第一页
     } catch (error) {
-      console.warn('获取目标页面索引失败:', error)
+      logger.warn('获取目标页面索引失败:', error)
       return 0
     }
   }
@@ -399,7 +400,7 @@ export class PdfProcessor {
           pageTexts.push(pageText)
         }
       } catch (error) {
-        console.warn(`⚠️ [DEBUG] 跳过第${pageNum}页:`, error)
+        logger.warn(`⚠️ [DEBUG] 跳过第${pageNum}页:`, error)
       }
     }
 
@@ -460,7 +461,7 @@ export class PdfProcessor {
           startPage: i + 1
         }
 
-        console.log(`📖 [DEBUG] 检测到新章节: "${chapterTitle}" (第${i + 1}页)`)
+        logger.debug(`📖 [DEBUG] 检测到新章节: "${chapterTitle}" (第${i + 1}页)`)
       } else if (currentChapter) {
         // 添加到当前章节
         currentChapter.content += '\n\n' + pageText
@@ -485,7 +486,7 @@ export class PdfProcessor {
       })
     }
 
-    console.log(`🔍 [DEBUG] 章节检测完成，找到 ${chapters.length} 个章节`)
+    logger.debug(`🔍 [DEBUG] 章节检测完成，找到 ${chapters.length} 个章节`)
 
     return chapters
   }
@@ -526,7 +527,7 @@ export class PdfProcessor {
         canvas: canvas
       }
     } catch (error) {
-      console.warn(`❌ [DEBUG] 获取页面内容失败 (页面 ${pageNumber}):`, error)
+      logger.warn(`❌ [DEBUG] 获取页面内容失败 (页面 ${pageNumber}):`, error)
       return { textContent: '' }
     }
   }

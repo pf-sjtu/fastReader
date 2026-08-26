@@ -14,7 +14,7 @@ import random
 import tempfile
 
 from .config import Config
-from .webdav_client import WebDAVClientWrapper
+from .webdav_client import WebDAVClientWrapper, WebDAVProbeError
 from .ai_client import create_ai_client, AIClient, AIResponse, PromptTemplates
 from .formatter import ResultFormatter
 from .logger import Logger
@@ -172,7 +172,12 @@ class BatchProcessor:
         if not self.config.batch.skipProcessed:
             return set()
 
-        cached_files = self.webdav.list_cache_files()
+        try:
+            cached_files = self.webdav.list_cache_files()
+        except WebDAVProbeError as e:
+            raise WebDAVProbeError(
+                f"云端缓存探测失败，已中止以免重复处理: {e}"
+            ) from e
         if cached_files:
             print(f"☁️  已获取缓存列表: {len(cached_files)} 项")
         return cached_files

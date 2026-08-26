@@ -6,18 +6,42 @@ WebDAV 客户端和批量处理器测试
 import os
 import sys
 import tempfile
+import types
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
-# 添加项目根目录到 Python 路径
+# 添加项目根目录到 Python 路径，并钉死本仓库的 src.cli
+# （开发机 site/.pth 上常有其他带 __init__.py 的 src 包，会抢走 `import src`）
 project_root = Path(__file__).parent.parent.parent
+_src_dir = project_root / "src"
+_cli_dir = _src_dir / "cli"
 sys.path.insert(0, str(project_root))
 
+for _name in list(sys.modules):
+    if _name == "src" or _name.startswith("src."):
+        del sys.modules[_name]
+
+_src_pkg = types.ModuleType("src")
+_src_pkg.__path__ = [str(_src_dir)]
+_src_pkg.__file__ = str(_src_dir / "__init__.py")
+sys.modules["src"] = _src_pkg
+
+_cli_pkg = types.ModuleType("src.cli")
+_cli_pkg.__path__ = [str(_cli_dir)]
+_cli_pkg.__file__ = str(_cli_dir / "__init__.py")
+sys.modules["src.cli"] = _cli_pkg
+
 from src.cli.config import ConfigLoader, Config
-from src.cli.webdav_client import WebDAVClientWrapper
+from src.cli.webdav_client import (
+    WebDAVClientWrapper,
+    WebDAVProbeError,
+    ResourceNotFound,
+)
 from src.cli.logger import Logger
 from src.cli.batch_processor import BatchProcessor
+from src.cli.models import BookFile
+from datetime import datetime
 
 
 def write_config_file(config_content):
@@ -341,6 +365,217 @@ batch:
             assert config.batch is not None
             assert config.batch.sourcePath == ""
             assert config.batch.skipProcessed is True
+        finally:
+            if os.path.exists(f_name):
+                os.unlink(f_name)
+
+
+class _StatusError(Exception):
+    """带 status_code 的假 HTTP 错误，用于模拟 webdav4.HTTPError。"""
+
+    def __init__(self, status_code: int):
+        self.status_code = status_code
+        super().__init__(f"received {status_code}")
+
+
+def _connected_wrapper():
+    config = Mock()
+    config.serverUrl = "https://example.com/dav/"
+    config.username = "testuser"
+    config.password = "testpass"
+    config.syncPath = "/books"
+    wrapper = WebDAVClientWrapper(config, Logger())
+    wrapper.client = MagicMock()
+    wrapper._connected = True
+    return wrapper
+
+
+class TestWebDAVExistenceProbe:
+    """存在 / 不存在 / 探测失败 三种语义。"""
+
+    def test_file_exists_true_when_present(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.exists.return_value = True
+        assert wrapper.file_exists("/books/cache.md") is True
+
+    def test_file_exists_false_when_missing(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.exists.return_value = False
+        assert wrapper.file_exists("/books/cache.md") is False
+
+    def test_file_exists_false_on_resource_not_found(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.exists.side_effect = ResourceNotFound("/books/cache.md")
+        assert wrapper.file_exists("/books/cache.md") is False
+
+    def test_file_exists_false_on_http_404(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.exists.side_effect = _StatusError(404)
+        assert wrapper.file_exists("/books/cache.md") is False
+
+    def test_file_exists_raises_on_http_500(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.exists.side_effect = _StatusError(500)
+        with pytest.raises(WebDAVProbeError):
+            wrapper.file_exists("/books/cache.md")
+
+    def test_file_exists_raises_on_http_401(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.exists.side_effect = _StatusError(401)
+        with pytest.raises(WebDAVProbeError):
+            wrapper.file_exists("/books/cache.md")
+
+    def test_file_exists_raises_on_network_error(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.exists.side_effect = ConnectionError("network down")
+        with pytest.raises(WebDAVProbeError):
+            wrapper.file_exists("/books/cache.md")
+
+    def test_file_exists_raises_on_timeout(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.exists.side_effect = TimeoutError("timed out")
+        with pytest.raises(WebDAVProbeError):
+            wrapper.file_exists("/books/cache.md")
+
+    def test_file_exists_raises_when_disconnected(self):
+        wrapper = _connected_wrapper()
+        wrapper._connected = False
+        with pytest.raises(WebDAVProbeError, match="未连接"):
+            wrapper.file_exists("/books/cache.md")
+
+    def test_get_file_info_returns_metadata_when_present(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.info.return_value = {
+            "size": 2048,
+            "modified": "2024-06-01T00:00:00",
+        }
+        info = wrapper.get_file_info("/books/cache.md")
+        assert info["size"] == 2048
+        assert info["modified"] == "2024-06-01T00:00:00"
+
+    def test_get_file_info_empty_when_missing(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.info.side_effect = ResourceNotFound("/books/cache.md")
+        assert wrapper.get_file_info("/books/cache.md") == {}
+
+    def test_get_file_info_empty_on_http_404(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.info.side_effect = _StatusError(404)
+        assert wrapper.get_file_info("/books/missing.md") == {}
+
+    def test_get_file_info_raises_on_http_503(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.info.side_effect = _StatusError(503)
+        with pytest.raises(WebDAVProbeError):
+            wrapper.get_file_info("/books/cache.md")
+
+    def test_get_file_info_raises_on_auth_failure(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.info.side_effect = _StatusError(403)
+        with pytest.raises(WebDAVProbeError):
+            wrapper.get_file_info("/books/cache.md")
+
+    def test_list_files_empty_on_directory_404(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.ls.side_effect = _StatusError(404)
+        assert wrapper.list_files("/books") == []
+
+    def test_list_files_raises_on_http_500(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.ls.side_effect = _StatusError(500)
+        with pytest.raises(WebDAVProbeError):
+            wrapper.list_files("/books")
+
+    def test_list_cache_files_raises_on_probe_failure(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.ls.side_effect = ConnectionError("reset")
+        with pytest.raises(WebDAVProbeError):
+            wrapper.list_cache_files()
+
+    def test_list_books_does_not_swallow_probe_error(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.ls.side_effect = _StatusError(401)
+        with pytest.raises(WebDAVProbeError):
+            wrapper.list_books("/books")
+
+    def test_check_cache_exists_false_when_missing(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.exists.return_value = False
+        book = BookFile(
+            name="demo.epub",
+            path="/books/demo.epub",
+            extension=".epub",
+            size=1,
+            last_modified=datetime(2024, 1, 1),
+        )
+        assert wrapper.check_cache_exists(book) is False
+
+    def test_check_cache_exists_raises_on_probe_failure(self):
+        wrapper = _connected_wrapper()
+        wrapper.client.exists.side_effect = TimeoutError("timed out")
+        book = BookFile(
+            name="demo.epub",
+            path="/books/demo.epub",
+            extension=".epub",
+            size=1,
+            last_modified=datetime(2024, 1, 1),
+        )
+        with pytest.raises(WebDAVProbeError):
+            wrapper.check_cache_exists(book)
+
+
+class TestBatchProcessorCacheProbe:
+    """批处理不得把缓存探测失败当成无缓存。"""
+
+    def test_batch_processor_aborts_when_cache_probe_fails(self):
+        config_content = """
+aiConfigManager:
+  providers:
+    - provider: gemini
+      apiKey: "test-key"
+      model: "gemini-1.5-pro"
+  currentModelId: 1
+
+webdavConfig:
+  serverUrl: "https://example.com/dav/"
+  username: "user"
+  password: "pass"
+  syncPath: "/books"
+
+batch:
+  sourcePath: "/books"
+  skipProcessed: true
+"""
+        f_name = write_config_file(config_content)
+        try:
+            loader = ConfigLoader(f_name)
+            config = loader.load()
+            logger = Logger()
+
+            with patch("src.cli.batch_processor.WebDAVClientWrapper") as mock_webdav, \
+                 patch("src.cli.batch_processor.create_ai_client"):
+                mock_webdav_instance = MagicMock()
+                mock_webdav.return_value = mock_webdav_instance
+                mock_webdav_instance.connect.return_value = True
+                mock_webdav_instance.list_books.return_value = [
+                    BookFile(
+                        name="book.epub",
+                        path="/books/book.epub",
+                        extension=".epub",
+                        size=10,
+                        last_modified=datetime(2024, 1, 1),
+                    )
+                ]
+                mock_webdav_instance.list_cache_files.side_effect = WebDAVProbeError(
+                    "503 Service Unavailable"
+                )
+
+                processor = BatchProcessor(config, logger)
+                result = processor.run()
+
+                assert result.failed == 1
+                assert "探测失败" in result.failed_books[0]["error"]
+                mock_webdav_instance.download_file.assert_not_called()
         finally:
             if os.path.exists(f_name):
                 os.unlink(f_name)

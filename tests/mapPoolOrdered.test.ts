@@ -97,4 +97,39 @@ describe('mapPoolOrdered', () => {
     expect(results).toEqual([])
     expect(spy).not.toHaveBeenCalled()
   })
+
+  it('resolves and fires onOrderedResult when mapper returns undefined', async () => {
+    const ordered: Array<number | undefined> = []
+
+    const results = await mapPoolOrdered(
+      [1, 2, 3],
+      async (value) => (value === 2 ? undefined : value),
+      {
+        concurrency: 2,
+        onOrderedResult: (result) => {
+          ordered.push(result)
+        },
+      }
+    )
+
+    expect(results).toEqual([1, undefined, 3])
+    expect(ordered).toEqual([1, undefined, 3])
+  })
+
+  it('resolves when mapper returns null', async () => {
+    const ordered: Array<number | null> = []
+
+    const results = await mapPoolOrdered(
+      [10, 20],
+      async (value) => (value === 10 ? null : value),
+      {
+        onOrderedResult: (result) => {
+          ordered.push(result)
+        },
+      }
+    )
+
+    expect(results).toEqual([null, 20])
+    expect(ordered).toEqual([null, 20])
+  })
 })

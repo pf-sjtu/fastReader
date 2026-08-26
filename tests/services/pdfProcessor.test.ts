@@ -1,13 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { getDocumentMock, globalWorkerOptions } = vi.hoisted(() => ({
+const { getDocumentMock, globalWorkerOptions, loggerMock } = vi.hoisted(() => ({
   getDocumentMock: vi.fn(),
-  globalWorkerOptions: { workerSrc: '' }
+  globalWorkerOptions: { workerSrc: '' },
+  loggerMock: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }))
 
 vi.mock('pdfjs-dist', () => ({
   getDocument: getDocumentMock,
   GlobalWorkerOptions: globalWorkerOptions
+}))
+
+vi.mock('../../src/lib/logger', () => ({
+  logger: loggerMock,
 }))
 
 import { PdfProcessor } from '../../src/services/pdfProcessor'
@@ -92,5 +102,79 @@ describe('PdfProcessor', () => {
 
     expect(text).not.toContain('123')
     expect(text.replace(/\s+/g, ' ').trim()).toBe('Hello World')
+  })
+
+  it('非 debug 路径不得向 console.log 刷 [DEBUG] 或大对象 dump', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const processor = new PdfProcessor()
+    const file = new File(['pdf-content'], 'sample.pdf', { type: 'application/pdf' })
+    vi.spyOn(File.prototype, 'arrayBuffer').mockResolvedValue(new ArrayBuffer(16))
+
+    const metadata = { info: { Title: '示例书', Author: '作者A' } }
+    const outline = [{ title: '第一章', dest: [1], items: [] }]
+    const pdfMock = {
+      numPages: 1,
+      getMetadata: vi.fn().mockResolvedValue(metadata),
+      getOutline: vi.fn().mockResolvedValue(outline),
+      getPage: vi.fn().mockResolvedValue({
+        getTextContent: vi.fn().mockResolvedValue({
+          items: [{ str: 'x'.repeat(120) }],
+        }),
+        cleanup: vi.fn(),
+      }),
+      destroy: vi.fn(),
+    }
+
+    getDocumentMock.mockReturnValue({ promise: Promise.resolve(pdfMock) })
+
+    await processor.extractBookData(file)
+
+    const debugConsoleCalls = logSpy.mock.calls.filter((args) =>
+      args.some(
+        (arg) =>
+          (typeof arg === 'string' && arg.includes('[DEBUG]')) ||
+          arg === 'chapterInfos' ||
+          arg === metadata ||
+          arg === outline
+      )
+    )
+
+    expect(debugConsoleCalls).toHaveLength(0)
+    expect(loggerMock.debug).toHaveBeenCalled()
+    expect(loggerMock.debug).toHaveBeenCalledWith(
+      '[DEBUG] PdfProcessor.parsePdf metadata:',
+      metadata
+    )
+    expect(loggerMock.debug).toHaveBeenCalledWith(
+      '📚 [DEBUG] 获取到PDF目录:',
+      outline
+    )
+    expect(
+      loggerMock.debug.mock.calls.some((args) => args.includes('chapterInfos'))
+    ).toBe(true)
+
+    logSpy.mockRestore()
+  })
+
+  it('章节提取失败时仍记录 error 日志', async () => {
+    const processor = new PdfProcessor()
+    const file = new File(['pdf-content'], 'empty.pdf', { type: 'application/pdf' })
+    const pdfMock = {
+      numPages: 1,
+      getOutline: vi.fn().mockRejectedValue(new Error('no outline')),
+      getPage: vi.fn().mockRejectedValue(new Error('no page')),
+      destroy: vi.fn(),
+    }
+
+    await expect(
+      processor.extractChapters(file, false, true, 0, 'auto', 'normal', 1, pdfMock as never)
+    ).rejects.toThrow('提取章节失败')
+
+    expect(loggerMock.error).toHaveBeenCalled()
+    expect(
+      loggerMock.error.mock.calls.some((args) =>
+        args.some((arg) => typeof arg === 'string' && arg.includes('提取章节失败'))
+      )
+    ).toBe(true)
   })
 })

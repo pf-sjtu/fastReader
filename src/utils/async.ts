@@ -156,13 +156,13 @@ export async function mapPoolOrdered<TItem, TResult>(
 
   const concurrency = clampConcurrency(options.concurrency ?? 3)
   const limiter = new ConcurrencyLimiter(concurrency)
-  const slots: Array<TResult | undefined> = new Array(n)
+  const slots: TResult[] = new Array(n)
+  const completed = new Array<boolean>(n).fill(false)
   let nextToCommit = 0
 
   const commitReady = () => {
-    while (nextToCommit < n && slots[nextToCommit] !== undefined) {
-      const result = slots[nextToCommit] as TResult
-      options.onOrderedResult?.(result, nextToCommit)
+    while (nextToCommit < n && completed[nextToCommit]) {
+      options.onOrderedResult?.(slots[nextToCommit], nextToCommit)
       nextToCommit++
     }
   }
@@ -172,6 +172,7 @@ export async function mapPoolOrdered<TItem, TResult>(
       limiter.execute(async () => {
         const result = await mapper(item, index)
         slots[index] = result
+        completed[index] = true
         options.onItemSettled?.(result, index)
         // 同步推进有序提交（JS 单线程，无需锁）
         commitReady()
@@ -180,7 +181,7 @@ export async function mapPoolOrdered<TItem, TResult>(
     )
   )
 
-  return slots as TResult[]
+  return slots
 }
 
 /**

@@ -3,7 +3,7 @@ WebDAV 客户端封装
 使用 webdav4 库 (https://github.com/skshetry/webdav4)
 """
 
-from typing import Optional, Any, List
+from typing import Optional, Any, List, NoReturn
 
 
 from pathlib import Path
@@ -11,19 +11,42 @@ from datetime import datetime
 import os
 import time
 
+from .models import BookFile
+from .logger import Logger
+
+
+class WebDAVProbeError(Exception):
+    """WebDAV 探测失败（网络/鉴权/服务端错误），不得当作「资源不存在」。"""
+
+
 # 尝试导入 webdav4 库
 _webdav_available = False
 try:
     from webdav4.client import Client as _WebDAVClient
-    from webdav4.client import HTTPError
+    from webdav4.client import HTTPError, ResourceNotFound
 
     _webdav_available = True
 except ImportError:
     _WebDAVClient = None
-    HTTPError = Exception
 
-from .models import BookFile
-from .logger import Logger
+    class HTTPError(Exception):
+        """webdav4 未安装时的占位。"""
+
+        status_code: Optional[int] = None
+
+    class ResourceNotFound(Exception):
+        """webdav4 未安装时的占位。"""
+
+
+def _is_not_found_error(exc: BaseException) -> bool:
+    """404 / ResourceNotFound 视为资源确实不存在。"""
+    if isinstance(exc, ResourceNotFound):
+        return True
+    status = getattr(exc, "status_code", None)
+    try:
+        return int(status) == 404
+    except (TypeError, ValueError):
+        return False
 
 
 class WebDAVClientWrapper:
@@ -121,10 +144,22 @@ class WebDAVClientWrapper:
         """检查是否已连接"""
         return self._connected and self.client is not None
 
-    def list_files(self, path: str, detail: bool = False) -> List[Any]:
-        """列出路径下的文件和文件夹"""
+    def _require_connected(self, operation: str) -> None:
         if not self.is_connected():
-            return []
+            raise WebDAVProbeError(f"WebDAV 未连接，无法{operation}")
+
+    def _raise_probe_error(
+        self, operation: str, path: str, exc: BaseException
+    ) -> NoReturn:
+        if isinstance(exc, WebDAVProbeError):
+            raise exc
+        msg = f"{operation}失败: {path}: {exc}"
+        self.logger.error(msg)
+        raise WebDAVProbeError(msg) from exc
+
+    def list_files(self, path: str, detail: bool = False) -> List[Any]:
+        """列出路径下的文件和文件夹。目录不存在返回空列表；探测失败抛 WebDAVProbeError。"""
+        self._require_connected("列出文件")
 
         try:
             # 确保路径不以 / 开头（webdav4 相对路径）
@@ -137,13 +172,13 @@ class WebDAVClientWrapper:
             # 过滤掉 . 和 ..
             return [f for f in files if f not in [".", ".."]]
         except Exception as e:
-            self.logger.error(f"列出文件失败: {e}")
-            return []
+            if _is_not_found_error(e):
+                return []
+            self._raise_probe_error("列出文件", path, e)
 
     def list_books(self, source_path: str) -> List[BookFile]:
         """列出源路径下的电子书文件"""
-        if not self.is_connected():
-            return []
+        self._require_connected("扫描电子书")
 
         books = []
         full_path = source_path
@@ -185,15 +220,16 @@ class WebDAVClientWrapper:
                         )
                     )
 
+        except WebDAVProbeError:
+            raise
         except Exception as e:
             self.logger.error(f"扫描电子书失败: {e}")
 
         return books
 
     def get_file_info(self, path: str) -> dict:
-        """获取文件信息"""
-        if not self.is_connected():
-            return {}
+        """获取文件信息。资源不存在返回空 dict；探测失败抛 WebDAVProbeError。"""
+        self._require_connected("获取文件信息")
 
         try:
             # webdav4 的 info 方法返回字典
@@ -210,13 +246,14 @@ class WebDAVClientWrapper:
                     or "2000-01-01T00:00:00",
                 }
             return {}
-        except Exception:
-            return {}
+        except Exception as e:
+            if _is_not_found_error(e):
+                return {}
+            self._raise_probe_error("获取文件信息", path, e)
 
     def file_exists(self, path: str) -> bool:
-        """检查文件是否存在"""
-        if not self.is_connected():
-            return False
+        """检查文件是否存在。不存在返回 False；探测失败抛 WebDAVProbeError。"""
+        self._require_connected("探测文件是否存在")
 
         try:
             # path 需要以 / 开头
@@ -225,8 +262,10 @@ class WebDAVClientWrapper:
             assert self.client is not None
             return self.client.exists(path)
 
-        except Exception:
-            return False
+        except Exception as e:
+            if _is_not_found_error(e):
+                return False
+            self._raise_probe_error("探测文件是否存在", path, e)
 
     def download_file(self, remote_path: str, local_path: str) -> bool:
         """下载文件"""
