@@ -45,16 +45,52 @@ import { logger } from '../../lib/logger'
 // 已跳过章节的标记前缀
 const SKIPPED_SUMMARY_PREFIX = RESULT_PREFIX.chapterSkipped
 
-/** 从模型输出中提取第一个匹配的 JSON 片段；失败返回 null */
-function parseJsonMatch<T>(response: string, pattern: RegExp, label: string): T | null {
-  try {
-    const jsonMatch = response.match(pattern)
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]) as T
+/** 找出文本中所有括号配平的候选片段（跳过字符串内的括号），按出现顺序返回 */
+function balancedCandidates(text: string, open: '{' | '['): string[] {
+  const close = open === '{' ? '}' : ']'
+  const out: string[] = []
+  for (let start = text.indexOf(open); start !== -1; start = text.indexOf(open, start + 1)) {
+    let depth = 0
+    let inStr = false
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i]
+      if (inStr) {
+        if (ch === '\\') i++
+        else if (ch === '"') inStr = false
+      } else if (ch === '"') inStr = true
+      else if (ch === open) depth++
+      else if (ch === close && --depth === 0) {
+        out.push(text.slice(start, i + 1))
+        break
+      }
     }
-  } catch (error) {
-    logger.error(`${label} JSON 解析失败:`, error)
   }
+  return out
+}
+
+/**
+ * 从模型输出中提取 JSON；失败返回 null。
+ * 先按贪婪匹配（常见的纯 JSON / 代码围栏），失败后回退为逐个括号配平片段，
+ * 以容忍模型在 JSON 前后追加含花括号的说明文字。
+ */
+function parseJsonMatch<T>(response: string, pattern: RegExp, label: string): T | null {
+  const greedy = response.match(pattern)?.[0]
+  if (greedy) {
+    try {
+      return JSON.parse(greedy) as T
+    } catch {
+      // 继续尝试配平片段
+    }
+  }
+  const open = pattern.source.startsWith('\\[') ? '[' : '{'
+  for (const candidate of balancedCandidates(response, open)) {
+    try {
+      return JSON.parse(candidate) as T
+    } catch {
+      // 试下一个
+    }
+  }
+  if (greedy) logger.error(`${label} JSON 解析失败`)
   return null
 }
 
@@ -150,9 +186,12 @@ export class AIService {
     this.pendingRequests.set(key, promise)
 
     // 请求完成后移除
-    promise.finally(() => {
-      this.pendingRequests.delete(key)
-    })
+    // 注意：finally 会派生新 promise，失败时它同样 reject 且无人处理 → 必须吞掉，错误仍经 promise 本体抛给调用方
+    promise
+      .finally(() => {
+        this.pendingRequests.delete(key)
+      })
+      .catch(() => {})
 
     return promise
   }

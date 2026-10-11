@@ -8,13 +8,13 @@
  * Cloudflare 运行时用本机 http 服务模拟：把 functions/api/dav 的 onRequest 包成端点。
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
-import { createServer, type Server } from 'node:http'
-import { Readable } from 'node:stream'
+import type { Server } from 'node:http'
 import { createHash, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { parse } from 'yaml'
 import { WebDAVService, type WebDAVConfig } from '../../src/services/webdavService'
 import { onRequest } from '../../functions/api/dav/[[path]].js'
+import { startPagesEmulator, patchRelativeFetch } from './pagesEmulator'
 
 // 浏览器里 getProcessedUrl 返回相对的 /api/dav；Node 下 webdav 库无法解析相对地址，
 // 补成本机代理的绝对地址（仅替换这一个纯函数，其余真实代码不变）
@@ -49,53 +49,22 @@ function loadDavConfig(): WebDAVConfig {
 }
 
 let server: Server
-const realFetch = globalThis.fetch
+let restoreFetch: (() => void) | undefined
+const realFetch = globalThis.fetch // 直接探测代理时绕过补丁用
 
 beforeAll(async () => {
   if (!CONFIG_PATH) return
-  // Cloudflare Pages 运行时模拟：Node 请求 → Request → onRequest → Response
-  server = createServer(async (req, res) => {
-    try {
-      const method = req.method || 'GET'
-      const headers = new Headers()
-      for (const [k, v] of Object.entries(req.headers)) {
-        if (Array.isArray(v)) v.forEach((x) => headers.append(k, x))
-        else if (v !== undefined) headers.set(k, v)
-      }
-      const hasBody = method !== 'GET' && method !== 'HEAD'
-      const request = new Request(`http://localhost:${PORT}${req.url}`, {
-        method,
-        headers,
-        body: hasBody ? (Readable.toWeb(req) as unknown as ReadableStream) : undefined,
-        // @ts-expect-error Node fetch 流式请求体需要 duplex
-        duplex: 'half',
-      })
-      const response: Response = await onRequest({ request, env: { ALLOWED_ORIGINS: ORIGIN } })
-      // E2E_TRACE=1：打印 方法 / X-WebDAV-Path / Depth / 状态码（不含任何凭据）
-      if (process.env.E2E_TRACE) {
-        console.log(
-          `[trace] ${method} path=${headers.get('x-webdav-path')} depth=${headers.get('depth') ?? '-'} -> ${response.status}`
-        )
-      }
-      const out: Record<string, string> = {}
-      response.headers.forEach((v, k) => (out[k] = v))
-      res.writeHead(response.status, out)
-      res.end(Buffer.from(await response.arrayBuffer()))
-    } catch (e) {
-      res.writeHead(500)
-      res.end(String(e))
-    }
+  server = await startPagesEmulator({
+    port: PORT,
+    origin: ORIGIN,
+    routes: { '/api/dav': onRequest },
+    trace: !!process.env.E2E_TRACE, // 打印 方法 / 路径 / 状态码，不含凭据
   })
-  await new Promise<void>((r) => server.listen(PORT, r))
-  // 浏览器里的相对地址（/api/dav）在 Node 中无法解析：补上 origin
-  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    if (typeof input === 'string' && input.startsWith('/')) input = ORIGIN + input
-    return realFetch(input as RequestInfo, init)
-  }) as typeof fetch
+  restoreFetch = patchRelativeFetch(ORIGIN)
 })
 
 afterAll(async () => {
-  globalThis.fetch = realFetch
+  restoreFetch?.()
   if (server) await new Promise((r) => server.close(r))
 })
 

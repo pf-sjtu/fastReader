@@ -23,6 +23,8 @@ import {
 
 /** 重开时等待旧一轮退出的上限；超时后靠代际守卫丢弃旧结果 */
 const RESTART_WAIT_MS = 5000
+/** 主动中止会同时触发 cancel 回调与 AbortError 分支：固定 id 去重 */
+const CANCELLED_TOAST_ID = 'processing-cancelled'
 
 const PHASE_STEP_KEY: Record<Exclude<PipelinePhase, 'chapters'>, string> = {
   connections: 'progress.analyzingConnections',
@@ -162,7 +164,11 @@ export function useProcessingRun(deps: ProcessingRunDeps) {
         onChapterStart: (chapter, done) => {
           if (!isCurrentRun()) return
           setCurrentProcessingChapter(chapter.id)
-          setCurrentStep(t('progress.processingChapter', { current: done + 1, total, title: chapter.title }))
+          // 序号取章节自身位置（并发下 done 是已按序提交数，与当前章无关）
+          const pos = chapters.findIndex((c) => c.id === chapter.id)
+          setCurrentStep(
+            t('progress.processingChapter', { current: (pos >= 0 ? pos : done) + 1, total, title: chapter.title })
+          )
         },
         onChapter: (chapter, index, info) => {
           if (!isCurrentRun()) return
@@ -226,6 +232,15 @@ export function useProcessingRun(deps: ProcessingRunDeps) {
       if (!isCurrentRun()) return
 
       setProgress(100)
+      if (result.stats.usable === 0 && total > 0) {
+        // 全部章节失败：不是成功完成，不记历史
+        setCurrentStep(t('progress.allChaptersFailed'))
+        toast.error(t('progress.allChaptersFailed'), { id: 'processing-result', duration: 5000 })
+        if (processingOptions.enableNotification) {
+          await notificationService.sendErrorNotification(t('progress.allChaptersFailed'))
+        }
+        return
+      }
       setCurrentStep(t('progress.completed'))
       recordHistory({
         bookTitle: title || file.name.replace(/\.[^/.]+$/, ''),
@@ -245,7 +260,7 @@ export function useProcessingRun(deps: ProcessingRunDeps) {
       if (!generationRef.current.isCurrent(generation)) return
       if (isAbortError(error)) {
         setCurrentStep(t('progress.cancelled'))
-        toast.info(t('progress.cancelledHint'), { duration: 5000 })
+        toast.info(t('progress.cancelledHint'), { id: CANCELLED_TOAST_ID, duration: 5000 })
       } else {
         const msg = error instanceof Error ? error.message : t('progress.processingError')
         toast.error(msg, { duration: 5000, position: 'top-center' })
@@ -271,7 +286,7 @@ export function useProcessingRun(deps: ProcessingRunDeps) {
     setProcessing(false)
     setCurrentProcessingChapter('')
     setCurrentStep(t('progress.cancelled'))
-    toast.info(t('progress.cancelledHint'))
+    toast.info(t('progress.cancelledHint'), { id: CANCELLED_TOAST_ID })
   }, [t])
 
   /** 重新开始：中止进行中的任务，等旧一轮退出后清空结果并按当前配置再跑（缓存命中章节不再调用 AI） */

@@ -138,7 +138,10 @@ export function useBookFile(generationRef: MutableRefObject<GenerationCounter>) 
         setBookData({ title: result.title, author: result.author })
         setSelectedChapters(defaultSelection(result.chapters))
         void getBookId(targetFile)
-        toast.success(t('upload.chaptersExtracted', { count: result.chapters.length }))
+        toast.success(t('upload.chaptersExtracted', { count: result.chapters.length }), {
+          id: 'chapters-extracted',
+          duration: 3000,
+        })
       } catch (error) {
         if (isStale()) {
           releaseBookResources(processor, null)

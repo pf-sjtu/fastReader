@@ -565,6 +565,7 @@ function App() {
                       onDownloadMindMap={downloadMindMap}
                       onRegenerateKeyCharts={regenerateKeyCharts}
                       chartsGenerating={chartsGenerating}
+                      totalChapters={selectedChapters.size}
                     />
                   </Suspense>
                 </ErrorBoundary>

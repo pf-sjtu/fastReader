@@ -1,15 +1,17 @@
 import React from 'react';
 import { Moon, Sun } from 'lucide-react';
-import { useTheme } from './useTheme';
+import { useTheme, useIsDarkMode } from './useTheme';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 
 export const DarkModeToggle: React.FC = () => {
   const { t } = useTranslation();
-  const { theme, setTheme } = useTheme();
+  const { setTheme } = useTheme();
+  // 基于实际生效主题取反：theme 为 system 时也要让首次点击有可见变化
+  const isDark = useIsDarkMode();
 
   const toggleDarkMode = () => {
-    if (theme === 'dark') {
+    if (isDark) {
       setTheme('light');
     } else {
       setTheme('dark');
@@ -22,15 +24,15 @@ export const DarkModeToggle: React.FC = () => {
       size="sm"
       onClick={toggleDarkMode}
       className="flex items-center gap-2"
-      title={theme === 'dark' ? t('theme.switchToLight') : t('theme.switchToDark')}
+      title={isDark ? t('theme.switchToLight') : t('theme.switchToDark')}
     >
-      {theme === 'dark' ? (
+      {isDark ? (
         <Sun className="h-4 w-4" />
       ) : (
         <Moon className="h-4 w-4" />
       )}
       <span className="hidden sm:inline">
-        {theme === 'dark' ? t('theme.light') : t('theme.dark')}
+        {isDark ? t('theme.light') : t('theme.dark')}
       </span>
     </Button>
   );

@@ -107,6 +107,7 @@
     "postPhaseConnectionsFailed": "章节已完成，但关联分析失败",
     "postPhaseOverallFailed": "章节已完成，但全书总结失败",
     "processing": "处理中...",
+    "allChaptersFailed": "所有章节处理失败，请检查 AI 配置后重试",
     "processingCompleted": "处理完成",
     "syncFailed": "结果已生成，但云端同步失败",
     "confirmAbortTitle": "确认中止处理？",

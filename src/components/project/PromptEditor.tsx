@@ -136,8 +136,8 @@ export function PromptEditor() {
       <CardContent>
         <div className="space-y-4">
           {/* 版本切换和当前配置显示 */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">
                 {processingOptions.bookType === 'fiction' ? t('promptEditor.fiction') : t('promptEditor.nonFiction')}
               </Badge>
@@ -164,7 +164,7 @@ export function PromptEditor() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
               <TabsTrigger value="chapterSummary">{t('promptEditor.chapterSummary')}</TabsTrigger>
               <TabsTrigger value="mindmap">{t('promptEditor.mindmap')}</TabsTrigger>
               <TabsTrigger value="connectionAnalysis">{t('promptEditor.connectionAnalysis')}</TabsTrigger>
@@ -225,8 +225,8 @@ export function PromptEditor() {
           </Tabs>
 
           {/* 操作按钮 */}
-          <div className="flex items-center justify-between pt-4 border-t">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"

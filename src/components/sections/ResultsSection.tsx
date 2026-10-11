@@ -31,6 +31,8 @@ interface ResultsSectionProps {
   onDownloadMindMap?: (mindMapData: MindElixirData, title?: string) => void
   onRegenerateKeyCharts?: () => void | Promise<void>
   chartsGenerating?: boolean
+  /** 处理中尚无结果章节时，头部显示的预期总章数 */
+  totalChapters?: number
 }
 
 export const ResultsSection = memo(function ResultsSection({
@@ -47,6 +49,7 @@ export const ResultsSection = memo(function ResultsSection({
   onDownloadMindMap,
   onRegenerateKeyCharts,
   chartsGenerating = false,
+  totalChapters = 0,
 }: ResultsSectionProps) {
   const { t } = useTranslation()
   // 受控 Tab，避免切换时整树 default 重置
@@ -81,7 +84,7 @@ export const ResultsSection = memo(function ResultsSection({
         </CardTitle>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between -mt-1 min-w-0">
           <CardDescription className="truncate min-w-0">
-            {t('results.author', { author: bookSummary?.author || bookMindMap?.author })} | {t('results.chapterCount', { count: bookSummary?.chapters.length || bookMindMap?.chapters.length })}
+            {t('results.author', { author: bookSummary?.author || bookMindMap?.author })} | {t('results.chapterCount', { count: bookSummary?.chapters.length || bookMindMap?.chapters.length || totalChapters })}
           </CardDescription>
           <div className="flex flex-wrap items-center gap-1.5 shrink-0">
             <FontSizeControl variant="compact" showLabel={false} />
@@ -202,13 +205,16 @@ export const ResultsSection = memo(function ResultsSection({
           </Tabs>
         ) : processingMode === 'mindmap' && bookMindMap ? (
           <Tabs defaultValue="chapters" className="w-full min-w-0">
-            <TabsList className="grid w-full grid-cols-2 h-auto">
+            {/* mindmap 模式不产出整书导图（仅 combined-mindmap 模式产出）：有数据才显示该页签 */}
+            <TabsList className={cn('grid w-full h-auto', bookMindMap.combinedMindMap ? 'grid-cols-2' : 'grid-cols-1')}>
               <TabsTrigger value="chapters" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
                 {t('results.tabs.chapterMindMaps')}
               </TabsTrigger>
-              <TabsTrigger value="combined" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
-                {t('results.tabs.combinedMindMap')}
-              </TabsTrigger>
+              {bookMindMap.combinedMindMap && (
+                <TabsTrigger value="combined" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                  {t('results.tabs.combinedMindMap')}
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="chapters" className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -231,8 +237,8 @@ export const ResultsSection = memo(function ResultsSection({
               )}
             </TabsContent>
 
-            <TabsContent value="combined">
-              {bookMindMap.combinedMindMap ? (
+            {bookMindMap.combinedMindMap && (
+              <TabsContent value="combined">
                 <MindMapCard
                   id="combined"
                   title={t('results.tabs.combinedMindMap')}
@@ -248,16 +254,8 @@ export const ResultsSection = memo(function ResultsSection({
                   mindMapClassName="w-full h-[min(60vh,600px)] min-h-[240px] mx-auto"
                   mindElixirOptions={mindElixirOptions}
                 />
-              ) : (
-                <Card>
-                  <CardContent>
-                    <div className="text-center text-gray-500 py-8">
-                      {t('results.generatingMindMap')}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
+              </TabsContent>
+            )}
           </Tabs>
         ) : processingMode === 'combined-mindmap' && bookMindMap ? (
           bookMindMap.combinedMindMap ? (

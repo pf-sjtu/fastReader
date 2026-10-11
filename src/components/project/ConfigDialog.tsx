@@ -17,6 +17,16 @@ import { ProcessingSection } from './config/ProcessingSection'
 import { ChapterSection } from './config/ChapterSection'
 import { ChapterPreview } from './config/ChapterPreview'
 
+/** 页签 value → 标题文案 key（标题跟随当前页签） */
+const TAB_TITLE_KEY = {
+  'ai-config': 'config.aiServiceConfig',
+  'ai-providers': 'config.tabs.providers',
+  prompts: 'promptEditor.title',
+  webdav: 'config.tabs.webdav',
+  'export-import': 'config.tabs.exportImport',
+} as const
+type ConfigTab = keyof typeof TAB_TITLE_KEY
+
 interface ConfigDialogProps {
   processing: boolean
   file: File | null
@@ -26,6 +36,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
   const { t } = useTranslation()
   // 受控 open：章节预览仅在对话框打开时解析文件
   const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState<ConfigTab>('ai-config')
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -39,12 +50,12 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-wrap break-words">
             <Settings className="h-4 w-4 flex-shrink-0" />
-            {t('config.aiServiceConfig')}
+            {t(TAB_TITLE_KEY[tab])}
           </DialogTitle>
           <DialogDescription className="text-wrap break-words">{t('config.description')}</DialogDescription>
         </DialogHeader>
         <ScrollArea className="max-h-[60vh] pr-4">
-          <Tabs defaultValue="ai-config" className="w-full">
+          <Tabs value={tab} onValueChange={(v) => setTab(v as ConfigTab)} className="w-full">
             <TabsList className="flex flex-wrap w-full h-auto gap-1 p-1">
               <TabsTrigger value="ai-config" className="flex-1 min-w-fit">{t('config.aiServiceConfig')}</TabsTrigger>
               <TabsTrigger value="ai-providers" className="flex-1 min-w-fit">{t('config.tabs.providers')}</TabsTrigger>

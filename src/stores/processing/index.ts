@@ -12,7 +12,7 @@ const defaultProcessingOptions: ProcessingOptions = {
   useSmartDetection: false,
   skipNonEssentialChapters: true,
   maxSubChapterDepth: 0,
-  outputLanguage: 'en',
+  outputLanguage: 'auto',
   chapterNamingMode: 'auto',
   enableNotification: true,
   chapterDetectionMode: 'normal',

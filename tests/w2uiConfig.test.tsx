@@ -172,6 +172,7 @@ describe('ProcessingSection / ChapterSection', () => {
     expect(store().processingOptions.processingMode).toBe('mindmap')
     await selectOption(byId('book-type'), t('config.novelType'))
     expect(store().processingOptions.bookType).toBe('fiction')
+    expect(store().processingOptions.outputLanguage).toBe('auto')
     await selectOption(byId('output-language'), 'English')
     expect(store().processingOptions.outputLanguage).toBe('en')
   })

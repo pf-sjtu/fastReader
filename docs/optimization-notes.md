@@ -65,3 +65,5 @@
 - 旧版导出配置（`tests/fixtures/config/legacy-export-2026-08.yaml`，由真实导出脱敏）前端 `importConfig` 与 CLI `ConfigLoader` 均可直接读取；导入时 `connectionStatus` 重置为 `disconnected`（运行时状态不随备份迁移），`customFields` 空值归一化为对象
 - 真实 WebDAV 联调（`tests/tour/liveWebdav.test.ts`，设置 `E2E_CONFIG` 才运行，只写专用沙盒目录）发现两类 mock 测试永远发现不了的问题：（1）代理响应头白名单保留了 `content-length` 却丢了 `content-encoding`——上游 gzip 时 fetch 已解压，长度头是压缩后的，正文被截断；现在上游有内容编码时丢弃 `content-length`。（2）上传前只创建最后一级目录，`{书名}/mindmaps/` 这类两级新目录在标准 WebDAV 服务器（MKCOL 缺上级返回 409）上必然失败；现在自顶向下逐级创建，并缓存已确认存在的目录
 - 输出语言 auto：前端跟随界面语言，CLI 跟随原书语言（CLI 无界面）
+- 真实 AI 联调（`tests/tour/liveAI.test.ts`，同样需 `E2E_CONFIG`）发现：（1）`AIService` 请求去重处 `promise.finally(...)` 派生出无人处理的 promise，每次请求失败都会触发 unhandledRejection，已吞掉派生链（错误仍经本体抛给调用方）；（2）思维导图 JSON 提取原先只做贪婪 `{…}` 匹配，模型在 JSON 后附带含花括号的说明时必然失败，现回退为括号配平逐段尝试。网关对某模型返回 `model_not_found` 属配置问题，联调只告警不判失败
+- 浏览器端到端发现并修复的 UI 问题：mindmap 模式整书导图页签永远「生成中」、全章节失败仍显示成功、375px 提示词编辑器溢出、输出语言默认 `en` 与「auto 跟随界面」文案不符、主题首次点击无反应、设置标题不随页签变化、toast 堆积
