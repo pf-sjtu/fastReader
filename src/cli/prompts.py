@@ -4,12 +4,16 @@ Prompt 模板（与前端共享 src/services/prompts/config/v{1,2}-prompts.yaml�
 - 模板来源优先级：配置文件 promptVersionConfig > 仓库内 YAML
 - 默认版本与前端 configStore 一致（v1）
 - 输入组装与前端 aiService 对齐：章节摘要用「标题 + 原文」，关联/全书只喂章节摘要 JSON
+- 模板渲染语义见 src/services/prompts/config/README.md；render_prompt 与前端 renderPrompt 等价
+  （跨端用例 tests/fixtures/prompts/render-cases.json）
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -102,11 +106,53 @@ def prepare_post_process_chapters(
     return [{**c, "summary": _truncate(c["summary"], per)} for c in full]
 
 
-def _substitute(template: str, **kwargs) -> str:
-    result = template
-    for key, value in kwargs.items():
-        result = result.replace("{{" + key + "}}", str(value))
-    return result
+_log = logging.getLogger(__name__)
+
+# {{name}}，允许花括号内两侧空白；name 须以字母或下划线开头（与前端 PLACEHOLDER 一致）
+_PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+
+
+def _replace_placeholders(template: str, values: dict) -> tuple[str, set, list]:
+    """一次性替换已知占位符（值中的 {{…}} 不会被二次替换）；返回 (文本, 已用名, 未知名)"""
+    used: set = set()
+    unknown: list = []
+
+    def sub(match: re.Match) -> str:
+        name = match.group(1)
+        if name not in values:
+            if name not in unknown:
+                unknown.append(name)
+            return match.group(0)
+        used.add(name)
+        return str(values[name])
+
+    return _PLACEHOLDER.sub(sub, template or ""), used, unknown
+
+
+def render_prompt(template: str, variables: list[dict]) -> str:
+    """渲染模板（语义与前端 renderPrompt 一致）
+
+    variables: [{name, label, value, inline?}]，顺序即回退追加顺序
+    1. 模板引用的已知占位符全部替换
+    2. 未知占位符保留原样并告警
+    3. 模板未引用的变量以「标签: 值」追加到末尾——每个变量恰好发送一次
+    """
+    rendered, used, unknown = _replace_placeholders(template, {v["name"]: v["value"] for v in variables})
+    if unknown:
+        _log.warning("[render_prompt] 模板含未知占位符，已原样保留: %s", ", ".join(unknown))
+    appended = [
+        v["label"] + ":" + (" " if v.get("inline") else "\n") + str(v["value"])
+        for v in variables if v["name"] not in used
+    ]
+    if not appended:
+        return rendered
+    base = rendered.rstrip()
+    return "\n\n".join(([base] if base else []) + appended)
+
+
+def _json(data) -> str:
+    """与前端 JSON.stringify 一致的紧凑 JSON"""
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
 
 
 class PromptTemplates:
@@ -148,35 +194,29 @@ class PromptTemplates:
         return data.get(prompt_type, "") or ""
 
     def format_prompt(self, template: str, **kwargs) -> str:
-        return _substitute(template, **kwargs)
+        """仅替换占位符（不追加）"""
+        return _replace_placeholders(template, kwargs)[0]
 
     # ---- 输入组装（对齐前端 aiService）----
 
     def build_chapter_prompt(self, title: str, content: str, book_type: str) -> str:
-        template = self.get_prompt("chapterSummary", book_type)
-        if "{{content}}" in template:
-            return _substitute(template, title=title, content=content)
-        return f"{template}\n\n章节标题: {title}\n\n章节内容:\n{content}"
+        return render_prompt(self.get_prompt("chapterSummary", book_type), [
+            {"name": "title", "label": "章节标题", "value": title, "inline": True},
+            {"name": "content", "label": "章节内容", "value": content},
+        ])
 
     def build_connections_prompt(self, chapters_json: list[dict]) -> str:
-        template = self.get_prompt("connectionAnalysis")
-        payload = json.dumps(chapters_json, ensure_ascii=False, indent=2)
-        if "{{chapterSummaries}}" in template:
-            return _substitute(template, chapterSummaries=payload)
-        return f"{template}\n\n已处理的章节列表:\n{payload}"
+        return render_prompt(self.get_prompt("connectionAnalysis"), [
+            {"name": "chapterSummaries", "label": "已处理的章节列表", "value": _json(chapters_json)},
+        ])
 
     def build_overall_prompt(self, book_title: str, chapters_json: list[dict], connections: str) -> str:
-        template = self.get_prompt("overallSummary")
-        payload = json.dumps(chapters_json, ensure_ascii=False, indent=2)
-        connections_text = _truncate(connections or "", POST_PROCESS_CONNECTIONS_SOFT_LIMIT)
-        if "{{chapterInfo}}" in template or "{{connections}}" in template:
-            return _substitute(
-                template, bookTitle=book_title, chapterInfo=payload, connections=connections_text
-            )
-        return (
-            f"{template}\n\n书名: {book_title}\n\n已处理的章节列表:\n{payload}"
-            f"\n\n章节关联分析:\n{connections_text}"
-        )
+        return render_prompt(self.get_prompt("overallSummary"), [
+            {"name": "bookTitle", "label": "书名", "value": book_title, "inline": True},
+            {"name": "chapterInfo", "label": "已处理的章节列表", "value": _json(chapters_json)},
+            {"name": "connections", "label": "章节关联分析",
+             "value": _truncate(connections or "", POST_PROCESS_CONNECTIONS_SOFT_LIMIT)},
+        ])
 
 
 def resolve_prompts_dir(configured: str = "") -> Optional[str]:

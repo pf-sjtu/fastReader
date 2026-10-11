@@ -111,7 +111,9 @@ describe('AIService', () => {
     const ctrl = new AbortController()
     await service.generateOverallSummary('书', chapters, '关联文本', 'zh', { signal: ctrl.signal })
     const prompt = lastPrompt()
-    expect(prompt).toContain('书名: 书')
+    // 默认 v1 模板含 {{bookTitle}}：书名替换进《》，不再追加「书名:」段
+    expect(prompt).toContain('《书》')
+    expect(prompt).not.toContain('{{')
     expect(prompt).toContain('关联文本')
     expect(prompt).not.toContain(RESULT_PREFIX.chapterFailed)
     expect(providerMock.generateContent.mock.calls[0][1].signal).toBe(ctrl.signal)

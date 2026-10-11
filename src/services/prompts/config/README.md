@@ -75,15 +75,28 @@ const testPrompt = getSystemPrompt('testConnection')
 3. **版本兼容**：修改prompt时注意保持向后兼容性
 4. **测试验证**：修改后建议运行测试确保功能正常
 
-## 变量占位符说明
+## 模板渲染语义（唯一规范）
 
-常用的变量占位符：
+前端 `src/services/prompts/render.ts` 的 `renderPrompt(template, vars)` 与 CLI `src/cli/prompts.py` 的 `render_prompt(template, variables)` 实现同一语义，跨端用例见 `tests/fixtures/prompts/render-cases.json`（两端测试读取同一份输入/期望）。
 
-- `{{title}}` - 章节标题
-- `{{content}}` - 章节内容
-- `{{chapterSummaries}}` - 章节总结列表
-- `{{chapterInfo}}` - 章节信息
-- `{{connections}}` - 章节关联分析
-- `{{bookTitle}}` - 书籍标题
+1. **占位符语法**：`{{name}}`，花括号内允许两侧空白；`name` 以字母或下划线开头。单花括号（如 `{nodeData:null}`）不是占位符。
+2. **已知占位符全部替换**：一次性替换，变量值里出现的 `{{…}}` 不会被二次替换。
+3. **未知占位符保留原样**，并 `logger.warn` / `logging.warning` 一次（列出名字）。
+4. **回退追加**：模板未引用的变量，按变量顺序以 `标签: 值`（inline 变量同行，否则换行）追加到模板末尾，段间空一行。由此保证：
+   - 每个变量**恰好发送一次**——不会既留字面占位符又追加正文，也不会重复发送正文；
+   - 模板完全不含占位符（思维导图、关键图表、多数用户自定义 prompt）时，行为与旧版「模板 + 追加内容」逐字一致。
+5. 后处理的章节列表统一为紧凑 JSON（等价 `JSON.stringify`，CLI 用 `separators=(",", ":")`、`ensure_ascii=False`）。
 
-这些占位符会在运行时被实际内容替换。
+## 各类型变量表
+
+| prompt 类型 | 变量名（顺序即回退追加顺序） | 回退标签 | v1/v2 YAML 实际引用 |
+|---|---|---|---|
+| chapterSummary.fiction / nonFiction | `title`（inline）、`content` | 章节标题 / 章节内容 | `title`、`content` |
+| connectionAnalysis | `chapterSummaries` | 已处理的章节列表 | `chapterSummaries` |
+| overallSummary | `bookTitle`（inline）、`chapterInfo`、`connections` | 书名 / 已处理的章节列表 / 章节关联分析 | 三者全部 |
+| mindmap.chapter（仅前端） | `title`（inline）、`content` | 章节标题 / 章节内容 | 无（回退追加） |
+| mindmap.arrow（仅前端） | `chapterSummaries` | 章节列表 | 无 |
+| mindmap.combined（仅前端） | `bookTitle`（inline）、`chapterSummaries` | 书名 / 章节列表 | 无 |
+| keyCharts（TS 内置，仅前端） | `bookTitle`（inline）、`chapterSummaries`、`connections`、`overallSummary` | 书名 / 章节摘要 / 章节关联分析 / 全书总结 | 无 |
+
+`overallSummary` 的章节列表沿用既有名 `chapterInfo`（不改名，避免已持久化的用户自定义 prompt 失效）。测试 `tests/w2prompt.yamlPrompts.test.ts`、`tests/python/test_cli_render_prompt.py` 会校验 YAML 实际引用的占位符集合与上表一致。

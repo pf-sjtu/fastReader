@@ -1,0 +1,78 @@
+{
+  "description": "renderPrompt / render_prompt 跨端共用用例：前端 tests/w2prompt.render.test.ts 与 CLI tests/python/test_cli_render_prompt.py 读取同一份输入/期望",
+  "chapterVars": [
+    { "name": "title", "label": "章节标题", "value": "T", "inline": true },
+    { "name": "content", "label": "章节内容", "value": "C" }
+  ],
+  "cases": [
+    {
+      "name": "模板引用的占位符全部替换，不再追加",
+      "template": "A {{title}} B\n{{content}}\n",
+      "vars": "chapterVars",
+      "expected": "A T B\nC\n",
+      "unknown": []
+    },
+    {
+      "name": "模板不含占位符时回退为「模板 + 追加内容」",
+      "template": "请总结\n",
+      "vars": "chapterVars",
+      "expected": "请总结\n\n章节标题: T\n\n章节内容:\nC",
+      "unknown": []
+    },
+    {
+      "name": "只引用部分变量：未引用的变量按标签追加，已引用的不重复",
+      "template": "标题：{{title}}",
+      "vars": "chapterVars",
+      "expected": "标题：T\n\n章节内容:\nC",
+      "unknown": []
+    },
+    {
+      "name": "未知占位符保留原样并告警",
+      "template": "{{foo}} {{content}} {{title}}",
+      "vars": "chapterVars",
+      "expected": "{{foo}} C T",
+      "unknown": ["foo"]
+    },
+    {
+      "name": "变量值里的占位符不会被二次替换",
+      "template": "{{title}}|{{content}}",
+      "vars": [
+        { "name": "title", "label": "章节标题", "value": "{{content}}", "inline": true },
+        { "name": "content", "label": "章节内容", "value": "X" }
+      ],
+      "expected": "{{content}}|X",
+      "unknown": []
+    },
+    {
+      "name": "同一占位符多次出现全部替换，占位符内允许空白",
+      "template": "{{ title }}/{{title}}/{{content}}",
+      "vars": "chapterVars",
+      "expected": "T/T/C",
+      "unknown": []
+    },
+    {
+      "name": "空模板只输出追加段",
+      "template": "",
+      "vars": "chapterVars",
+      "expected": "章节标题: T\n\n章节内容:\nC",
+      "unknown": []
+    },
+    {
+      "name": "替换值中的 $ 等特殊字符原样保留",
+      "template": "{{title}}\n{{content}}",
+      "vars": [
+        { "name": "title", "label": "章节标题", "value": "$1 $& $$", "inline": true },
+        { "name": "content", "label": "章节内容", "value": "\\n 反斜杠 \\1" }
+      ],
+      "expected": "$1 $& $$\n\\n 反斜杠 \\1",
+      "unknown": []
+    },
+    {
+      "name": "单花括号与非法名不视为占位符",
+      "template": "{nodeData:null} {{1abc}} {{content}}",
+      "vars": "chapterVars",
+      "expected": "{nodeData:null} {{1abc}} C\n\n章节标题: T",
+      "unknown": []
+    }
+  ]
+}

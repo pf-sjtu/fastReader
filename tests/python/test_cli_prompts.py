@@ -101,7 +101,7 @@ class TestPromptAssembly:
     def test_connections_prompt_uses_summary_json(self):
         items = prepare_post_process_chapters([("一", "摘要一"), ("二", "摘要二")])
         prompt = PromptTemplates().build_connections_prompt(items)
-        assert json.dumps(items, ensure_ascii=False, indent=2) in prompt
+        assert json.dumps(items, ensure_ascii=False, separators=(",", ":")) in prompt  # 与前端 JSON.stringify 一致
         assert "{{chapterSummaries}}" not in prompt
 
     def test_connections_prompt_appends_without_placeholder(self, tmp_path):
@@ -112,7 +112,7 @@ class TestPromptAssembly:
     def test_overall_prompt_both_styles(self, tmp_path):
         items = [{"index": 1, "title": "一", "summary": "s"}]
         prompt = PromptTemplates().build_overall_prompt("书名X", items, "关联Y")
-        assert "《书名X》" in prompt and "关联Y" in prompt and '"summary": "s"' in prompt
+        assert "《书名X》" in prompt and "关联Y" in prompt and '"summary":"s"' in prompt
         (tmp_path / "v1-prompts.yaml").write_text("overallSummary: 总结\n", encoding="utf-8")
         prompt = PromptTemplates(prompts_dir=str(tmp_path)).build_overall_prompt("书名X", items, "关联Y")
         assert prompt.startswith("总结\n\n书名: 书名X\n\n已处理的章节列表:\n")

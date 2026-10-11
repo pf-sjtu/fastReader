@@ -9,6 +9,7 @@
 """
 
 import re
+import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from ebooklib import epub
@@ -17,9 +18,10 @@ from pypdf import PdfReader
 
 
 # 与前端 src/services/constants.ts SKIP_CHAPTER_KEYWORDS 保持一致
+# （跨端用例 tests/fixtures/chapter-skip-cases.json）
 SKIP_CHAPTER_KEYWORDS = [
     # 英文
-    'acknowledgments', 'ack', 'acknowledgement', 'thanks', 'gratitude',
+    'acknowledgments', 'acknowledgements', 'ack', 'acknowledgement', 'thanks', 'gratitude',
     'recommended reading', 'further reading', 'bibliography', 'references',
     'about the author', 'about author', 'author bio', 'biography',
     'praise for', 'reviews', 'testimonials', 'endorsements',
@@ -30,6 +32,7 @@ SKIP_CHAPTER_KEYWORDS = [
     'about the book', 'also by', 'about the cover illustration',
     'colophon', 'cast of characters', 'list of characters',
     'preface', 'afterword', 'foreword',
+    '序言', '前言', '后记',
     # 中文
     '作者简介', '译者简介', '作者／译者', '作者/译者', '关于作者', '关于译者',
     '人物表', '登场人物', '角色表',
@@ -42,20 +45,25 @@ SKIP_CHAPTER_KEYWORDS = [
     '出版信息', '版本记录',
 ]
 
-# 标题前导的编号/标点（如 "1. "、"§"、"— "），匹配前剥掉
-_LEADING_NOISE = re.compile(r'^[\W_\d]+', re.UNICODE)
+
+def _strip_leading_noise(text: str) -> str:
+    """剥掉标题前导的编号/标点/空白（如 "1. "、"§"、"— "）；与前端 LEADING_NOISE 正则等价（非字母、非组合符号）"""
+    i = 0
+    while i < len(text) and not (text[i].isalpha() or unicodedata.category(text[i]).startswith('M')):
+        i += 1
+    return text[i:]
 
 
 def matches_skip_title(title: str) -> bool:
     """标题是否命中跳过词表。
 
-    与前端子串匹配不同，这里按「标题前缀 + 整词」匹配：
+    与前端 matchesKeywords 一致，按「标题前缀 + 整词」匹配：
     'About the Author' / 'Copyright ©' / '致谢' 命中；
     'Authority and Power' / 'The Abouts' / 'Black Hack' 不会因 author/about/ack 子串被误杀。
     """
     if not title:
         return False
-    normalized = _LEADING_NOISE.sub('', title.strip().lower())
+    normalized = _strip_leading_noise(title.strip().lower())
     for keyword in SKIP_CHAPTER_KEYWORDS:
         k = keyword.lower()
         if not normalized.startswith(k):

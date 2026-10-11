@@ -7,9 +7,6 @@ import time
 import sys
 import os
 import shutil
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
-from datetime import datetime
 from typing import Optional
 import random
 import tempfile
@@ -17,27 +14,19 @@ import tempfile
 from .config import Config, active_provider
 from .webdav_client import WebDAVClientWrapper, WebDAVProbeError
 from .ai_client import create_ai_client, AIClient
-from .prompts import PromptTemplates, RESULT_PREFIX, failed_text, resolve_prompts_dir
+from .prompts import PromptTemplates, resolve_prompts_dir
 from .retry import RetryPolicy
 from .checkpoint import ChapterCheckpoint
 from .formatter import ResultFormatter, build_metadata
 from .logger import Logger
 from .chapter_extractor import ChapterExtractorFactory, Chapter
-from .models import BookFile, BatchResult, ProcessingResult, ChapterInfo
+from .models import BookFile, BatchResult, ProcessingResult
+from . import batch_report
+from .chapter_summarizer import (
+    FAILED_CHAPTER_RATIO_LIMIT, ChapterOutcome, post_process, summarize_chapters,
+)
 
-# 失败章节占比超过该值则整本判失败、不上传
-FAILED_CHAPTER_RATIO_LIMIT = 0.5
-
-
-@dataclass
-class ChapterOutcome:
-    """单章处理结果"""
-    title: str
-    summary: str
-    status: str  # ok / skipped / failed
-    input_tokens: int = 0
-    output_tokens: int = 0
-    reused: bool = False
+__all__ = ["BatchProcessor", "ChapterOutcome", "FAILED_CHAPTER_RATIO_LIMIT"]
 
 
 class BatchProcessor:
@@ -166,25 +155,10 @@ class BatchProcessor:
             self.webdav.disconnect()
 
     def _init_progress_log(self) -> str:
-        """初始化进度日志文件（追加模式，同日多次运行不互相覆盖）"""
-        log_dir = self.config.output.logDir
-        os.makedirs(log_dir, exist_ok=True)
-
-        date_str = datetime.now().strftime("%Y%m%d")
-        log_file = os.path.join(log_dir, f"batch_progress_{date_str}.log")
-
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write("\n# fastReader 批量处理进度日志\n")
-            f.write(f"# 开始时间: {datetime.now().isoformat()}\n")
-            f.write(f"# 源路径: {self.config.batch.sourcePath}\n")
-
-        return log_file
+        return batch_report.init_progress_log(self.config)
 
     def _log_progress(self, log_file: str, message: str):
-        """写入进度日志"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"[{timestamp}] {message}\n")
+        batch_report.log_progress(log_file, message)
 
     def _load_cached_file_names(self) -> set[str]:
         """加载云端缓存文件名集合（{sanitizedName}-完整摘要.md）"""
@@ -202,22 +176,8 @@ class BatchProcessor:
         return cached_files
 
     def _print_config_summary(self):
-        """打印配置摘要"""
-        print("\n⚙️  配置摘要:")
-        print(f"   - 处理模式: {self.config.processing.mode}")
-        print(
-            f"   - 书籍类型: {'小说' if self.config.processing.bookType == 'fiction' else '非小说'}"
-        )
-        print(f"   - AI 模型: {self.provider_name} / {self.model_name}")
-        print(f"   - Prompt 版本: {self.prompt_templates.version}")
-        print(f"   - 输出语言: {self.config.processing.outputLanguage}")
-        print(f"   - 章节识别: {self.config.processing.chapterDetectionMode}")
-        print(f"   - 章节并发: {self.config.batch.concurrency}")
-        print(f"   - 跳过已处理: {'是' if self.config.batch.skipProcessed else '否'}")
-        print(f"   - 重试次数: {self.config.batch.maxRetries}")
-        print(
-            f"   - 同步到 WebDAV: {'是' if self.config.output.syncToWebDAV else '否'}"
-        )
+        batch_report.print_config_summary(
+            self.config, self.provider_name, self.model_name, self.prompt_templates.version)
 
     def _process_books(
         self, books: list[BookFile], log_file: str, cached_files: set[str]
@@ -275,7 +235,7 @@ class BatchProcessor:
     def _summarize_chapters(
         self, book: BookFile, chapters: list[Chapter]
     ) -> tuple[list[ChapterOutcome], ChapterCheckpoint]:
-        """章节级并发总结，结果保持章节顺序；成功结果逐章落盘以便断点续跑"""
+        """章节级并发总结（断点按书 + 模型 + prompt 版本 + 类型 + 语言隔离）"""
         assert self.ai_client is not None
         checkpoint = ChapterCheckpoint.for_book(
             self.config.output.localDir, book.sanitized_name,
@@ -283,43 +243,11 @@ class BatchProcessor:
             book_type=self.config.processing.bookType,
             language=self.config.processing.outputLanguage,
         )
-        total = len(chapters)
-
-        def work(idx_chapter: tuple[int, Chapter]) -> ChapterOutcome:
-            idx, chapter = idx_chapter
-            label = f"章节 {idx + 1}/{total}: {chapter.title[:30]}"
-            key = checkpoint.key(chapter.title, chapter.content)
-            cached = checkpoint.get(key)
-            if cached:
-                print(f"   ♻️  复用已完成{label}")
-                return ChapterOutcome(chapter.title, cached["summary"], "ok",
-                                      cached.get("input_tokens", 0), cached.get("output_tokens", 0), True)
-
-            response = self.ai_client.summarize_chapter(
-                ChapterInfo(id=str(idx + 1), title=chapter.title, content=chapter.content, order=idx),
-                self.config.processing.bookType,
-                self.config.processing.outputLanguage,
-            )
-            if response.skipped:
-                print(f"   ⏭️  跳过{label}")
-                return ChapterOutcome(chapter.title, response.content, "skipped")
-            if response.success:
-                checkpoint.put(key, chapter.title, response.content,
-                               response.input_tokens, response.output_tokens)
-                print(f"   ✅ 完成{label} (input: {response.input_tokens:,}, output: {response.output_tokens:,})")
-                return ChapterOutcome(chapter.title, response.content, "ok",
-                                      response.input_tokens, response.output_tokens)
-            print(f"   ❌ 失败{label}: {response.error}")
-            return ChapterOutcome(
-                chapter.title, failed_text(RESULT_PREFIX["chapterFailed"], response.error), "failed",
-                response.input_tokens, response.output_tokens,
-            )
-
-        if len(checkpoint):
-            print(f"   ♻️  发现断点文件，已完成 {len(checkpoint)} 章")
-        workers = max(1, min(self.config.batch.concurrency, total))
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            outcomes = list(pool.map(work, enumerate(chapters)))
+        outcomes = summarize_chapters(
+            self.ai_client, checkpoint, chapters,
+            self.config.processing.bookType, self.config.processing.outputLanguage,
+            self.config.batch.concurrency,
+        )
         return outcomes, checkpoint
 
     def _process_single_book(
@@ -377,26 +305,12 @@ class BatchProcessor:
                 )
 
             # 5. 后处理只喂成功章节
-            usable = [(o.title, o.summary) for o in outcomes if o.status == "ok"]
-            lang = self.config.processing.outputLanguage
             assert self.ai_client is not None
-
-            print("\n🔗 正在生成章节关联分析...")
-            conn = self.ai_client.analyze_connections(usable, lang)
-            in_tok += conn.input_tokens
-            out_tok += conn.output_tokens
-            connections = conn.content if conn.success else failed_text(
-                RESULT_PREFIX["connectionsFailed"], conn.error)
-            print(f"   {'✅ 关联分析完成' if conn.success else '⚠️  关联分析失败: ' + str(conn.error)}")
-
-            print("\n📝 正在生成全书总结...")
-            overall_resp = self.ai_client.generate_overall_summary(
-                book_content.title, usable, connections if conn.success else "", lang)
-            in_tok += overall_resp.input_tokens
-            out_tok += overall_resp.output_tokens
-            overall = overall_resp.content if overall_resp.success else failed_text(
-                RESULT_PREFIX["overallFailed"], overall_resp.error)
-            print(f"   {'✅ 全书总结完成' if overall_resp.success else '⚠️  全书总结失败: ' + str(overall_resp.error)}")
+            post = post_process(self.ai_client, outcomes, book_content.title,
+                                self.config.processing.outputLanguage)
+            in_tok += post.input_tokens
+            out_tok += post.output_tokens
+            connections, overall = post.connections, post.overall
 
             # 6. 费用（含关联/全书 token）
             cost_usd, cost_cny = self.ai_client.calculate_cost(in_tok, out_tok)
@@ -474,85 +388,7 @@ class BatchProcessor:
             return None
 
     def _generate_report(self, result: BatchResult):
-        """生成处理报告"""
-        print("\n" + "=" * 60)
-        print("📊 处理结果摘要")
-        print("=" * 60)
-        print(f"   总数: {result.total}")
-        print(
-            f"   成功: {result.success} ({result.success / result.total * 100:.1f}%)"
-            if result.total > 0
-            else "   成功: 0"
-        )
-        print(f"   失败: {result.failed}")
-        print(f"   跳过: {result.skipped}")
-        print(f"   总费用: ${result.total_cost_usd:.5f} / ¥{result.total_cost_cny:.5f}")
-        print(f"   总耗时: {self._format_time(result.processing_time)}")
-        print("=" * 60)
-
-        if result.failed_books:
-            print("\n❌ 失败列表:")
-            for item in result.failed_books:
-                print(f"   - {item['name']}: {item['error']}")
-
-        report_file = self._create_report_file(result)
-        print(f"\n📄 详细报告: {report_file}")
-
-    def _create_report_file(self, result: BatchResult) -> str:
-        """创建报告文件"""
-        report_dir = self.config.output.logDir
-        os.makedirs(report_dir, exist_ok=True)
-
-        date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_file = os.path.join(report_dir, f"batch_report_{date_str}.md")
-
-        content = f"""# fastReader 批量处理报告
-
-## 基本信息
-- 生成时间: {datetime.now().isoformat()}
-- 源路径: {self.config.batch.sourcePath}
-- 处理模式: {self.config.processing.mode}
-
-## 处理统计
-- 总数: {result.total}
-- 成功: {result.success}
-- 失败: {result.failed}
-- 跳过: {result.skipped}
-- 总耗时: {self._format_time(result.processing_time)}
-
-## 费用统计
-- 总费用 (USD): ${result.total_cost_usd:.5f}
-- 总费用 (CNY): ¥{result.total_cost_cny:.5f}
-
-## AI 配置
-- 提供商: {self.provider_name}
-- 模型: {self.model_name}
-
-## 失败列表
-"""
-
-        for item in result.failed_books:
-            content += f"- **{item['name']}**: {item['error']}\n"
-
-        if not result.failed_books:
-            content += "\n无失败记录\n"
-
-        content += "\n---\n*由 fastReader CLI 自动生成*\n"
-
-        with open(report_file, "w", encoding="utf-8") as f:
-            f.write(content)
-
-        return report_file
+        batch_report.generate_report(self.config, result, self.provider_name, self.model_name)
 
     def _format_time(self, seconds: float) -> str:
-        """格式化时间"""
-        if seconds < 60:
-            return f"{seconds:.1f}秒"
-        elif seconds < 3600:
-            mins = int(seconds // 60)
-            secs = int(seconds % 60)
-            return f"{mins}分{secs}秒"
-        else:
-            hours = int(seconds // 3600)
-            mins = int((seconds % 3600) // 60)
-            return f"{hours}小时{mins}分"
+        return batch_report.format_time(seconds)

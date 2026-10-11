@@ -26,64 +26,24 @@ import {
 import { parseCharts, type BookCharts } from '../../charts'
 import { getLanguageInstruction } from '../prompts/utils'
 import { createAIProvider } from './factory'
-import { RESULT_PREFIX, isUsableText } from '../../utils/resultStatus'
+import { RESULT_PREFIX } from '../../utils/resultStatus'
+import { renderPrompt } from '../prompts/render'
+import {
+  POST_PROCESS_CONNECTIONS_SOFT_LIMIT,
+  arrowVars,
+  chapterVars,
+  combinedMindMapVars,
+  connectionVars,
+  keyChartsVars,
+  overallVars,
+  prepareChapterSummariesForPostProcess,
+  truncateText,
+  usableChapters
+} from './promptInputs'
 import { logger } from '../../lib/logger'
 
 // 已跳过章节的标记前缀
 const SKIPPED_SUMMARY_PREFIX = RESULT_PREFIX.chapterSkipped
-
-/** 后处理只喂可用章节（排除失败/跳过占位与空摘要） */
-function usableChapters<T extends { summary?: string }>(chapters: T[]): Array<T & { summary: string }> {
-  return chapters.filter((ch): ch is T & { summary: string } => isUsableText(ch.summary))
-}
-
-/**
- * 后处理（关联/全书总结）输入策略：
- * - 现代模型多为 128k–256k+ 上下文；章节摘要后处理默认**不截断**，保证质量。
- * - 仅当摘要总字符超过安全阈值时才按比例压缩（极端长书 / 小上下文模型兜底）。
- * - 中文约 1–2 token/字，200k 字量级仍远低于 256k token 窗口的常见可用输入。
- */
-const POST_PROCESS_SOFT_LIMIT_CHARS = 200_000
-const POST_PROCESS_CONNECTIONS_SOFT_LIMIT = 50_000
-
-function truncateText(text: string, maxLen: number): string {
-  const s = (text || '').trim()
-  if (s.length <= maxLen) return s
-  return `${s.slice(0, Math.max(0, maxLen - 1))}…`
-}
-
-/**
- * 组装后处理用的章节列表。
- * 默认全文；仅当总长超过 softLimit 时按章均分压缩。
- */
-function prepareChapterSummariesForPostProcess(
-  chapters: Array<{ title: string; summary?: string }>,
-  softLimitChars = POST_PROCESS_SOFT_LIMIT_CHARS
-): Array<{ index: number; title: string; summary: string }> {
-  const valid = chapters.filter((ch) => (ch.summary || '').trim().length > 0)
-  if (valid.length === 0) return []
-
-  const full = valid.map((chapter, index) => ({
-    index: index + 1,
-    title: chapter.title,
-    summary: (chapter.summary || '').trim(),
-  }))
-
-  const totalChars = full.reduce((sum, ch) => sum + ch.summary.length, 0)
-  if (totalChars <= softLimitChars) {
-    return full
-  }
-
-  // 极端情况：按比例压到 softLimit（保留尽量多信息）
-  const per = Math.max(400, Math.floor(softLimitChars / full.length))
-  console.warn(
-    `[AIService] 后处理摘要总长 ${totalChars} 字超过软上限 ${softLimitChars}，按章截至约 ${per} 字`
-  )
-  return full.map((chapter) => ({
-    ...chapter,
-    summary: truncateText(chapter.summary, per),
-  }))
-}
 
 /** 从模型输出中提取第一个匹配的 JSON 片段；失败返回 null */
 function parseJsonMatch<T>(response: string, pattern: RegExp, label: string): T | null {
@@ -250,7 +210,7 @@ export class AIService {
         ? promptConfig.chapterSummary.fiction || getFictionChapterSummaryPrompt()
         : promptConfig.chapterSummary.nonFiction || getNonFictionChapterSummaryPrompt()
 
-    const prompt = `${customPrompt || basePrompt}\n\n章节标题: ${chapterTitle}\n\n章节内容:\n${chapterContent}`
+    const prompt = renderPrompt(customPrompt || basePrompt, chapterVars(chapterTitle, chapterContent))
 
     return this.generateContent(prompt, outputLanguage, opts)
   }
@@ -274,7 +234,7 @@ export class AIService {
       return '章节数量不足，无法分析关联。'
     }
 
-    const prompt = `${basePrompt}\n\n已处理的章节列表:\n${JSON.stringify(processedChapters)}`
+    const prompt = renderPrompt(basePrompt, connectionVars(processedChapters))
 
     return this.generateContent(prompt, outputLanguage, opts)
   }
@@ -304,7 +264,7 @@ export class AIService {
       POST_PROCESS_CONNECTIONS_SOFT_LIMIT
     )
 
-    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n已处理的章节列表:\n${JSON.stringify(processedChapters)}\n\n章节关联分析:\n${connectionsText}`
+    const prompt = renderPrompt(basePrompt, overallVars(bookTitle, processedChapters, connectionsText))
 
     return this.generateContent(prompt, outputLanguage, opts)
   }
@@ -337,7 +297,10 @@ export class AIService {
       POST_PROCESS_CONNECTIONS_SOFT_LIMIT
     )
 
-    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n章节摘要:\n${JSON.stringify(processedChapters)}\n\n章节关联分析:\n${connectionsText}\n\n全书总结:\n${overallText}`
+    const prompt = renderPrompt(
+      basePrompt,
+      keyChartsVars(bookTitle, processedChapters, connectionsText, overallText)
+    )
 
     const response = await this.generateContent(prompt, outputLanguage, opts)
     const charts = parseCharts(response)
@@ -359,7 +322,7 @@ export class AIService {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.mindmap.chapter || getChapterMindMapPrompt()
 
-    const prompt = `${basePrompt}\n\n章节标题: ${chapterTitle}\n\n章节内容:\n${chapterContent}`
+    const prompt = renderPrompt(basePrompt, chapterVars(chapterTitle, chapterContent))
 
     const response = await this.generateContent(prompt, outputLanguage, opts)
     return parseJsonMatch<MindElixirData>(response, /\{[\s\S]*\}/, '思维导图')
@@ -383,7 +346,7 @@ export class AIService {
       summary: chapter.summary
     }))
 
-    const prompt = `${basePrompt}\n\n章节列表:\n${JSON.stringify(chapterList)}`
+    const prompt = renderPrompt(basePrompt, arrowVars(chapterList))
 
     const response = await this.generateContent(prompt, outputLanguage, opts)
     return (
@@ -409,7 +372,7 @@ export class AIService {
       return null
     }
 
-    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n章节列表:\n${JSON.stringify(processedChapters)}`
+    const prompt = renderPrompt(basePrompt, combinedMindMapVars(bookTitle, processedChapters))
 
     const response = await this.generateContent(prompt, outputLanguage, opts)
     return parseJsonMatch<MindElixirData>(response, /\{[\s\S]*\}/, '思维导图')

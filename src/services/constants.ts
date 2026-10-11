@@ -1,10 +1,11 @@
 /**
  * 章节标题：提取阶段可硬丢弃的关键词（skipNonEssentialChapters）
- * 与「默认不勾选」词表共享主体；序言/后记不在「默认不勾选」中。
+ * 与「默认不勾选」词表共享主体；序言/前言/后记不在「默认不勾选」中。
+ * 与 CLI src/cli/chapter_extractor.py SKIP_CHAPTER_KEYWORDS 保持一致（跨端用例 tests/fixtures/chapter-skip-cases.json）。
  */
 export const SKIP_CHAPTER_KEYWORDS = [
   // 英文
-  'acknowledgments', 'ack', 'acknowledgement', 'thanks', 'gratitude',
+  'acknowledgments', 'acknowledgements', 'ack', 'acknowledgement', 'thanks', 'gratitude',
   'recommended reading', 'further reading', 'bibliography', 'references',
   'about the author', 'about author', 'author bio', 'biography',
   'praise for', 'reviews', 'testimonials', 'endorsements',
@@ -16,6 +17,7 @@ export const SKIP_CHAPTER_KEYWORDS = [
   'colophon', 'cast of characters', 'list of characters',
   // 提取硬丢时可含；默认不勾选词表会再过滤掉序言/后记语义
   'preface', 'afterword', 'foreword',
+  '序言', '前言', '后记',
   // 中文
   '作者简介', '译者简介', '作者／译者', '作者/译者', '关于作者', '关于译者',
   '人物表', '登场人物', '角色表',
@@ -48,11 +50,24 @@ export function matchesDefaultUnselectTitle(title: string): boolean {
   return matchesKeywords(title, DEFAULT_UNSELECT_CHAPTER_KEYWORDS)
 }
 
+/** 标题前导的编号/标点/空白（如 "1. "、"§"、"— "），匹配前剥掉 */
+const LEADING_NOISE = /^[^\p{L}\p{M}]+/u
+const ALNUM = /^[\p{L}\p{N}]/u
+const endsWithAscii = (s: string): boolean => s.charCodeAt(s.length - 1) < 0x80
+
+/**
+ * 「标题前缀 + 整词」匹配（与 CLI matches_skip_title 一致）：
+ * 'About the Author' / 'Copyright ©' / '致谢' 命中；
+ * 'Authority and Power' / 'The Abouts' / 'Black Hack' 不会因 author/about/ack 子串被误杀。
+ * 中文关键词按前缀匹配；英文关键词要求后一个字符不是字母/数字（单词边界）。
+ */
 function matchesKeywords(title: string, keywords: string[]): boolean {
   if (!title) return false
-  const lower = title.toLowerCase()
+  const normalized = title.trim().toLowerCase().replace(LEADING_NOISE, '')
   return keywords.some((keyword) => {
     const k = keyword.toLowerCase()
-    return lower.includes(k) || title.includes(keyword)
+    if (!normalized.startsWith(k)) return false
+    const rest = normalized.slice(k.length)
+    return !(endsWithAscii(k) && ALNUM.test(rest))
   })
 }
