@@ -18,6 +18,7 @@ import { autoSyncService } from '@/services/autoSyncService'
 import { cloudCacheService } from '@/services/cloudCacheService'
 import { webdavService } from '@/services/webdavService'
 import { useProcessingHistoryStore } from '@/stores/processingHistory'
+import { useConfigStore } from '@/stores/configStore'
 import type { BookMindMap, BookSummary, ProcessingMode } from '@/types/book'
 import { logger } from '@/lib/logger'
 import {
@@ -202,11 +203,28 @@ export async function syncSummaryResult(
   return outcome
 }
 
-/** 单书导图结果上云（autoSync 控制）；返回是否失败 */
-export async function syncMindMapResult(mindMap: BookMindMap, fileName: string): Promise<boolean> {
+/**
+ * 单书导图结果上云（autoSync 控制）；返回是否失败。
+ * 传入 manifest 时，在导图真正上传成功后补写「已处理」标记，使批量 skipProcessed 能识别单书产物
+ */
+export async function syncMindMapResult(
+  mindMap: BookMindMap,
+  fileName: string,
+  manifest?: MindMapManifest
+): Promise<boolean> {
   try {
     const ok = await autoSyncService.syncMindMap(mindMap, fileName.replace(/\.[^/.]+$/, ''))
-    return !ok
+    if (!ok) return true
+    // autoSync 关闭时 syncMindMap 也返回 true 但并未上传，此时不能写标记
+    const { enabled, autoSync } = useConfigStore.getState().webdavConfig
+    if (manifest && enabled && autoSync) {
+      const up = await webdavService.uploadFile(
+        cloudCacheService.getMindMapManifestPath(fileName),
+        JSON.stringify(manifest, null, 2)
+      )
+      if (!up.success) return true
+    }
+    return false
   } catch (e) {
     logger.error('[persistence] 导图同步失败:', e)
     return true

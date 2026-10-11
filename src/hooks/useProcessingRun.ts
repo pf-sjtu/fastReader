@@ -209,7 +209,17 @@ export function useProcessingRun(deps: ProcessingRunDeps) {
           combinedMindMap: result.combinedMindMap ?? null,
         }
         setBookMindMap(mindMap)
-        if (result.stats.usable > 0 && (await syncMindMapResult(mindMap, file.name)) && isCurrentRun()) {
+        const manifest = {
+          mode,
+          fileName: file.name,
+          processedAt: new Date().toISOString(),
+          model: aiConfig.model,
+          chapterCount: result.chapters.length,
+          processedChapters: result.stats.usable,
+          failedChapters: result.stats.failed,
+          isPartial: result.isPartial,
+        }
+        if (result.stats.usable > 0 && (await syncMindMapResult(mindMap, file.name, manifest)) && isCurrentRun()) {
           toast.warning(t('progress.syncFailed'))
         }
       }

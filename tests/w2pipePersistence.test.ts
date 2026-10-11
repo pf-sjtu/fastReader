@@ -212,6 +212,36 @@ describe('云同步与历史', () => {
     expect(await syncMindMapResult(mm, 'a.epub')).toBe(true)
   })
 
+  it('syncMindMapResult：autoSync 实际上传成功后才补写 manifest', async () => {
+    const cfg = davConfig as Record<string, unknown>
+    const mm = { title: '', author: '', chapters: [] }
+    const manifest = {
+      mode: 'mindmap' as const, fileName: 'a.epub', processedAt: 't', model: 'm',
+      chapterCount: 2, processedChapters: 2, failedChapters: 0, isPartial: false,
+    }
+    webdavMock.uploadFile.mockReset()
+
+    // autoSync 关闭：syncMindMap 返回 true 但未上传，不能写标记
+    cfg.autoSync = false
+    autoSyncMock.syncMindMap.mockResolvedValueOnce(true)
+    expect(await syncMindMapResult(mm, 'a.epub', manifest)).toBe(false)
+    expect(webdavMock.uploadFile).not.toHaveBeenCalled()
+
+    // autoSync 开启：写到批量判定读取的同一路径
+    cfg.autoSync = true
+    autoSyncMock.syncMindMap.mockResolvedValueOnce(true)
+    webdavMock.uploadFile.mockResolvedValueOnce({ success: true })
+    expect(await syncMindMapResult(mm, 'a.epub', manifest)).toBe(false)
+    expect(webdavMock.uploadFile.mock.calls[0][0]).toBe('/fr/a/a_mindmap_manifest.json')
+    expect(JSON.parse(webdavMock.uploadFile.mock.calls[0][1])).toMatchObject({ mode: 'mindmap', isPartial: false })
+
+    // 标记写失败视为同步失败
+    autoSyncMock.syncMindMap.mockResolvedValueOnce(true)
+    webdavMock.uploadFile.mockResolvedValueOnce({ success: false, error: 'x' })
+    expect(await syncMindMapResult(mm, 'a.epub', manifest)).toBe(true)
+    delete cfg.autoSync
+  })
+
   it('uploadMindMapBundle：沿用单书目录布局，导图写成功后才写 manifest', async () => {
     webdavMock.syncFiles.mockResolvedValueOnce({ success: true })
     webdavMock.uploadFile.mockResolvedValueOnce({ success: true })
