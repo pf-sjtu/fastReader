@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { EpubProcessor, type ChapterData, type BookData as EpubBookData } from '@/services/epubProcessor'
-import { PdfProcessor, type BookData as PdfBookData } from '@/services/pdfProcessor'
+import { useShallow } from 'zustand/react/shallow'
+import type { EpubProcessor, ChapterData, BookData as EpubBookData } from '@/services/epubProcessor'
+import type { PdfProcessor, BookData as PdfBookData } from '@/services/pdfProcessor'
 import { AIService } from '@/services/aiService'
 import { CacheService } from '@/services/cacheService'
 import { cloudCacheService, type ProcessingMetadata } from '@/services/cloudCacheService'
@@ -21,36 +22,89 @@ import {
   serializeCharts,
   type BookCharts,
 } from '@/charts'
+import type { Chapter, BookSummary, BookMindMap } from '@/types/book'
+import { RESULT_PREFIX, failedText, isUsableText } from '@/utils/resultStatus'
+import { prepareChapterInput } from '@/utils/chapterInput'
+import { flattenMindMapToText } from '@/utils/mindMapText'
+import {
+  createAbortError,
+  createGenerationCounter,
+  isAbortError,
+  waitForSettled,
+} from '@/utils/runGuard'
+import {
+  clearChapterResult,
+  isPartialCache,
+  markChapterFailed,
+  toLoadedChapters,
+  usableOrEmpty,
+  usableSummaryChapters,
+} from '@/utils/chapterResults'
 
-const epubProcessor = new EpubProcessor()
-const pdfProcessor = new PdfProcessor()
 const cacheService = new CacheService()
 
-export interface Chapter {
-  id: string
-  title: string
-  content: string
-  summary?: string
-  mindMap?: MindElixirData
-  processed: boolean
+/** 结果写入本地缓存：只写可用内容，失败占位不落盘（避免被当成有效缓存） */
+function writeSummaryToLocalCache(cacheKey: string, summary: BookSummary) {
+  usableSummaryChapters(summary.chapters).forEach((ch) => {
+    cacheService.setCache(cacheKey, 'summary', ch.summary as string, ch.id)
+  })
+  if (isUsableText(summary.connections)) {
+    cacheService.setCache(cacheKey, 'connections', summary.connections)
+  }
+  if (isUsableText(summary.overallSummary)) {
+    cacheService.setCache(cacheKey, 'overall_summary', summary.overallSummary)
+  }
+  if (summary.charts) {
+    cacheService.setCache(cacheKey, 'key_charts', serializeCharts(summary.charts))
+  }
 }
 
-export interface BookSummary {
-  title: string
-  author: string
-  chapters: Chapter[]
-  connections: string
-  overallSummary: string
-  /** 关键图表结构化数据（实体关系 + 时间线等） */
-  charts?: BookCharts | null
-  chartsError?: string | null
+/** 重开时等待旧一轮退出的上限；超时后靠代际守卫丢弃旧结果 */
+const RESTART_WAIT_MS = 5000
+
+type BookProcessor = EpubProcessor | PdfProcessor
+
+/** 按格式动态加载解析器，pdfjs / epubjs 不进首屏 */
+async function createProcessor(format: 'epub' | 'pdf'): Promise<BookProcessor> {
+  if (format === 'epub') {
+    const { EpubProcessor } = await import('@/services/epubProcessor')
+    return new EpubProcessor()
+  }
+  const { PdfProcessor } = await import('@/services/pdfProcessor')
+  return new PdfProcessor()
 }
 
-export interface BookMindMap {
-  title: string
-  author: string
-  chapters: Chapter[]
-  combinedMindMap?: MindElixirData | null
+/** 释放解析器与 PDF 文档（destroy 均幂等，失败只记日志） */
+function releaseBookResources(
+  processor: BookProcessor | null,
+  bookData: EpubBookData | PdfBookData | null
+) {
+  try {
+    void Promise.resolve(processor?.destroy()).catch((e) =>
+      logger.warn('[useBookProcessing] 释放解析器失败:', e)
+    )
+    const pdfDocument = (bookData as PdfBookData | null)?.pdfDocument
+    if (pdfDocument) {
+      void Promise.resolve(pdfDocument.destroy()).catch((e) =>
+        logger.warn('[useBookProcessing] 释放 PDF 文档失败:', e)
+      )
+    }
+  } catch (e) {
+    logger.warn('[useBookProcessing] 释放资源失败:', e)
+  }
+}
+
+// 类型已迁到 src/types/book.ts，这里保留导出兼容既有引用
+export type { Chapter, BookSummary, BookMindMap, ProcessingMode } from '@/types/book'
+
+interface VendorFullscreenElement {
+  webkitRequestFullscreen?: () => void
+  msRequestFullscreen?: () => void
+}
+
+interface VendorFullscreenDocument {
+  webkitExitFullscreen?: () => void
+  msExitFullscreen?: () => void
 }
 
 export interface RightPanelContent {
@@ -58,8 +112,6 @@ export interface RightPanelContent {
   chapter: ChapterData
   title: string
 }
-
-export type ProcessingMode = 'summary' | 'mindmap' | 'combined-mindmap'
 
 export function useBookProcessing() {
   const { t } = useTranslation()
@@ -69,10 +121,19 @@ export function useBookProcessing() {
     resetTokenUsage,
     aiConfig,
     processingOptions,
-    promptConfig,
     aiServiceOptions,
     webdavConfig
-  } = useConfigStore()
+  } = useConfigStore(
+    useShallow((s) => ({
+      tokenUsage: s.tokenUsage,
+      addTokenUsage: s.addTokenUsage,
+      resetTokenUsage: s.resetTokenUsage,
+      aiConfig: s.aiConfig,
+      processingOptions: s.processingOptions,
+      aiServiceOptions: s.aiServiceOptions,
+      webdavConfig: s.webdavConfig,
+    }))
+  )
 
   // 处理状态
   const [processing, setProcessing] = useState(false)
@@ -81,8 +142,18 @@ export function useBookProcessing() {
   const [currentStep, setCurrentStep] = useState('')
   const [currentProcessingChapter, setCurrentProcessingChapter] = useState('')
   const abortControllerRef = useRef<AbortController | null>(null)
-  /** 处理代数：重启/新开跑时递增，防止旧任务完成后覆盖新状态 */
-  const processGenerationRef = useRef(0)
+  /**
+   * 处理代数：换书 / 重启 / 新开跑时递增，旧任务的异步回调据此丢弃结果。
+   * 覆盖 processBook、extractChapters、checkCloudCache、云/历史加载、图表生成。
+   */
+  const generationRef = useRef(createGenerationCounter())
+  /** 当前 processBook 一轮的结束信号（restart 时等待旧一轮真正退出） */
+  const runPromiseRef = useRef<Promise<void> | null>(null)
+  /** 图表单独生成的取消器（换书时一并取消） */
+  const chartsAbortRef = useRef<AbortController | null>(null)
+  /** 当前书的解析器（换书时 destroy） */
+  const processorRef = useRef<BookProcessor | null>(null)
+  const fullBookDataRef = useRef<EpubBookData | PdfBookData | null>(null)
 
   // 数据状态
   const [file, setFile] = useState<File | null>(null)
@@ -101,6 +172,10 @@ export function useBookProcessing() {
   const [cloudCacheMetadata, setCloudCacheMetadata] = useState<ProcessingMetadata | null>(null)
   const [isCheckingCloudCache, setIsCheckingCloudCache] = useState(false)
   const [cloudCacheContent, setCloudCacheContent] = useState<string | null>(null)
+  /** 云端缓存不完整（isPartial 或含失败占位）：可查看但应提示重新处理失败章节 */
+  const [cloudCacheIsPartial, setCloudCacheIsPartial] = useState(false)
+  /** 云端缓存状态无法确认（网络/鉴权异常），不等同于「无缓存」 */
+  const [cloudCacheStatusUnknown, setCloudCacheStatusUnknown] = useState(false)
   /** 同名 .json 关键图表原文（检查云缓存时并行拉取） */
   const [cloudChartsJson, setCloudChartsJson] = useState<string | null>(null)
   const [cloudChartsFileFound, setCloudChartsFileFound] = useState(false)
@@ -133,8 +208,22 @@ export function useBookProcessing() {
   // 获取提示词配置
   const getPromptConfig = useCallback(() => useConfigStore.getState().promptConfig, [])
 
-  // 重置所有状态
+  // 重置所有状态：作废进行中的任务（处理 / 提取 / 查缓存 / 图表），释放旧书资源
   const resetState = useCallback(() => {
+    generationRef.current.bump()
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    chartsAbortRef.current?.abort()
+    chartsAbortRef.current = null
+    releaseBookResources(processorRef.current, fullBookDataRef.current)
+    processorRef.current = null
+    fullBookDataRef.current = null
+
+    setProcessing(false)
+    setExtractingChapters(false)
+    setIsCheckingCloudCache(false)
+    setProgress(0)
+    setCurrentStep('')
     setExtractedChapters(null)
     setBookData(null)
     setSelectedChapters(new Set())
@@ -148,6 +237,8 @@ export function useBookProcessing() {
     setExpandedChapters(new Set())
     setCloudCacheMetadata(null)
     setCloudCacheContent(null)
+    setCloudCacheIsPartial(false)
+    setCloudCacheStatusUnknown(false)
     setCloudChartsJson(null)
     setCloudChartsFileFound(false)
     setChartsGenerating(false)
@@ -162,41 +253,46 @@ export function useBookProcessing() {
     const targetFile = overrideFile || file
     if (!targetFile) return
 
+    const generation = generationRef.current.current
+    const isStale = () => !generationRef.current.isCurrent(generation)
+    let processor: BookProcessor | null = null
+
     setExtractingChapters(true)
     try {
-      let bookDataResult: (EpubBookData | PdfBookData) & { chapters: ChapterData[] }
-      let chapters: ChapterData[]
-
       const format = detectBookFormat(targetFile)
-      if (format === 'epub') {
-        bookDataResult = await epubProcessor.extractBookData(
-          targetFile,
-          processingOptions.useSmartDetection,
-          processingOptions.skipNonEssentialChapters,
-          processingOptions.maxSubChapterDepth,
-          processingOptions.chapterNamingMode,
-          processingOptions.chapterDetectionMode,
-          processingOptions.epubTocDepth
-        )
-        chapters = bookDataResult.chapters
-      } else if (format === 'pdf') {
-        bookDataResult = await pdfProcessor.extractBookData(
-          targetFile,
-          processingOptions.useSmartDetection,
-          processingOptions.skipNonEssentialChapters,
-          processingOptions.maxSubChapterDepth,
-          processingOptions.chapterNamingMode,
-          processingOptions.chapterDetectionMode,
-          processingOptions.epubTocDepth
-        )
-        chapters = bookDataResult.chapters
-      } else {
+      if (!format) {
         const hint = targetFile.name
           ? `不支持的文件格式: ${targetFile.name}（仅支持 .epub / .pdf）`
           : '不支持的文件格式（仅支持 .epub / .pdf）'
         throw new Error(t('upload.unsupportedFormat', { defaultValue: hint }))
       }
 
+      processor = await createProcessor(format)
+      const bookDataResult: (EpubBookData | PdfBookData) & { chapters: ChapterData[] } =
+        await processor.extractBookData(
+          targetFile,
+          processingOptions.useSmartDetection,
+          processingOptions.skipNonEssentialChapters,
+          processingOptions.maxSubChapterDepth,
+          processingOptions.chapterNamingMode,
+          processingOptions.chapterDetectionMode,
+          processingOptions.epubTocDepth
+        )
+
+      // 已换书：丢弃结果并释放刚创建的资源
+      if (isStale()) {
+        releaseBookResources(processor, bookDataResult)
+        return
+      }
+
+      // 同一本书重新提取：释放上一次的解析资源
+      if (processorRef.current && processorRef.current !== processor) {
+        releaseBookResources(processorRef.current, fullBookDataRef.current)
+      }
+      processorRef.current = processor
+      fullBookDataRef.current = bookDataResult
+
+      const chapters = bookDataResult.chapters
       setFullBookData(bookDataResult)
       setExtractedChapters(chapters)
       setBookData({
@@ -214,31 +310,26 @@ export function useBookProcessing() {
 
       toast.success(t('upload.chaptersExtracted', { count: chapters.length }))
     } catch (error) {
-      console.error('提取章节错误:', error)
+      if (isStale()) {
+        releaseBookResources(processor, null)
+        return
+      }
+      logger.error('提取章节错误:', error)
       toast.error(error instanceof Error ? error.message : t('upload.extractError'))
     } finally {
-      setExtractingChapters(false)
+      if (!isStale()) setExtractingChapters(false)
     }
   }, [file, processingOptions, t])
 
-  // 设置文件后自动检查云缓存并提取章节
-  const handleFileSelect = useCallback(async (selectedFile: File) => {
-    setFile(selectedFile)
-    resetState()
-    setFile(selectedFile)
-
-    // 先查云缓存（有缓存时仍自动取章，用户可选择直接用缓存）
-    if (webdavConfig.enabled && webdavService.isInitialized()) {
-      await checkCloudCache(selectedFile.name)
-    }
-
-    await extractChapters(selectedFile)
-  }, [resetState, webdavConfig.enabled, extractChapters])
-
-  // 检查云端缓存（MD + 同名 JSON）
+  // 检查云端缓存（MD + 同名 JSON）；状态三态，unknown 不当作「无缓存」
   const checkCloudCache = useCallback(async (fileName: string) => {
+    const generation = generationRef.current.current
+    const isStale = () => !generationRef.current.isCurrent(generation)
+
     setCloudCacheMetadata(null)
     setCloudCacheContent(null)
+    setCloudCacheIsPartial(false)
+    setCloudCacheStatusUnknown(false)
     setCloudChartsJson(null)
     setCloudChartsFileFound(false)
     cloudCacheKeyRef.current = fileName
@@ -247,27 +338,65 @@ export function useBookProcessing() {
       return false
     }
 
+    const markUnknown = () => {
+      setCloudCacheStatusUnknown(true)
+      toast.warning(
+        t(
+          'cloudCache.statusUnknown',
+          '无法确认云端缓存状态（网络或鉴权异常），可稍后重试或直接处理'
+        )
+      )
+    }
+
     setIsCheckingCloudCache(true)
     try {
+      const status = await cloudCacheService.checkCacheStatus(fileName)
+      if (isStale() || status === 'missing') return false
+      if (status === 'unknown') {
+        markUnknown()
+        return false
+      }
+
       const result = await cloudCacheService.readCache(fileName)
+      if (isStale()) return false
 
       if (result.success && result.content) {
+        const parsed = cloudCacheService.parseUnifiedContent(result.content)
+        setCloudCacheIsPartial(
+          isPartialCache({
+            metadata: result.metadata,
+            chapters: parsed.chapters,
+            connections: parsed.connections,
+            overallSummary: parsed.overallSummary,
+          })
+        )
         setCloudCacheMetadata(result.metadata || null)
         setCloudCacheContent(result.content)
         setCloudChartsJson(result.chartsJson ?? null)
         setCloudChartsFileFound(!!result.chartsFileFound)
-        setIsCheckingCloudCache(false)
         return true
       }
 
-      setIsCheckingCloudCache(false)
+      // 文件存在却读不到：同样无法确认
+      markUnknown()
       return false
     } catch (error) {
-      console.error('[App] 检查云端缓存失败:', error)
-      setIsCheckingCloudCache(false)
+      if (!isStale()) logger.error('[useBookProcessing] 检查云端缓存失败:', error)
       return false
+    } finally {
+      if (!isStale()) setIsCheckingCloudCache(false)
     }
-  }, [webdavConfig.enabled])
+  }, [webdavConfig.enabled, t])
+
+  // 设置文件后检查云缓存并提取章节（云缓存只在此处检查一次，不再由 effect 重复触发）
+  const handleFileSelect = useCallback(async (selectedFile: File) => {
+    resetState()
+    setFile(selectedFile)
+
+    // 先查云缓存（有缓存时仍自动取章，用户可选择直接用缓存）
+    await checkCloudCache(selectedFile.name)
+    await extractChapters(selectedFile)
+  }, [resetState, checkCloudCache, extractChapters])
 
   /**
    * 解析关键图表：优先同名 JSON → MD 内嵌段 → 本地 key_charts
@@ -308,6 +437,7 @@ export function useBookProcessing() {
   const loadFromCloudCache = useCallback(async (): Promise<boolean> => {
     if (!cloudCacheContent) return false
 
+    const generation = generationRef.current.current
     try {
       const parsed = cloudCacheService.parseUnifiedContent(cloudCacheContent)
       if (!parsed.chapters.length && !parsed.overallSummary) {
@@ -330,6 +460,7 @@ export function useBookProcessing() {
       if (cacheKey) {
         try {
           const fresh = await cloudCacheService.readChartsJson(cacheKey)
+          if (!generationRef.current.isCurrent(generation)) return false
           if (fresh.found) {
             chartsFileFound = true
             if (fresh.content?.trim()) {
@@ -338,13 +469,14 @@ export function useBookProcessing() {
             }
           }
           setCloudChartsFileFound(fresh.found)
-          console.log(
+          logger.debug(
             `[loadFromCloudCache] charts JSON path try: found=${fresh.found}, len=${fresh.content?.length ?? 0}`
           )
         } catch (e) {
-          console.warn('[loadFromCloudCache] 再读图表 JSON 失败:', e)
+          logger.warn('[loadFromCloudCache] 再读图表 JSON 失败:', e)
         }
       }
+      if (!generationRef.current.isCurrent(generation)) return false
 
       const charts = resolveChartsFromCloudSources(
         cloudCacheContent,
@@ -355,37 +487,19 @@ export function useBookProcessing() {
       const summary: BookSummary = {
         title: parsed.title || file?.name.replace(/\.[^/.]+$/, '') || '',
         author: parsed.author || '',
-        chapters: parsed.chapters.map((ch, index) => ({
-          id: `cloud-${index}`,
-          title: ch.title,
-          content: '',
-          summary: ch.summary,
-          processed: true
-        })),
+        chapters: toLoadedChapters(parsed.chapters, 'cloud'),
         connections: parsed.connections,
         overallSummary: parsed.overallSummary,
         charts,
         chartsError: null,
       }
+      const partial = isPartialCache({ metadata: cloudCacheMetadata, ...summary })
 
       setBookSummary(summary)
 
-      // 本地缓存：章节/关联/全书/图表一并落盘
+      // 本地缓存：只写可用的章节/关联/全书/图表
       if (file) {
-        summary.chapters.forEach((ch) => {
-          if (ch.summary) {
-            cacheService.setCache(file.name, 'summary', ch.summary, ch.id)
-          }
-        })
-        if (summary.connections) {
-          cacheService.setCache(file.name, 'connections', summary.connections)
-        }
-        if (summary.overallSummary) {
-          cacheService.setCache(file.name, 'overall_summary', summary.overallSummary)
-        }
-        if (charts) {
-          cacheService.setCache(file.name, 'key_charts', serializeCharts(charts))
-        }
+        writeSummaryToLocalCache(file.name, summary)
 
         useProcessingHistoryStore.getState().addRecord({
           bookTitle: summary.title,
@@ -412,16 +526,21 @@ export function useBookProcessing() {
         )
       } else {
         toast.success(t('cloudCache.loaded'))
-        const canAuto =
-          !!summary.overallSummary &&
-          !summary.overallSummary.startsWith('【全书总结失败】') &&
-          summary.chapters.length > 0
-        // 仅当确认云端无 JSON 文件时才自动生成
-        pendingAutoChartsRef.current = canAuto
+        // 仅当确认云端无 JSON 文件、且缓存完整时才自动生成
+        pendingAutoChartsRef.current =
+          !partial && isUsableText(summary.overallSummary) && summary.chapters.length > 0
+      }
+      if (partial) {
+        toast.warning(
+          t(
+            'cloudCache.partialLoaded',
+            '云端缓存不完整（部分章节处理失败），可重新处理以补全失败章节'
+          )
+        )
       }
       return true
     } catch (e) {
-      console.error('加载云端缓存失败:', e)
+      logger.error('加载云端缓存失败:', e)
       toast.error(t('cloudCache.parseError') || t('history.cacheParseError'))
       return false
     }
@@ -506,21 +625,21 @@ export function useBookProcessing() {
     if (!file || !extractedChapters || selectedChapters.size === 0) return
 
     // 新开跑：作废旧任务
-    const generation = ++processGenerationRef.current
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
+    const generation = generationRef.current.bump()
+    abortControllerRef.current?.abort()
 
     const controller = new AbortController()
     abortControllerRef.current = controller
-    const isCurrentRun = () =>
-      generation === processGenerationRef.current && !controller.signal.aborted
+    const signal = controller.signal
+    const aiOpts = { signal }
+    let finishRun: () => void = () => {}
+    runPromiseRef.current = new Promise<void>((resolve) => {
+      finishRun = resolve
+    })
+
+    const isCurrentRun = () => generationRef.current.isCurrent(generation) && !signal.aborted
     const throwIfAborted = () => {
-      if (!isCurrentRun()) {
-        const err = new Error('Aborted')
-        err.name = 'AbortError'
-        throw err
-      }
+      if (!isCurrentRun()) throw createAbortError()
     }
 
     setProcessing(true)
@@ -531,8 +650,11 @@ export function useBookProcessing() {
       resetTokenUsage()
 
       const aiService = new AIService(aiConfig, getPromptConfig, {
-        onTokenUsage: addTokenUsage,
-        ...aiServiceOptions
+        ...aiServiceOptions,
+        // 被取代的旧一轮仍可能回报 token：只记当前代
+        onTokenUsage: (tokens: number) => {
+          if (generationRef.current.isCurrent(generation)) addTokenUsage(tokens)
+        },
       })
       const selectedChapterData = extractedChapters.filter(ch => selectedChapters.has(ch.id))
       const totalChapters = selectedChapterData.length
@@ -542,6 +664,29 @@ export function useBookProcessing() {
       const chapterConcurrency = clampConcurrency(
         processingOptions.chapterConcurrency ?? 3
       )
+
+      const onChapterStart = (chapter: ChapterData, orderedDone: number) => {
+        setCurrentProcessingChapter(chapter.id)
+        setCurrentStep(
+          t('progress.processingChapter', {
+            current: orderedDone + 1,
+            total: totalChapters,
+            title: chapter.title,
+          })
+        )
+      }
+      const onChapterCommitted = (orderedDone: number, phaseMax: number, fallbackTitle: string) => {
+        setProgress(chapterPhaseProgress(orderedDone, totalChapters, phaseMax))
+        setCurrentStep(
+          t('progress.processingChapter', {
+            current: Math.min(orderedDone + 1, totalChapters),
+            total: totalChapters,
+            title:
+              selectedChapterData[Math.min(orderedDone, totalChapters - 1)]?.title ??
+              fallbackTitle,
+          })
+        )
+      }
 
       if (processingMode === 'summary') {
         // 章节总结：0–80%；关联/全书为后处理（失败不丢章）
@@ -563,63 +708,45 @@ export function useBookProcessing() {
 
         const processedChapters = await mapPoolOrdered(
           selectedChapterData,
-          async (chapter) => {
+          async (chapter): Promise<Chapter> => {
             throwIfAborted()
-            setCurrentProcessingChapter(chapter.id)
-            setCurrentStep(
-              t('progress.processingChapter', {
-                current: orderedDone + 1,
-                total: totalChapters,
-                title: chapter.title,
-              })
-            )
+            onChapterStart(chapter, orderedDone)
 
-            let summary: string
             try {
-              summary = await aiService.summarizeChapter(
+              const summary = await aiService.summarizeChapter(
                 chapter.title,
-                chapter.content,
+                prepareChapterInput(chapter.content),
                 bookType,
                 processingOptions.outputLanguage,
-                customPrompt
+                customPrompt,
+                aiOpts
               )
+              throwIfAborted()
+              return {
+                id: chapter.id,
+                title: chapter.title,
+                content: chapter.content,
+                summary,
+                processed: true,
+              }
             } catch (chapterErr) {
               throwIfAborted()
               logger.error(`[processBook] 章节失败: ${chapter.title}`, chapterErr)
-              summary = `【处理失败】${chapterErr instanceof Error ? chapterErr.message : '未知错误'}`
               anyChapterFailed = true
+              return markChapterFailed(chapter, chapterErr)
             }
-
-            throwIfAborted()
-            return {
-              id: chapter.id,
-              title: chapter.title,
-              content: chapter.content,
-              summary,
-              processed: true,
-            } as Chapter
           },
           {
             concurrency: chapterConcurrency,
+            signal,
             onOrderedResult: (processedChapter, index) => {
+              if (!isCurrentRun()) return
               orderedDone = index + 1
               setBookSummary((prev) => ({
-                ...prev!,
+                ...(prev ?? initialSummary),
                 chapters: [...(prev?.chapters ?? []), processedChapter],
               }))
-              setProgress(
-                chapterPhaseProgress(orderedDone, totalChapters, CHAPTER_PHASE_MAX)
-              )
-              setCurrentStep(
-                t('progress.processingChapter', {
-                  current: Math.min(orderedDone + 1, totalChapters),
-                  total: totalChapters,
-                  title:
-                    selectedChapterData[
-                      Math.min(orderedDone, totalChapters - 1)
-                    ]?.title ?? processedChapter.title,
-                })
-              )
+              onChapterCommitted(orderedDone, CHAPTER_PHASE_MAX, processedChapter.title)
             },
           }
         )
@@ -627,72 +754,71 @@ export function useBookProcessing() {
         if (anyChapterFailed) postPhaseWarning = true
         setCurrentProcessingChapter('')
 
-        // —— 后处理：关联 + 全书总结（独立容错，失败仍保留章节结果）——
+        // —— 后处理：只喂可用章节；关联 + 全书总结独立容错，失败仍保留章节结果 ——
+        const usableChapters = usableSummaryChapters(processedChapters)
         let connections = ''
         let overallSummary = ''
-
-        try {
-          throwIfAborted()
-          setCurrentStep(t('progress.analyzingConnections'))
-          setProgress(85)
-          connections = await aiService.analyzeConnections(
-            processedChapters,
-            processingOptions.outputLanguage
-          )
-        } catch (postErr) {
-          throwIfAborted()
-          console.error('[processBook] 关联分析失败:', postErr)
-          connections = `【关联分析失败】${postErr instanceof Error ? postErr.message : '未知错误'}`
-          postPhaseWarning = true
-          toast.warning(t('progress.postPhaseConnectionsFailed') || '章节已完成，但关联分析失败')
-        }
-
-        try {
-          throwIfAborted()
-          setCurrentStep(t('progress.generatingOverallSummary'))
-          setProgress(90)
-          overallSummary = await aiService.generateOverallSummary(
-            bookData?.title || '',
-            processedChapters,
-            connections,
-            processingOptions.outputLanguage
-          )
-        } catch (postErr) {
-          throwIfAborted()
-          console.error('[processBook] 全书总结失败:', postErr)
-          overallSummary = `【全书总结失败】${postErr instanceof Error ? postErr.message : '未知错误'}`
-          postPhaseWarning = true
-          toast.warning(t('progress.postPhaseOverallFailed') || '章节已完成，但全书总结失败')
-        }
-
-        // —— 关键图表（仅全书总结成功时自动抽取，soft-fail）——
         let charts: BookCharts | null = null
         let chartsError: string | null = null
-        const overallOk =
-          overallSummary &&
-          !overallSummary.startsWith('【全书总结失败】') &&
-          overallSummary.trim().length > 0
 
-        if (overallOk) {
+        if (usableChapters.length > 0) {
           try {
             throwIfAborted()
-            setCurrentStep(t('progress.generatingKeyCharts') || '正在生成关键图表…')
-            setProgress(96)
-            charts = await aiService.generateKeyCharts(
-              bookData?.title || '',
-              processedChapters,
-              connections.startsWith('【关联分析失败】') ? '' : connections,
-              overallSummary,
-              processingOptions.outputLanguage
+            setCurrentStep(t('progress.analyzingConnections'))
+            setProgress(85)
+            connections = await aiService.analyzeConnections(
+              usableChapters,
+              processingOptions.outputLanguage,
+              aiOpts
             )
-            // 本地必存
-            cacheService.setCache(file.name, 'key_charts', serializeCharts(charts))
           } catch (postErr) {
             throwIfAborted()
-            console.error('[processBook] 关键图表失败:', postErr)
-            chartsError = postErr instanceof Error ? postErr.message : '未知错误'
+            logger.error('[processBook] 关联分析失败:', postErr)
+            connections = failedText(RESULT_PREFIX.connectionsFailed, postErr)
             postPhaseWarning = true
-            toast.warning(t('progress.postPhaseChartsFailed') || '章节已完成，但关键图表生成失败')
+            toast.warning(t('progress.postPhaseConnectionsFailed') || '章节已完成，但关联分析失败')
+          }
+
+          try {
+            throwIfAborted()
+            setCurrentStep(t('progress.generatingOverallSummary'))
+            setProgress(90)
+            overallSummary = await aiService.generateOverallSummary(
+              bookData?.title || '',
+              usableChapters,
+              usableOrEmpty(connections),
+              processingOptions.outputLanguage,
+              aiOpts
+            )
+          } catch (postErr) {
+            throwIfAborted()
+            logger.error('[processBook] 全书总结失败:', postErr)
+            overallSummary = failedText(RESULT_PREFIX.overallFailed, postErr)
+            postPhaseWarning = true
+            toast.warning(t('progress.postPhaseOverallFailed') || '章节已完成，但全书总结失败')
+          }
+
+          // —— 关键图表（仅全书总结成功时自动抽取，soft-fail）——
+          if (isUsableText(overallSummary)) {
+            try {
+              throwIfAborted()
+              setCurrentStep(t('progress.generatingKeyCharts') || '正在生成关键图表…')
+              setProgress(96)
+              charts = await aiService.generateKeyCharts(
+                bookData?.title || '',
+                usableChapters,
+                usableOrEmpty(connections),
+                overallSummary,
+                processingOptions.outputLanguage,
+                aiOpts
+              )
+            } catch (postErr) {
+              throwIfAborted()
+              logger.error('[processBook] 关键图表失败:', postErr)
+              chartsError = postErr instanceof Error ? postErr.message : '未知错误'
+              postPhaseWarning = true
+              toast.warning(t('progress.postPhaseChartsFailed') || '章节已完成，但关键图表生成失败')
+            }
           }
         }
 
@@ -710,26 +836,20 @@ export function useBookProcessing() {
 
         setBookSummary(summary)
 
-        // 保存缓存
-        processedChapters.forEach(chapter => {
-          if (chapter.summary && !chapter.summary.startsWith('【处理失败】')) {
-            cacheService.setCache(file.name, 'summary', chapter.summary, chapter.id)
-          }
-        })
-        if (connections && !connections.startsWith('【关联分析失败】')) {
-          cacheService.setCache(file.name, 'connections', connections)
-        }
-        if (overallSummary && !overallSummary.startsWith('【全书总结失败】')) {
-          cacheService.setCache(file.name, 'overall_summary', overallSummary)
-        }
+        // 本地缓存：只写可用内容
+        writeSummaryToLocalCache(file.name, summary)
 
-        // 云端 MD：仍受 autoSync 开关控制（用完整 file.name，与读取路径一致）
-        try {
-          await autoSyncService.syncSummary(summary, file.name, chapterNamingMode)
-        } catch (error) {
-          console.error('自动同步失败:', error)
-          toast.warning(t('progress.syncFailed') || '结果已生成，但云端同步失败')
+        // 云端 MD：仍受 autoSync 开关控制（用完整 file.name，与读取路径一致）。
+        // 没有可用章节时不上传；失败章节由 formatUnified 剔除并标记 isPartial
+        if (usableChapters.length > 0) {
+          try {
+            await autoSyncService.syncSummary(summary, file.name, chapterNamingMode)
+          } catch (error) {
+            logger.error('自动同步失败:', error)
+            toast.warning(t('progress.syncFailed') || '结果已生成，但云端同步失败')
+          }
         }
+        throwIfAborted()
 
         // 关键图表 JSON：WebDAV 开启则强制落盘（读 store，不依赖闭包 / autoSync）
         const davOn = useConfigStore.getState().webdavConfig.enabled
@@ -739,7 +859,7 @@ export function useBookProcessing() {
             logger.debug('[processBook] → syncChartsJson', file.name)
             const chartsSaved = await autoSyncService.syncChartsJson(file.name, charts)
             logger.debug('[processBook] ← syncChartsJson', chartsSaved)
-            if (!chartsSaved.success) {
+            if (!chartsSaved.success && isCurrentRun()) {
               logger.warn('[processBook] 图表 JSON 未保存到云端:', chartsSaved.error)
               toast.warning(
                 t(
@@ -779,60 +899,44 @@ export function useBookProcessing() {
 
         const processedChapters = await mapPoolOrdered(
           selectedChapterData,
-          async (chapter) => {
+          async (chapter): Promise<Chapter> => {
             throwIfAborted()
-            setCurrentProcessingChapter(chapter.id)
-            setCurrentStep(
-              t('progress.processingChapter', {
-                current: orderedDone + 1,
-                total: totalChapters,
-                title: chapter.title,
-              })
-            )
+            onChapterStart(chapter, orderedDone)
 
-            let mindMap: MindElixirData | null = null
             try {
-              mindMap = await aiService.generateChapterMindMap(
+              const mindMap: MindElixirData | null = await aiService.generateChapterMindMap(
                 chapter.title,
-                chapter.content,
-                processingOptions.outputLanguage
+                prepareChapterInput(chapter.content),
+                processingOptions.outputLanguage,
+                aiOpts
               )
+              throwIfAborted()
+              if (!mindMap) throw new Error('思维导图 JSON 解析失败')
+              return {
+                id: chapter.id,
+                title: chapter.title,
+                content: chapter.content,
+                mindMap,
+                processed: true,
+              }
             } catch (chapterErr) {
               throwIfAborted()
               logger.error(`[processBook] 导图章节失败: ${chapter.title}`, chapterErr)
               anyChapterFailed = true
+              return markChapterFailed(chapter, chapterErr)
             }
-
-            throwIfAborted()
-            return {
-              id: chapter.id,
-              title: chapter.title,
-              content: chapter.content,
-              mindMap: mindMap ?? undefined,
-              processed: mindMap != null,
-            } as Chapter
           },
           {
             concurrency: chapterConcurrency,
+            signal,
             onOrderedResult: (processedChapter, index) => {
+              if (!isCurrentRun()) return
               orderedDone = index + 1
               setBookMindMap((prev) => ({
-                ...prev!,
+                ...(prev ?? initialMindMap),
                 chapters: [...(prev?.chapters ?? []), processedChapter],
               }))
-              setProgress(
-                chapterPhaseProgress(orderedDone, totalChapters, CHAPTER_PHASE_MAX)
-              )
-              setCurrentStep(
-                t('progress.processingChapter', {
-                  current: Math.min(orderedDone + 1, totalChapters),
-                  total: totalChapters,
-                  title:
-                    selectedChapterData[
-                      Math.min(orderedDone, totalChapters - 1)
-                    ]?.title ?? processedChapter.title,
-                })
-              )
+              onChapterCommitted(orderedDone, CHAPTER_PHASE_MAX, processedChapter.title)
             },
           }
         )
@@ -840,33 +944,30 @@ export function useBookProcessing() {
         if (anyChapterFailed) postPhaseWarning = true
         setCurrentProcessingChapter('')
 
-        // 生成整书思维导图（容错）
+        // 生成整书思维导图（容错）：输入为各章导图前 2 层拍平的文本，失败章节不参与
         let combinedMindMap: MindElixirData | null = null
+        const chaptersForCombined = processedChapters
+          .filter((ch) => ch.processed && ch.mindMap)
+          .map((ch) => ({
+            ...ch,
+            summary: flattenMindMapToText(ch.mindMap) || ch.title,
+          }))
 
-        if (processingMode === 'combined-mindmap') {
+        if (processingMode === 'combined-mindmap' && chaptersForCombined.length > 0) {
           try {
             throwIfAborted()
             setCurrentStep(t('progress.generatingCombinedMindMap'))
             setProgress(90)
 
-            const chaptersForCombined = processedChapters.map((ch) => ({
-              ...ch,
-              summary:
-                ch.summary ||
-                (ch.mindMap && typeof ch.mindMap === 'object' && 'nodeData' in ch.mindMap
-                  ? String((ch.mindMap as { nodeData?: { topic?: string } }).nodeData?.topic || '')
-                  : '') ||
-                ch.title
-            }))
-
             combinedMindMap = await aiService.generateCombinedMindMap(
               bookData?.title || '',
               chaptersForCombined,
-              processingOptions.outputLanguage
+              processingOptions.outputLanguage,
+              aiOpts
             )
           } catch (postErr) {
             throwIfAborted()
-            console.error('[processBook] 整书导图失败:', postErr)
+            logger.error('[processBook] 整书导图失败:', postErr)
             postPhaseWarning = true
             toast.warning(t('progress.postPhaseCombinedFailed') || '章节导图已完成，但整书导图失败')
           }
@@ -892,12 +993,15 @@ export function useBookProcessing() {
           cacheService.setCache(file.name, 'combined_mindmap', combinedMindMap)
         }
 
-        try {
-          const fileName = file.name.replace(/\.[^/.]+$/, '')
-          await autoSyncService.syncMindMap(mindMapResult, fileName)
-        } catch (error) {
-          console.error('自动同步失败:', error)
-          toast.warning(t('progress.syncFailed') || '结果已生成，但云端同步失败')
+        // 无可用章节导图时不上传
+        if (chaptersForCombined.length > 0) {
+          try {
+            const fileName = file.name.replace(/\.[^/.]+$/, '')
+            await autoSyncService.syncMindMap(mindMapResult, fileName)
+          } catch (error) {
+            logger.error('自动同步失败:', error)
+            toast.warning(t('progress.syncFailed') || '结果已生成，但云端同步失败')
+          }
         }
       } else {
         throw new Error(`未知处理模式: ${processingMode}`)
@@ -917,7 +1021,7 @@ export function useBookProcessing() {
           chapterCount: selectedChapterData.length
         })
       } catch (e) {
-        console.error('记录处理历史失败:', e)
+        logger.error('记录处理历史失败:', e)
       }
 
       if (postPhaseWarning) {
@@ -933,11 +1037,11 @@ export function useBookProcessing() {
         )
       }
     } catch (error) {
-      // 被更新一轮处理取代：静默退出
-      if (generation !== processGenerationRef.current) {
+      // 被更新一轮处理 / 换书取代：静默退出
+      if (!generationRef.current.isCurrent(generation)) {
         return
       }
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (isAbortError(error)) {
         setCurrentStep(t('progress.cancelled'))
         toast.info(t('progress.cancelledHint') || '已中止。可返回配置修改设置后重新开始，或直接重新处理。', {
           duration: 5000,
@@ -955,13 +1059,14 @@ export function useBookProcessing() {
         }
       }
     } finally {
-      if (generation === processGenerationRef.current) {
+      if (generationRef.current.isCurrent(generation)) {
         if (abortControllerRef.current === controller) {
           abortControllerRef.current = null
         }
         setProcessing(false)
         setCurrentProcessingChapter('')
       }
+      finishRun()
     }
   }, [
     file, extractedChapters, selectedChapters, bookData, aiConfig,
@@ -970,7 +1075,7 @@ export function useBookProcessing() {
     aiServiceOptions
   ])
 
-  // 中止处理（当前章请求仍可能跑完，之后不再进入下一章）
+  // 中止处理：取消进行中的 AI 请求，并发池不再出队
   const cancelProcessing = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
@@ -982,14 +1087,15 @@ export function useBookProcessing() {
   }, [t])
 
   /**
-   * 重新开始处理：中止进行中的任务，清空结果后按当前配置再跑。
+   * 重新开始处理：中止进行中的任务，等旧一轮真正退出后清空结果并按当前配置再跑。
    * 调用方应先切到结果页（或保持在结果页）。
    */
   const restartProcessing = useCallback(async () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-      // 等一拍让旧 processBook 退出，避免双跑
-      await new Promise((r) => setTimeout(r, 50))
+    abortControllerRef.current?.abort()
+    // 超时兜底：旧一轮若仍未退出，其结果由代际守卫丢弃，不会写入新一轮
+    const settled = await waitForSettled(runPromiseRef.current, RESTART_WAIT_MS)
+    if (!settled) {
+      logger.warn('[restartProcessing] 旧一轮未在超时内退出，将由代际守卫丢弃其结果')
     }
     setBookSummary(null)
     setBookMindMap(null)
@@ -1000,39 +1106,27 @@ export function useBookProcessing() {
     await processBook()
   }, [processBook])
 
-  // 清除章节缓存
-  const clearChapterCache = useCallback((chapterId: string) => {
-    if (!file) return
+  /** 单章缓存键：本地文件名优先，其次云端 / 历史键 */
+  const resolveChapterCacheKey = useCallback(
+    () => file?.name || cloudCacheKeyRef.current || null,
+    [file?.name]
+  )
 
-    const summary = cacheService.getSummary(file.name)
-    if (summary && summary.chapters) {
-      const chapter = summary.chapters.find((ch: any) => ch.id === chapterId)
-      if (chapter) {
-        chapter.processed = false
-        chapter.summary = undefined
-        cacheService.setCache(file.name, 'summary', summary)
-        setBookSummary(summary)
-        toast.success(t('cache.chapterCleared'))
-      }
-    }
-  }, [file, t])
+  // 清除章节缓存：只删该章的章节级键，只重置该章状态（保留标题/作者/图表等）
+  const clearChapterCache = useCallback((chapterId: string) => {
+    const cacheKey = resolveChapterCacheKey()
+    if (cacheKey) cacheService.clearChapterCache(cacheKey, chapterId, 'summary')
+    setBookSummary((prev) => (prev ? clearChapterResult(prev, chapterId, 'summary') : prev))
+    toast.success(t('cache.chapterCleared'))
+  }, [resolveChapterCacheKey, t])
 
   // 清除章节思维导图缓存
   const clearChapterMindMapCache = useCallback((chapterId: string) => {
-    if (!file) return
-
-    const mindMap = cacheService.getCache(file.name, 'mindmap')
-    if (mindMap && mindMap.chapters) {
-      const chapter = mindMap.chapters.find((ch: any) => ch.id === chapterId)
-      if (chapter) {
-        chapter.processed = false
-        chapter.mindMap = undefined
-        cacheService.setCache(file.name, 'mindmap', mindMap)
-        setBookMindMap(mindMap)
-        toast.success(t('cache.chapterCleared'))
-      }
-    }
-  }, [file, t])
+    const cacheKey = resolveChapterCacheKey()
+    if (cacheKey) cacheService.clearChapterCache(cacheKey, chapterId, 'mindmap')
+    setBookMindMap((prev) => (prev ? clearChapterResult(prev, chapterId, 'mindmap') : prev))
+    toast.success(t('cache.chapterCleared'))
+  }, [resolveChapterCacheKey, t])
 
   // 清除特定缓存（不依赖本地 File：历史/云端加载后也能清内存与 localStorage）
   const clearSpecificCache = useCallback((cacheType: string) => {
@@ -1123,25 +1217,32 @@ export function useBookProcessing() {
         webdavEnabled: useConfigStore.getState().webdavConfig.enabled,
       })
 
-      if (!source.overallSummary || source.overallSummary.startsWith('【全书总结失败】')) {
+      if (!isUsableText(source.overallSummary)) {
         if (!options?.silent) {
           toast.error(t('results.charts.needOverall', '请先完成全书总结后再生成图表'))
         }
         return
       }
-      if (!source.chapters?.length) {
+      const usableChapters = usableSummaryChapters(source.chapters ?? [])
+      if (!usableChapters.length) {
         if (!options?.silent) {
           toast.error(t('results.charts.needChapters', '缺少章节摘要'))
         }
         return
       }
       if (chartsAutoGenRef.current) {
-        console.warn('[runKeyChartsGeneration] skipped: already running')
+        logger.warn('[runKeyChartsGeneration] skipped: already running')
         if (!options?.silent) {
           toast.message(t('results.charts.busy', '关键图表正在生成中，请稍候…'))
         }
         return
       }
+      // 换书（resetState）会递增代数并 abort：旧结果不写回、不上传
+      const generation = generationRef.current.current
+      const isStale = () => !generationRef.current.isCurrent(generation)
+      const controller = new AbortController()
+      chartsAbortRef.current = controller
+
       chartsAutoGenRef.current = true
       setChartsGenerating(true)
       setBookSummary((prev) =>
@@ -1154,21 +1255,26 @@ export function useBookProcessing() {
 
       try {
         const aiService = new AIService(aiConfig, getPromptConfig, {
-          onTokenUsage: addTokenUsage,
           ...aiServiceOptions,
+          onTokenUsage: (tokens: number) => {
+            if (!isStale()) addTokenUsage(tokens)
+          },
         })
 
-        console.log('[runKeyChartsGeneration] calling AI generateKeyCharts…')
+        logger.debug('[runKeyChartsGeneration] calling AI generateKeyCharts…')
         const charts = await aiService.generateKeyCharts(
           source.title || '',
-          source.chapters,
-          source.connections?.startsWith('【关联分析失败】')
-            ? ''
-            : source.connections || '',
+          usableChapters,
+          usableOrEmpty(source.connections),
           source.overallSummary,
-          processingOptions.outputLanguage
+          processingOptions.outputLanguage,
+          { signal: controller.signal }
         )
-        console.log('[runKeyChartsGeneration] AI done', {
+        if (isStale()) {
+          toast.dismiss(toastId)
+          return
+        }
+        logger.debug('[runKeyChartsGeneration] AI done', {
           nodes: charts?.entityGraph?.nodes?.length ?? 0,
           events: charts?.entityTimeline?.events?.length ?? 0,
         })
@@ -1184,14 +1290,7 @@ export function useBookProcessing() {
           cloudCacheKeyRef.current = cacheName
           cacheService.setCache(cacheName, 'key_charts', serializeCharts(charts))
         }
-        setBookSummary((prev) => {
-          // 若用户已换书，勿覆盖
-          if (prev && prev.title === source.title) {
-            return { ...prev, charts, chartsError: null }
-          }
-          if (!prev) return nextSummary
-          return { ...prev, charts, chartsError: null }
-        })
+        setBookSummary((prev) => (prev ? { ...prev, charts, chartsError: null } : nextSummary))
 
         // 云端上传：运行时读 store，避免闭包里 enabled 过期；不依赖 autoSync 开关
         let chartsCloudOk = false
@@ -1228,14 +1327,16 @@ export function useBookProcessing() {
             if (!chartsCloudOk) {
               console.warn('[runKeyChartsGeneration] JSON 保存失败:', chartsOnly.error)
             }
-            // 顺带 force 写 MD（内嵌图表兜底），失败不挡 JSON 成功态
-            const mdOk = await autoSyncService.syncSummary(
-              nextSummary,
-              cacheName,
-              chapterNamingMode,
-              { force: true }
-            )
-            console.log('[runKeyChartsGeneration] syncSummary force=', mdOk)
+            // 顺带 force 写 MD（内嵌图表兜底），失败不挡 JSON 成功态；已换书则不写
+            if (!isStale()) {
+              const mdOk = await autoSyncService.syncSummary(
+                nextSummary,
+                cacheName,
+                chapterNamingMode,
+                { force: true }
+              )
+              logger.debug('[runKeyChartsGeneration] syncSummary force=', mdOk)
+            }
           } catch (syncErr) {
             chartsCloudErr =
               syncErr instanceof Error ? syncErr.message : String(syncErr)
@@ -1266,8 +1367,12 @@ export function useBookProcessing() {
           }
         }
       } catch (err) {
+        if (isStale()) {
+          toast.dismiss(toastId)
+          return
+        }
         const msg = err instanceof Error ? err.message : '未知错误'
-        console.error('[runKeyChartsGeneration] failed', err)
+        logger.error('[runKeyChartsGeneration] failed', err)
         setBookSummary((prev) =>
           prev ? { ...prev, chartsError: msg } : prev
         )
@@ -1275,9 +1380,12 @@ export function useBookProcessing() {
           id: toastId,
         })
       } finally {
-        chartsAutoGenRef.current = false
-        setChartsGenerating(false)
-        console.log('[runKeyChartsGeneration] end')
+        // 已换书时 resetState 已复位；不能覆盖新一代可能已置起的标志
+        if (!isStale()) {
+          chartsAutoGenRef.current = false
+          setChartsGenerating(false)
+        }
+        if (chartsAbortRef.current === controller) chartsAbortRef.current = null
       }
     },
     [
@@ -1335,25 +1443,27 @@ export function useBookProcessing() {
     setPreviewFontSize(prev => Math.max(prev - 2, 12))
   }, [])
 
-  // 预览全屏控制
+  // 预览全屏控制（兼容带厂商前缀的旧 API）
   const togglePreviewFullscreen = useCallback(() => {
-    if (!previewCardRef.current) return
+    const el = previewCardRef.current as (HTMLDivElement & VendorFullscreenElement) | null
+    if (!el) return
 
     if (!isPreviewFullscreen) {
-      if (previewCardRef.current.requestFullscreen) {
-        previewCardRef.current.requestFullscreen()
-      } else if ((previewCardRef.current as any).webkitRequestFullscreen) {
-        (previewCardRef.current as any).webkitRequestFullscreen()
-      } else if ((previewCardRef.current as any).msRequestFullscreen) {
-        (previewCardRef.current as any).msRequestFullscreen()
+      if (el.requestFullscreen) {
+        el.requestFullscreen()
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen()
+      } else if (el.msRequestFullscreen) {
+        el.msRequestFullscreen()
       }
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen()
-      } else if ((document as any).webkitExitFullscreen) {
-        (document as any).webkitExitFullscreen()
-      } else if ((document as any).msExitFullscreen) {
-        (document as any).msExitFullscreen()
+      const doc = document as Document & VendorFullscreenDocument
+      if (doc.exitFullscreen) {
+        doc.exitFullscreen()
+      } else if (doc.webkitExitFullscreen) {
+        doc.webkitExitFullscreen()
+      } else if (doc.msExitFullscreen) {
+        doc.msExitFullscreen()
       }
     }
   }, [isPreviewFullscreen])
@@ -1375,26 +1485,11 @@ export function useBookProcessing() {
     }
   }, [])
 
-  // 文件变化时检查云端缓存
-  useEffect(() => {
-    if (file) {
-      checkCloudCache(file.name)
-    }
-  }, [file, checkCloudCache])
-
-  // WebDAV文件选择处理
+  // WebDAV文件选择处理（与本地上传一致：查缓存 + 提取章节）
   const handleWebDAVFileSelect = useCallback(async (selectedFile: File) => {
-    setFile(selectedFile)
-    resetState()
-    setFile(selectedFile)
     toast.success(t('webdav.fileSelected', { name: selectedFile.name }))
-
-    // 与本地上传一致：自动查缓存并提取章节
-    if (webdavConfig.enabled && webdavService.isInitialized()) {
-      await checkCloudCache(selectedFile.name)
-    }
-    await extractChapters(selectedFile)
-  }, [resetState, t, webdavConfig.enabled, extractChapters, checkCloudCache])
+    await handleFileSelect(selectedFile)
+  }, [t, handleFileSelect])
 
   // 打开WebDAV浏览器
   const openWebDAVBrowser = useCallback(() => {
@@ -1409,7 +1504,7 @@ export function useBookProcessing() {
     }
 
     setIsWebDAVBrowserOpen(true)
-  }, [webdavConfig.enabled])
+  }, [webdavConfig.enabled, t])
 
   // 章节总结导航（滚动容器为 .scroll-container，非 window）
   const handleChapterSummaryNavigation = useCallback((chapterId: string) => {
@@ -1458,6 +1553,9 @@ export function useBookProcessing() {
 
   // 从历史记录加载云端缓存
   const loadFromHistoryRecord = useCallback(async (fileName: string): Promise<boolean> => {
+    // 加载期间若用户换书 / 开跑，丢弃本次结果
+    const generation = generationRef.current.current
+    const isStale = () => !generationRef.current.isCurrent(generation)
     try {
       const config = useConfigStore.getState().webdavConfig
       if (!config.enabled) {
@@ -1465,12 +1563,10 @@ export function useBookProcessing() {
         return false
       }
 
-      // 历史记录里的 fileName 即云端缓存键（可能没有本地 File）
-      cloudCacheKeyRef.current = fileName
-
       // 确保 WebDAV 已初始化
       if (!webdavService.isInitialized()) {
         const initResult = await webdavService.initialize(config)
+        if (isStale()) return false
         if (!initResult.success) {
           toast.error(t('history.webdavInitFailed'))
           return false
@@ -1479,6 +1575,7 @@ export function useBookProcessing() {
 
       // 读取云端缓存
       const result = await cloudCacheService.readCache(fileName)
+      if (isStale()) return false
       if (!result.success || !result.content) {
         toast.error(t('history.cacheNotFound'))
         return false
@@ -1503,40 +1600,27 @@ export function useBookProcessing() {
       const summary: BookSummary = {
         title: parsed.title || fileName.replace(/\.[^/.]+$/, ''),
         author: parsed.author,
-        chapters: parsed.chapters.map((ch, index) => ({
-          id: `history-${index}`,
-          title: ch.title,
-          content: '',
-          summary: ch.summary,
-          processed: true
-        })),
+        chapters: toLoadedChapters(parsed.chapters, 'history'),
         connections: parsed.connections,
         overallSummary: parsed.overallSummary,
         charts,
         chartsError: null,
       }
+      const partial = isPartialCache({ metadata: result.metadata, ...summary })
 
-      // 重置状态并设置结果
+      // 重置状态（作废旧任务、释放旧书资源）并设置结果；此后同步执行，无需再判代际
       resetState()
+      // 历史记录里的 fileName 即云端缓存键（可能没有本地 File）
+      cloudCacheKeyRef.current = fileName
       setBookSummary(summary)
       setCloudCacheContent(result.content)
+      setCloudCacheIsPartial(partial)
       setCloudChartsJson(result.chartsJson ?? null)
       setCloudChartsFileFound(chartsFileFound)
 
-      // 历史加载同样写入本地图表缓存
-      summary.chapters.forEach((ch) => {
-        if (ch.summary) {
-          cacheService.setCache(fileName, 'summary', ch.summary, ch.id)
-        }
-      })
-      if (summary.connections) {
-        cacheService.setCache(fileName, 'connections', summary.connections)
-      }
-      if (summary.overallSummary) {
-        cacheService.setCache(fileName, 'overall_summary', summary.overallSummary)
-      }
+      // 历史加载同样写入本地缓存（只写可用内容）
+      writeSummaryToLocalCache(fileName, summary)
       if (charts) {
-        cacheService.setCache(fileName, 'key_charts', serializeCharts(charts))
         pendingAutoChartsRef.current = false
       } else if (chartsFileFound) {
         // 有文件但解析失败：不自动覆盖
@@ -1548,11 +1632,16 @@ export function useBookProcessing() {
           )
         )
       } else {
-        const canAuto =
-          !!summary.overallSummary &&
-          !summary.overallSummary.startsWith('【全书总结失败】') &&
-          summary.chapters.length > 0
-        pendingAutoChartsRef.current = canAuto
+        pendingAutoChartsRef.current =
+          !partial && isUsableText(summary.overallSummary) && summary.chapters.length > 0
+      }
+      if (partial) {
+        toast.warning(
+          t(
+            'cloudCache.partialLoaded',
+            '云端缓存不完整（部分章节处理失败），可重新处理以补全失败章节'
+          )
+        )
       }
 
       // 更新历史位置（移到最顶部）
@@ -1566,7 +1655,8 @@ export function useBookProcessing() {
 
       return true
     } catch (error) {
-      console.error('从历史加载失败:', error)
+      if (isStale()) return false
+      logger.error('从历史加载失败:', error)
       toast.error(t('history.loadError'))
       return false
     }
@@ -1581,9 +1671,7 @@ export function useBookProcessing() {
     }
     if (chartsGenerating || chartsAutoGenRef.current) return
     const canAuto =
-      !!bookSummary.overallSummary &&
-      !bookSummary.overallSummary.startsWith('【全书总结失败】') &&
-      bookSummary.chapters.length > 0
+      isUsableText(bookSummary.overallSummary) && bookSummary.chapters.length > 0
     if (!canAuto) {
       pendingAutoChartsRef.current = false
       return
@@ -1591,7 +1679,7 @@ export function useBookProcessing() {
     pendingAutoChartsRef.current = false
     const cacheFileName =
       file?.name || cloudCacheKeyRef.current || cloudCacheMetadata?.fileName || null
-    console.log('[autoCharts] 触发自动生成, cacheFileName=', cacheFileName)
+    logger.debug('[autoCharts] 触发自动生成, cacheFileName=', cacheFileName)
     void runKeyChartsGeneration(bookSummary, {
       silent: true,
       cacheFileName,
@@ -1622,6 +1710,8 @@ export function useBookProcessing() {
     cloudCacheMetadata,
     isCheckingCloudCache,
     cloudCacheContent,
+    cloudCacheIsPartial,
+    cloudCacheStatusUnknown,
     cloudChartsFileFound,
     chartsGenerating,
     rightPanelContent,
@@ -1662,6 +1752,7 @@ export function useBookProcessing() {
 
     // 设置器
     setCustomPrompt,
+    setSelectedChapters,
     setIsWebDAVBrowserOpen,
     setBookSummary,
     setBookMindMap,

@@ -2,6 +2,9 @@ import { webdavService } from './webdavService'
 import { useConfigStore } from '../stores/configStore'
 import { metadataFormatter } from './metadataFormatter'
 
+/** 云端缓存存在性三态（与 webdavService.existsStatus 一致） */
+export type CacheExistsStatus = 'exists' | 'missing' | 'unknown'
+
 /**
  * 云端缓存文件信息
  */
@@ -130,6 +133,18 @@ export class CloudCacheService {
     } catch (error) {
       console.error('[CloudCache] 检查缓存失败:', error)
       return false
+    }
+  }
+
+  /**
+   * 缓存存在性三态（C4）：unknown 表示鉴权/网络/服务端错误，调用方不得当作「无缓存」
+   */
+  async checkCacheStatus(fileName: string): Promise<CacheExistsStatus> {
+    try {
+      return await this.webdavService.existsStatus(this.getCacheFilePath(fileName))
+    } catch (error) {
+      console.warn('[CloudCache] 检查缓存状态失败:', error)
+      return 'unknown'
     }
   }
 
@@ -280,102 +295,18 @@ export class CloudCacheService {
     }
   }
 
-
   /**
-   * 解析文件中的 HTML 备注
-   * @param content 文件内容
-   * @returns 解析出的元数据或 null
+   * 解析文件头 HTML 备注（委托 metadataFormatter，全项目唯一解析实现）
    */
   parseMetadata(content: string): ProcessingMetadata | null {
-    try {
-      // 匹配文件头部的 HTML 注释
-      const commentMatch = content.match(/<!--\s*\n([\s\S]*?)\n-->/)
-
-      if (!commentMatch) {
-        return null
-      }
-
-      const commentContent = commentMatch[1]
-      const metadata: ProcessingMetadata = {
-        source: '',
-        fileName: '',
-        processedAt: '',
-        model: '',
-        chapterDetectionMode: '',
-        selectedChapters: '',
-        chapterCount: 0,
-        originalCharCount: 0,
-        processedCharCount: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        costUSD: 0,
-        costRMB: 0,
-        skippedChapters: 0,
-        selectedChapterCount: 0,
-        isPartial: false
-      }
-
-
-      // 解析各字段
-      const lines = commentContent.split('\n')
-      for (const line of lines) {
-        const [key, ...valueParts] = line.split(':')
-        if (!key || !valueParts.length) continue
-
-        const value = valueParts.join(':').trim()
-        const trimmedKey = key.trim() as keyof ProcessingMetadata
-
-        switch (trimmedKey) {
-          case 'source':
-          case 'fileName':
-          case 'processedAt':
-          case 'model':
-          case 'chapterDetectionMode':
-          case 'selectedChapters':
-            metadata[trimmedKey] = value
-            break
-          case 'chapterCount':
-          case 'originalCharCount':
-          case 'processedCharCount':
-          case 'inputTokens':
-          case 'outputTokens':
-            metadata[trimmedKey] = parseInt(value, 10) || 0
-            break
-          case 'costUSD':
-          case 'costRMB':
-            metadata[trimmedKey] = parseFloat(value) || 0
-            break
-          case 'skippedChapters':
-            metadata.skippedChapters = parseInt(value, 10) || 0
-            break
-          case 'selectedChapterCount':
-            metadata.selectedChapterCount = parseInt(value, 10) || 0
-            break
-          case 'isPartial':
-            metadata.isPartial = value === 'true'
-            break
-          case 'epubTocDepth':
-            metadata.epubTocDepth = value === 'N/A' ? undefined : parseInt(value, 10) || undefined
-            break
-        }
-      }
-
-
-      return metadata
-    } catch (error) {
-      console.error('[CloudCache] 解析元数据失败:', error)
-      return null
-    }
+    return metadataFormatter.parse(content)
   }
 
   /**
-   * 从缓存内容提取纯 Markdown（不含备注）
-   * @param content 包含备注的文件内容
-   * @returns 纯 Markdown 内容
+   * 从缓存内容提取纯 Markdown（只去掉文件头备注）
    */
   stripMetadata(content: string): string {
-    // 移除文件头部的 HTML 注释
-    return content.replace(/<!--\s*\n[\s\S]*?\n-->\n*/, '')
+    return metadataFormatter.strip(content)
   }
 
   /**
@@ -442,21 +373,50 @@ export class CloudCacheService {
    * 获取云端缓存文件名集合（{sanitizedName}-完整摘要.md）
    */
   async fetchCacheFileNames(): Promise<Set<string>> {
+    const result = await this.fetchCacheFileNamesStatus()
+    return result.status === 'ok' ? result.names : new Set()
+  }
+
+  /**
+   * 获取云端缓存文件名集合（三态）：列目录失败返回 unknown，
+   * 批量 skipProcessed 必须据此中止，不能把失败当成「云端没有缓存」而整库重跑覆盖。
+   */
+  async fetchCacheFileNamesStatus(): Promise<
+    { status: 'ok'; names: Set<string> } | { status: 'unknown'; error: string }
+  > {
     const webdavConfig = useConfigStore.getState().webdavConfig
     const syncPath = webdavConfig.syncPath || '/fastReader'
-    const result = await this.webdavService.getDirectoryContents(syncPath)
+    try {
+      const result = await this.webdavService.getDirectoryContents(syncPath)
+      if (!result.success || !result.data) {
+        // 同步目录尚不存在 = 确实没有缓存
+        if (await this.isMissingPath(syncPath)) {
+          return { status: 'ok', names: new Set() }
+        }
+        console.warn('[CloudCache] 获取缓存列表失败:', result.error)
+        return { status: 'unknown', error: result.error || '获取云端缓存列表失败' }
+      }
 
-    if (!result.success || !result.data) {
-      console.warn('[CloudCache] 获取缓存列表失败:', result.error)
-      return new Set()
+      const cacheFiles = result.data
+        .filter((file) => file.type === 'file')
+        .map((file) => file.basename)
+        .filter((name) => name.endsWith('-完整摘要.md'))
+
+      return { status: 'ok', names: new Set(cacheFiles) }
+    } catch (error) {
+      return {
+        status: 'unknown',
+        error: error instanceof Error ? error.message : '获取云端缓存列表失败',
+      }
     }
+  }
 
-    const cacheFiles = result.data
-      .filter((file) => file.type === 'file')
-      .map((file) => file.basename)
-      .filter((name) => name.endsWith('-完整摘要.md'))
-
-    return new Set(cacheFiles)
+  private async isMissingPath(path: string): Promise<boolean> {
+    try {
+      return (await this.webdavService.existsStatus(path)) === 'missing'
+    } catch {
+      return false
+    }
   }
 
 }

@@ -4,6 +4,7 @@
  */
 
 import type { ProcessingMetadata } from './cloudCacheService'
+import { isFailedText, isPlaceholderText } from '../utils/resultStatus'
 
 // 默认汇率（USD -> CNY）
 const DEFAULT_EXCHANGE_RATE = 7.0
@@ -205,7 +206,13 @@ export function formatAsHTMLComment(metadata: ProcessingMetadata): string {
   }
 
 
-  return `<!--\n${lines.join('\n')}\n-->`
+  // 每行按 `key: value` 拆开后只转义 value，key 都是固定字面量
+  const safeLines = lines.map((line) => {
+    const idx = line.indexOf(':')
+    return `${line.slice(0, idx)}: ${escapeMetadataValue(line.slice(idx + 1).trim())}`
+  })
+
+  return `<!--\n${safeLines.join('\n')}\n-->`
 }
 
 /**
@@ -220,115 +227,100 @@ export function addMetadataToContent(content: string, metadata: ProcessingMetada
 }
 
 /**
- * 从文件内容中解析元数据
+ * 文件头元数据注释：只认文件开头（允许 BOM / 前导空白）的第一个 `<!--\n ... \n-->` 块，
+ * 正文中出现的其它 HTML 注释一律忽略。
+ */
+const HEADER_COMMENT_RE = /^\uFEFF?\s*<!--[ \t]*\r?\n([\s\S]*?)\r?\n-->/
+const HEADER_COMMENT_STRIP_RE = /^\uFEFF?\s*<!--[ \t]*\r?\n[\s\S]*?\r?\n-->(?:[ \t]*\r?\n)*/
+
+/** 写入注释的值：去换行、转义 `-->`，防止提前闭合注释 */
+export function escapeMetadataValue(value: unknown): string {
+  return String(value ?? '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/-->/g, '--&gt;')
+}
+
+/** 读取注释值：还原 escapeMetadataValue 的转义 */
+export function unescapeMetadataValue(value: string): string {
+  return value.replace(/--&gt;/g, '-->')
+}
+
+type StringField = 'source' | 'fileName' | 'processedAt' | 'model' | 'chapterDetectionMode' | 'selectedChapters'
+type IntField =
+  | 'chapterCount'
+  | 'originalCharCount'
+  | 'processedCharCount'
+  | 'inputTokens'
+  | 'outputTokens'
+  | 'skippedChapters'
+  | 'selectedChapterCount'
+
+const STRING_FIELDS = new Set<string>(['source', 'fileName', 'processedAt', 'model', 'chapterDetectionMode', 'selectedChapters'])
+const INT_FIELDS = new Set<string>([
+  'chapterCount',
+  'originalCharCount',
+  'processedCharCount',
+  'inputTokens',
+  'outputTokens',
+  'skippedChapters',
+  'selectedChapterCount',
+])
+
+/**
+ * 从文件内容中解析元数据（前端唯一实现，cloudCacheService 委托至此）
  * @param content 文件内容
  * @returns 解析出的元数据或 null
  */
 export function parseMetadataFromContent(content: string): ProcessingMetadata | null {
-  try {
-    // 匹配文件头部的 HTML 注释
-    const commentMatch = content.match(/<!--\s*\n([\s\S]*?)\n-->/)
+  const commentMatch = typeof content === 'string' ? content.match(HEADER_COMMENT_RE) : null
+  if (!commentMatch) return null
 
-    if (!commentMatch) {
-      return null
-    }
-
-    const commentContent = commentMatch[1]
-    const metadata: ProcessingMetadata = {
-      source: '',
-      fileName: '',
-      processedAt: '',
-      model: '',
-      chapterDetectionMode: '',
-      selectedChapters: '',
-      chapterCount: 0,
-      originalCharCount: 0,
-      processedCharCount: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      costUSD: 0,
-      costRMB: 0
-    }
-
-    // 解析各字段
-    const lines = commentContent.split('\n')
-    for (const line of lines) {
-      const colonIndex = line.indexOf(':')
-      if (colonIndex === -1) continue
-
-      const key = line.slice(0, colonIndex).trim()
-      const value = line.slice(colonIndex + 1).trim()
-
-      switch (key) {
-        case 'source':
-          metadata.source = value
-          break
-        case 'fileName':
-          metadata.fileName = value
-          break
-        case 'processedAt':
-          metadata.processedAt = value
-          break
-        case 'model':
-          metadata.model = value
-          break
-        case 'chapterDetectionMode':
-          metadata.chapterDetectionMode = value
-          break
-        case 'epubTocDepth':
-          metadata.epubTocDepth = value === 'N/A' ? undefined : parseInt(value, 10) || undefined
-          break
-        case 'selectedChapters':
-          metadata.selectedChapters = value
-          break
-        case 'chapterCount':
-          metadata.chapterCount = parseInt(value, 10) || 0
-          break
-        case 'originalCharCount':
-          metadata.originalCharCount = parseInt(value, 10) || 0
-          break
-        case 'processedCharCount':
-          metadata.processedCharCount = parseInt(value, 10) || 0
-          break
-        case 'inputTokens':
-          metadata.inputTokens = parseInt(value, 10) || 0
-          break
-        case 'outputTokens':
-          metadata.outputTokens = parseInt(value, 10) || 0
-          break
-        case 'costUSD':
-          metadata.costUSD = parseFloat(value) || 0
-          break
-        case 'costRMB':
-          metadata.costRMB = parseFloat(value) || 0
-          break
-        case 'skippedChapters':
-          ;(metadata as ProcessingMetadata & { skippedChapters: number }).skippedChapters = parseInt(value, 10) || 0
-          break
-        case 'selectedChapterCount':
-          ;(metadata as ProcessingMetadata & { selectedChapterCount: number }).selectedChapterCount = parseInt(value, 10) || 0
-          break
-        case 'isPartial':
-          ;(metadata as ProcessingMetadata & { isPartial: boolean }).isPartial = value === 'true'
-          break
-      }
-    }
-
-
-    return metadata
-  } catch (error) {
-    console.error('[MetadataFormatter] 解析元数据失败:', error)
-    return null
+  const metadata: ProcessingMetadata = {
+    source: '',
+    fileName: '',
+    processedAt: '',
+    model: '',
+    chapterDetectionMode: '',
+    selectedChapters: '',
+    chapterCount: 0,
+    originalCharCount: 0,
+    processedCharCount: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    costUSD: 0,
+    costRMB: 0,
   }
+
+  for (const line of commentMatch[1].split(/\r?\n/)) {
+    const colonIndex = line.indexOf(':')
+    if (colonIndex === -1) continue
+
+    const key = line.slice(0, colonIndex).trim()
+    const value = unescapeMetadataValue(line.slice(colonIndex + 1).trim())
+
+    if (STRING_FIELDS.has(key)) {
+      metadata[key as StringField] = value
+    } else if (INT_FIELDS.has(key)) {
+      metadata[key as IntField] = parseInt(value, 10) || 0
+    } else if (key === 'costUSD' || key === 'costRMB') {
+      metadata[key] = parseFloat(value) || 0
+    } else if (key === 'isPartial') {
+      metadata.isPartial = value === 'true'
+    } else if (key === 'epubTocDepth') {
+      metadata.epubTocDepth = value === 'N/A' ? undefined : parseInt(value, 10) || undefined
+    }
+  }
+
+  return metadata
 }
 
 /**
- * 从文件内容中移除元数据备注
+ * 从文件内容中移除文件头元数据备注（只移除开头那一块）
  * @param content 包含备注的文件内容
  * @returns 纯 Markdown 内容
  */
 export function stripMetadataFromContent(content: string): string {
-  return content.replace(/<!--\s*\n[\s\S]*?\n-->\n*/, '')
+  return content.replace(HEADER_COMMENT_STRIP_RE, '')
 }
 
 // ============================================================================
@@ -384,6 +376,20 @@ export function formatUnifiedMarkdown(
   chapterNamingMode: 'auto' | 'numbered' = 'auto'
 ): string {
   const lines: string[] = []
+
+  // 失败 / 跳过占位不写入云端：只保留可用章节；有失败内容时元数据标记 isPartial，
+  // 读取方据此不把它当完整缓存（单书 autoSync 与批量引擎都经过这里）
+  const chapters = data.chapters.filter((ch) => !isPlaceholderText(ch.summary))
+  const overallSummary = isPlaceholderText(data.overallSummary) ? '' : data.overallSummary
+  const connections = isPlaceholderText(data.connections) ? '' : data.connections
+  const hasFailure =
+    data.chapters.some((ch) => isFailedText(ch.summary)) ||
+    isFailedText(data.overallSummary) ||
+    isFailedText(data.connections)
+  data = { ...data, chapters, overallSummary, connections }
+  if (metadata && hasFailure && metadata.isPartial !== true) {
+    metadata = { ...metadata, isPartial: true }
+  }
 
   // 1. 头部元数据（HTML 注释格式）
   if (metadata) {

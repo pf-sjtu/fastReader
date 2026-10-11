@@ -20,6 +20,9 @@ export type {
   ChapterDataLegacy,
 } from './chapter'
 
+// ==================== 单书处理结果 ====================
+export type { Chapter, BookSummary, BookMindMap, ProcessingMode } from './book'
+
 // ==================== AI 相关 ====================
 export type {
   AIProviderType,
