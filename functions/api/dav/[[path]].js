@@ -1,4 +1,22 @@
-import { isValidUpstreamBase } from '../../../src/services/webdavProxyUtils'
+import {
+  isValidUpstreamBase,
+  isWithinUpstreamScope,
+  resolveScopedUpstreamUrl
+} from '../../../src/services/webdavProxyUtils'
+
+// 请求体上限（字节），超限返回 413，防止 Worker 内存被打满
+const MAX_BODY_BYTES = 50 * 1024 * 1024
+
+// 回传给浏览器的上游响应头白名单（location 另行按同源规则处理）
+const RESPONSE_HEADER_ALLOWLIST = [
+  'content-type',
+  'content-length',
+  'etag',
+  'last-modified',
+  'dav',
+  'content-range',
+  'accept-ranges'
+]
 
 // 从环境变量读取白名单，支持逗号分隔的字符串（追加到默认值）
 function getAllowedOrigins(env) {
@@ -65,11 +83,27 @@ function isAllowedMethod(method) {
   return ['OPTIONS', 'PROPFIND', 'GET', 'PUT', 'POST', 'DELETE', 'MKCOL', 'MOVE', 'COPY', 'HEAD'].includes(method)
 }
 
-function resolveUpstreamUrl(baseUrl, path) {
-  // base 必须带尾斜杠，否则 new URL 会把最后一段路径当文件名替换掉
-  const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
-  const trimmedPath = path ? path.replace(/^\//, '') : ''
-  return new URL(trimmedPath, base).toString()
+// 解析重定向目标；不在 base 作用域内（跨源/越界/私网）返回 null
+function resolveRedirectTarget(base, location, currentUrl) {
+  try {
+    const target = new URL(location, currentUrl).toString()
+    return isWithinUpstreamScope(base, target) ? target : null
+  } catch {
+    return null
+  }
+}
+
+function filterResponseHeaders(headers, base, currentUrl) {
+  const out = new Headers()
+  RESPONSE_HEADER_ALLOWLIST.forEach((key) => {
+    const value = headers.get(key)
+    if (value !== null) out.set(key, value)
+  })
+  const location = headers.get('location')
+  if (location && resolveRedirectTarget(base, location, currentUrl)) {
+    out.set('location', location)
+  }
+  return out
 }
 
 function filterRequestHeaders(headers) {
@@ -113,12 +147,23 @@ export async function onRequest(context) {
     return new Response('Invalid upstream base URL', { status: 400, headers: cors })
   }
 
-  const upstreamUrl = resolveUpstreamUrl(base, path)
+  const upstreamUrl = resolveScopedUpstreamUrl(base, path)
+  if (!upstreamUrl) {
+    return new Response('Invalid upstream path', { status: 400, headers: cors })
+  }
   const upstreamHeaders = filterRequestHeaders(request.headers)
   upstreamHeaders.delete('X-WebDAV-Base')
   upstreamHeaders.delete('X-WebDAV-Path')
 
+  const declaredLength = Number(request.headers.get('Content-Length') || 0)
+  if (declaredLength > MAX_BODY_BYTES) {
+    return new Response('Payload too large', { status: 413, headers: cors })
+  }
   const bodyBuffer = request.body ? await request.arrayBuffer() : null
+  // 无 Content-Length（chunked）时读完再校验实际大小
+  if (bodyBuffer && bodyBuffer.byteLength > MAX_BODY_BYTES) {
+    return new Response('Payload too large', { status: 413, headers: cors })
+  }
   const buildRequest = (url) => new Request(url, {
     method: request.method,
     headers: upstreamHeaders,
@@ -126,17 +171,20 @@ export async function onRequest(context) {
     redirect: 'manual'
   })
 
-  let response = await fetch(buildRequest(upstreamUrl))
+  let currentUrl = upstreamUrl
+  let response = await fetch(buildRequest(currentUrl))
 
+  // 只在重定向目标仍处于 base 作用域（同源 + 路径前缀）时跟随一次；跨源不跟随，凭据不外泄
   if (response.status >= 300 && response.status < 400) {
     const location = response.headers.get('location')
-    if (location) {
-      const resolvedUrl = new URL(location, upstreamUrl).toString()
-      response = await fetch(buildRequest(resolvedUrl))
+    const redirectUrl = location ? resolveRedirectTarget(base, location, currentUrl) : null
+    if (redirectUrl) {
+      currentUrl = redirectUrl
+      response = await fetch(buildRequest(currentUrl))
     }
   }
 
-  const responseHeaders = new Headers(response.headers)
+  const responseHeaders = filterResponseHeaders(response.headers, base, currentUrl)
   Object.entries(cors).forEach(([key, value]) => {
     responseHeaders.set(key, value)
   })

@@ -1,0 +1,6 @@
+# Cloudflare Pages 响应头（构建时随 public/ 复制到 dist/）
+# connect-src 不收窄到具体主机：AI 服务商由用户自定义，且需直连本机 Ollama
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

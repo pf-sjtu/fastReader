@@ -1,3 +1,7 @@
+// 与 DAV 代理共用同一套上游校验（https、无凭据、非私网/本机、path 不得逃出 base）。
+// AI 服务商由用户自定义，因此不做主机白名单。
+import { isValidUpstreamBase, resolveScopedUpstreamUrl } from '../../../src/services/webdavProxyUtils'
+
 // 从环境变量读取白名单，支持逗号分隔的字符串（追加到默认值）
 function getAllowedOrigins(env) {
   const defaultOrigins = [
@@ -45,29 +49,18 @@ function isAllowedOrigin(origin, requestOrigin, allowedOrigins) {
   const normalizedOrigin = origin ? normalizeDomain(origin) : ''
   const normalizedRequestOrigin = requestOrigin ? normalizeDomain(requestOrigin) : ''
 
-  if (normalizedOrigin && normalizedAllowed.includes(normalizedOrigin)) {
-    return true
+  // 与 DAV 代理一致：Origin 存在时以它为准，X-Request-Origin 可伪造，仅在无 Origin 时回退
+  if (normalizedOrigin) {
+    return normalizedAllowed.includes(normalizedOrigin)
   }
-  return normalizedAllowed.includes(normalizedRequestOrigin)
+  if (normalizedRequestOrigin) {
+    return normalizedAllowed.includes(normalizedRequestOrigin)
+  }
+  return false
 }
 
 function isAllowedMethod(method) {
   return ['OPTIONS', 'POST', 'GET'].includes(method)
-}
-
-function isValidUpstreamBase(baseUrl) {
-  try {
-    const url = new URL(baseUrl)
-    return ['http:', 'https:'].includes(url.protocol)
-  } catch {
-    return false
-  }
-}
-
-function resolveUpstreamUrl(baseUrl, path) {
-  const trimmedPath = path ? path.replace(/^\//, '') : ''
-  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
-  return new URL(trimmedPath, normalizedBase).toString()
 }
 
 function filterRequestHeaders(headers) {
@@ -110,7 +103,10 @@ export async function onRequest(context) {
     return new Response('Invalid upstream base URL', { status: 400, headers: cors })
   }
 
-  const upstreamUrl = resolveUpstreamUrl(base, path)
+  const upstreamUrl = resolveScopedUpstreamUrl(base, path)
+  if (!upstreamUrl) {
+    return new Response('Invalid upstream path', { status: 400, headers: cors })
+  }
   const upstreamHeaders = filterRequestHeaders(request.headers)
 
   const bodyBuffer = request.body ? await request.arrayBuffer() : null
@@ -123,6 +119,8 @@ export async function onRequest(context) {
 
   const response = await fetch(upstreamRequest)
   const responseHeaders = new Headers(response.headers)
+  // 上游 Cookie 不应落到本站源下
+  responseHeaders.delete('set-cookie')
   Object.entries(cors).forEach(([key, value]) => {
     responseHeaders.set(key, value)
   })
