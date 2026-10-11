@@ -242,9 +242,10 @@ export const useAIConfigStore = create<AIConfigState>()(
 
           const original = state.aiConfigManager.providers[providerIndex]
           const duplicated: AIProviderConfig = { ...original }
+          let newIndex = -1
 
           set((prevState) => {
-            const newIndex = prevState.aiConfigManager.providers.length + 1
+            newIndex = prevState.aiConfigManager.providers.length + 1
             const newAIConfigManager = {
               ...prevState.aiConfigManager,
               providers: [...prevState.aiConfigManager.providers, duplicated],
@@ -256,7 +257,7 @@ export const useAIConfigStore = create<AIConfigState>()(
             }
           })
 
-          return state.aiConfigManager.providers.length
+          return newIndex
         },
 
         setCurrentModelId: (index) => {
@@ -308,8 +309,9 @@ export const useAIConfigStore = create<AIConfigState>()(
             customFields: templateConfig.customFields
           }
 
+          let newIndex = -1
           set((prevState) => {
-            const newIndex = prevState.aiConfigManager.providers.length + 1
+            newIndex = prevState.aiConfigManager.providers.length + 1
             const newAIConfigManager = {
               ...prevState.aiConfigManager,
               providers: [...prevState.aiConfigManager.providers, newProvider],
@@ -321,7 +323,7 @@ export const useAIConfigStore = create<AIConfigState>()(
             }
           })
 
-          return newProvider.model ? newProvider.model.length : -1
+          return newIndex
         },
 
         getAvailableAITemplates: () => {

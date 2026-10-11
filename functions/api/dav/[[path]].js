@@ -57,10 +57,19 @@ function corsHeaders(origin, requestOrigin, allowedOrigins) {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'OPTIONS, PROPFIND, GET, PUT, POST, DELETE, MKCOL, MOVE, COPY, HEAD',
     'Access-Control-Allow-Headers': 'Authorization, Content-Type, Depth, If-Match, If-None-Match, Range, X-Requested-With, X-WebDAV-Base, X-WebDAV-Path, X-Request-Origin',
+    'Access-Control-Expose-Headers': 'X-Proxy-Error',
     'Access-Control-Max-Age': '86400',
     'Cache-Control': 'no-store, no-cache, must-revalidate',
     'Pragma': 'no-cache'
   }
+}
+
+// 代理自身产生的错误：带 X-Proxy-Error，客户端据此与上游同状态码区分
+function proxyError(message, status, cors) {
+  return new Response(message, {
+    status,
+    headers: { ...cors, 'Content-Type': 'text/plain; charset=utf-8', 'X-Proxy-Error': '1' }
+  })
 }
 
 function isAllowedOrigin(origin, requestOrigin, allowedOrigins) {
@@ -130,11 +139,11 @@ export async function onRequest(context) {
   }
 
   if (!isAllowedMethod(request.method)) {
-    return new Response('Method not allowed', { status: 405, headers: cors })
+    return proxyError('Method not allowed', 405, cors)
   }
 
   if (!isAllowedOrigin(origin, requestOrigin, allowedOrigins)) {
-    return new Response('Origin not allowed', { status: 403, headers: cors })
+    return proxyError('Origin not allowed', 403, cors)
   }
 
   const url = new URL(request.url)
@@ -144,12 +153,12 @@ export async function onRequest(context) {
   const path = headerPath || url.searchParams.get('path') || '/'
 
   if (!isValidUpstreamBase(base)) {
-    return new Response('Invalid upstream base URL', { status: 400, headers: cors })
+    return proxyError('Invalid upstream base URL', 400, cors)
   }
 
   const upstreamUrl = resolveScopedUpstreamUrl(base, path)
   if (!upstreamUrl) {
-    return new Response('Invalid upstream path', { status: 400, headers: cors })
+    return proxyError('Invalid upstream path', 400, cors)
   }
   const upstreamHeaders = filterRequestHeaders(request.headers)
   upstreamHeaders.delete('X-WebDAV-Base')
@@ -157,12 +166,12 @@ export async function onRequest(context) {
 
   const declaredLength = Number(request.headers.get('Content-Length') || 0)
   if (declaredLength > MAX_BODY_BYTES) {
-    return new Response('Payload too large', { status: 413, headers: cors })
+    return proxyError('Payload too large', 413, cors)
   }
   const bodyBuffer = request.body ? await request.arrayBuffer() : null
   // 无 Content-Length（chunked）时读完再校验实际大小
   if (bodyBuffer && bodyBuffer.byteLength > MAX_BODY_BYTES) {
-    return new Response('Payload too large', { status: 413, headers: cors })
+    return proxyError('Payload too large', 413, cors)
   }
   const buildRequest = (url) => new Request(url, {
     method: request.method,
@@ -172,7 +181,12 @@ export async function onRequest(context) {
   })
 
   let currentUrl = upstreamUrl
-  let response = await fetch(buildRequest(currentUrl))
+  let response
+  try {
+    response = await fetch(buildRequest(currentUrl))
+  } catch {
+    return proxyError('Upstream unreachable', 502, cors)
+  }
 
   // 只在重定向目标仍处于 base 作用域（同源 + 路径前缀）时跟随一次；跨源不跟随，凭据不外泄
   if (response.status >= 300 && response.status < 400) {
@@ -180,7 +194,11 @@ export async function onRequest(context) {
     const redirectUrl = location ? resolveRedirectTarget(base, location, currentUrl) : null
     if (redirectUrl) {
       currentUrl = redirectUrl
-      response = await fetch(buildRequest(currentUrl))
+      try {
+        response = await fetch(buildRequest(currentUrl))
+      } catch {
+        return proxyError('Upstream unreachable', 502, cors)
+      }
     }
   }
 
