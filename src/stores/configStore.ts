@@ -23,6 +23,7 @@ import { useAIConfigStore } from './ai-config'
 import { useProcessingStore } from './processing'
 import { useWebDAVStore } from './webdav'
 import { usePromptStore } from './prompts'
+import { DEFAULT_PROMPT_VERSION } from '../services/prompts/templates'
 import { useCoreStore } from './core'
 
 // 重新导出类型
@@ -363,7 +364,10 @@ export const useConfigStore = create<ConfigState>()(
 
         // WebDAV配置
         if (config.webdavConfig) {
-          useWebDAVStore.getState().updateWebDAVConfig(config.webdavConfig)
+          // 连接状态是运行时状态：备份里记录的是导出设备上的结果，导入后必须重新探测
+          useWebDAVStore
+            .getState()
+            .updateWebDAVConfig({ ...config.webdavConfig, connectionStatus: 'disconnected' })
         }
 
         // 提示词配置
@@ -396,8 +400,8 @@ export const useConfigStore = create<ConfigState>()(
       useProcessingStore.getState().resetProcessingOptions()
       useWebDAVStore.getState().resetWebDAVConfig()
       usePromptStore.setState({
-        currentPromptVersion: 'v1',
-        promptConfig: usePromptStore.getState().promptVersionConfig.v1
+        currentPromptVersion: DEFAULT_PROMPT_VERSION,
+        promptConfig: usePromptStore.getState().promptVersionConfig[DEFAULT_PROMPT_VERSION]
       })
       useCoreStore.getState().resetCoreState()
     }

@@ -20,7 +20,7 @@ from typing import Optional
 import yaml
 
 # 前端 configStore 的 currentPromptVersion 默认值
-DEFAULT_PROMPT_VERSION = "v1"
+DEFAULT_PROMPT_VERSION = "v2"  # 与前端 DEFAULT_PROMPT_VERSION 一致
 SUPPORTED_PROMPT_VERSIONS = ("v1", "v2")
 
 # 仓库内共享 YAML 目录（src/cli/ → src/services/prompts/config）

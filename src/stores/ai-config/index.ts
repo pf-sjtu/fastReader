@@ -434,7 +434,8 @@ export function mergeAIConfigManager<T extends Pick<AIConfigState, 'aiConfigMana
   if (!data || !Array.isArray(data.providers)) return current
   const aiConfigManager: AIConfigManager = {
     ...current.aiConfigManager,
-    providers: data.providers,
+    // 手工编辑的配置可能把 customFields 写成空值（`customFields:` → null），统一归一化为对象
+    providers: data.providers.map((p) => ({ ...p, customFields: p.customFields ?? {} })),
     currentModelId:
       typeof data.currentModelId === 'number' ? data.currentModelId : current.aiConfigManager.currentModelId
   }

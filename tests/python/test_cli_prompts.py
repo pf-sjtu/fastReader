@@ -1,6 +1,6 @@
 """
 Prompt 共享 / AI 客户端测试
-- 模板来自前端 YAML，默认版本 v1，配置可覆盖，目录可覆盖
+- 模板来自前端 YAML，默认版本 v2，配置可覆盖，目录可覆盖
 - 章节摘要与后处理的输入组装对齐前端（后处理只喂摘要 JSON）
 - 统一 _generate：语言指令走 system、重试、空内容判失败
 - 费用：定价表对齐前端、汇率来自配置
@@ -45,6 +45,10 @@ class FakeClient(AIClient):
         return reply
 
 
+# 这些用例依赖 v1 模板的措辞或只放了 v1 文件的临时目录：显式指定版本，不依赖默认值（默认为 v2）
+V1 = PromptConfig(currentVersion="v1")
+
+
 class TestYamlPrompts:
     def test_both_versions_load_from_shared_yaml(self):
         for version in ("v1", "v2"):
@@ -64,7 +68,7 @@ class TestYamlPrompts:
         (tmp_path / "v1-prompts.yaml").write_text(
             "chapterSummary:\n  fiction: F\n  nonFiction: N\nconnectionAnalysis: C\noverallSummary: O\n",
             encoding="utf-8")
-        templates = PromptTemplates(prompts_dir=str(tmp_path))
+        templates = PromptTemplates(prompt_config=V1, prompts_dir=str(tmp_path))
         assert templates.get_prompt("chapterSummary", "fiction") == "F"
         assert templates.get_prompt("overallSummary") == "O"
 
@@ -83,7 +87,7 @@ class TestYamlPrompts:
 
 class TestPromptAssembly:
     def test_chapter_prompt_substitutes_placeholders_v1(self):
-        prompt = PromptTemplates().build_chapter_prompt("标题甲", "正文乙", "non-fiction")
+        prompt = PromptTemplates(prompt_config=V1).build_chapter_prompt("标题甲", "正文乙", "non-fiction")
         assert "章节标题：标题甲" in prompt and "正文乙" in prompt
         assert "{{" not in prompt
 
@@ -94,7 +98,7 @@ class TestPromptAssembly:
 
     def test_chapter_prompt_appends_when_no_placeholder(self):
         """自定义模板无占位符时按前端 aiService 的方式追加标题与正文"""
-        cfg = PromptConfig(versions={"v1": PromptVersionConfig(chapterSummary_nonFiction="请总结")})
+        cfg = PromptConfig(versions={"v1": PromptVersionConfig(chapterSummary_nonFiction="请总结")}, currentVersion="v1")
         prompt = PromptTemplates(prompt_config=cfg).build_chapter_prompt("标题甲", "正文乙", "non-fiction")
         assert prompt == "请总结\n\n章节标题: 标题甲\n\n章节内容:\n正文乙"
 
@@ -106,7 +110,7 @@ class TestPromptAssembly:
 
     def test_connections_prompt_appends_without_placeholder(self, tmp_path):
         (tmp_path / "v1-prompts.yaml").write_text("connectionAnalysis: 分析\n", encoding="utf-8")
-        prompt = PromptTemplates(prompts_dir=str(tmp_path)).build_connections_prompt([{"index": 1}])
+        prompt = PromptTemplates(prompt_config=V1, prompts_dir=str(tmp_path)).build_connections_prompt([{"index": 1}])
         assert prompt.startswith("分析\n\n已处理的章节列表:\n")
 
     def test_overall_prompt_both_styles(self, tmp_path):
@@ -114,7 +118,7 @@ class TestPromptAssembly:
         prompt = PromptTemplates().build_overall_prompt("书名X", items, "关联Y")
         assert "《书名X》" in prompt and "关联Y" in prompt and '"summary":"s"' in prompt
         (tmp_path / "v1-prompts.yaml").write_text("overallSummary: 总结\n", encoding="utf-8")
-        prompt = PromptTemplates(prompts_dir=str(tmp_path)).build_overall_prompt("书名X", items, "关联Y")
+        prompt = PromptTemplates(prompt_config=V1, prompts_dir=str(tmp_path)).build_overall_prompt("书名X", items, "关联Y")
         assert prompt.startswith("总结\n\n书名: 书名X\n\n已处理的章节列表:\n")
         assert prompt.endswith("章节关联分析:\n关联Y")
 

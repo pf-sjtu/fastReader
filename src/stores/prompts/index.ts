@@ -4,12 +4,14 @@ import { persist } from 'zustand/middleware'
 import type { PromptConfig, PromptVersionConfig } from '../types'
 import {
   DEFAULT_PROMPT_CONFIG,
-  DEFAULT_PROMPT_CONFIG_V2
+  DEFAULT_PROMPT_CONFIG_V2,
+  DEFAULT_PROMPT_CONFIG_BY_VERSION,
+  DEFAULT_PROMPT_VERSION
 } from '../../services/prompts/templates'
 
 export const PROMPT_STORAGE_KEY = 'ebook-prompt-config'
 
-const defaultPromptConfig: PromptConfig = DEFAULT_PROMPT_CONFIG
+const defaultPromptConfig: PromptConfig = DEFAULT_PROMPT_CONFIG_BY_VERSION[DEFAULT_PROMPT_VERSION]
 const defaultPromptVersionConfig: PromptVersionConfig = {
   v1: DEFAULT_PROMPT_CONFIG,
   v2: DEFAULT_PROMPT_CONFIG_V2
@@ -38,7 +40,7 @@ export const usePromptStore = create<PromptState>()(
     (set) => ({
       promptConfig: defaultPromptConfig,
       promptVersionConfig: defaultPromptVersionConfig,
-      currentPromptVersion: 'v1',
+      currentPromptVersion: DEFAULT_PROMPT_VERSION,
 
       setCurrentPromptVersion: (version) =>
         set((state) => {

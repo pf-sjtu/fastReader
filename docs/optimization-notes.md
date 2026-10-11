@@ -61,4 +61,6 @@
 ### 已知取舍
 - CSP `connect-src` 只放行 https 与本机 http：局域网 http Ollama（如 `192.168.x.x:11434`）会被拦截，需改用 https 反代或本机地址
 - AI 代理只接受 https 公网 base：公网 IP 上的 http 自建服务商会被拒
+- 默认 prompt 版本为 v2（v2 结构更完整）：前端 `DEFAULT_PROMPT_VERSION` 与 CLI `DEFAULT_PROMPT_VERSION` 必须一致；已持久化为 v1 的用户保持 v1（无法区分「主动选择」与「沿用旧默认」，不擅自改动）
+- 旧版导出配置（`tests/fixtures/config/legacy-export-2026-08.yaml`，由真实导出脱敏）前端 `importConfig` 与 CLI `ConfigLoader` 均可直接读取；导入时 `connectionStatus` 重置为 `disconnected`（运行时状态不随备份迁移），`customFields` 空值归一化为对象
 - 输出语言 auto：前端跟随界面语言，CLI 跟随原书语言（CLI 无界面）

@@ -1,8 +1,9 @@
-// 思维导图默认 prompt（用户未配置时的兜底，取 v1 YAML 模板）
+// 思维导图默认 prompt（用户未配置时的兜底，取默认版本 YAML 模板）
 import { getMindmapPrompt } from './config/promptLoader'
+import { DEFAULT_PROMPT_VERSION } from './templates'
 
-export const getChapterMindMapPrompt = (): string => getMindmapPrompt('v1', 'chapter')
+export const getChapterMindMapPrompt = (): string => getMindmapPrompt(DEFAULT_PROMPT_VERSION, 'chapter')
 
-export const getMindMapArrowPrompt = (): string => getMindmapPrompt('v1', 'arrow')
+export const getMindMapArrowPrompt = (): string => getMindmapPrompt(DEFAULT_PROMPT_VERSION, 'arrow')
 
-export const getCombinedMindMapPrompt = (): string => getMindmapPrompt('v1', 'combined')
+export const getCombinedMindMapPrompt = (): string => getMindmapPrompt(DEFAULT_PROMPT_VERSION, 'combined')

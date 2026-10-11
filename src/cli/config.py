@@ -16,7 +16,7 @@ SUPPORTED_MODES = ("summary",)
 SUPPORTED_DETECTION_MODES = ("normal", "epub-toc")
 SUPPORTED_PROVIDERS = ("gemini", "openai", "302.ai")
 DEFAULT_CHAPTER_CONCURRENCY = 3  # 与前端 chapterConcurrency 默认值一致
-DEFAULT_PROMPT_VERSION = "v1"    # 与前端 configStore currentPromptVersion 默认值一致
+DEFAULT_PROMPT_VERSION = "v2"    # 与前端 DEFAULT_PROMPT_VERSION（services/prompts/templates）一致
 
 
 @dataclass

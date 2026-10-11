@@ -124,3 +124,11 @@ export type PromptType = 'chapterSummary' | 'mindmap' | 'connectionAnalysis' | '
 export type BookType = 'fiction' | 'non-fiction'
 export type MindmapType = 'chapter' | 'arrow' | 'combined'
 export type PromptVersion = 'v1' | 'v2'
+
+/** 默认 prompt 版本（v2 结构更完整）；新用户、重置、未配置时的兜底均以此为准，CLI 的 DEFAULT_PROMPT_VERSION 与之保持一致 */
+export const DEFAULT_PROMPT_VERSION: PromptVersion = 'v2'
+
+export const DEFAULT_PROMPT_CONFIG_BY_VERSION = {
+  v1: DEFAULT_PROMPT_CONFIG,
+  v2: DEFAULT_PROMPT_CONFIG_V2,
+} as const

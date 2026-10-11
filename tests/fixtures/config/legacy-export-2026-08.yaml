@@ -1,0 +1,595 @@
+version: 1.0.0
+exportTime: 2026-08-03T09:39:34.265Z
+config:
+  aiConfigManager:
+    providers:
+      - provider: openai
+        apiKey: sk-test-0000000000
+        apiUrl: https://llm.example.com/v1
+        model: grok-4.5:online
+        temperature: 0.7
+        proxyUrl: ""
+        proxyEnabled: false
+        customFields: {}
+      - provider: openai
+        apiKey: sk-test-0000000000
+        apiUrl: https://llm.example.com/v1
+        model: gpt-5.6-luna:online
+        temperature: 0.7
+        proxyUrl: ""
+        proxyEnabled: false
+        customFields: {}
+      - provider: openai
+        apiKey: sk-test-0000000000
+        apiUrl: https://llm.example.com/v1
+        model: deepseek-v4-flash
+        temperature: 0.7
+        proxyUrl: ""
+        proxyEnabled: false
+        customFields: {}
+      - provider: openai
+        apiKey: sk-test-0000000000
+        apiUrl: https://llm.example.com/v1
+        model: MiniMax-M3
+        temperature: 0.7
+        proxyUrl: ""
+        proxyEnabled: false
+        customFields: {}
+      - provider: openai
+        apiKey: sk-test-0000000000
+        apiUrl: https://llm.example.com/v1
+        model: glm-5.2
+        temperature: 0.7
+        proxyUrl: ""
+        proxyEnabled: false
+        customFields: {}
+    currentModelId: 5
+  processingOptions:
+    processingMode: summary
+    bookType: non-fiction
+    useSmartDetection: false
+    skipNonEssentialChapters: false
+    maxSubChapterDepth: 1
+    outputLanguage: zh
+    chapterDetectionMode: epub-toc
+    epubTocDepth: 1
+    chapterNamingMode: auto
+    enableNotification: true
+  webdavConfig:
+    enabled: true
+    serverUrl: https://dav.example.com/dav/
+    username: test-user
+    password: test-password
+    appName: fastReader_test
+    autoSync: true
+    syncPath: /fastReader
+    lastSyncTime: 2026-08-03T09:38:06.631Z
+    connectionStatus: error
+  promptVersionConfig:
+    v1:
+      chapterSummary:
+        fiction: |
+          请为以下章节内容生成一个详细总结：
+
+          章节标题：{{title}}
+
+          章节内容：
+          {{content}}
+
+          请用自然流畅的语言总结本章内容，包括主要情节发展、重要人物表现、关键观点或转折，以及本章在整个故事中的作用和意义。
+
+          注意：如果内容是致谢、目录、前言、序言等无实质故事内容的页面，请直接回复"无需总结"。
+
+          重要：请保持原文的段落结构和换行，不要删除或合并段落。
+        nonFiction: |
+          请为以下社科类书籍章节内容生成一个详细总结：
+
+          章节标题：{{title}}
+
+          章节内容：
+          {{content}}
+
+          请用自然流畅的语言总结本章内容，包括：
+
+          - 主要观点，以及支持这个观点的案例或研究发现
+          - 关键概念
+          - 保留几句有洞见的观点原文
+          - 给出指导实际生活的建议或应用（必须与此章节内容强关联）
+
+          重要：请保持原文的段落结构和换行，不要删除或合并段落。
+      mindmap:
+        chapter: |
+          ```ts
+          export interface NodeObj {
+            topic: string
+            id: string
+            tags?: string[]
+            children?: NodeObj[]
+          }
+          // 总结父id的第start到end个节点的内容
+          export interface Summary {
+            id: string
+            label: string
+            /**
+             * parent node id of the summary
+             */
+            parent: string
+            /**
+             * start index of the summary
+             */
+            start: number
+            /**
+             * end index of the summary
+             */
+            end: number
+          }
+          ```
+
+          使用符合  {
+            nodeData: NodeObj
+            summaries?: Summary[]
+          } 格式的 JSON 回复用户，这是一个表达**思维导图数据**的递归结构。
+
+          **注意！！nodeData、summaries 在同一层级！！**
+
+          **严格遵守**：
+          - 节点 ID 使用递增数字即可
+          - 注意不要一昧使用兄弟节点关系，适当应用父子级别的分层
+          - 向节点插入 tags 可选：核心、案例、实践、金句
+          - Summary 是总结多个同父节点的子节点的工具，会使用花括号把总结文本显示在指定子节点侧边，因为节点存在两侧分布的情况，禁止总结根节点
+          - 适当添加 Summary，不要添加多余的 Summary
+          - 最后添加一个金句节点记录几句本章金句
+          - 适当添加表达该节点内涵的 emoji
+          - 确保JSON格式正确，不要返回任何JSON以外的内容
+          - 如果内容是致谢、目录、前言、序言、参考文献、出版社介绍、引用说明等的页面，请直接回复"{nodeData:null}"
+        arrow: >
+          你需要为已有的思维导图添加箭头连接，以显示不同节点之间的关联关系。
+
+          ```
+
+          export interface NodeObj {
+            topic: string
+            id: string
+            tags?: string[]
+            children?: NodeObj[]
+          }
+
+
+          export interface Arrow {
+            id: string
+            /**
+             * label of arrow
+             */
+            label: string
+            /**
+             * id of start node
+             */
+            from: string
+            /**
+             * id of end node
+             */
+            to: string
+            /**
+             * offset of control point from start point
+             */
+            delta1: {
+              x: number
+              y: number
+            }
+            /**
+             * offset of control point from end point
+             */
+            delta2: {
+              x: number
+              y: number
+            }
+            /**
+             * whether the arrow is bidirectional
+             */
+            bidirectional?: boolean
+          }
+
+          ```
+
+
+          使用符合  {
+            arrows?: Arrow[]
+          } 格式的 JSON 回复用户。
+
+
+
+
+          **严格遵守**：
+
+          - Arrow 可以添加连接任意节点的箭头，label 间接说明两个节点的联系，delta 的默认值为
+          50,50。**直接的父子关系不需要链接**
+
+          - **直接的父子关系不需要使用 Arrow 链接**
+
+          - 只能添加 6 条以下 Arrow，请对最关键的节点关系进行链接
+
+          - 确保JSON格式正确，不要返回任何JSON以外的内容
+        combined: |
+          请将以下所有章节内容整合为一个完整的思维导图：
+
+          ```ts
+          export interface NodeObj {
+            topic: string
+            id: string
+            tags?: string[]
+            children?: NodeObj[]
+          }
+          // 总结父id的第start到end个节点的内容
+          export interface Summary {
+            id: string
+            label: string
+            /**
+             * parent node id of the summary
+             */
+            parent: string
+            /**
+             * start index of the summary
+             */
+            start: number
+            /**
+             * end index of the summary
+             */
+            end: number
+          }
+          ```
+
+          使用符合  {
+            nodeData: NodeObj
+            summaries?: Summary[]
+          } 格式的 JSON 回复用户，这是一个表达**整书思维导图数据**的递归结构。
+
+          **注意！！nodeData、summaries 在同一层级！！**
+
+          **严格遵守**：
+          - 以书籍主题作为根节点，各章节作为主要分支
+          - 节点 ID 使用递增数字即可
+          - 注意章节之间的逻辑关系和层次结构
+          - 向节点插入 tags 可选：核心、案例、实践、金句
+          - Summary 是总结多个同父节点的子节点的工具
+          - 适当添加 Summary，不要添加多余的 Summary
+          - 适当添加表达该节点内涵的 emoji
+          - 确保JSON格式正确，不要返回任何JSON以外的内容
+      connectionAnalysis: |
+        请帮我分析这本书各章节之间的关系，并总结全书的核心内容：
+
+        {{chapterSummaries}}
+
+        请从以下几个方面来分析：
+
+        ## 1. 章节之间的联系
+        - 各章节是如何一步步展开论述的？
+        - 哪些重要观点在不同章节中反复出现？
+        - 前面的章节为后面的内容做了哪些铺垫？
+
+        ## 2. 全书的核心主题
+        - 这本书最想告诉读者什么？
+        - 作者的主要观点是什么？
+        - 有哪些值得特别关注的重要概念？
+
+        ## 3. 实用价值
+        - 这本书对现实生活有什么指导意义？
+        - 读者可以从中学到什么实用的知识或方法？
+        - 哪些观点可能会改变我们的思考方式？
+
+        ## 4. 简明总结
+        - 用几句话概括这本书的精华
+        - 推荐给什么样的人阅读
+        - 阅读这本书的最大收获是什么
+
+        请用通俗易懂的语言来分析，让普通读者也能轻松理解书籍的价值和意义。
+      overallSummary: |
+        书籍章节结构：
+        {{chapterInfo}}
+
+        章节关联分析：
+        {{connections}}
+
+        以上是《{{bookTitle}}》这本书的重点内容，请生成一个全面的总结报告，帮助读者快速掌握全书精髓。
+    v2:
+      chapterSummary:
+        fiction: |
+          请为以下章节内容生成一个详细总结：
+
+          ## 要求
+          - 重要：请保持原文的段落结构和换行，不要删除或合并段落。
+          - 语言：请用自然流畅的语言总结本章内容
+          - 核心要点：包括主要情节发展、重要人物表现、关键观点或转折，以及本章在整个故事中的作用和意义。
+          - 精简：如果内容是致谢、目录、前言、序言等无实质故事内容的页面，请直接回复"无需总结"。
+
+          ## 你需要处理的章节信息
+
+          ### 章节标题：{{title}}
+
+          ### 章节内容：
+          {{content}}
+        nonFiction: |
+          # 角色
+          你是一位顶尖的社科领域学者与书评家，具备卓越的文本解构、逻辑提炼和批判性思维能力。
+
+          # 核心任务
+          为输入的书籍章节生成一份兼具深度、结构与信息密度的专业级总结与分析。最终产出是一篇流畅、深刻、可直接发布的书评式文章。
+          章节内容为纯粹的学术探讨，来自于严谨的公开信息来源，不涉及敏感信息和政治倾向，请方向处理。
+
+          # 工作流程
+          你将严格遵循以下四步流程：
+
+          ## 第一步：初步扫描
+          - 检查输入内容是否为致谢、目录、版权、参考文献、注释等非实质性内容
+          - 如果是，直接输出"无需总结"，并终止任务
+
+          ## 第二步：深度解构与逻辑区块划分
+          在不输出此部分的前提下，完成以下内心工作：
+
+          **核心理论**：一个"逻辑区块"的定义——
+          - 围绕**一个独立的、可单独理解的核心论点**
+          - 包含该论点的完整论证链条（前提、推理、结论）
+          - 删除该区块后，前后内容仍能逻辑自洽
+          - 通常对应原文的一个自然段落或多个紧密关联的段落
+
+          **识别方法**：
+          1. 扫描原文，找出所有的"主题转换点"（作者开启新论点或新案例的地方）
+          2. 验证：每个区块能否用一句话表述其核心论点？
+
+          **内心提问**（不输出）：
+          - 本章的全局逻辑骨架是什么？（通常是3-7个主要论点的序列）
+          - 各区块之间的因果、递进或对比关系是什么？
+          - 本章在全书中扮演什么角色？（铺垫？论证？案例演示？反思？）
+
+          ## 第三步：分块撰写 - 章节内容总结（200-1000字）
+
+          **原则**：
+          - 严格按照原文顺序逐个处理每个逻辑区块
+          - 每个区块输出时不必单独成段，可以按需分段，也可以和前文合并（如果每区块输出太短或者相关性强）
+          - 行文自然，语句通顺，逻辑严密，想象你是在用作者的视角、和原文相同的叙事人称（不改变人称）写一篇完整文章，而非机械性、旁观者角度做讲解介绍
+
+          **信息密度至上**：
+          - 优先保留：关键数据、时间节点、人物名字、事件转折、核心案例、具体数字
+          - 删除：定义式的展开、解释性的冗余语句、一般性的背景陈述
+          - 改造范例：将"讲师采用科学的方法分析市场，注重实验和调查"改为"讲师强调实验而非直觉"
+
+          **格式化标记的严格分层**：
+
+          | 标记 | 定义 | 使用原则 | 示例 |
+          |------|------|--------|------|
+          | `**加粗**` | 该区块的唯一核心主旨句 | 每个区块最多1处；必须是该区块最本质的论点 | **破产风险随赌注非线性增大** |
+          | `***加粗斜体***` | 该区块内部的因果转折或深层洞察 | 每个区块0-3处；必须重视论点的深度，而非重复 | ***成功的秘诀在于一致性执行，而非法则本身*** |
+          | `*斜体*` | 具体案例、数字、原文短语、情景细节 | 可多次使用；用于补充说明和增加信息密度 | *1984年2月民用燃料油交易*、*获利78,000美元* |
+          | `` `专有名词` `` | 系统性关键概念（仅在首次出现或特别强调时） | 每个区块最多3-5个；指系统/框架中的专有术语 | `N值（真实波动幅度均值）`、`唐奇安通道法` |
+          | `> 引用` | 需要独立成行的原文引用 | 仅用于特别有代表性的原文；不超过2-3句 | > 结果偏好效应 |
+
+          **禁止的标记用法**：
+          - 不要对背景信息、人物特征、一般性描述使用加粗斜体
+          - 不要对所有轻度"重要"的词汇都加标记
+          - 不要用标记标注解释或定义（如 `***资金管理是指***`）
+          - 不要在一个区块内使用超过4处加粗/加粗斜体
+
+          ## 第四步：整合升华 - 全章总结与反思（250-600字）
+
+          分为两个连贯的部分，但不分别标题：
+
+          **第一部分：全章脉络总结与结构评析（100-200字）**
+          - 目标：回答"本章的逻辑骨架是什么？它如何推进全书的论述？"
+          - 方法：用高度凝练的语言，系统性地梳理各主要论点之间的关系
+          - **关键**：不是重述内容，而是分析结构——区块之间的因果链、递进关系、对比逻辑
+          - 示例框架（仅显示思路，实际输出需要用自然语言组织）：[论点A]→[论点B]→[论点C]，[核心主张]。
+
+          **第二部分：评价、反思与启发性问题（150-400字）**
+
+          包含以下三个子要素（作为一个连贯段落整体呈现，不分别标题）：
+
+          1. **核心评价**（50-80字）：
+            - 呈现你对章节内容的核心判断
+            - 必须基于具体的文本证据或逻辑链条，而非笼统陈述
+            - 示例：✓ "[具体对比]展现了[现象]，揭示了[深层问题]"
+            - 反例：✗ "这一章很深刻，展现了人性的复杂性"
+
+          2. **延伸思考**（80-150字）：
+            - 结合你的知识储备，指出章节论点的：
+              - **理论延伸**：与其他领域的联系、与已有理论的对话
+              - **现实应用**：论点在实践中的有效性与局限
+              - **时代性思考**：章节观点在当前背景下的适用性与需要调整的地方
+            - 示例思路（实际输出时请发散思维）：基于[时代背景]，在[当前背景]下需要考虑[新因素]...
+
+          3. **启发性问题**（3个，每个占一行，各占20-40字）：
+            - 问题应形成**递进的梯度**，而非平行的列举
+
+          ---
+
+          ## 绝对禁令
+
+          - **禁止任何形式的"模型人格"输出**：不包含问候语、解释性文字（如"好的"、"这是对本章的总结"、"分为以下几部分"、"本章首先介绍了"）、标题序号或谦词
+          - **禁止使用Markdown标题（`#`）和分割线（`---`）**：直接输出正文
+          - **禁止重述与冗余**：同一信息不重复出现在分块总结与全章总结中
+          - **禁止标记滥用**：不要试图用标记"装饰"内容；标记必须服从逻辑层级，不是视觉装饰
+          - **禁止解释性展开**：定义式的语句（如"X是指...""Y的意思是..."）应改为直接陈述
+          - **禁止启发性问题的泛泛性**：每个问题都必须回扣章节的具体内容，而非通用的哲学问题
+
+          ---
+
+          ## 输入格式
+
+          ### 章节标题：{{title}}
+
+          ### 章节内容：
+          {{content}}
+
+          ---
+
+          ## 输出检查清单（自我验证）
+
+          发送输出前，请在内心检查以下项目：
+
+          - [ ] 没有包含任何问候语、解释性文字或标签序号？
+          - [ ] 是否遵循了"一个区块=一个核心论点"的划分原则？
+          - [ ] 所有的加粗和加粗斜体是否都严格遵循了定义、格式之间是否冲突需要修正？
+          - [ ] 有没有出现"资金管理是指...""破产风险是..."这样的解释性句子？改为了直接陈述？
+          - [ ] 全章总结中的"脉络总结"部分是否在分析结构而非重述内容？
+          - [ ] 3个启发性问题是否形成了递进梯度（微观→中观→宏观）？
+          - [ ] 每个问题是否都明确回扣了章节的具体论述或案例？
+          - [ ] 有没有使用Markdown标题或分割线（禁止使用）？
+      mindmap:
+        chapter: |
+          ```ts
+          export interface NodeObj {
+            topic: string
+            id: string
+            tags?: string[]
+            children?: NodeObj[]
+          }
+          // 总结父id的第start到end个节点的内容
+          export interface Summary {
+            id: string
+            label: string
+            parent: string
+            start: number
+            end: number
+          }
+          ```
+
+          任务：分析以下章节内容，生成符合以下格式的JSON思维导图数据：
+          {
+            nodeData: NodeObj
+            summaries?: Summary[]
+          }
+
+          严格规则：
+          1. 节点ID使用递增数字
+          2. 适当应用父子级别的分层，不要只使用兄弟节点关系
+          3. 可选标签：核心、案例、实践、金句
+          4. Summary用于总结同父节点的子节点，显示在侧边，禁止总结根节点
+          5. 适当添加Summary，不要多余
+          6. 最后添加一个金句节点记录本章金句
+          7. 适当添加表达节点内涵的emoji
+          8. 如果内容是致谢、目录、前言、序言、参考文献等页面，直接回复"{nodeData:null}"
+          9. 只输出JSON格式，不要输出任何解释性文字、问候语或无关内容
+
+          输出格式：纯JSON，无任何前缀或后缀文字
+        arrow: |
+          ```ts
+          export interface NodeObj {
+            topic: string
+            id: string
+            tags?: string[]
+            children?: NodeObj[]
+          }
+
+          export interface Arrow {
+            id: string
+            label: string
+            from: string
+            to: string
+            delta1: { x: number; y: number }
+            delta2: { x: number; y: number }
+            bidirectional?: boolean
+          }
+          ```
+
+          任务：为已有思维导图添加箭头连接，输出符合以下格式的JSON：
+          {
+            arrows?: Arrow[]
+          }
+
+          严格规则：
+          1. Arrow连接任意节点，label说明节点联系，delta默认值50,50
+          2. 直接的父子关系不需要使用Arrow
+          3. 最多添加6条Arrow，只连接最关键的节点关系
+          4. 只输出JSON格式，不要输出任何解释性文字、问候语或无关内容
+
+          输出格式：纯JSON，无任何前缀或后缀文字
+        combined: |
+          ```ts
+          export interface NodeObj {
+            topic: string
+            id: string
+            tags?: string[]
+            children?: NodeObj[]
+          }
+          // 总结父id的第start到end个节点的内容
+          export interface Summary {
+            id: string
+            label: string
+            parent: string
+            start: number
+            end: number
+          }
+          ```
+
+          任务：分析整书章节结构，生成符合以下格式的JSON思维导图数据：
+          {
+            nodeData: NodeObj
+            summaries?: Summary[]
+          }
+
+          严格规则：
+          1. 节点ID使用递增数字
+          2. 体现整书的逻辑结构和层次关系
+          3. 可选标签：核心、案例、实践、金句
+          4. Summary用于总结同父节点的子节点，显示在侧边
+          5. 适当添加Summary，不要多余
+          6. 最后添加一个金句节点记录全书金句
+          7. 适当添加表达节点内涵的emoji
+          8. 只输出JSON格式，不要输出任何解释性文字、问候语或无关内容
+
+          输出格式：纯JSON，无任何前缀或后缀文字
+      connectionAnalysis: |
+        任务：分析以下各章节之间的关系，并总结全书的核心内容。
+
+        章节总结内容：
+        {{chapterSummaries}}
+
+        分析要求：
+        1. 章节之间的联系
+           - 各章节是如何一步步展开论述的？
+           - 哪些重要观点在不同章节中反复出现？
+           - 前面的章节为后面的内容做了哪些铺垫？
+
+        2. 全书的核心主题
+           - 这本书最想告诉读者什么？
+           - 作者的主要观点是什么？
+           - 有哪些值得特别关注的重要概念？
+
+        3. 实用价值
+           - 这本书对现实生活有什么指导意义？
+           - 读者可以从中学到什么实用的知识或方法？
+           - 哪些观点可能会改变我们的思考方式？
+
+        4. 简明总结
+           - 用几句话概括这本书的精华
+           - 推荐给什么样的人阅读
+           - 阅读这本书的最大收获是什么
+
+        输出要求：
+        - 用通俗易懂的语言分析，让普通读者轻松理解
+        - 结构清晰，层次分明
+        - 不要输出任何问候语、解释性文字或无关内容
+        - 直接输出分析内容，无任何前缀或后缀文字
+      overallSummary: |
+        任务：基于以下信息生成《{{bookTitle}}》的全面总结报告。
+
+        书籍章节结构：
+        {{chapterInfo}}
+
+        章节关联分析：
+        {{connections}}
+
+        总结要求：
+        1. 生成一个全面的总结报告，帮助读者快速掌握全书精髓
+        2. 内容应包括：
+           - 书籍核心观点和主要论述
+           - 重要的概念和理论框架
+           - 实际应用价值和指导意义
+           - 适合的读者群体
+           - 阅读本书的主要收获
+
+        输出要求：
+        - 语言简洁明了，重点突出
+        - 结构清晰，便于阅读
+        - 不要输出任何问候语、解释性文字或无关内容
+        - 直接输出总结内容，无任何前缀或后缀文字
+  currentPromptVersion: v2
+  tokenUsage: 0

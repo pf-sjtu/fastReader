@@ -48,7 +48,7 @@ advanced:
   requestTimeout: 120                          # 单次 AI 请求超时（秒）
   promptsDir: ""                               # Prompt YAML 目录（默认使用仓库 src/services/prompts/config）
 
-# Prompt 版本（可选，默认 v1，与 Web 端一致）；也可粘贴 Web 端导出的 promptVersionConfig 覆盖模板
+# Prompt 版本（可选，默认 v2，与 Web 端一致）；也可粘贴 Web 端导出的 promptVersionConfig 覆盖模板
 # currentPromptVersion: v1
 
 # 环境变量说明：

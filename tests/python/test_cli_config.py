@@ -276,13 +276,16 @@ class TestPromptTemplates:
         assert prompt != ""
         assert "角色" in prompt
 
-    def test_default_version_matches_frontend_v1(self):
-        """未指定版本时与前端 configStore 默认一致（v1）"""
+    def test_default_version_matches_frontend_v2(self):
+        """未指定版本时与前端 DEFAULT_PROMPT_VERSION 一致（v2）"""
         from src.cli.ai_client import PromptTemplates
 
         prompts = PromptTemplates(prompt_config=None)
-        assert prompts.version == "v1"
-        assert "社科类书籍章节" in prompts.get_prompt('chapterSummary', 'non-fiction')
+        assert prompts.version == "v2"
+        # v2 社科模板以角色设定开头；v1 以「请为以下社科类书籍章节」开头，二者可区分
+        text = prompts.get_prompt('chapterSummary', 'non-fiction')
+        assert text.startswith('# 角色')
+        assert "社科类书籍章节" not in text[:40]
 
     def test_default_prompts_v2_fiction(self):
         """测试 v2 小说默认 Prompt"""

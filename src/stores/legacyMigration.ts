@@ -7,6 +7,7 @@ import { useWebDAVStore, WEBDAV_STORAGE_KEY } from './webdav'
 import { usePromptStore, PROMPT_STORAGE_KEY } from './prompts'
 import { useCoreStore, CORE_STORAGE_KEY } from './core'
 import { logger } from '../lib/logger'
+import { DEFAULT_PROMPT_VERSION } from '../services/prompts/templates'
 
 export const LEGACY_CONFIG_KEY = 'ebook-mindmap-config'
 
@@ -68,7 +69,11 @@ export function migrateLegacyConfig(storage: Storage | null = getStorage()): boo
   }
 
   if (legacy.promptVersionConfig?.v1 && legacy.promptVersionConfig?.v2 && absent(PROMPT_STORAGE_KEY)) {
-    const version = legacy.currentPromptVersion === 'v2' ? 'v2' : 'v1'
+    // 显式记录的版本原样保留；未记录时按当前默认
+    const version =
+      legacy.currentPromptVersion === 'v1' || legacy.currentPromptVersion === 'v2'
+        ? legacy.currentPromptVersion
+        : DEFAULT_PROMPT_VERSION
     usePromptStore.setState({
       promptVersionConfig: legacy.promptVersionConfig,
       currentPromptVersion: version,
