@@ -4,6 +4,8 @@
  * @deprecated 请从 @/types 导入
  */
 
+import type { AIProvider, GenerateContentRequest, GenerateContentResponse } from '../../types/ai'
+
 // 从统一类型定义重新导出，保持向后兼容
 export type {
   AIProviderType,
@@ -25,4 +27,22 @@ export interface Chapter {
   title: string
   content: string
   summary?: string
+}
+
+/** AI 调用选项（C1）：取消信号一路传到 provider 的 fetch 与重试 sleep */
+export interface AICallOptions {
+  signal?: AbortSignal
+  /** 输出因长度上限被截断时回调（AIService 返回字符串，无法挂字段） */
+  onTruncated?: (info: { finishReason?: string }) => void
+}
+
+/** provider 返回：在通用响应上补充截断标记 */
+export interface AIGenerateResult extends GenerateContentResponse {
+  /** finishReason 为 length / MAX_TOKENS 时为 true */
+  truncated?: boolean
+}
+
+/** 支持取消的 provider（本目录所有实现均满足） */
+export interface CancellableAIProvider extends AIProvider {
+  generateContent(request: GenerateContentRequest, opts?: AICallOptions): Promise<AIGenerateResult>
 }

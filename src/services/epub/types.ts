@@ -4,10 +4,11 @@
  */
 
 // 从统一类型定义重新导出，保持向后兼容
+// EPUB 处理器产出的章节/书籍带 href/tocItem/depth 与 book 实例，故此处 ChapterData/BookData 指 EPUB 扩展类型
 export type {
-  ChapterData,
+  EpubChapterData as ChapterData,
   EpubChapterData as ChapterDataEpub,
-  BookData,
+  EpubBookData as BookData,
   EpubBookData as BookDataEpub,
   ChapterInfo,
   ChapterNamingMode,

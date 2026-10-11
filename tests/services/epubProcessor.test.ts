@@ -76,6 +76,27 @@ describe('EpubProcessor', () => {
     })
   })
 
+  describe('destroy', () => {
+    it('释放 parseEpub 打开的 Book，且幂等', async () => {
+      const bookData = await processor.parseEpub(new File(['mock-epub'], 'ok.epub'))
+      const destroySpy = vi.spyOn(bookData.book, 'destroy')
+      processor.destroy()
+      processor.destroy()
+      expect(destroySpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('Book.destroy 抛错不影响调用方', async () => {
+      const bookData = await processor.parseEpub(new File(['mock-epub'], 'bad.epub'))
+      vi.spyOn(bookData.book, 'destroy').mockImplementation(() => {
+        throw new Error('x')
+      })
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      expect(() => processor.destroy()).not.toThrow()
+      expect(warn).toHaveBeenCalled()
+      warn.mockRestore()
+    })
+  })
+
   describe('shouldSkipChapter', () => {
     it('should skip chapter with keywords', () => {
       const result = processorInternals.shouldSkipChapter('Preface')

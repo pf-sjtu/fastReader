@@ -17,15 +17,14 @@ function toStandaloneArrayBuffer(nodeBuffer: Buffer): ArrayBuffer {
   return copy
 }
 
-describe('EpubProcessor with real book', () => {
+// 夹具在 gitignore 的 tmp/epub 下：新 clone / CI 中不存在时跳过
+const hasFixture = fs.existsSync(EPUB_PATH)
+
+describe.skipIf(!hasFixture)('EpubProcessor with real book', () => {
   let processor: EpubProcessor
   let file: File
 
   beforeAll(() => {
-    if (!fs.existsSync(EPUB_PATH)) {
-      throw new Error(`真实 EPUB 夹具不存在: ${EPUB_PATH}`)
-    }
-
     processor = new EpubProcessor()
 
     const nodeBuffer = fs.readFileSync(EPUB_PATH)

@@ -1,6 +1,4 @@
-// 章节关联分析相关的prompt模板
-export const getChapterConnectionsAnalysisPrompt = (chapterSummaries: string, customPrompt?: string) => {
-  const template = customPrompt || ''
-  
-  return template.replace('{{chapterSummaries}}', chapterSummaries)
-}
+// 章节关联分析默认 prompt（用户未配置时的兜底，取 v1 YAML 模板）
+import { getConnectionAnalysisPrompt } from './config/promptLoader'
+
+export const getChapterConnectionsAnalysisPrompt = (): string => getConnectionAnalysisPrompt('v1')

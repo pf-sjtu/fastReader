@@ -3,13 +3,13 @@
  * 根据配置创建对应的 Provider 实例
  */
 
-import type { AIProvider, AIProviderConfig, AIProviderType, AIServiceOptions } from './types'
+import type { AIProviderConfig, AIProviderType, AIServiceOptions, CancellableAIProvider } from './types'
 import { GeminiProvider } from './geminiProvider'
 import { OpenAIProvider, Provider302 } from './openaiProvider'
 import { OllamaProvider } from './ollamaProvider'
 
 // Provider 注册表
-const providerRegistry: Record<AIProviderType, new (config: AIProviderConfig, options?: AIServiceOptions) => AIProvider> = {
+const providerRegistry: Record<AIProviderType, new (config: AIProviderConfig, options?: AIServiceOptions) => CancellableAIProvider> = {
   gemini: GeminiProvider,
   openai: OpenAIProvider,
   '302.ai': Provider302,
@@ -23,7 +23,7 @@ const providerRegistry: Record<AIProviderType, new (config: AIProviderConfig, op
 export function createAIProvider(
   config: AIProviderConfig,
   options?: AIServiceOptions
-): AIProvider {
+): CancellableAIProvider {
   const ProviderClass = providerRegistry[config.provider]
 
   if (!ProviderClass) {

@@ -9,12 +9,16 @@ describe('detectBookFormat', () => {
   it('识别 epub/pdf 扩展名', () => {
     expect(detectBookFormat(fakeFile('a.epub'))).toBe('epub')
     expect(detectBookFormat(fakeFile('B.PDF'))).toBe('pdf')
+    expect(detectBookFormat(fakeFile('X.EPUB'))).toBe('epub')
+    expect(detectBookFormat(fakeFile(' 书.Epub '))).toBe('epub')
   })
 
   it('识别全角点与 MIME', () => {
     expect(detectBookFormat(fakeFile('书．epub'))).toBe('epub')
     expect(detectBookFormat(fakeFile('x', 'application/epub+zip'))).toBe('epub')
     expect(detectBookFormat(fakeFile('x', 'application/pdf'))).toBe('pdf')
+    expect(detectBookFormat(fakeFile('x', 'APPLICATION/EPUB+ZIP'))).toBe('epub')
+    expect(detectBookFormat(fakeFile('x', 'Application/PDF'))).toBe('pdf')
   })
 
   it('拒绝 md/空名', () => {

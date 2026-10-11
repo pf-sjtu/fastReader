@@ -1,12 +1,17 @@
 import * as pdfjsLib from 'pdfjs-dist'
-// 动态导入worker以避免构建错误
-if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url).toString()
-}
+// pdfjs-dist 5.x 只提供 .mjs worker；?url 让 Vite 把 worker 作为资源产出到 dist/assets
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { matchesSkipChapterTitle } from './constants'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { ConcurrencyLimiter } from '../utils/async'
 import { logger } from '../lib/logger'
+
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+}
+
+/** 无目录且未检测到章节时，按固定页数分组：每组最多 N 页 */
+export const PDF_PAGES_PER_GROUP = 10
 
 // 格式化章节编号，支持补零
 const formatChapterNumber = (index: number, total: number = 99): string => {
@@ -45,6 +50,15 @@ export interface BookData {
 }
 
 export class PdfProcessor {
+  /** parsePdf 交给调用方的文档实例，destroy() 时统一释放 */
+  private openDocuments = new Set<PDFDocumentProxy>()
+
+  /** 释放本实例打开的全部 PDF 文档（幂等） */
+  async destroy(): Promise<void> {
+    const docs = [...this.openDocuments]
+    this.openDocuments.clear()
+    await Promise.all(docs.map((doc) => this.safeDestroyPdf(doc, 'destroy')))
+  }
 
   private extractTextFromItems(items: unknown[]): string {
     return items
@@ -111,6 +125,7 @@ export class PdfProcessor {
       })
 
       keepPdfForCaller = true
+      this.openDocuments.add(pdf)
       return {
         title,
         author,
@@ -165,19 +180,16 @@ export class PdfProcessor {
   }
 
   async extractChapters(file: File, useSmartDetection: boolean = false, skipNonEssentialChapters: boolean = true, maxSubChapterDepth: number = 0, chapterNamingMode: 'auto' | 'numbered' = 'auto', chapterDetectionMode: 'normal' | 'smart' | 'epub-toc' = 'normal', _epubTocDepth: number = 1, existingPdf?: PDFDocumentProxy): Promise<ChapterData[]> {
-    let pdf: PDFDocumentProxy | null = null
-    let shouldDestroyPdf = false
+    let ownedPdf: PDFDocumentProxy | null = null
 
     try {
       void _epubTocDepth
 
-      if (existingPdf) {
-        pdf = existingPdf
-      } else {
+      if (!existingPdf) {
         const arrayBuffer = await file.arrayBuffer()
-        pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-        shouldDestroyPdf = true
+        ownedPdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
       }
+      const pdf: PDFDocumentProxy = existingPdf ?? ownedPdf!
 
       const chapters: ChapterData[] = []
       const totalPages = pdf.numPages
@@ -279,8 +291,8 @@ export class PdfProcessor {
         }
 
         if (detectedChapters.length === 0) {
-          // 如果没有检测到章节，按页面分组
-          const pagesPerChapter = Math.max(1, Math.floor(totalPages / 10)) // 每章最多10页
+          // 如果没有检测到章节，按页面分组：每组最多 PDF_PAGES_PER_GROUP 页
+          const pagesPerChapter = PDF_PAGES_PER_GROUP
 
           for (let i = 0; i < totalPages; i += pagesPerChapter) {
             const endPage = Math.min(i + pagesPerChapter, totalPages)
@@ -319,9 +331,7 @@ export class PdfProcessor {
       logger.error(`❌ [DEBUG] 提取章节失败:`, error)
       throw new Error(`提取章节失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
-      if (shouldDestroyPdf) {
-        await this.safeDestroyPdf(pdf, 'extractChapters')
-      }
+      await this.safeDestroyPdf(ownedPdf, 'extractChapters')
     }
   }
 
@@ -392,12 +402,15 @@ export class PdfProcessor {
     for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
       try {
         const page = await pdf.getPage(pageNum)
-        const textContent = await page.getTextContent()
-
-        const pageText = this.extractTextFromItems(textContent.items as unknown[])
-
-        if (pageText.length > 0) {
-          pageTexts.push(pageText)
+        try {
+          const textContent = await page.getTextContent()
+          const pageText = this.extractTextFromItems(textContent.items as unknown[])
+          if (pageText.length > 0) {
+            pageTexts.push(pageText)
+          }
+        } finally {
+          // 每页用完立即释放，降低大 PDF 峰值内存
+          page.cleanup?.()
         }
       } catch (error) {
         logger.warn(`⚠️ [DEBUG] 跳过第${pageNum}页:`, error)

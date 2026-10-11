@@ -92,8 +92,9 @@ export function clampConcurrency(
 export class ConcurrencyLimiter {
   private running = 0
   private queue: Array<() => void> = []
+  private maxConcurrency: number
 
-  constructor(private maxConcurrency: number) {
+  constructor(maxConcurrency: number) {
     this.maxConcurrency = clampConcurrency(maxConcurrency, 1, 100)
   }
 
@@ -140,48 +141,79 @@ export interface MapPoolOrderedOptions<T> {
   onOrderedResult?: (result: T, index: number) => void
   /** 任意一项完成时（可能乱序） */
   onItemSettled?: (result: T, index: number) => void
+  /** 触发后不再出队新任务，并以 AbortError reject */
+  signal?: AbortSignal
 }
 
 /**
  * 有限并发 map：任务可并行执行，结果数组与 onOrderedResult 严格按输入索引顺序。
  * 呈现顺序不受完成先后影响。
+ *
+ * 失败语义（C2）：任一任务 reject 或 signal 触发后立即 reject（首个错误 / AbortError），
+ * 不再出队新任务；已开始的任务自然结束，但其结果不再触发回调。
  */
-export async function mapPoolOrdered<TItem, TResult>(
+export function mapPoolOrdered<TItem, TResult>(
   items: readonly TItem[],
   mapper: (item: TItem, index: number) => Promise<TResult>,
   options: MapPoolOrderedOptions<TResult> = {}
 ): Promise<TResult[]> {
   const n = items.length
-  if (n === 0) return []
+  const { signal } = options
+  if (signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'))
+  if (n === 0) return Promise.resolve([])
 
-  const concurrency = clampConcurrency(options.concurrency ?? 3)
-  const limiter = new ConcurrencyLimiter(concurrency)
+  const concurrency = Math.min(clampConcurrency(options.concurrency ?? 3), n)
   const slots: TResult[] = new Array(n)
   const completed = new Array<boolean>(n).fill(false)
   let nextToCommit = 0
+  let nextToStart = 0
+  let finished = false
 
-  const commitReady = () => {
-    while (nextToCommit < n && completed[nextToCommit]) {
-      options.onOrderedResult?.(slots[nextToCommit], nextToCommit)
-      nextToCommit++
+  return new Promise<TResult[]>((resolve, reject) => {
+    const fail = (error: unknown) => {
+      if (finished) return
+      finished = true
+      signal?.removeEventListener('abort', onAbort)
+      reject(error)
     }
-  }
+    const onAbort = () => fail(new DOMException('Aborted', 'AbortError'))
+    signal?.addEventListener('abort', onAbort, { once: true })
 
-  await Promise.all(
-    items.map((item, index) =>
-      limiter.execute(async () => {
-        const result = await mapper(item, index)
+    const commitReady = () => {
+      while (nextToCommit < n && completed[nextToCommit]) {
+        options.onOrderedResult?.(slots[nextToCommit], nextToCommit)
+        nextToCommit++
+      }
+    }
+
+    const worker = async (): Promise<void> => {
+      while (!finished && nextToStart < n) {
+        const index = nextToStart++
+        const result = await mapper(items[index], index)
+        if (finished) return
         slots[index] = result
         completed[index] = true
         options.onItemSettled?.(result, index)
         // 同步推进有序提交（JS 单线程，无需锁）
         commitReady()
-        return result
-      })
-    )
-  )
+      }
+    }
 
-  return slots
+    let active = concurrency
+    for (let w = 0; w < concurrency; w++) {
+      worker().then(
+        () => {
+          active--
+          if (active === 0 && !finished) {
+            finished = true
+            signal?.removeEventListener('abort', onAbort)
+            resolve(slots)
+          }
+        },
+        fail
+      )
+    }
+  })
 }
 
 /**

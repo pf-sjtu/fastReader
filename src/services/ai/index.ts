@@ -4,6 +4,8 @@
 
 // 类型定义
 export type {
+  AICallOptions,
+  AIGenerateResult,
   AIProvider,
   AIProviderConfig,
   AIProviderType,
@@ -28,12 +30,14 @@ export { GeminiProvider } from './geminiProvider'
 export { OpenAIProvider, Provider302 } from './openaiProvider'
 export { OllamaProvider } from './ollamaProvider'
 
+// 错误与取消
+export { AIRequestError, isAbortError, createAbortError } from './retry'
+
 // 工具函数
 export {
   isBrowser,
   sleep,
   proxyFetch,
-  getHttpsProxyAgent,
   identifyRateLimitError,
   calculateRetryDelay
 } from './utils'

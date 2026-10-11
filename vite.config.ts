@@ -14,9 +14,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
-      // 浏览器包不引入 Node 代理实现（仅 CLI/Node 路径需要）
-      "https-proxy-agent": resolve(__dirname, "src/shims/empty-module.ts"),
-      "agent-base": resolve(__dirname, "src/shims/empty-module.ts"),
     },
   },
   build: {

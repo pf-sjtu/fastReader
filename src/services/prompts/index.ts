@@ -23,5 +23,6 @@ export const getTestConnectionPrompt = () => getSystemPrompt('testConnection')
 
 export {
   getChapterMindMapPrompt,
-  getMindMapArrowPrompt
+  getMindMapArrowPrompt,
+  getCombinedMindMapPrompt
 } from './mindmap'

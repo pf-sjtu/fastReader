@@ -13,6 +13,8 @@
 
 // 重新导出所有类型和类，保持向后兼容
 export type {
+  AICallOptions,
+  AIGenerateResult,
   AIProvider,
   AIProviderConfig,
   AIProviderType,
@@ -36,6 +38,7 @@ export { BaseAIProvider } from './ai/baseProvider'
 export { GeminiProvider } from './ai/geminiProvider'
 export { OpenAIProvider, Provider302 } from './ai/openaiProvider'
 export { OllamaProvider } from './ai/ollamaProvider'
+export { AIRequestError, isAbortError, createAbortError } from './ai/retry'
 
 // 导出工厂函数
 export {
@@ -49,7 +52,6 @@ export {
   isBrowser,
   sleep,
   proxyFetch,
-  getHttpsProxyAgent,
   identifyRateLimitError,
   calculateRetryDelay
 } from './ai/utils'

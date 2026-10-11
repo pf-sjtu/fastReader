@@ -4,26 +4,46 @@
  */
 
 import type {
-  AIProvider,
+  AICallOptions,
+  AIGenerateResult,
   AIProviderConfig,
+  AIProviderType,
   AIServiceOptions,
+  CancellableAIProvider,
   GenerateContentRequest,
-  GenerateContentResponse,
   RateLimitError
 } from './types'
+import { identifyRateLimitError, proxyFetch } from './utils'
 import {
-  sleep,
-  identifyRateLimitError,
-  calculateRetryDelay,
-  proxyFetch
-} from './utils'
+  AIRequestError,
+  abortableSleep,
+  backoffDelay,
+  classifyError,
+  DEFAULT_RETRY_BASE_MS,
+  getServerRetryAfterMs,
+  parseRetryAfterBody,
+  parseRetryAfterHeader,
+  RETRY_MAX_DELAY_MS,
+  RETRY_TRANSIENT_BASE_MAX_MS,
+  setProviderCooldown,
+  throwIfAborted,
+  waitProviderCooldown
+} from './retry'
+import { logger } from '../../lib/logger'
 
-export abstract class BaseAIProvider implements AIProvider {
+/** finishReason 表示输出被长度上限截断（OpenAI: length；Gemini: MAX_TOKENS） */
+export function isTruncatedFinishReason(reason: string | undefined | null): boolean {
+  if (!reason) return false
+  const r = reason.toLowerCase()
+  return r === 'length' || r === 'max_tokens'
+}
+
+export abstract class BaseAIProvider implements CancellableAIProvider {
   protected config: AIProviderConfig
-  protected options: Required<AIServiceOptions>
+  protected options: { maxRetries: number; baseRetryDelay: number }
   protected onTokenUsage?: (tokens: number) => void
 
-  abstract readonly type: string
+  abstract readonly type: AIProviderType
   abstract readonly name: string
   abstract readonly supportsSystemPrompt: boolean
   abstract readonly supportsStreaming: boolean
@@ -32,7 +52,7 @@ export abstract class BaseAIProvider implements AIProvider {
     this.config = config
     this.options = {
       maxRetries: options?.maxRetries ?? 3,
-      baseRetryDelay: options?.baseRetryDelay ?? 60000
+      baseRetryDelay: options?.baseRetryDelay ?? DEFAULT_RETRY_BASE_MS
     }
     this.onTokenUsage = options?.onTokenUsage
   }
@@ -41,22 +61,29 @@ export abstract class BaseAIProvider implements AIProvider {
    * 子类实现的具体生成逻辑
    */
   protected abstract doGenerateContent(
-    request: GenerateContentRequest
-  ): Promise<GenerateContentResponse>
+    request: GenerateContentRequest,
+    opts?: AICallOptions
+  ): Promise<AIGenerateResult>
 
   /**
    * 生成内容（带重试逻辑）
    */
-  async generateContent(request: GenerateContentRequest): Promise<GenerateContentResponse> {
-    return this.executeWithRetry(
-      () => this.doGenerateContent(request),
+  async generateContent(request: GenerateContentRequest, opts?: AICallOptions): Promise<AIGenerateResult> {
+    const result = await this.executeWithRetry(
+      () => this.doGenerateContent(request, opts),
       '内容生成',
       {
         provider: this.type,
         model: this.config.model,
         promptLength: request.prompt.length
-      }
+      },
+      opts?.signal
     )
+    if (isTruncatedFinishReason(result.finishReason)) {
+      logger.warn(`[AI服务] ${this.name} 输出被长度上限截断 (finishReason=${result.finishReason})`)
+      return { ...result, truncated: true }
+    }
+    return result
   }
 
   /**
@@ -79,89 +106,70 @@ export abstract class BaseAIProvider implements AIProvider {
     }
   }
 
+  /** 同一 provider（类型 + 接口地址）共享 429 冷却 */
+  protected get cooldownKey(): string {
+    return `${this.type}|${this.config.apiUrl ?? ''}`
+  }
+
   /**
-   * 带重试的执行包装器
+   * 带重试的执行包装器：
+   * - 只对 408/429/5xx/网络错误重试；400/401/403/404/上下文超长立即失败
+   * - 429：优先 Retry-After，否则按 baseRetryDelay 指数退避，并设置 provider 级冷却
+   * - signal 触发时立即中断等待并抛 AbortError
    */
   protected async executeWithRetry<T>(
     operation: () => Promise<T>,
     operationName: string,
-    context?: Record<string, unknown>
+    context?: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<T> {
-    let lastError: Error | null = null
+    const maxAttempts = Math.max(1, this.options.maxRetries)
 
-    for (let attempt = 1; attempt <= this.options.maxRetries; attempt++) {
+    for (let attempt = 1; ; attempt++) {
+      // 其他并发请求刚收到 429：冷却结束前不发出
+      await waitProviderCooldown(this.cooldownKey, signal)
+      throwIfAborted(signal)
+
       try {
         if (attempt > 1) {
-          console.log(`[AI服务] ${operationName} - 尝试第 ${attempt} 次`)
+          logger.info(`[AI服务] ${operationName} - 尝试第 ${attempt} 次`)
         }
-
-        const result = await operation()
-
-        if (attempt > 1) {
-          console.log(`[AI服务] ${operationName} - 第 ${attempt} 次尝试成功`)
-        }
-
-        return result
+        return await operation()
       } catch (error: unknown) {
-        lastError = error as Error
+        const kind = signal?.aborted ? 'abort' : classifyError(error)
+        if (kind === 'abort') throw error
 
-        // 尝试识别流量限制错误
-        const rateLimitError = this.identifyRateLimitError(error as Error)
-
-        if (rateLimitError && attempt < this.options.maxRetries) {
-          const retryDelay = rateLimitError.retryAfter
-            ? rateLimitError.retryAfter * 1000
-            : calculateRetryDelay(attempt, this.options.baseRetryDelay)
-
-          console.log(
-            `[AI服务] ${operationName} - 触发流量限制，${retryDelay / 1000}秒后重试...`
-          )
-          await sleep(retryDelay)
-          continue
-        }
-
-        // 如果已达到最大重试次数，抛出错误
-        if (attempt >= this.options.maxRetries) {
-          console.error(`[AI服务] ${operationName} - 达到最大重试次数，操作失败:`, {
-            error: lastError?.message || lastError,
-            context,
-            attempts: attempt
+        const message = (error as Error)?.message || String(error)
+        if (kind === 'fatal' || kind === 'context' || attempt >= maxAttempts) {
+          logger.error(`[AI服务] ${operationName} - 失败（${kind}，第 ${attempt} 次）:`, {
+            error: message,
+            context
           })
-          throw lastError
+          throw error
         }
 
-        // 上下文过长 / 请求体过大：重试无意义，立即失败
-        const msg = (lastError?.message || String(error || '')).toLowerCase()
-        const status = (error as { status?: number })?.status
-        if (
-          status === 413 ||
-          (status === 400 &&
-            (msg.includes('context') ||
-              msg.includes('token') ||
-              msg.includes('too long') ||
-              msg.includes('maximum'))) ||
-          msg.includes('context length') ||
-          msg.includes('context_length') ||
-          msg.includes('maximum context') ||
-          msg.includes('too many tokens') ||
-          msg.includes('prompt is too long')
-        ) {
-          console.error(`[AI服务] ${operationName} - 上下文/长度错误，不再重试:`, lastError?.message)
-          throw lastError
+        const serverDelay = getServerRetryAfterMs(error)
+        let delay: number
+        if (serverDelay !== undefined) {
+          delay = Math.min(serverDelay, RETRY_MAX_DELAY_MS)
+        } else if (kind === 'rateLimit') {
+          delay = backoffDelay(attempt, this.options.baseRetryDelay)
+        } else {
+          delay = backoffDelay(attempt, Math.min(this.options.baseRetryDelay, RETRY_TRANSIENT_BASE_MAX_MS))
         }
 
-        // 其他错误：用较短退避（默认 baseRetryDelay 常为 60s，会像卡死）
-        const base = Math.min(this.options.baseRetryDelay || 2000, 5000)
-        const retryDelay = calculateRetryDelay(attempt, base)
-        console.log(
-          `[AI服务] ${operationName} - 第 ${attempt} 次尝试失败，${retryDelay / 1000}秒后重试...`,
-          (error as Error)?.message || error
-        )
-        await sleep(retryDelay)
+        if (kind === 'rateLimit') {
+          setProviderCooldown(this.cooldownKey, delay)
+          logger.warn(`[AI服务] ${operationName} - 触发流量限制，${Math.round(delay / 1000)}秒后重试`)
+        } else {
+          logger.warn(
+            `[AI服务] ${operationName} - 第 ${attempt} 次失败，${Math.round(delay / 1000)}秒后重试:`,
+            message
+          )
+        }
+        await abortableSleep(delay, signal)
       }
     }
-
-    throw lastError
   }
 
   /**
@@ -169,6 +177,19 @@ export abstract class BaseAIProvider implements AIProvider {
    */
   protected identifyRateLimitError(error: Error): RateLimitError | null {
     return identifyRateLimitError(error, (error as { status?: number }).status, (error as { body?: string }).body)
+  }
+
+  /**
+   * 把非 2xx 响应转为带 status/body/retryAfterMs 的错误
+   */
+  protected async createHttpError(response: Response, label: string): Promise<AIRequestError> {
+    const body = await response.text().catch(() => '')
+    const retryAfterMs =
+      parseRetryAfterHeader(response.headers?.get?.('retry-after')) ?? parseRetryAfterBody(body)
+    return new AIRequestError(
+      `${label} API请求失败: ${response.status} ${response.statusText} - ${body}`,
+      { status: response.status, body, retryAfterMs }
+    )
   }
 
   /**
@@ -184,7 +205,7 @@ export abstract class BaseAIProvider implements AIProvider {
    * 代理请求包装器
    */
   protected async fetchWithProxy(url: string, options: RequestInit): Promise<Response> {
-    return proxyFetch(url, options, this.config.proxyEnabled ? this.config.proxyUrl : undefined)
+    return proxyFetch(url, options)
   }
 
   /**

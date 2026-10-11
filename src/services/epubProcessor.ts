@@ -22,6 +22,21 @@ export type { ChapterData, BookData }
 
 export class EpubProcessor {
   private processingFiles = new Set<string>()
+  /** parseEpub 打开的 Book 实例，destroy() 时统一释放 */
+  private openBooks = new Set<Book>()
+
+  /** 释放本实例打开的全部 EPUB（幂等） */
+  destroy(): void {
+    const books = [...this.openBooks]
+    this.openBooks.clear()
+    for (const book of books) {
+      try {
+        book.destroy()
+      } catch (error) {
+        console.warn('[EpubProcessor] 释放 EPUB 资源失败:', error)
+      }
+    }
+  }
 
   async parseEpub(file: File): Promise<BookData> {
     try {
@@ -34,8 +49,18 @@ export class EpubProcessor {
       try {
         const arrayBuffer = await file.arrayBuffer()
         const book = ePub()
-        await book.open(arrayBuffer)
-        await book.ready
+        try {
+          await book.open(arrayBuffer)
+          await book.ready
+        } catch (openError) {
+          try {
+            book.destroy()
+          } catch {
+            // ignore
+          }
+          throw openError
+        }
+        this.openBooks.add(book)
 
         const title = book.packaging?.metadata?.title || '未知标题'
         const author = book.packaging?.metadata?.creator || '未知作者'

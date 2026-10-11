@@ -3,11 +3,18 @@
  * 支持 OpenAI 兼容的 API 格式
  */
 
-import type { GenerateContentRequest, GenerateContentResponse, AIProviderConfig, AIServiceOptions } from './types'
+import type {
+  AICallOptions,
+  AIGenerateResult,
+  AIProviderConfig,
+  AIServiceOptions,
+  GenerateContentRequest
+} from './types'
 import { BaseAIProvider } from './baseProvider'
+import { logger } from '../../lib/logger'
 
 export class OpenAIProvider extends BaseAIProvider {
-  readonly type: 'openai' | '302.ai'
+  readonly type: AIProviderConfig['provider']
   readonly name: string
   readonly supportsSystemPrompt = true
   readonly supportsStreaming = false
@@ -19,7 +26,7 @@ export class OpenAIProvider extends BaseAIProvider {
   }
 
   protected getDefaultModel(): string {
-    return this.config.provider === '302.ai' ? 'gpt-3.5-turbo' : 'gpt-3.5-turbo'
+    return 'gpt-3.5-turbo'
   }
 
   protected get apiUrl(): string {
@@ -32,25 +39,21 @@ export class OpenAIProvider extends BaseAIProvider {
   }
 
   protected async doGenerateContent(
-    request: GenerateContentRequest
-  ): Promise<GenerateContentResponse> {
+    request: GenerateContentRequest,
+    opts?: AICallOptions
+  ): Promise<AIGenerateResult> {
     const { prompt, systemPrompt, temperature } = request
 
     const messages: Array<{ role: 'system' | 'user'; content: string }> = []
 
-    if (systemPrompt && this.supportsSystemPrompt) {
-      messages.push({
-        role: 'system',
-        content: systemPrompt
-      })
+    // system prompt 只放 system 消息，避免在 user 消息末尾重复一遍浪费 token
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt })
     }
+    messages.push({ role: 'user', content: prompt })
 
-    messages.push({
-      role: 'user',
-      content: systemPrompt ? `${prompt}\n\n${systemPrompt}` : prompt
-    })
-
-    const response = await this.fetchWithProxy(`${this.apiUrl}/chat/completions`, {
+    const url = `${this.apiUrl}/chat/completions`
+    const response = await this.fetchWithProxy(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -60,26 +63,19 @@ export class OpenAIProvider extends BaseAIProvider {
         model: this.model,
         messages,
         temperature: temperature ?? this.temperature
-      })
+      }),
+      signal: opts?.signal
     })
 
     if (!response.ok) {
-      const errorBody = await response.text()
-      const error = new Error(
-        `${this.name} API请求失败: ${response.status} ${response.statusText} - ${errorBody}`
-      ) as Error & { status: number; body: string }
-      error.status = response.status
-      error.body = errorBody
-
-      console.error(`${this.name} API错误详情:`, {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorBody,
-        url: `${this.apiUrl}/chat/completions`,
+      const error = await this.createHttpError(response, this.name)
+      logger.error(`${this.name} API错误详情:`, {
+        status: error.status,
+        body: error.body,
+        url,
         model: this.model,
         provider: this.config.provider
       })
-
       throw error
     }
 

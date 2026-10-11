@@ -4,6 +4,7 @@
  */
 
 import type {
+  AICallOptions,
   AIProviderConfig,
   AIServiceOptions,
   Chapter,
@@ -19,14 +20,22 @@ import {
   getKeyChartsPrompt,
   getTestConnectionPrompt,
   getChapterMindMapPrompt,
-  getMindMapArrowPrompt
+  getMindMapArrowPrompt,
+  getCombinedMindMapPrompt
 } from '../prompts'
 import { parseCharts, type BookCharts } from '../../charts'
 import { getLanguageInstruction } from '../prompts/utils'
 import { createAIProvider } from './factory'
+import { RESULT_PREFIX, isUsableText } from '../../utils/resultStatus'
+import { logger } from '../../lib/logger'
 
 // 已跳过章节的标记前缀
-const SKIPPED_SUMMARY_PREFIX = '【已跳过】'
+const SKIPPED_SUMMARY_PREFIX = RESULT_PREFIX.chapterSkipped
+
+/** 后处理只喂可用章节（排除失败/跳过占位与空摘要） */
+function usableChapters<T extends { summary?: string }>(chapters: T[]): Array<T & { summary: string }> {
+  return chapters.filter((ch): ch is T & { summary: string } => isUsableText(ch.summary))
+}
 
 /**
  * 后处理（关联/全书总结）输入策略：
@@ -74,6 +83,19 @@ function prepareChapterSummariesForPostProcess(
     ...chapter,
     summary: truncateText(chapter.summary, per),
   }))
+}
+
+/** 从模型输出中提取第一个匹配的 JSON 片段；失败返回 null */
+function parseJsonMatch<T>(response: string, pattern: RegExp, label: string): T | null {
+  try {
+    const jsonMatch = response.match(pattern)
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]) as T
+    }
+  } catch (error) {
+    logger.error(`${label} JSON 解析失败:`, error)
+  }
+  return null
 }
 
 export class AIService {
@@ -147,8 +169,14 @@ export class AIService {
    */
   private async generateContent(
     prompt: string,
-    outputLanguage?: SupportedLanguage
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions
   ): Promise<string> {
+    // 带取消信号的请求不参与去重：共享的 promise 会被某一方的取消连带中断
+    if (opts?.signal) {
+      return this.doGenerateContent(prompt, outputLanguage, opts)
+    }
+
     const key = this.generateRequestKey(prompt, outputLanguage)
 
     // 检查是否有进行中的相同请求
@@ -158,7 +186,7 @@ export class AIService {
     }
 
     // 创建新请求
-    const promise = this.doGenerateContent(prompt, outputLanguage)
+    const promise = this.doGenerateContent(prompt, outputLanguage, opts)
     this.pendingRequests.set(key, promise)
 
     // 请求完成后移除
@@ -174,17 +202,26 @@ export class AIService {
    */
   private async doGenerateContent(
     prompt: string,
-    outputLanguage?: SupportedLanguage
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions
   ): Promise<string> {
     const provider = this.createProvider()
     const language = outputLanguage || 'en'
     const systemPrompt = getLanguageInstruction(language)
 
-    const response = await provider.generateContent({
-      prompt,
-      systemPrompt,
-      outputLanguage: language
-    })
+    const response = await provider.generateContent(
+      {
+        prompt,
+        systemPrompt,
+        outputLanguage: language
+      },
+      opts
+    )
+
+    if (response.truncated) {
+      logger.warn(`[AIService] 模型输出被截断 (finishReason=${response.finishReason})，结果可能不完整`)
+      opts?.onTruncated?.({ finishReason: response.finishReason })
+    }
 
     return response.content
   }
@@ -197,7 +234,8 @@ export class AIService {
     chapterContent: string,
     bookType: 'fiction' | 'non-fiction',
     outputLanguage?: SupportedLanguage,
-    customPrompt?: string
+    customPrompt?: string,
+    opts?: AICallOptions
   ): Promise<string> {
     const promptConfig = this.getCurrentPromptConfig()
 
@@ -212,11 +250,9 @@ export class AIService {
         ? promptConfig.chapterSummary.fiction || getFictionChapterSummaryPrompt()
         : promptConfig.chapterSummary.nonFiction || getNonFictionChapterSummaryPrompt()
 
-    const prompt = customPrompt
-      ? `${customPrompt}\n\n章节标题: ${chapterTitle}\n\n章节内容:\n${chapterContent}`
-      : `${basePrompt}\n\n章节标题: ${chapterTitle}\n\n章节内容:\n${chapterContent}`
+    const prompt = `${customPrompt || basePrompt}\n\n章节标题: ${chapterTitle}\n\n章节内容:\n${chapterContent}`
 
-    return this.generateContent(prompt, outputLanguage)
+    return this.generateContent(prompt, outputLanguage, opts)
   }
 
   /**
@@ -225,23 +261,22 @@ export class AIService {
    */
   async analyzeConnections(
     chapters: Chapter[],
-    outputLanguage?: SupportedLanguage
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions
   ): Promise<string> {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt =
       promptConfig.connectionAnalysis || getChapterConnectionsAnalysisPrompt()
 
-    const processedChapters = prepareChapterSummariesForPostProcess(
-      chapters.filter((ch) => !this.isSkippedSummary(ch.summary || ''))
-    )
+    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters))
 
     if (processedChapters.length < 2) {
       return '章节数量不足，无法分析关联。'
     }
 
-    const prompt = `${basePrompt}\n\n已处理的章节列表:\n${JSON.stringify(processedChapters, null, 2)}`
+    const prompt = `${basePrompt}\n\n已处理的章节列表:\n${JSON.stringify(processedChapters)}`
 
-    return this.generateContent(prompt, outputLanguage)
+    return this.generateContent(prompt, outputLanguage, opts)
   }
 
   /**
@@ -251,14 +286,13 @@ export class AIService {
     bookTitle: string,
     chapters: Chapter[],
     connections: string,
-    outputLanguage?: SupportedLanguage
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions
   ): Promise<string> {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.overallSummary || getOverallSummaryPrompt()
 
-    const processedChapters = prepareChapterSummariesForPostProcess(
-      chapters.filter((ch) => !this.isSkippedSummary(ch.summary || ''))
-    )
+    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters))
 
     if (processedChapters.length === 0) {
       return '没有可用的章节摘要，无法生成全书总结。'
@@ -270,9 +304,9 @@ export class AIService {
       POST_PROCESS_CONNECTIONS_SOFT_LIMIT
     )
 
-    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n已处理的章节列表:\n${JSON.stringify(processedChapters, null, 2)}\n\n章节关联分析:\n${connectionsText}`
+    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n已处理的章节列表:\n${JSON.stringify(processedChapters)}\n\n章节关联分析:\n${connectionsText}`
 
-    return this.generateContent(prompt, outputLanguage)
+    return this.generateContent(prompt, outputLanguage, opts)
   }
 
   /**
@@ -284,12 +318,11 @@ export class AIService {
     chapters: Chapter[],
     connections: string,
     overallSummary: string,
-    outputLanguage?: SupportedLanguage
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions
   ): Promise<BookCharts> {
     const basePrompt = getKeyChartsPrompt()
-    const processedChapters = prepareChapterSummariesForPostProcess(
-      chapters.filter((ch) => !this.isSkippedSummary(ch.summary || ''))
-    )
+    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters))
 
     if (processedChapters.length === 0) {
       throw new Error('没有可用的章节摘要，无法生成关键图表。')
@@ -304,9 +337,9 @@ export class AIService {
       POST_PROCESS_CONNECTIONS_SOFT_LIMIT
     )
 
-    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n章节摘要:\n${JSON.stringify(processedChapters, null, 2)}\n\n章节关联分析:\n${connectionsText}\n\n全书总结:\n${overallText}`
+    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n章节摘要:\n${JSON.stringify(processedChapters)}\n\n章节关联分析:\n${connectionsText}\n\n全书总结:\n${overallText}`
 
-    const response = await this.generateContent(prompt, outputLanguage)
+    const response = await this.generateContent(prompt, outputLanguage, opts)
     const charts = parseCharts(response)
     if (!charts) {
       throw new Error('关键图表 JSON 解析失败或无有效数据')
@@ -320,26 +353,16 @@ export class AIService {
   async generateChapterMindMap(
     chapterTitle: string,
     chapterContent: string,
-    outputLanguage?: SupportedLanguage
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions
   ): Promise<MindElixirData | null> {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.mindmap.chapter || getChapterMindMapPrompt()
 
     const prompt = `${basePrompt}\n\n章节标题: ${chapterTitle}\n\n章节内容:\n${chapterContent}`
 
-    const response = await this.generateContent(prompt, outputLanguage)
-
-    try {
-      // 尝试从响应中提取 JSON
-      const jsonMatch = response.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]) as MindElixirData
-      }
-    } catch (error) {
-      console.error('思维导图 JSON 解析失败:', error)
-    }
-
-    return null
+    const response = await this.generateContent(prompt, outputLanguage, opts)
+    return parseJsonMatch<MindElixirData>(response, /\{[\s\S]*\}/, '思维导图')
   }
 
   /**
@@ -347,34 +370,25 @@ export class AIService {
    */
   async generateMindMapArrows(
     chapters: Chapter[],
-    outputLanguage?: SupportedLanguage
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions
   ): Promise<Array<{ from: string; to: string; label: string }>> {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.mindmap.arrow || getMindMapArrowPrompt()
 
-    const chapterList = chapters
-      .filter(ch => !this.isSkippedSummary(ch.summary || ''))
-      .map((chapter, index) => ({
-        index: index + 1,
-        id: chapter.id,
-        title: chapter.title,
-        summary: chapter.summary
-      }))
+    const chapterList = usableChapters(chapters).map((chapter, index) => ({
+      index: index + 1,
+      id: chapter.id,
+      title: chapter.title,
+      summary: chapter.summary
+    }))
 
-    const prompt = `${basePrompt}\n\n章节列表:\n${JSON.stringify(chapterList, null, 2)}`
+    const prompt = `${basePrompt}\n\n章节列表:\n${JSON.stringify(chapterList)}`
 
-    const response = await this.generateContent(prompt, outputLanguage)
-
-    try {
-      const jsonMatch = response.match(/\[[\s\S]*\]/)
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0])
-      }
-    } catch (error) {
-      console.error('箭头 JSON 解析失败:', error)
-    }
-
-    return []
+    const response = await this.generateContent(prompt, outputLanguage, opts)
+    return (
+      parseJsonMatch<Array<{ from: string; to: string; label: string }>>(response, /\[[\s\S]*\]/, '箭头') ?? []
+    )
   }
 
   /**
@@ -383,38 +397,22 @@ export class AIService {
   async generateCombinedMindMap(
     bookTitle: string,
     chapters: Chapter[],
-    outputLanguage?: SupportedLanguage
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions
   ): Promise<MindElixirData | null> {
     const promptConfig = this.getCurrentPromptConfig()
-    const basePrompt = promptConfig.mindmap.combined || getChapterMindMapPrompt()
+    const basePrompt = promptConfig.mindmap.combined || getCombinedMindMapPrompt()
 
-    const processedChapters = prepareChapterSummariesForPostProcess(
-      chapters
-        .filter((ch) => !this.isSkippedSummary(ch.summary || ''))
-        .map((chapter) => ({
-          title: chapter.title,
-          summary: chapter.summary || chapter.title,
-        }))
-    )
+    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters))
 
     if (processedChapters.length === 0) {
       return null
     }
 
-    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n章节列表:\n${JSON.stringify(processedChapters, null, 2)}`
+    const prompt = `${basePrompt}\n\n书名: ${bookTitle}\n\n章节列表:\n${JSON.stringify(processedChapters)}`
 
-    const response = await this.generateContent(prompt, outputLanguage)
-
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]) as MindElixirData
-      }
-    } catch (error) {
-      console.error('思维导图 JSON 解析失败:', error)
-    }
-
-    return null
+    const response = await this.generateContent(prompt, outputLanguage, opts)
+    return parseJsonMatch<MindElixirData>(response, /\{[\s\S]*\}/, '思维导图')
   }
 
   /**
@@ -463,13 +461,6 @@ export class AIService {
    */
   private createSkippedSummary(reason?: string): string {
     return AIService.createSkippedSummary(reason)
-  }
-
-  /**
-   * 实例方法：检查是否为已跳过的总结
-   */
-  private isSkippedSummary(summary: string): boolean {
-    return AIService.isSkippedSummary(summary)
   }
 }
 

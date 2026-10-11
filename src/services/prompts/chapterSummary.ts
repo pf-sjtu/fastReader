@@ -1,16 +1,6 @@
-// 章节总结相关的prompt模板
-export const getFictionChapterSummaryPrompt = (title: string, content: string, customPrompt?: string) => {
-  const template = customPrompt || ''
-  
-  return template
-    .replace('{{title}}', title)
-    .replace('{{content}}', content)
-}
+// 章节总结默认 prompt（用户未配置时的兜底，取 v1 YAML 模板）
+import { getChapterSummaryPrompt } from './config/promptLoader'
 
-export const getNonFictionChapterSummaryPrompt = (title: string, content: string, customPrompt?: string) => {
-  const template = customPrompt || ''
-  
-  return template
-    .replace('{{title}}', title)
-    .replace('{{content}}', content)
-}
+export const getFictionChapterSummaryPrompt = (): string => getChapterSummaryPrompt('v1', 'fiction')
+
+export const getNonFictionChapterSummaryPrompt = (): string => getChapterSummaryPrompt('v1', 'nonFiction')

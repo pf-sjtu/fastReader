@@ -3,8 +3,9 @@
  * 本地部署的 LLM 服务
  */
 
-import type { GenerateContentRequest, GenerateContentResponse } from './types'
+import type { AICallOptions, AIGenerateResult, GenerateContentRequest } from './types'
 import { BaseAIProvider } from './baseProvider'
+import { logger } from '../../lib/logger'
 
 export class OllamaProvider extends BaseAIProvider {
   readonly type = 'ollama' as const
@@ -21,8 +22,9 @@ export class OllamaProvider extends BaseAIProvider {
   }
 
   protected async doGenerateContent(
-    request: GenerateContentRequest
-  ): Promise<GenerateContentResponse> {
+    request: GenerateContentRequest,
+    opts?: AICallOptions
+  ): Promise<AIGenerateResult> {
     const { prompt, systemPrompt, temperature } = request
 
     const messages: Array<{ role: 'system' | 'user'; content: string }> = []
@@ -48,7 +50,8 @@ export class OllamaProvider extends BaseAIProvider {
       requestHeaders['Authorization'] = `Bearer ${this.config.apiKey}`
     }
 
-    const response = await this.fetchWithProxy(`${this.apiUrl}/api/chat`, {
+    const url = `${this.apiUrl}/api/chat`
+    const response = await this.fetchWithProxy(url, {
       method: 'POST',
       headers: requestHeaders,
       body: JSON.stringify({
@@ -58,25 +61,18 @@ export class OllamaProvider extends BaseAIProvider {
         options: {
           temperature: temperature ?? this.temperature
         }
-      })
+      }),
+      signal: opts?.signal
     })
 
     if (!response.ok) {
-      const errorBody = await response.text()
-      const error = new Error(
-        `Ollama API请求失败: ${response.status} ${response.statusText} - ${errorBody}`
-      ) as Error & { status: number; body: string }
-      error.status = response.status
-      error.body = errorBody
-
-      console.error('Ollama API错误详情:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorBody,
-        url: `${this.apiUrl}/api/chat`,
+      const error = await this.createHttpError(response, 'Ollama')
+      logger.error('Ollama API错误详情:', {
+        status: error.status,
+        body: error.body,
+        url,
         model: this.model
       })
-
       throw error
     }
 
@@ -84,7 +80,8 @@ export class OllamaProvider extends BaseAIProvider {
 
     return {
       content: data.message?.content || '',
-      finishReason: data.done ? 'stop' : undefined
+      // 新版 Ollama 返回 done_reason（length 表示达到 num_predict 上限）
+      finishReason: data.done_reason ?? (data.done ? 'stop' : undefined)
     }
   }
 
