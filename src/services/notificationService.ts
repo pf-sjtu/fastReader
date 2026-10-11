@@ -1,4 +1,6 @@
 // 通知服务
+import i18n from '../i18n'
+
 export class NotificationService {
   private static instance: NotificationService
 
@@ -67,10 +69,10 @@ export class NotificationService {
 
   // 发送任务完成通知
   async sendTaskCompleteNotification(taskType: string, bookTitle?: string): Promise<void> {
-    const title = '任务完成'
-    const message = bookTitle 
-      ? `${taskType}已完成：${bookTitle}`
-      : `${taskType}已完成`
+    const title = i18n.t('notification.taskCompleteTitle')
+    const message = bookTitle
+      ? i18n.t('notification.taskCompleteBook', { task: taskType, book: bookTitle })
+      : i18n.t('notification.taskComplete', { task: taskType })
 
     await this.sendNotification(title, {
       body: message,
@@ -80,8 +82,8 @@ export class NotificationService {
 
   // 发送处理进度通知
   async sendProgressNotification(progress: number, currentStep: string): Promise<void> {
-    const title = '处理进度更新'
-    const message = `当前进度：${progress}% - ${currentStep}`
+    const title = i18n.t('notification.progressTitle')
+    const message = i18n.t('notification.progress', { progress, step: currentStep })
 
     await this.sendNotification(title, {
       body: message,
@@ -91,8 +93,8 @@ export class NotificationService {
 
   // 发送错误通知
   async sendErrorNotification(error: string): Promise<void> {
-    const title = '处理出错'
-    const message = `任务执行失败：${error}`
+    const title = i18n.t('notification.errorTitle')
+    const message = i18n.t('notification.error', { error })
 
     await this.sendNotification(title, {
       body: message,

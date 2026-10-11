@@ -68,6 +68,8 @@ export function pressKey(target: Element, key: string) {
 /** 轮询直到断言通过（异步 effect + 动态 import 的完成时机受负载影响） */
 export async function waitFor(assertion: () => void, timeoutMs = 3000) {
   const start = Date.now()
+  // 先在 act 内刷新一轮：让已排队的 promise 回调（setState）在 act 中完成，避免 "not wrapped in act" 警告
+  await flush(1)
   for (;;) {
     try {
       assertion()
@@ -77,4 +79,30 @@ export async function waitFor(assertion: () => void, timeoutMs = 3000) {
       await flush(1)
     }
   }
+}
+
+/** jsdom 缺少的 DOM API（Radix Select / Popper 需要） */
+export function stubDomForRadix() {
+  const proto = Element.prototype as unknown as Record<string, unknown>
+  proto.scrollIntoView ??= () => {}
+  proto.hasPointerCapture ??= () => false
+  proto.releasePointerCapture ??= () => {}
+  ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}
+
+/** 通过键盘操作 Radix Select：ArrowDown 打开，在选项上按 Enter 选中 */
+export async function selectOption(trigger: Element | null | undefined, optionText: string | RegExp) {
+  if (!trigger) throw new Error('selectOption: trigger 不存在')
+  pressKey(trigger, 'ArrowDown')
+  await flush(1)
+  const option = Array.from(document.querySelectorAll('[role="option"]')).find((o) =>
+    typeof optionText === 'string' ? o.textContent?.trim() === optionText : optionText.test(o.textContent ?? '')
+  )
+  if (!option) throw new Error(`selectOption: 未找到选项 ${String(optionText)}`)
+  pressKey(option, 'Enter')
+  await flush(1)
 }

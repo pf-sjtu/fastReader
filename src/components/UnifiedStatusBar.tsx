@@ -52,10 +52,10 @@ interface UnifiedStatusBarProps {
   className?: string
 }
 
-const MODE_LABEL: Record<string, string> = {
-  summary: '总结',
-  mindmap: '章节导图',
-  'combined-mindmap': '整书导图',
+const MODE_LABEL_KEY: Record<string, string> = {
+  summary: 'statusBar.mode.summary',
+  mindmap: 'statusBar.mode.mindmap',
+  'combined-mindmap': 'statusBar.mode.combinedMindmap',
 }
 
 export const UnifiedStatusBar = memo(function UnifiedStatusBar({
@@ -323,12 +323,12 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
             <div className="hidden sm:flex items-center gap-2 shrink-0">
               {processingMode && (
                 <Badge variant="outline" className="text-xs font-normal">
-                  {MODE_LABEL[processingMode] || processingMode}
+                  {MODE_LABEL_KEY[processingMode] ? t(MODE_LABEL_KEY[processingMode]) : processingMode}
                 </Badge>
               )}
               {!hasApiKey && (
                 <Badge variant="destructive" className="text-xs font-normal">
-                  未配置 API Key
+                  {t('statusBar.noApiKey')}
                 </Badge>
               )}
               {currentModel && (

@@ -52,8 +52,8 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
   const isSheet = variant === 'sheet'
 
   const progressLabel = isReadingMode
-    ? t('nav.readingProgress', '阅读进度')
-    : t('nav.processingProgress', '处理进度')
+    ? t('nav.readingProgress')
+    : t('nav.processingProgress')
 
   const indexById = useMemo(() => {
     const map = new Map<string, number>()

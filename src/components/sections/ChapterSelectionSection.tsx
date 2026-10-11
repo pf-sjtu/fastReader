@@ -11,7 +11,7 @@ import { List, Brain, Loader2, BookOpen, Filter, ArrowRight } from 'lucide-react
 import { toast } from 'sonner'
 import { useConfigStore } from '@/stores/configStore'
 import type { ChapterData } from '@/services/epubProcessor'
-import { memo, useState, useMemo, useEffect } from 'react'
+import { memo, useState, useMemo } from 'react'
 
 interface ChapterSelectionSectionProps {
   extractedChapters: ChapterData[]
@@ -48,7 +48,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
 
   // 全选模式：'all' = 全选所有, 'filter' = 按字符数筛选, 'range' = 定义首尾章节
   const [selectAllMode, setSelectAllMode] = useState<'all' | 'filter' | 'range'>('all')
-  const [charThreshold, setCharThreshold] = useState<number[]>([0])
+  const [rawThreshold, setCharThreshold] = useState(0)
   const [startChapterId, setStartChapterId] = useState<string>('')
   const [endChapterId, setEndChapterId] = useState<string>('')
 
@@ -71,12 +71,8 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
     }
   }, [chapterCharCounts])
 
-  // 初始化滑块值
-  useEffect(() => {
-    if (minChars !== maxChars && charThreshold[0] < minChars) {
-      setCharThreshold([minChars])
-    }
-  }, [minChars, maxChars])
+  // 阈值不低于当前书的最小章节字符数（派生值，换书时无需 effect 同步）
+  const charThreshold = minChars !== maxChars ? Math.max(rawThreshold, minChars) : rawThreshold
 
   // 格式化字符数为 k 单位（一位小数）
   const formatCharCount = (count: number): string => {
@@ -93,7 +89,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
       onSelectAll(true)
     } else if (mode === 'filter') {
       // 按字符数筛选后全选
-      applyThreshold(charThreshold[0])
+      applyThreshold(charThreshold)
     } else if (mode === 'range') {
       // 首尾章节模式：根据当前选择的首尾章节更新选中状态
       updateRangeSelection(startChapterId, endChapterId)
@@ -142,7 +138,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
 
   // 处理滑动条变更
   const handleThresholdChange = (value: number[]) => {
-    setCharThreshold(value)
+    setCharThreshold(value[0])
     // 如果当前是筛选模式，更新选中状态
     if (selectAllMode === 'filter') {
       applyThreshold(value[0])
@@ -174,7 +170,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
           {t('chapters.title')}
         </CardTitle>
         <CardDescription>
-          {bookData?.title} - {bookData?.author} | {t('chapters.totalChapters', { count: extractedChapters.length })}，{t('chapters.selectedChapters', { count: selectedChapters.size })}
+          {bookData?.title} - {bookData?.author} | {t('chapters.totalChapters', { count: extractedChapters.length })} · {t('chapters.selectedChapters', { count: selectedChapters.size })}
         </CardDescription>
         <div className="flex flex-col gap-3 mt-2">
           {/* 全选模式单选组 */}
@@ -188,7 +184,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="all" id="select-all" />
                   <Label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                    全选所有章节
+                    {t('chapters.selectModeAll')}
                   </Label>
                 </div>
 
@@ -196,14 +192,14 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
                   <RadioGroupItem value="filter" id="char-filter" />
                   <Label htmlFor="char-filter" className="text-sm font-medium flex items-center gap-1 cursor-pointer">
                     <Filter className="h-3 w-3" />
-                    按照字符数筛选
+                    {t('chapters.selectModeFilter')}
                   </Label>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="range" id="range-select" />
                   <Label htmlFor="range-select" className="text-sm font-medium cursor-pointer">
-                    定义首尾章节
+                    {t('chapters.selectModeRange')}
                   </Label>
                 </div>
               </div>
@@ -216,7 +212,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
                   </span>
                   <div className="flex-1 flex flex-col gap-1">
                     <Slider
-                      value={charThreshold}
+                      value={[charThreshold]}
                       onValueChange={handleThresholdChange}
                       min={minChars}
                       max={maxChars}
@@ -224,7 +220,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
                       className="flex-1"
                     />
                     <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>最小字符数: <span className="font-medium text-primary">{formatCharCount(charThreshold[0])}</span></span>
+                      <span>{t('chapters.minChars')} <span className="font-medium text-primary">{formatCharCount(charThreshold)}</span></span>
                       <span>{formatCharCount(maxChars)}</span>
                     </div>
                   </div>
@@ -235,10 +231,10 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
               {selectAllMode === 'range' && (
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-1 mt-1">
                   <div className="flex-1 min-w-0">
-                    <Label className="text-xs text-muted-foreground mb-1 block">起始章节</Label>
+                    <Label className="text-xs text-muted-foreground mb-1 block">{t('chapters.startChapter')}</Label>
                     <Select value={startChapterId} onValueChange={handleStartChapterChange}>
                       <SelectTrigger className="w-full min-h-9">
-                        <SelectValue placeholder="选择起始章节" />
+                        <SelectValue placeholder={t('chapters.selectStartChapter')} />
                       </SelectTrigger>
                       <SelectContent>
                         {extractedChapters.map((chapter) => (
@@ -253,10 +249,10 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
                   <ArrowRight className="h-4 w-4 text-muted-foreground hidden sm:block sm:mt-5 shrink-0" />
 
                   <div className="flex-1 min-w-0">
-                    <Label className="text-xs text-muted-foreground mb-1 block">结束章节</Label>
+                    <Label className="text-xs text-muted-foreground mb-1 block">{t('chapters.endChapter')}</Label>
                     <Select value={endChapterId} onValueChange={handleEndChapterChange}>
                       <SelectTrigger className="w-full min-h-9">
-                        <SelectValue placeholder="选择结束章节" />
+                        <SelectValue placeholder={t('chapters.selectEndChapter')} />
                       </SelectTrigger>
                       <SelectContent>
                         {extractedChapters.map((chapter) => (

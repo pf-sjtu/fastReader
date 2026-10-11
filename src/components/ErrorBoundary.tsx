@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import i18n from '../i18n'
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -42,14 +43,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     const message = error instanceof Error ? error.message : String(error)
     return {
       hasError: true,
-      message: message.trim() || '未知错误',
+      message: message.trim() || i18n.t('common.unknownError'),
       isChunkError: isChunkLoadError(error),
     }
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    const where = this.props.section ? `「${this.props.section}」` : '应用'
-    console.error(`${where}发生未捕获错误:`, error, errorInfo)
+    console.error(`[ErrorBoundary] ${this.props.section ?? 'app'} 发生未捕获错误:`, error, errorInfo)
   }
 
   handleReload = () => {
@@ -65,26 +65,26 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
     const { message, isChunkError } = this.state
 
-    const hint = isChunkError
-      ? '应用已更新，当前页面引用的资源已失效，请刷新页面加载最新版本。'
-      : '请刷新页面后重试。'
+    // 类组件不能用 useTranslation；渲染时读取 i18n.t，语言切换会随父组件重渲染生效
+    const hint = isChunkError ? i18n.t('errorBoundary.chunkHint') : i18n.t('errorBoundary.reloadHint')
+    const reloadLabel = i18n.t('errorBoundary.reload')
 
     if (this.props.section) {
       return (
         <div role="alert" className="rounded-lg border border-destructive/40 bg-card p-4 space-y-2 text-sm">
-          <p className="font-medium text-foreground">{this.props.section}加载出错</p>
-          <p className="text-muted-foreground">{isChunkError ? hint : '可重试该区域，或刷新页面。'}</p>
+          <p className="font-medium text-foreground">{i18n.t('errorBoundary.sectionFailed', { section: this.props.section })}</p>
+          <p className="text-muted-foreground">{isChunkError ? hint : i18n.t('errorBoundary.sectionHint')}</p>
           {!isChunkError && (
             <p className="text-xs font-mono break-all rounded-md bg-muted p-2 text-foreground">{message}</p>
           )}
           <div className="flex gap-2">
             {!isChunkError && (
               <Button type="button" size="sm" variant="outline" onClick={this.reset}>
-                重试
+                {i18n.t('errorBoundary.retry')}
               </Button>
             )}
             <Button type="button" size="sm" onClick={this.handleReload}>
-              刷新页面
+              {reloadLabel}
             </Button>
           </div>
         </div>
@@ -94,13 +94,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-background">
         <div className="max-w-md w-full rounded-lg border bg-card p-6 text-center space-y-3">
-          <h1 className="text-lg font-semibold text-foreground">页面发生错误</h1>
+          <h1 className="text-lg font-semibold text-foreground">{i18n.t('errorBoundary.pageFailed')}</h1>
           <p className="text-sm text-muted-foreground">{hint}</p>
           <p className="text-xs font-mono text-left break-all rounded-md bg-muted p-3 text-foreground">
             {message}
           </p>
           <Button type="button" onClick={this.handleReload}>
-            刷新页面
+            {reloadLabel}
           </Button>
         </div>
       </div>

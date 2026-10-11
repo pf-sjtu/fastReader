@@ -70,12 +70,12 @@ export function CloudCacheSection({
           {includesKeyCharts ? (
             <p className="text-foreground/80">
               {cloudChartsFileFound
-                ? t('cloudCache.includesKeyChartsJson', '含关键图表（同名 JSON）')
-                : t('cloudCache.includesKeyCharts', '含关键图表')}
+                ? t('cloudCache.includesKeyChartsJson')
+                : t('cloudCache.includesKeyCharts')}
             </p>
           ) : (
             <p className="text-muted-foreground">
-              {t('cloudCache.noKeyChartsYet', '暂无关键图表 JSON，加载后可重新生成')}
+              {t('cloudCache.noKeyChartsYet')}
             </p>
           )}
           {cloudCacheMetadata.costUSD && cloudCacheMetadata.costUSD > 0 && (

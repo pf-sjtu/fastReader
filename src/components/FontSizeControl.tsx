@@ -55,7 +55,7 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
       <div className={`flex items-center gap-2 ${className}`}>
         {showLabel && (
           <span className="text-sm font-medium text-muted-foreground">
-            {t('fontSize.control', '字体')}
+            {t('fontSize.control')}
           </span>
         )}
         <Button
@@ -63,7 +63,7 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
           size="sm"
           onClick={decreaseFontSize}
           disabled={fontScale <= 0.5}
-          title={t('fontSize.decrease', '减小字体')}
+          title={t('fontSize.decrease')}
         >
           <Minus className="h-4 w-4" />
         </Button>
@@ -75,7 +75,7 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
           size="sm"
           onClick={increaseFontSize}
           disabled={fontScale >= 2}
-          title={t('fontSize.increase', '增大字体')}
+          title={t('fontSize.increase')}
         >
           <Plus className="h-4 w-4" />
         </Button>
@@ -84,7 +84,7 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
           size="sm"
           onClick={resetFontSize}
           disabled={fontScale === 1}
-          title={t('fontSize.reset', '重置字体大小')}
+          title={t('fontSize.reset')}
         >
           <RotateCcw className="h-4 w-4" />
         </Button>
@@ -98,10 +98,10 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold">
-              {t('fontSize.title', '字体大小控制')}
+              {t('fontSize.title')}
             </h3>
             <p className="text-sm text-muted-foreground">
-              {t('fontSize.description', '调节预览内容的字体大小')}
+              {t('fontSize.description')}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -112,7 +112,7 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
               disabled={fontScale <= 0.5}
             >
               <Minus className="h-4 w-4 mr-1" />
-              {t('fontSize.decrease', '减小')}
+              {t('fontSize.decrease')}
             </Button>
             <span className="text-sm font-medium px-3 py-1 bg-muted rounded min-w-[80px] text-center">
               {Math.round(fontScale * 100)}%
@@ -124,7 +124,7 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
               disabled={fontScale >= 2}
             >
               <Plus className="h-4 w-4 mr-1" />
-              {t('fontSize.increase', '增大')}
+              {t('fontSize.increase')}
             </Button>
             <Button
               variant="ghost"
@@ -133,13 +133,13 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
               disabled={fontScale === 1}
             >
               <RotateCcw className="h-4 w-4 mr-1" />
-              {t('fontSize.reset', '重置')}
+              {t('fontSize.reset')}
             </Button>
           </div>
         </div>
         <div className="mt-2 text-xs text-muted-foreground">
-          {t('fontSize.currentScale', '当前缩放比例')}: {fontScale}x 
-          ({t('fontSize.baseSize', '基础大小')}: 16px)
+          {t('fontSize.currentScale')}: {fontScale}x 
+          ({t('fontSize.baseSize')}: 16px)
         </div>
       </CardContent>
     </Card>

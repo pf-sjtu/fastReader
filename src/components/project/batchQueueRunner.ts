@@ -1,18 +1,24 @@
 // 批量队列执行逻辑：与 BatchQueuePanel 组件分离，全部经 store.getState() 读写，便于测试且不受组件闭包影响
 import { toast } from 'sonner'
+import i18n from '../../i18n'
 import { useBatchQueueStore } from '../../stores/batchQueueStore'
 import { useConfigStore } from '../../stores/configStore'
-import { batchProcessingEngine } from '../../services/batchProcessingEngine'
+import { batchProcessingEngine, type BatchProcessingResult } from '../../services/batchProcessingEngine'
 import { cloudCacheService } from '../../services/cloudCacheService'
 
 /** 云端缓存文件名集合；null 表示尚未获取（需先确认云端状态） */
 export type CachedNamesRef = { current: Set<string> | null }
 
+/** 是否为「已有缓存而跳过」：读引擎的结构化 skipped 字段，不再匹配错误文案 */
+export function isSkippedResult(result: BatchProcessingResult): boolean {
+  return result.skipped === true
+}
+
 /** 致命错误（如无法确认云端缓存状态）：停止整个队列，避免后续逐本失败或覆盖已有结果 */
 function stopQueueOnFatal(reason: string) {
   batchProcessingEngine.stop()
   useBatchQueueStore.getState().stopProcessing()
-  toast.error('批量处理已停止', { description: reason })
+  toast.error(i18n.t('batch.toast.stoppedFatal'), { description: reason })
 }
 
 /**
@@ -51,13 +57,16 @@ export async function processNextPendingItem(cachedNames: CachedNamesRef): Promi
     const result = await batchProcessingEngine.processItem(nextPending, batchConfig, cachedNames.current)
     const { markItemCompleted, markItemFailed, markItemSkipped } = useBatchQueueStore.getState()
 
+    const failReason = result.error || i18n.t('batch.itemFailed')
     if (result.fatal) {
-      markItemFailed(nextPending.id, result.error || '处理失败')
-      stopQueueOnFatal(result.error || '处理失败')
+      markItemFailed(nextPending.id, failReason)
+      stopQueueOnFatal(failReason)
       return false
     }
 
-    if (result.success && !result.error?.includes('已跳过')) {
+    if (isSkippedResult(result)) {
+      markItemSkipped(nextPending.id)
+    } else if (result.success) {
       markItemCompleted(nextPending.id, {
         chapterCount: result.metadata?.chapterCount || 0,
         processedChapters: result.metadata?.processedChapters || 0,
@@ -70,25 +79,22 @@ export async function processNextPendingItem(cachedNames: CachedNamesRef): Promi
       })
 
       if (result.metadata?.isPartial) {
-        toast.warning(`处理完成但不完整: ${nextPending.fileName}`, {
-          description: `有 ${result.metadata.skippedChapters ?? 0} 章因内容过滤被跳过`
+        toast.warning(i18n.t('batch.toast.itemPartial', { name: nextPending.fileName }), {
+          description: i18n.t('batch.toast.itemPartialDesc', { count: result.metadata.skippedChapters ?? 0 })
         })
       } else {
-        toast.success(`处理完成: ${nextPending.fileName}`)
+        toast.success(i18n.t('batch.toast.itemDone', { name: nextPending.fileName }))
       }
-    } else if (result.error?.includes('已跳过')) {
-      markItemSkipped(nextPending.id)
     } else {
-      markItemFailed(nextPending.id, result.error || '处理失败')
-      toast.error(`处理失败: ${nextPending.fileName}`, {
+      markItemFailed(nextPending.id, failReason)
+      toast.error(i18n.t('batch.toast.itemFailed', { name: nextPending.fileName }), {
         description: result.error
       })
     }
   } catch (error) {
-    useBatchQueueStore.getState().markItemFailed(nextPending.id, error instanceof Error ? error.message : '未知错误')
-    toast.error(`处理失败: ${nextPending.fileName}`, {
-      description: error instanceof Error ? error.message : '未知错误'
-    })
+    const message = error instanceof Error ? error.message : i18n.t('common.unknownError')
+    useBatchQueueStore.getState().markItemFailed(nextPending.id, message)
+    toast.error(i18n.t('batch.toast.itemFailed', { name: nextPending.fileName }), { description: message })
   }
 
   // 处理期间被用户停止：不再继续（也不报「完成」）
@@ -100,8 +106,8 @@ export async function processNextPendingItem(cachedNames: CachedNamesRef): Promi
 function finishQueue() {
   useBatchQueueStore.getState().stopProcessing()
   const { completed, failed } = useBatchQueueStore.getState().stats
-  toast('处理完成', {
-    description: `批量处理已完成，成功 ${completed} 个，失败 ${failed} 个`
+  toast(i18n.t('batch.toast.finished'), {
+    description: i18n.t('batch.toast.finishedDesc', { completed, failed })
   })
 }
 

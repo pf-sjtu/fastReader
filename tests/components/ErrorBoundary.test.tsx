@@ -2,6 +2,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ErrorBoundary } from '../../src/components/ErrorBoundary'
+import i18n from '../../src/i18n'
 
 function Boom() {
   throw new Error('boom-details')
@@ -43,6 +44,6 @@ describe('ErrorBoundary', () => {
     })
 
     expect(container.textContent).toContain('boom-details')
-    expect(container.textContent).toContain('刷新页面')
+    expect(container.textContent).toContain(i18n.t('errorBoundary.reload'))
   })
 })

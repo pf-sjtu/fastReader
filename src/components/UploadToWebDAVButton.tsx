@@ -5,6 +5,7 @@ import { Button } from './ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -55,13 +56,10 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
       0
     )
 
-    // 选中的章节
+    // 选中的章节：有 summary 就算选中
     const selectedChapters = bookSummary.chapters
       .map((_: unknown, index: number) => index + 1)
-      .filter((_: unknown, index: number) => {
-        // 如果有 summary 就算选中
-        return bookSummary.chapters[index]?.summary
-      })
+      .filter((_: unknown, index: number) => bookSummary.chapters[index]?.summary)
 
     return metadataFormatter.generate({
       fileName: file.name,
@@ -80,14 +78,12 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
   const generateMarkdownContent = () => {
     if (!bookSummary || !file) return ''
 
-    // 准备章节数据
     const chapters = bookSummary.chapters.map((chapter) => ({
       id: chapter.id,
       title: chapter.title,
       summary: chapter.summary || ''
     }))
 
-    // 准备书籍数据
     const bookData = {
       title: bookSummary.title,
       author: bookSummary.author,
@@ -99,50 +95,12 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
         : null,
     }
 
-    // 生成元数据
     const metadata = generateMetadata()
-
-    // 使用统一格式生成 Markdown
     return metadataFormatter.formatUnified(bookData, metadata || undefined, chapterNamingMode)
   }
 
-  // 生成文件名
-  const generateFileName = () => {
-    if (!file) return ''
-    // 获取原文件名（不含扩展名）
-    const originalName = file.name.replace(/\.[^/.]+$/, '')
-    // 清理文件名中的特殊字符，但保留中文、日文、韩文等多语言字符
-    const sanitizedName = originalName
-      .replace(/[<>:"/\\|?*]/g, '') // 移除 Windows 不允许的字符
-      .replace(/\s+/g, ' ') // 将多个空格合并为单个空格
-      .trim()
-    return `${sanitizedName}-完整摘要.md`
-  }
-
-  // 检查文件是否已存在
-  const checkFileExists = async () => {
-    if (!webdavConfig.enabled) return false
-    
-    try {
-      const fileName = generateFileName()
-      const remotePath = `${webdavConfig.syncPath}/${fileName}`
-      // 三态：unknown（网络/鉴权异常）不能当成不存在
-      const status = await webdavService.existsStatus(remotePath)
-      
-      if (status === 'exists') {
-        setUploadStatus('exists')
-        setFileName(fileName)
-      } else {
-        setUploadStatus('idle')
-      }
-      
-      return status === 'exists'
-    } catch (error) {
-      console.error('检查文件存在失败:', error)
-      setUploadStatus('error')
-      return false
-    }
-  }
+  // 云端文件名与云缓存读取共用同一规则（{sanitizedName}-完整摘要.md）
+  const generateFileName = () => (file ? cloudCacheService.getCacheFileName(file.name) : '')
 
   // 上传文件到WebDAV
   const uploadToWebDAV = async (forceOverwrite = false) => {
@@ -169,7 +127,7 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
         const status = await webdavService.existsStatus(remotePath)
         if (status === 'unknown') {
           // 无法确认是否已有同名文件：不冒险覆盖
-          toast.error('无法确认云端是否已存在同名文件，已取消上传，请检查网络或 WebDAV 配置后重试')
+          toast.error(t('upload.existsUnknown'))
           setIsUploading(false)
           return
         }
@@ -181,43 +139,36 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
         }
       }
 
-      // 上传 MD
       console.log('🚀 开始上传到WebDAV:', remotePath, 'len=', markdownContent.length)
       const uploadResult = await webdavService.uploadFile(remotePath, markdownContent)
       if (!uploadResult.success) {
-        throw new Error(uploadResult.error || '上传失败')
+        throw new Error(uploadResult.error || t('upload.failed'))
       }
 
       const verifyStatus = await webdavService.existsStatus(remotePath)
       if (verifyStatus === 'missing') {
-        throw new Error('文件上传后验证失败：文件在服务器上未找到')
+        throw new Error(t('upload.verifyMissing'))
       }
       if (verifyStatus === 'unknown') {
-        toast.warning('上传已完成，但无法确认云端文件状态')
+        toast.warning(t('upload.verifyUnknown'))
       }
 
       // 有关键图表则上传同名 JSON（{name}-完整摘要.json）
       let chartsNote = ''
       if (bookSummary.charts) {
-        const chartsUp = await cloudCacheService.uploadChartsJson(
-          file.name,
-          bookSummary.charts
-        )
-        chartsNote = chartsUp.success
-          ? '（含关键图表 JSON）'
-          : '（图表 JSON 上传失败，摘要 MD 已成功）'
+        const chartsUp = await cloudCacheService.uploadChartsJson(file.name, bookSummary.charts)
+        chartsNote = chartsUp.success ? t('upload.chartsIncluded') : t('upload.chartsFailed')
         if (!chartsUp.success) {
           console.warn('图表 JSON 上传失败:', chartsUp.error)
         }
       }
 
       setUploadStatus('uploaded')
-      toast.success(`文件已上传到WebDAV: ${fileName}${chartsNote}`)
-      
+      toast.success(t('upload.success', { fileName, note: chartsNote }))
     } catch (error) {
       console.error('上传失败:', error)
       setUploadStatus('error')
-      toast.error('上传失败: ' + (error instanceof Error ? error.message : '未知错误'))
+      toast.error(t('upload.failedWithError', { error: error instanceof Error ? error.message : t('common.unknownError') }))
     } finally {
       setIsUploading(false)
     }
@@ -229,12 +180,27 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
     await uploadToWebDAV(true)
   }
 
-  // 组件挂载时检查文件状态
+  // 书目或同步目录变化时检查云端是否已有同名文件（三态：unknown 不能当成不存在）。
+  // 依赖派生出的远程路径而不是 bookSummary 对象：处理中摘要对象频繁变化，不应反复探测
+  const remotePath = webdavConfig.enabled && bookSummary && file ? `${webdavConfig.syncPath}/${generateFileName()}` : null
   React.useEffect(() => {
-    if (webdavConfig.enabled && bookSummary) {
-      checkFileExists()
+    if (!remotePath) return
+    let cancelled = false
+    webdavService
+      .existsStatus(remotePath)
+      .then((status) => {
+        if (cancelled) return
+        setUploadStatus(status === 'exists' ? 'exists' : 'idle')
+        if (status === 'exists') setFileName(remotePath.slice(remotePath.lastIndexOf('/') + 1))
+      })
+      .catch((error) => {
+        console.error('检查文件存在失败:', error)
+        if (!cancelled) setUploadStatus('error')
+      })
+    return () => {
+      cancelled = true
     }
-  }, [webdavConfig.enabled, bookSummary?.title, bookSummary?.author]) // 只依赖关键属性，避免重复检查
+  }, [remotePath])
 
   // 如果WebDAV未启用，不显示按钮
   if (!webdavConfig.enabled) {
@@ -247,51 +213,51 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
       return (
         <Button variant="outline" size="sm" disabled className={className}>
           <Upload className="h-4 w-4 mr-1 animate-spin" />
-          {t('upload.uploading', { defaultValue: '上传中...' })}
+          {t('upload.uploading')}
         </Button>
       )
     }
 
     if (uploadStatus === 'uploaded') {
       return (
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => uploadToWebDAV()} 
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => uploadToWebDAV()}
           className={`${className} border-green-200 hover:border-green-300 hover:bg-green-50`}
-          title={t('upload.reupload', { defaultValue: '重新上传' })}
+          title={t('upload.reupload')}
         >
           <Check className="h-4 w-4 mr-1 text-green-600" />
-          {t('upload.uploaded', { defaultValue: '已上传' })}
+          {t('upload.uploaded')}
         </Button>
       )
     }
 
     if (uploadStatus === 'exists') {
       return (
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => uploadToWebDAV()} 
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => uploadToWebDAV()}
           className={`${className} border hover:border-foreground/20 hover:bg-accent`}
-          title={t('upload.clickToOverwrite', { defaultValue: '点击覆盖上传' })}
+          title={t('upload.clickToOverwrite')}
         >
           <Cloud className="h-4 w-4 mr-1 text-primary" />
-          {t('upload.exists', { defaultValue: '云端已存在' })}
+          {t('upload.exists')}
         </Button>
       )
     }
 
     return (
-      <Button 
-        variant="outline" 
-        size="sm" 
+      <Button
+        variant="outline"
+        size="sm"
         onClick={() => uploadToWebDAV()}
         className={className}
-        title={t('upload.uploadToWebDAV', { defaultValue: '上传到WebDAV' })}
+        title={t('upload.uploadToWebDAV')}
       >
         <Upload className="h-4 w-4 mr-1" />
-        {t('upload.upload', { defaultValue: '上传' })}
+        {t('upload.upload')}
       </Button>
     )
   }
@@ -299,51 +265,42 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
   return (
     <>
       {renderButton()}
-      
+
       {/* 覆盖确认对话框 */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-yellow-600" />
-              {t('upload.confirmOverwrite', { defaultValue: '确认覆盖文件' })}
+              {t('upload.confirmOverwrite')}
             </DialogTitle>
           </DialogHeader>
           <Alert className="mt-2">
             <AlertDescription className="space-y-2">
-              <div>
-                {fileName ? `文件 "${fileName}" 在WebDAV云端已存在，是否要覆盖它？` : '文件在WebDAV云端已存在，是否要覆盖它？'}
-              </div>
+              <DialogDescription className="text-foreground">
+                {fileName ? t('upload.existsQuestionNamed', { fileName }) : t('upload.existsQuestion')}
+              </DialogDescription>
               {fileName && (
                 <div className="text-sm text-muted-foreground">
-                  远程路径: {webdavConfig.syncPath}/{fileName}
+                  {t('upload.remotePath', { path: `${webdavConfig.syncPath}/${fileName}` })}
                 </div>
               )}
             </AlertDescription>
           </Alert>
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setShowConfirmDialog(false)}
               disabled={isUploading}
             >
-              {t('common.cancel', { defaultValue: '取消' })}
+              {t('common.cancel')}
             </Button>
-            <Button 
+            <Button
               onClick={confirmOverwrite}
               disabled={isUploading}
             >
-              {isUploading ? (
-                <>
-                  <Upload className="h-4 w-4 mr-1 animate-spin" />
-                  {t('upload.uploading', { defaultValue: '上传中...' })}
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4 mr-1" />
-                  {t('upload.overwrite', { defaultValue: '覆盖' })}
-                </>
-              )}
+              <Upload className={`h-4 w-4 mr-1 ${isUploading ? 'animate-spin' : ''}`} />
+              {isUploading ? t('upload.uploading') : t('upload.overwrite')}
             </Button>
           </DialogFooter>
         </DialogContent>

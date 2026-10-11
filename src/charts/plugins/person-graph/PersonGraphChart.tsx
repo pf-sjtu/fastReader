@@ -333,7 +333,7 @@ export function PersonGraphChart({ charts }: Props) {
   if (!graph || (graph.nodes?.length ?? 0) === 0) {
     return (
       <div className="text-sm text-muted-foreground py-8 text-center">
-        {t('results.charts.noEntityGraph', '暂无实体关系数据')}
+        {t('results.charts.noEntityGraph')}
       </div>
     )
   }
@@ -341,7 +341,7 @@ export function PersonGraphChart({ charts }: Props) {
   if (loadError) {
     return (
       <div className="text-sm text-destructive py-8 text-center">
-        {t('results.charts.graphLoadError', '关系图加载失败')}: {loadError}
+        {t('results.charts.graphLoadError')}: {loadError}
       </div>
     )
   }
@@ -364,7 +364,7 @@ export function PersonGraphChart({ charts }: Props) {
               htmlFor="graph-force"
               className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap"
             >
-              {t('results.charts.forceStrength', '相互作用力')}
+              {t('results.charts.forceStrength')}
             </Label>
             <span className="text-[11px] tabular-nums text-muted-foreground">
               {force}
@@ -390,15 +390,12 @@ export function PersonGraphChart({ charts }: Props) {
             }}
           >
             <RefreshCw className="h-3 w-3 mr-1" />
-            {t('results.charts.relayout', '重新排布')}
+            {t('results.charts.relayout')}
           </Button>
         </div>
       </div>
       <p className="text-xs text-muted-foreground mt-2">
-        {t(
-          'results.charts.entityGraphHint',
-          '滚轮缩放 · 拖动画布/节点 · 点击实体查看详情 · 右下角调节斥力（浏览器记忆）'
-        )}
+        {t('results.charts.entityGraphHint')}
       </p>
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
@@ -414,7 +411,7 @@ export function PersonGraphChart({ charts }: Props) {
               {[
                 selected?.node.type,
                 selected?.node.importance != null
-                  ? `重要度 ${selected.node.importance}`
+                  ? t('results.charts.importance', { value: selected.node.importance })
                   : '',
               ]
                 .filter(Boolean)
@@ -430,7 +427,7 @@ export function PersonGraphChart({ charts }: Props) {
             {selected?.edges && selected.edges.length > 0 && (
               <div>
                 <div className="text-muted-foreground mb-2 sticky top-0 bg-background/95 backdrop-blur-sm py-1">
-                  {t('results.charts.relations', '关系')}
+                  {t('results.charts.relations')}
                 </div>
                 <ul className="space-y-2 pb-6">
                   {selected.edges.map((e, i) => (

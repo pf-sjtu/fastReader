@@ -15,6 +15,7 @@ import {
   useCurrentPromptVersion
 } from '../../stores/configStore'
 import { RotateCcw, Save, Eye, Copy } from 'lucide-react'
+import { buildPromptPreview, type PromptTab } from './promptPreview'
 
 export function PromptEditor() {
   const { t } = useTranslation()
@@ -73,23 +74,21 @@ export function PromptEditor() {
     setCurrentPromptVersion(version)
   }
 
-  // 预览提示词（替换变量）
-  const getPreviewPrompt = () => {
-    let prompt = getCurrentPrompt()
-    if (activeTab === 'chapterSummary') {
-      prompt = prompt
-        .replace('{{title}}', t('promptEditor.preview.title'))
-        .replace('{{content}}', t('promptEditor.preview.content'))
-    } else if (activeTab === 'connectionAnalysis') {
-      prompt = prompt.replace('{{chapterSummaries}}', t('promptEditor.preview.chapterSummaries'))
-    } else if (activeTab === 'overallSummary') {
-      prompt = prompt
-        .replace('{{chapterInfo}}', t('promptEditor.preview.chapterInfo'))
-        .replace('{{connections}}', t('promptEditor.preview.connections'))
-        .replace('{{bookTitle}}', t('promptEditor.preview.bookTitle'))
-    }
-    return prompt
-  }
+  // 预览提示词：与真实请求同一渲染语义（全部占位符替换，未引用变量按「标签: 值」追加）
+  const getPreviewPrompt = () =>
+    buildPromptPreview(
+      activeTab as PromptTab,
+      getCurrentPrompt(),
+      {
+        title: t('promptEditor.preview.title'),
+        content: t('promptEditor.preview.content'),
+        chapterSummaries: t('promptEditor.preview.chapterSummaries'),
+        chapterInfo: t('promptEditor.preview.chapterInfo'),
+        connections: t('promptEditor.preview.connections'),
+        bookTitle: t('promptEditor.preview.bookTitle'),
+      },
+      processingOptions.processingMode === 'combined-mindmap'
+    )
 
   // 重置为默认提示词
   const handleReset = () => {

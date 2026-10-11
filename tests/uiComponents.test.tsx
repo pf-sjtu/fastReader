@@ -46,11 +46,11 @@ describe('ErrorBoundary 局部边界与 chunk 失效识别', () => {
       </div>
     )
     expect(m.container.textContent).toContain('外部内容')
-    expect(m.container.textContent).toContain('关键图表加载出错')
+    expect(m.container.textContent).toContain(i18n.t('errorBoundary.sectionFailed', { section: '关键图表' }))
     expect(m.container.textContent).toContain('图表炸了')
 
     shouldThrow = false
-    click(findButton('重试'))
+    click(findButton(i18n.t('errorBoundary.retry')))
     expect(m.container.textContent).toContain('恢复正常')
   })
 
@@ -67,9 +67,9 @@ describe('ErrorBoundary 局部边界与 chunk 失效识别', () => {
       </ErrorBoundary>
     )
     await flush(5)
-    expect(m.container.textContent).toContain('应用已更新')
-    expect(findButton('刷新页面')).toBeTruthy()
-    expect(findButton('重试')).toBeUndefined()
+    expect(m.container.textContent).toContain(i18n.t('errorBoundary.chunkHint'))
+    expect(findButton(i18n.t('errorBoundary.reload'))).toBeTruthy()
+    expect(findButton(i18n.t('errorBoundary.retry'))).toBeUndefined()
   })
 })
 
@@ -207,30 +207,30 @@ describe('ViewContentDialog HTML 净化', () => {
 describe('AIProviderConfig 编辑子对话框未保存确认', () => {
   it('有改动时关闭先确认，「继续编辑」保留表单；无改动直接关闭', async () => {
     m = mount(<AIProviderConfig />)
-    click(findButton(/添加配置/))
-    expect(document.body.textContent).toContain('创建AI服务商配置')
+    click(findButton(i18n.t('aiProvider.add')))
+    expect(document.body.textContent).toContain(i18n.t('aiProvider.createTitle'))
 
     // 无改动：取消直接关闭
-    click(findButton('取消'))
-    expect(document.body.textContent).not.toContain('创建AI服务商配置')
+    click(findButton(i18n.t('common.cancel')))
+    expect(document.body.textContent).not.toContain(i18n.t('aiProvider.createTitle'))
 
-    click(findButton(/添加配置/))
+    click(findButton(i18n.t('aiProvider.add')))
     const keyInput = document.querySelector<HTMLInputElement>('[role="dialog"] input[type="password"]')!
     typeInto(keyInput, 'sk-test')
-    click(findButton('取消'))
-    expect(document.body.textContent).toContain('放弃未保存的修改？')
+    click(findButton(i18n.t('common.cancel')))
+    expect(document.body.textContent).toContain(i18n.t('aiProvider.discardTitle'))
 
-    click(findButton('继续编辑'))
-    expect(document.body.textContent).toContain('创建AI服务商配置')
+    click(findButton(i18n.t('aiProvider.keepEditing')))
+    expect(document.body.textContent).toContain(i18n.t('aiProvider.createTitle'))
     expect(document.querySelector<HTMLInputElement>('[role="dialog"] input[type="password"]')?.value).toBe('sk-test')
 
     // Esc 关闭同样拦截
     pressKey(document.querySelector('[role="dialog"]')!, 'Escape')
     await flush()
-    expect(document.body.textContent).toContain('放弃未保存的修改？')
-    click(findButton('放弃修改'))
+    expect(document.body.textContent).toContain(i18n.t('aiProvider.discardTitle'))
+    click(findButton(i18n.t('aiProvider.discard')))
     await flush()
-    expect(document.body.textContent).not.toContain('创建AI服务商配置')
+    expect(document.body.textContent).not.toContain(i18n.t('aiProvider.createTitle'))
   })
 })
 

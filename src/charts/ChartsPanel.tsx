@@ -68,7 +68,7 @@ export function ChartsPanel({
           onClick={handleRegenerate}
         >
           <RefreshCw className={`h-3.5 w-3.5 mr-1 ${regenBusy ? 'animate-spin' : ''}`} />
-          {t('results.charts.regenerate', '重新生成图表')}
+          {t('results.charts.regenerate')}
         </Button>
       )}
       {onClearCache && charts && (
@@ -79,7 +79,7 @@ export function ChartsPanel({
           onClick={onClearCache}
         >
           <Trash2 className="h-3.5 w-3.5 mr-1" />
-          {t('results.charts.clearCache', '清除图表缓存')}
+          {t('results.charts.clearCache')}
         </Button>
       )}
     </div>
@@ -88,7 +88,7 @@ export function ChartsPanel({
   if (generating && !charts) {
     return (
       <div className="text-center text-muted-foreground py-12 text-sm">
-        {t('results.charts.generating', '正在生成关键图表…')}
+        {t('results.charts.generating')}
       </div>
     )
   }
@@ -99,7 +99,7 @@ export function ChartsPanel({
         {toolbar}
         <div className="text-center py-8 space-y-2">
           <p className="text-sm text-destructive">
-            {t('results.charts.failed', '关键图表生成失败')}
+            {t('results.charts.failed')}
           </p>
           <p className="text-xs text-muted-foreground break-all max-w-lg mx-auto">
             {chartsError}
@@ -114,7 +114,7 @@ export function ChartsPanel({
       <div className="space-y-3">
         {toolbar}
         <div className="text-center text-muted-foreground py-8 text-sm">
-          {t('results.charts.empty', '暂无关键图表数据')}
+          {t('results.charts.empty')}
         </div>
       </div>
     )

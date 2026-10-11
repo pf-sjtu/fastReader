@@ -482,7 +482,7 @@ export function EpubReader({
                       size="sm"
                       onClick={decreaseFontSize}
                       disabled={fontSize <= 12}
-                      title={t('reader.epub.decreaseFontSize', '减小字体')}
+                      title={t('reader.epub.decreaseFontSize')}
                     >
                       <Minus className="h-4 w-4" />
                     </Button>
@@ -494,7 +494,7 @@ export function EpubReader({
                       size="sm"
                       onClick={increaseFontSize}
                       disabled={fontSize >= 24}
-                      title={t('reader.epub.increaseFontSize', '增大字体')}
+                      title={t('reader.epub.increaseFontSize')}
                     >
                       <Plus className="h-4 w-4" />
                     </Button>
@@ -507,7 +507,7 @@ export function EpubReader({
                     variant="outline"
                     size="sm"
                     onClick={toggleFullscreen}
-                    title={isFullscreen ? t('reader.epub.exitFullscreen', '退出全屏') : t('reader.epub.enterFullscreen', '进入全屏')}
+                    title={isFullscreen ? t('reader.epub.exitFullscreen') : t('reader.epub.enterFullscreen')}
                   >
                     {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                   </Button>

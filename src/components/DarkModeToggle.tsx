@@ -2,8 +2,10 @@ import React from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from './useTheme';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from 'react-i18next';
 
 export const DarkModeToggle: React.FC = () => {
+  const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
 
   const toggleDarkMode = () => {
@@ -20,7 +22,7 @@ export const DarkModeToggle: React.FC = () => {
       size="sm"
       onClick={toggleDarkMode}
       className="flex items-center gap-2"
-      title={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
+      title={theme === 'dark' ? t('theme.switchToLight') : t('theme.switchToDark')}
     >
       {theme === 'dark' ? (
         <Sun className="h-4 w-4" />
@@ -28,7 +30,7 @@ export const DarkModeToggle: React.FC = () => {
         <Moon className="h-4 w-4" />
       )}
       <span className="hidden sm:inline">
-        {theme === 'dark' ? '浅色' : '深色'}
+        {theme === 'dark' ? t('theme.light') : t('theme.dark')}
       </span>
     </Button>
   );

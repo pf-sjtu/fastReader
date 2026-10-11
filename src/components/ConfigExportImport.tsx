@@ -15,8 +15,10 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 
 export function ConfigExportImport() {
+  const { t } = useTranslation()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importYaml, setImportYaml] = React.useState('')
   const [isImporting, setIsImporting] = React.useState(false)
@@ -47,9 +49,9 @@ export function ConfigExportImport() {
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
       
-      toast.success('配置导出成功')
+      toast.success(t('configIO.exportSuccess'))
     } catch (error) {
-      toast.error(`导出失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      toast.error(t('configIO.exportFailed', { error: error instanceof Error ? error.message : t('common.unknownError') }))
     } finally {
       setIsExporting(false)
     }
@@ -58,7 +60,7 @@ export function ConfigExportImport() {
   // 导入配置
   const handleImport = async () => {
     if (!importYaml.trim()) {
-      toast.error('请输入要导入的配置内容')
+      toast.error(t('configIO.emptyImport'))
       return
     }
 
@@ -71,19 +73,19 @@ export function ConfigExportImport() {
       if (result.success) {
         setImportResult({
           success: true,
-          message: '配置导入成功！所有设置已更新。'
+          message: t('configIO.importSuccessDetail')
         })
-        toast.success('配置导入成功')
+        toast.success(t('configIO.importSuccess'))
         setImportYaml('') // 清空输入框
       } else {
         setImportResult({
           success: false,
-          message: result.error || '导入失败'
+          message: result.error || t('configIO.importFailed')
         })
-        toast.error(result.error || '导入失败')
+        toast.error(result.error || t('configIO.importFailed'))
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      const errorMessage = error instanceof Error ? error.message : t('common.unknownError')
       setImportResult({
         success: false,
         message: errorMessage
@@ -105,16 +107,16 @@ export function ConfigExportImport() {
       setImportYaml(content)
     }
     reader.onerror = () => {
-      toast.error('文件读取失败')
+      toast.error(t('configIO.readFailed'))
     }
     reader.readAsText(file)
   }
 
   // 重置所有配置
   const handleReset = () => {
-    if (confirm('确定要重置所有配置吗？此操作不可撤销。')) {
+    if (confirm(t('configIO.confirmReset'))) {
       resetAllConfig()
-      toast.success('所有配置已重置为默认值')
+      toast.success(t('configIO.resetDone'))
       setImportResult(null)
       setImportYaml('')
     }
@@ -127,10 +129,10 @@ export function ConfigExportImport() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Download className="h-5 w-5" />
-            导出配置
+            {t('configIO.exportTitle')}
           </CardTitle>
           <CardDescription>
-            将当前所有设置导出为YAML文件，包括AI配置、提示词、WebDAV设置等
+            {t('configIO.exportDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -142,12 +144,12 @@ export function ConfigExportImport() {
             {isExporting ? (
               <>
                 <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                导出中...
+                {t('configIO.exporting')}
               </>
             ) : (
               <>
                 <FileText className="mr-2 h-4 w-4" />
-                导出配置文件
+                {t('configIO.exportButton')}
               </>
             )}
           </Button>
@@ -159,17 +161,18 @@ export function ConfigExportImport() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            导入配置
+            {t('configIO.importTitle')}
           </CardTitle>
           <CardDescription>
-            从YAML文件或文本内容导入配置，将覆盖当前所有设置
+            {t('configIO.importDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* 文件上传 */}
           <div>
-            <Label htmlFor="config-file">选择配置文件</Label>
+            <Label htmlFor="config-file">{t('configIO.chooseFile')}</Label>
             <input
+              id="config-file"
               ref={fileInputRef}
               type="file"
               accept=".yaml,.yml"
@@ -180,10 +183,10 @@ export function ConfigExportImport() {
 
           {/* 或者手动输入 */}
           <div>
-            <Label htmlFor="yaml-input">或直接粘贴YAML内容</Label>
+            <Label htmlFor="yaml-input">{t('configIO.pasteLabel')}</Label>
             <Textarea
               id="yaml-input"
-              placeholder="粘贴配置文件的YAML内容..."
+              placeholder={t('configIO.pastePlaceholder')}
               value={importYaml}
               onChange={(e) => setImportYaml(e.target.value)}
               className="mt-1 min-h-[200px] font-mono text-sm"
@@ -212,12 +215,12 @@ export function ConfigExportImport() {
               {isImporting ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  导入中...
+                  {t('configIO.importing')}
                 </>
               ) : (
                 <>
                   <Upload className="mr-2 h-4 w-4" />
-                  导入配置
+                  {t('configIO.importButton')}
                 </>
               )}
             </Button>
@@ -232,7 +235,7 @@ export function ConfigExportImport() {
                 }
               }}
             >
-              清空
+              {t('configIO.clear')}
             </Button>
           </div>
         </CardContent>
@@ -243,10 +246,10 @@ export function ConfigExportImport() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-red-600">
             <RefreshCw className="h-5 w-5" />
-            重置配置
+            {t('configIO.resetTitle')}
           </CardTitle>
           <CardDescription>
-            将所有设置恢复为默认值，此操作不可撤销
+            {t('configIO.resetDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -255,7 +258,7 @@ export function ConfigExportImport() {
             onClick={handleReset}
             className="w-full sm:w-auto"
           >
-            重置所有配置
+            {t('configIO.resetButton')}
           </Button>
         </CardContent>
       </Card>
@@ -263,13 +266,14 @@ export function ConfigExportImport() {
       {/* 使用说明 */}
       <Card>
         <CardHeader>
-          <CardTitle>使用说明</CardTitle>
+          <CardTitle>{t('configIO.helpTitle')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-gray-600">
-          <p>• <strong>导出配置</strong>：将当前所有设置保存为YAML文件，便于备份和迁移</p>
-          <p>• <strong>导入配置</strong>：从文件或文本内容恢复设置，会完全覆盖当前配置</p>
-          <p>• <strong>重置配置</strong>：将所有设置恢复为初始默认值</p>
-          <p>• <strong>注意事项</strong>：导入前建议先导出当前配置作为备份</p>
+          {(['export', 'import', 'reset', 'note'] as const).map((k) => (
+            <p key={k}>
+              • <strong>{t(`configIO.help.${k}Label`)}</strong>: {t(`configIO.help.${k}`)}
+            </p>
+          ))}
         </CardContent>
       </Card>
     </div>

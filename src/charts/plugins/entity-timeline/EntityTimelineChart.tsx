@@ -71,7 +71,7 @@ export function EntityTimelineChart({ charts }: Props) {
   if (!data || !layout || layout.timeRows.length === 0) {
     return (
       <div className="text-sm text-muted-foreground py-8 text-center">
-        {t('results.charts.noTimeline', '暂无时间线数据')}
+        {t('results.charts.noTimeline')}
       </div>
     )
   }
@@ -96,7 +96,7 @@ export function EntityTimelineChart({ charts }: Props) {
                 background: stickyColBg,
               }}
             >
-              {t('results.charts.timelineTime', '时间')}
+              {t('results.charts.timelineTime')}
             </div>
             {entities.map((ent) => {
               const color = entityColor.get(ent.id) || theme.palette[0]
@@ -106,7 +106,7 @@ export function EntityTimelineChart({ charts }: Props) {
                 ''
               const tipLines = [
                 ent.name,
-                ent.type ? `${t('results.charts.entityType', '类型')}: ${ent.type}` : '',
+                ent.type ? `${t('results.charts.entityType')}: ${ent.type}` : '',
                 blurb && blurb !== ent.type ? blurb : '',
               ].filter(Boolean)
               const tip = tipLines.join('\n')
@@ -211,10 +211,7 @@ export function EntityTimelineChart({ charts }: Props) {
         </div>
       </div>
       <p className="text-xs text-muted-foreground mt-2">
-        {t(
-          'results.charts.timelineHint',
-          '纵轴为时间/事件顺序，横轴为实体；表头与时间列已冻结，可滚动查看；点击色块查看详情'
-        )}
+        {t('results.charts.timelineHint')}
       </p>
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
@@ -238,7 +235,7 @@ export function EntityTimelineChart({ charts }: Props) {
             {selected?.entityIds?.length ? (
               <div className="pb-6">
                 <div className="text-muted-foreground mb-1 sticky top-0 bg-background/95 backdrop-blur-sm py-1">
-                  {t('results.charts.relatedEntities', '相关实体')}
+                  {t('results.charts.relatedEntities')}
                 </div>
                 <ul className="list-disc pl-5 space-y-1">
                   {selected.entityIds.map((id) => {

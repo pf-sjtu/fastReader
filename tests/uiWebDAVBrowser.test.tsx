@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import '../src/i18n'
+import i18n from '../src/i18n'
 import { mount, pressKey, click, findButton, waitFor, type Mounted } from './uiTestUtils'
 
 // 网络边界：webdavService
@@ -60,9 +60,9 @@ describe('WebDAVFileBrowser 可访问性', () => {
     downloadFileAsFile.mockResolvedValue({ success: false, error: 'stop' })
     m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(rows()).toHaveLength(2))
-    const btn = document.querySelector('[aria-label="下载文件 a.epub"]')
+    const btn = document.querySelector(`[aria-label="${i18n.t('webdav.browser.downloadFileNamed', { name: 'a.epub' })}"]`)
     click(btn)
     await waitFor(() => expect(downloadFileAsFile).toHaveBeenCalledWith('/books/a.epub', 'a.epub'))
-    expect(findButton('取消')).toBeTruthy()
+    expect(findButton(i18n.t('common.cancel'))).toBeTruthy()
   })
 })

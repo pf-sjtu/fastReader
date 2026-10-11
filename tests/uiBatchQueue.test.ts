@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '../src/i18n'
 
 // 只 mock 网络/引擎边界；store 用真实实现
 const { processItem, fetchStatus, engineStop, toastFn } = vi.hoisted(() => {
@@ -65,8 +66,8 @@ describe('批量队列执行（batchQueueRunner）', () => {
     expect(processItem).toHaveBeenCalledTimes(3)
     expect(state.isProcessing).toBe(false)
     expect(state.queue.map((i) => i.status)).toEqual(['completed', 'failed', 'completed'])
-    expect(toastFn).toHaveBeenCalledWith('处理完成', {
-      description: '批量处理已完成，成功 2 个，失败 1 个',
+    expect(toastFn).toHaveBeenCalledWith(i18n.t('batch.toast.finished'), {
+      description: i18n.t('batch.toast.finishedDesc', { completed: 2, failed: 1 }),
     })
   })
 
@@ -83,7 +84,7 @@ describe('批量队列执行（batchQueueRunner）', () => {
     expect(state.isProcessing).toBe(false)
     expect(state.queue[0].status).toBe('failed')
     expect(state.queue[1].status).toBe('pending')
-    expect(toastFn.error).toHaveBeenCalledWith('批量处理已停止', { description: '无法确认云端缓存状态' })
+    expect(toastFn.error).toHaveBeenCalledWith(i18n.t('batch.toast.stoppedFatal'), { description: '无法确认云端缓存状态' })
   })
 
   it('云端缓存状态 unknown 时不开始处理任何一本', async () => {
@@ -102,7 +103,7 @@ describe('批量队列执行（batchQueueRunner）', () => {
   it('已获取的缓存集合会复用并传给引擎；「已跳过」标为 skipped', async () => {
     enqueue('a.epub')
     const names = new Set(['a-完整摘要.md'])
-    processItem.mockResolvedValueOnce({ success: true, fileName: 'a.epub', error: '已跳过（已有缓存）' })
+    processItem.mockResolvedValueOnce({ success: true, skipped: true, fileName: 'a.epub', error: '已跳过（已有缓存）' })
     useBatchQueueStore.getState().startProcessing()
 
     await runBatchQueue({ current: names })
@@ -137,7 +138,7 @@ describe('批量队列执行（batchQueueRunner）', () => {
     await runBatchQueue({ current: null })
 
     expect(processItem).toHaveBeenCalledTimes(1)
-    expect(toastFn).not.toHaveBeenCalledWith('处理完成', expect.anything())
+    expect(toastFn).not.toHaveBeenCalledWith(i18n.t('batch.toast.finished'), expect.anything())
     expect(useBatchQueueStore.getState().queue[1].status).toBe('pending')
   })
 

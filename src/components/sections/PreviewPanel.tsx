@@ -70,7 +70,7 @@ export function PreviewPanel({
                   onClick={onDecreaseFontSize}
                   disabled={fontSize <= 12}
                   className="h-8 w-8 p-0"
-                  title={t('reader.epub.decreaseFontSize', '减小字体')}
+                  title={t('reader.epub.decreaseFontSize')}
                 >
                   <Minus className="h-3 w-3" />
                 </Button>
@@ -83,7 +83,7 @@ export function PreviewPanel({
                   onClick={onIncreaseFontSize}
                   disabled={fontSize >= 24}
                   className="h-8 w-8 p-0"
-                  title={t('reader.epub.increaseFontSize', '增大字体')}
+                  title={t('reader.epub.increaseFontSize')}
                 >
                   <Plus className="h-3 w-3" />
                 </Button>
@@ -97,7 +97,7 @@ export function PreviewPanel({
                 size="sm"
                 onClick={onToggleFullscreen}
                 className="h-8 w-8 p-0"
-                title={isFullscreen ? t('reader.epub.exitFullscreen', '退出全屏') : t('reader.epub.enterFullscreen', '进入全屏')}
+                title={isFullscreen ? t('reader.epub.exitFullscreen') : t('reader.epub.enterFullscreen')}
               >
                 {isFullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
               </Button>

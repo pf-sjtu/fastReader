@@ -57,7 +57,7 @@ export const TimelineNavigation = memo(function TimelineNavigation({
       <div className="px-3 py-2.5 border-b shrink-0 space-y-1.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-foreground">
-            {processingMode === 'summary' ? '章节总结' : '思维导图'}
+            {processingMode === 'summary' ? t('timeline.chapterSummary') : t('timeline.mindmap')}
           </span>
           <span className="text-xs text-muted-foreground">
             {processedCount}/{chapters.length}
@@ -106,7 +106,7 @@ export const TimelineNavigation = memo(function TimelineNavigation({
                 </button>
               </div>
               {isProcessing && (
-                <div className="ml-6 text-[10px] text-primary mt-0.5">{t('common.processing', '处理中...')}</div>
+                <div className="ml-6 text-[10px] text-primary mt-0.5">{t('common.processing')}</div>
               )}
               {/* 连接线独立于节点下方 */}
               {!isLast && <div className="ml-[7px] w-px h-3 bg-border" />}
@@ -129,7 +129,7 @@ export const TimelineNavigation = memo(function TimelineNavigation({
             disabled={!chapters.some(ch => ch.processed)}
           >
             <BookOpen className="h-3 w-3 mr-1" />
-            查看第一个章节
+            {t('timeline.viewFirstChapter')}
           </Button>
         </div>
       )}

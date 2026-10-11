@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import '../src/i18n'
+import i18n from '../src/i18n'
 import { mount, click, findButton, waitFor, type Mounted } from './uiTestUtils'
 
 const { processItem, fetchStatus, toastFn } = vi.hoisted(() => ({
@@ -51,14 +51,14 @@ describe('BatchQueuePanel', () => {
     m = mount(<BatchQueuePanel />)
     const trigger = m.container.querySelector('button[aria-expanded]')
     expect(trigger?.tagName).toBe('BUTTON')
-    expect(trigger?.textContent).toContain('批量处理队列')
+    expect(trigger?.textContent).toContain(i18n.t('batch.panelTitle'))
   })
 
   it('云端缓存状态未知时不开始处理', async () => {
     fetchStatus.mockResolvedValue({ status: 'unknown', error: '401' })
     m = mount(<BatchQueuePanel />)
     click(m.container.querySelector('button[aria-expanded]'))
-    click(findButton('开始处理'))
+    click(findButton(i18n.t('batch.startProcessing')))
     await waitFor(() => expect(toastFn.error).toHaveBeenCalled())
     expect(useBatchQueueStore.getState().isProcessing).toBe(false)
     expect(processItem).not.toHaveBeenCalled()
@@ -68,7 +68,7 @@ describe('BatchQueuePanel', () => {
     useConfigStore.getState().setProcessingMode('mindmap')
     m = mount(<BatchQueuePanel />)
     click(m.container.querySelector('button[aria-expanded]'))
-    click(findButton('开始处理'))
+    click(findButton(i18n.t('batch.startProcessing')))
     await waitFor(() => expect(toastFn.error).toHaveBeenCalledWith('批量处理暂不支持思维导图模式'))
     expect(fetchStatus).not.toHaveBeenCalled()
   })
@@ -82,8 +82,8 @@ describe('BatchQueuePanel', () => {
     }))
     m = mount(<BatchQueuePanel />)
     click(m.container.querySelector('button[aria-expanded]'))
-    click(findButton('开始处理'))
-    await waitFor(() => expect(toastFn).toHaveBeenCalledWith('处理完成', expect.anything()))
+    click(findButton(i18n.t('batch.startProcessing')))
+    await waitFor(() => expect(toastFn).toHaveBeenCalledWith(i18n.t('batch.toast.finished'), expect.anything()))
     expect(processItem).toHaveBeenCalledTimes(2)
     expect(useBatchQueueStore.getState().queue.every((i) => i.status === 'completed')).toBe(true)
   })

@@ -6,229 +6,154 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
-import { 
-  Settings, 
-  ExternalLink, 
-  Info, 
-  CheckCircle, 
-  XCircle, 
-  Loader2,
-  FolderOpen,
-  RefreshCw,
-  Eye,
-  EyeOff
-} from 'lucide-react'
-import { useState, useEffect } from 'react'
-import { useWebDAVConfig, useConfigStore } from '../../stores/configStore'
+import { Settings, ExternalLink, Info, CheckCircle, XCircle, Loader2, FolderOpen, RefreshCw, Eye, EyeOff } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useConfigStore } from '../../stores/configStore'
 import { webdavService } from '../../services/webdavService'
+import { useWebDAVClient, isWebDAVConfigComplete } from './webdav/useWebDAVClient'
+
+const AUTO_TEST_DELAY_MS = 1000
+
+const STATUS_ICON: Record<string, ReactNode> = {
+  connected: <CheckCircle className="h-4 w-4 text-green-500" />,
+  connecting: <Loader2 className="h-4 w-4 text-primary animate-spin" />,
+  error: <XCircle className="h-4 w-4 text-red-500" />,
+}
+
+function Field({ id, label, hint, children }: { id: string; label: string; hint?: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      {children}
+      {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
+    </div>
+  )
+}
 
 export function WebDAVConfig() {
-  const webdavConfig = useWebDAVConfig()
-  const { setWebDAVEnabled, setWebDAVServerUrl, setWebDAVUsername, setWebDAVPassword, setWebDAVAppName, setWebDAVAutoSync, setWebDAVSyncPath, setWebDAVBrowsePath, setWebDAVConnectionStatus, resetWebDAVConfig } = useConfigStore(
-    useShallow((s) => ({
-      setWebDAVEnabled: s.setWebDAVEnabled,
-      setWebDAVServerUrl: s.setWebDAVServerUrl,
-      setWebDAVUsername: s.setWebDAVUsername,
-      setWebDAVPassword: s.setWebDAVPassword,
-      setWebDAVAppName: s.setWebDAVAppName,
-      setWebDAVAutoSync: s.setWebDAVAutoSync,
-      setWebDAVSyncPath: s.setWebDAVSyncPath,
-      setWebDAVBrowsePath: s.setWebDAVBrowsePath,
-      setWebDAVConnectionStatus: s.setWebDAVConnectionStatus,
-      resetWebDAVConfig: s.resetWebDAVConfig,
+  const { t } = useTranslation()
+  const { config: webdavConfig, ensureReady, errorText } = useWebDAVClient()
+  const s = useConfigStore(
+    useShallow((st) => ({
+      setWebDAVEnabled: st.setWebDAVEnabled,
+      setWebDAVServerUrl: st.setWebDAVServerUrl,
+      setWebDAVUsername: st.setWebDAVUsername,
+      setWebDAVPassword: st.setWebDAVPassword,
+      setWebDAVAppName: st.setWebDAVAppName,
+      setWebDAVAutoSync: st.setWebDAVAutoSync,
+      setWebDAVSyncPath: st.setWebDAVSyncPath,
+      setWebDAVBrowsePath: st.setWebDAVBrowsePath,
+      setWebDAVConnectionStatus: st.setWebDAVConnectionStatus,
+      resetWebDAVConfig: st.resetWebDAVConfig,
     }))
   )
+  const setStatus = s.setWebDAVConnectionStatus
 
-
-  // 组件状态
-  const [isTestingConnection, setIsTestingConnection] = useState(false)
-  const [connectionTestResult, setConnectionTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [isTesting, setIsTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [showPassword, setShowPassword] = useState(false)
-  const [lastConfigHash, setLastConfigHash] = useState('')
+  // 只采纳最后一次测试的结果；记录已自动测试过的凭据，避免重复自动测试
+  const testSeqRef = useRef(0)
+  const autoTestedKeyRef = useRef('')
 
-  // 生成配置哈希用于检测配置变化
-  const getConfigHash = () => {
-    return `${webdavConfig.enabled}-${webdavConfig.serverUrl}-${webdavConfig.username}-${webdavConfig.password}`
-  }
-
-  // 当WebDAV功能启用且配置完整时，自动测试连接
-  useEffect(() => {
-    const currentHash = getConfigHash()
-    
-    // 只有配置真正变化时才重新测试
-    if (currentHash !== lastConfigHash &&
-        webdavConfig.enabled && 
-        webdavConfig.serverUrl && 
-        webdavConfig.username && 
-        webdavConfig.password &&
-        !isTestingConnection) {
-      
-      // 更新配置哈希
-      setLastConfigHash(currentHash)
-      
-      // 延迟一下自动测试，避免频繁触发
-      const timer = setTimeout(() => {
-        console.log('WebDAV配置完整，自动测试连接...')
-        testConnection()
-      }, 1000)
-      
-      return () => clearTimeout(timer)
-    }
-  }, [webdavConfig.enabled, webdavConfig.serverUrl, webdavConfig.username, webdavConfig.password, isTestingConnection, lastConfigHash])
-
-  // 测试WebDAV连接
-  const testConnection = async () => {
-    if (!webdavConfig.serverUrl || !webdavConfig.username || !webdavConfig.password) {
-      setConnectionTestResult({
-        success: false,
-        message: '请填写完整的WebDAV配置信息'
-      })
+  const testConnection = useCallback(async () => {
+    if (!isWebDAVConfigComplete(useConfigStore.getState().webdavConfig)) {
+      setTestResult({ success: false, message: t('webdav.config.fillAll') })
       return
     }
-
-    setIsTestingConnection(true)
-    setWebDAVConnectionStatus('connecting')
-    setConnectionTestResult(null)
-
-    try {
-      // 初始化WebDAV服务
-      const initResult = await webdavService.initialize(webdavConfig)
-      
-      if (!initResult.success) {
-        setWebDAVConnectionStatus('error')
-        setConnectionTestResult({
-          success: false,
-          message: initResult.error || '连接失败'
-        })
-        return
-      }
-
-      // 测试连接
-      const testResult = await webdavService.testConnection()
-      
-      if (testResult.success) {
-        setWebDAVConnectionStatus('connected')
-        setConnectionTestResult({
-          success: true,
-          message: 'WebDAV连接测试成功！'
-        })
-      } else {
-        setWebDAVConnectionStatus('error')
-        setConnectionTestResult({
-          success: false,
-          message: testResult.error || '连接测试失败'
-        })
-      }
-    } catch (error) {
-      setWebDAVConnectionStatus('error')
-      setConnectionTestResult({
-        success: false,
-        message: `连接测试异常: ${error instanceof Error ? error.message : '未知错误'}`
-      })
-    } finally {
-      setIsTestingConnection(false)
+    const seq = ++testSeqRef.current
+    const done = (success: boolean, message: string) => {
+      if (seq !== testSeqRef.current) return
+      setStatus(success ? 'connected' : 'error')
+      setTestResult({ success, message })
+      setIsTesting(false)
     }
-  }
+    setIsTesting(true)
+    setStatus('connecting')
+    setTestResult(null)
+    // 用最新配置重新初始化，再探测
+    const initError = await ensureReady(true)
+    if (initError) return done(false, initError)
+    try {
+      const r = await webdavService.testConnection()
+      done(r.success, r.success ? t('webdav.config.testSuccess') : r.error || t('webdav.config.testFailed'))
+    } catch (err) {
+      done(false, t('webdav.config.testException', { error: errorText(err) }))
+    }
+  }, [ensureReady, errorText, setStatus, t])
 
-  // 重置配置
+  // 启用且凭据完整时，凭据变化后防抖自动测试一次
+  const { enabled, serverUrl, username, password } = webdavConfig
+  const autoKey = enabled && serverUrl && username && password ? `${serverUrl}\n${username}\n${password}` : ''
+  useEffect(() => {
+    if (!autoKey || autoKey === autoTestedKeyRef.current) return
+    const timer = setTimeout(() => {
+      autoTestedKeyRef.current = autoKey
+      void testConnection()
+    }, AUTO_TEST_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [autoKey, testConnection])
+
   const handleReset = () => {
-    resetWebDAVConfig()
-    setConnectionTestResult(null)
+    s.resetWebDAVConfig()
+    setTestResult(null)
     webdavService.disconnect()
   }
 
-  // 获取连接状态图标
-  const getConnectionStatusIcon = () => {
-    switch (webdavConfig.connectionStatus) {
-      case 'connected':
-        return <CheckCircle className="h-4 w-4 text-green-500" />
-      case 'connecting':
-        return <Loader2 className="h-4 w-4 text-primary animate-spin" />
-      case 'error':
-        return <XCircle className="h-4 w-4 text-red-500" />
-      default:
-        return <XCircle className="h-4 w-4 text-gray-400" />
-    }
-  }
-
-  // 获取连接状态文本
-  const getConnectionStatusText = () => {
-    switch (webdavConfig.connectionStatus) {
-      case 'connected':
-        return '已连接'
-      case 'connecting':
-        return '连接中...'
-      case 'error':
-        return '连接失败'
-      default:
-        return '未连接'
-    }
-  }
+  const statusKey = ['connected', 'connecting', 'error'].includes(webdavConfig.connectionStatus)
+    ? webdavConfig.connectionStatus
+    : 'disconnected'
 
   return (
     <div className="space-y-6">
-      {/* 启用开关 */}
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
           <Label htmlFor="webdav-enabled" className="text-base font-medium">
-            启用WebDAV同步
+            {t('webdav.config.enable')}
           </Label>
-          <p className="text-sm text-muted-foreground">
-            启用后可以将处理后的文件自动同步到WebDAV服务器
-          </p>
+          <p className="text-sm text-muted-foreground">{t('webdav.config.enableHint')}</p>
         </div>
-        <Switch
-          id="webdav-enabled"
-          checked={webdavConfig.enabled}
-          onCheckedChange={setWebDAVEnabled}
-        />
+        <Switch id="webdav-enabled" checked={webdavConfig.enabled} onCheckedChange={s.setWebDAVEnabled} />
       </div>
 
       <Separator />
 
       {webdavConfig.enabled && (
         <>
-          {/* 服务器配置 */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5" />
-                服务器配置
+                {t('webdav.config.serverTitle')}
               </CardTitle>
-              <CardDescription>
-                配置WebDAV服务器的连接信息
-              </CardDescription>
+              <CardDescription>{t('webdav.config.serverDescription')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="server-url">服务器地址</Label>
+              <Field id="server-url" label={t('webdav.config.serverUrl')}>
                 <Input
                   id="server-url"
                   placeholder="https://dav.jianguoyun.com/dav/"
                   value={webdavConfig.serverUrl}
-                  onChange={(e) => setWebDAVServerUrl(e.target.value)}
+                  onChange={(e) => s.setWebDAVServerUrl(e.target.value)}
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="username">用户名</Label>
+              </Field>
+              <Field id="username" label={t('webdav.config.username')}>
                 <Input
                   id="username"
                   placeholder="your-email@example.com"
                   value={webdavConfig.username}
-                  onChange={(e) => setWebDAVUsername(e.target.value)}
+                  onChange={(e) => s.setWebDAVUsername(e.target.value)}
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">密码</Label>
+              </Field>
+              <Field id="password" label={t('webdav.config.password')}>
                 <div className="relative">
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="应用密码"
+                    placeholder={t('webdav.config.passwordPlaceholder')}
                     value={webdavConfig.password}
-                    onChange={(e) => setWebDAVPassword(e.target.value)}
+                    onChange={(e) => s.setWebDAVPassword(e.target.value)}
                   />
                   <Button
                     type="button"
@@ -236,177 +161,124 @@ export function WebDAVConfig() {
                     size="sm"
                     className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? t('webdav.config.hidePassword') : t('webdav.config.showPassword')}
                   >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="app-name">应用名称</Label>
+              </Field>
+              <Field id="app-name" label={t('webdav.config.appName')}>
                 <Input
                   id="app-name"
                   placeholder="fastReader_by_PF"
                   value={webdavConfig.appName}
-                  onChange={(e) => setWebDAVAppName(e.target.value)}
+                  onChange={(e) => s.setWebDAVAppName(e.target.value)}
                 />
-              </div>
+              </Field>
             </CardContent>
           </Card>
 
-          {/* 连接测试 */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <RefreshCw className="h-5 w-5" />
-                连接测试
+                {t('webdav.config.testTitle')}
               </CardTitle>
-              <CardDescription>
-                测试WebDAV服务器连接是否正常
-              </CardDescription>
+              <CardDescription>{t('webdav.config.testDescription')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  {getConnectionStatusIcon()}
-                  <span className="text-sm">{getConnectionStatusText()}</span>
+                  {STATUS_ICON[statusKey] ?? <XCircle className="h-4 w-4 text-gray-400" />}
+                  <span className="text-sm">{t(`webdav.config.status.${statusKey}`)}</span>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={testConnection}
-                    disabled={isTestingConnection}
-                  >
-                    {isTestingConnection ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        测试中...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        测试连接
-                      </>
-                    )}
+                  <Button variant="outline" size="sm" onClick={() => void testConnection()} disabled={isTesting}>
+                    {isTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    {isTesting ? t('webdav.config.testing') : t('config.testConnection')}
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleReset}
-                  >
-                    重置
+                  <Button variant="outline" size="sm" onClick={handleReset}>
+                    {t('webdav.config.reset')}
                   </Button>
                 </div>
               </div>
 
-              {connectionTestResult && (
-                <Alert className={connectionTestResult.success ? 'border-green-200' : 'border-red-200'}>
-                  <AlertDescription>
-                    {connectionTestResult.message}
-                  </AlertDescription>
+              {testResult && (
+                <Alert className={testResult.success ? 'border-green-200' : 'border-red-200'}>
+                  <AlertDescription>{testResult.message}</AlertDescription>
                 </Alert>
               )}
             </CardContent>
           </Card>
 
-          {/* 同步设置 */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FolderOpen className="h-5 w-5" />
-                同步设置
+                {t('webdav.config.syncTitle')}
               </CardTitle>
-              <CardDescription>
-                配置文件同步的相关选项
-              </CardDescription>
+              <CardDescription>{t('webdav.config.syncDescription')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label htmlFor="auto-sync">自动同步</Label>
-                  <p className="text-sm text-muted-foreground">
-                    处理完成后自动同步文件到WebDAV
-                  </p>
+                  <Label htmlFor="auto-sync">{t('webdav.config.autoSync')}</Label>
+                  <p className="text-sm text-muted-foreground">{t('webdav.config.autoSyncHint')}</p>
                 </div>
-                <Switch
-                  id="auto-sync"
-                  checked={webdavConfig.autoSync}
-                  onCheckedChange={setWebDAVAutoSync}
-                />
+                <Switch id="auto-sync" checked={webdavConfig.autoSync} onCheckedChange={s.setWebDAVAutoSync} />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="browse-path">浏览路径</Label>
+              <Field id="browse-path" label={t('webdav.config.browsePath')} hint={t('webdav.config.browsePathHint')}>
                 <Input
                   id="browse-path"
                   placeholder="/"
                   value={webdavConfig.browsePath}
-                  onChange={(e) => setWebDAVBrowsePath(e.target.value)}
+                  onChange={(e) => s.setWebDAVBrowsePath(e.target.value)}
                 />
-                <p className="text-sm text-muted-foreground">
-                  WebDAV 文件浏览默认从此目录开始
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="sync-path">同步路径</Label>
+              </Field>
+              <Field id="sync-path" label={t('webdav.config.syncPath')} hint={t('webdav.config.syncPathHint')}>
                 <Input
                   id="sync-path"
                   placeholder="/fastReader"
                   value={webdavConfig.syncPath}
-                  onChange={(e) => setWebDAVSyncPath(e.target.value)}
+                  onChange={(e) => s.setWebDAVSyncPath(e.target.value)}
                 />
-                <p className="text-sm text-muted-foreground">
-                  处理结果将输出到此路径
-                </p>
-              </div>
-
-
+              </Field>
               {webdavConfig.lastSyncTime && (
                 <div className="text-sm text-muted-foreground">
-                  最后同步时间: {new Date(webdavConfig.lastSyncTime).toLocaleString()}
+                  {t('webdav.config.lastSync', { time: new Date(webdavConfig.lastSyncTime).toLocaleString() })}
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* 帮助信息 */}
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
               <div className="space-y-2">
                 <p>
-                  <strong>坚果云WebDAV配置说明：</strong>
+                  <strong>{t('webdav.config.helpTitle')}</strong>
                 </p>
                 <ul className="list-disc list-inside space-y-1 text-sm">
-                  <li>服务器地址：https://dav.jianguoyun.com/dav/</li>
-                  <li>用户名：坚果云账户邮箱</li>
-                  <li>密码：在坚果云安全选项中生成的应用密码</li>
-                  <li>应用密码不是登录密码，需要在账户设置中单独生成</li>
+                  <li>{t('webdav.config.helpServer')}</li>
+                  <li>{t('webdav.config.helpUsername')}</li>
+                  <li>{t('webdav.config.helpPassword')}</li>
+                  <li>{t('webdav.config.helpAppPassword')}</li>
                 </ul>
                 <div className="flex items-center gap-2 pt-2">
                   <ExternalLink className="h-4 w-4" />
-                  <a 
-                    href="https://help.jianguoyun.com/?p=1464" 
-                    target="_blank" 
+                  <a
+                    href="https://help.jianguoyun.com/?p=1464"
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="text-primary hover:underline"
                   >
-                    查看坚果云WebDAV设置教程
+                    {t('webdav.config.helpLink')}
                   </a>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  当前版本通过同源 `/api/dav` 代理访问 WebDAV，请确保服务器地址为 https。
-                </p>
+                <p className="text-sm text-muted-foreground">{t('webdav.config.proxyNote')}</p>
               </div>
             </AlertDescription>
           </Alert>
-
         </>
       )}
     </div>
