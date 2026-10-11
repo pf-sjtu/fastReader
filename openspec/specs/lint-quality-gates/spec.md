@@ -1,8 +1,10 @@
 # lint-quality-gates Specification
 
 ## Purpose
-TBD - created by archiving change update-eslint-debt-remediation. Update Purpose after archive.
+约束代码质量门禁：真实类型检查、ESLint、测试与构建在本地与 CI 上的执行要求，以及历史债务的分批收敛方式。
+
 ## Requirements
+
 ### Requirement: Incremental lint debt remediation
 系统 MUST 采用分批方式收敛 ESLint 历史债务，并为每一批次提供可验证的文件清单。
 
@@ -27,3 +29,26 @@ TBD - created by archiving change update-eslint-debt-remediation. Update Purpose
 - **THEN** 运行对应测试套件并通过
 - **AND** 记录失败项与后续批次计划
 
+### Requirement: 不得保留零引用的遗留模块
+代码库 MUST NOT 保留经全仓库检索确认零 import 引用的遗留服务文件、兼容层别名或未使用的工具模块。
+
+#### Scenario: 删除已证实零引用的遗留 WebDAV 代理服务
+- **WHEN** `src/services/webdavProxyService.ts` 在全仓库无 import 引用
+- **AND** 现有 WebDAV 流量经 `/api/dav` header 代理处理
+- **THEN** 该文件 SHALL 从代码库移除
+
+#### Scenario: 删除已证实零引用的 AI 兼容别名
+- **WHEN** `AiService` 类与 `AIServiceCompat` 对象在全仓库无 import 引用
+- **AND** `AIService` facade 重导出仍被业务代码使用
+- **THEN** 仅移除弃用别名，保留活跃 facade 导出
+
+#### Scenario: 删除已证实零引用的错误工具模块
+- **WHEN** `src/lib/error.ts` 在全仓库无 import 引用
+- **THEN** 该文件 SHALL 从代码库移除
+
+### Requirement: 真实类型检查与 CI 门禁
+`pnpm build` 与 `pnpm typecheck` MUST 使用 `tsc -b` 实际检查 `src/` 全部文件；CI MUST 在每次推送执行 typecheck、lint、test、build。
+
+#### Scenario: 引入类型错误
+- **WHEN** 提交引入类型错误
+- **THEN** `pnpm typecheck` 失败且 CI 标红

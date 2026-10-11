@@ -63,4 +63,4 @@
 ## 7. 收尾（leader）
 - [x] 7.1 补齐各领域上报的 i18n key（zh/en 各 414 键，键一致性测试）
 - [x] 7.2 全量 typecheck / lint / test / coverage / build
-- [ ] 7.3 更新 README、CLAUDE.md、docs（随第 2 波一并完成）
+- [x] 7.3 更新 README、CLAUDE.md、docs（随第 2 波一并完成）

@@ -1,8 +1,10 @@
 # batch-ui Specification
 
 ## Purpose
-TBD - created by archiving change add-batch-processing. Update Purpose after archive.
+约束 Web 端批量处理界面与引擎：文件选择、队列执行与暂停、跳过已处理书籍的判定，以及与单书一致的处理模式支持。
+
 ## Requirements
+
 ### Requirement: Batch Processing UI
 
 系统 SHALL 在 WebDAV 按钮右侧添加"批量处理"按钮。
@@ -94,3 +96,16 @@ TBD - created by archiving change add-batch-processing. Update Purpose after arc
 - **THEN** 系统提示存在未完成的批次
 - **AND** 用户可选择继续上次批次或开始新批次
 
+### Requirement: 批量跳过以元数据完整性为准
+批量 skipProcessed MUST 读取云端摘要元数据；`isPartial` 为 true 的书 MUST NOT 被跳过。
+
+#### Scenario: 云端结果不完整
+- **WHEN** 批量处理开启 skipProcessed，云端存在同名摘要但 `isPartial: true`
+- **THEN** 该书重新进入处理
+
+### Requirement: 批量支持全部处理模式
+批量处理 MUST 与单书使用同一处理管线，支持 summary、mindmap、combined-mindmap 模式。
+
+#### Scenario: 批量导图模式
+- **WHEN** 以 mindmap 模式批量处理
+- **THEN** 每本书产出非空的章节导图结果

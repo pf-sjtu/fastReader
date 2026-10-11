@@ -1,7 +1,7 @@
 # markdown-rendering Specification
 
 ## Purpose
-TBD - created by archiving change fix-markdown-punctuation-rendering. Update Purpose after archive.
+约束 AI 结果 Markdown 的渲染规则：中日韩文本与全角标点相邻时，加粗、斜体、行内代码等强调语法必须被正确识别并显示，不得退化为字面星号或反引号。
 ## Requirements
 ### Requirement: Markdown 标点符号预处理
 The system SHALL 在渲染 Markdown 内容前，检测 Markdown 强调标记（`**`, `__`, `*`, `_`）内部是否包含标点符号，并在对应侧的作用域外添加空格：

@@ -1,8 +1,10 @@
 # processing-metadata Specification
 
 ## Purpose
-TBD - created by archiving change add-batch-processing. Update Purpose after archive.
+约束处理结果文件头部的元数据注释：字段集合、写入转义与解析范围，供云端缓存识别、费用统计与完整性判断使用。
+
 ## Requirements
+
 ### Requirement: Processing Metadata Annotation
 
 系统 SHALL 在保存处理结果时，在文件头部添加 HTML 注释格式的处理元信息。
@@ -85,3 +87,13 @@ TBD - created by archiving change add-batch-processing. Update Purpose after arc
 - **THEN** 返回包含所有字段的 Metadata 对象
 - **AND** 如果文件没有备注，返回 null
 
+### Requirement: 元数据注释块解析与转义
+系统 MUST 只解析文件开头的 HTML 注释元数据块，写入元数据值时 MUST 转义 `-->`；前端只保留一份解析实现。
+
+#### Scenario: 正文中出现 HTML 注释
+- **WHEN** 摘要正文中包含 `<!-- ... -->`
+- **THEN** 元数据解析结果只来自文件开头的注释块
+
+#### Scenario: 元数据值包含注释结束符
+- **WHEN** 书名或提示词中包含 `-->`
+- **THEN** 写出的文件元数据块仍可被完整解析

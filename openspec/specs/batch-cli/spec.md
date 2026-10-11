@@ -1,8 +1,10 @@
 # batch-cli Specification
 
 ## Purpose
-TBD - created by archiving change add-batch-processing. Update Purpose after archive.
+约束 Python 批量 CLI 的配置、处理流程、错误处理与产物格式，确保其输出与前端缓存契约一致、可被前端识别与复用。
+
 ## Requirements
+
 ### Requirement: CLI Entry Point
 
 系统 SHALL 提供 `fastreader batch` 命令行工具。
@@ -38,12 +40,20 @@ TBD - created by archiving change add-batch-processing. Update Purpose after arc
 
 ### Requirement: Batch File Discovery
 系统 SHALL 在单次批量处理内缓存云端文件列表，用于过滤已处理文件，避免循环内重复调用 WebDAV。
+系统 MUST 区分「缓存列表为空（确实没有已处理文件）」与「缓存列表探测失败」；后者不得当作无缓存而把全部书籍加入处理队列。
 
 #### Scenario: 单次批处理内缓存列表
 - **GIVEN** 配置 skipProcessed = true
 - **WHEN** 系统开始一次批量处理
 - **THEN** 系统只进行一次 WebDAV 目录/缓存列表查询
 - **AND** 后续过滤逻辑使用本地缓存列表进行对比
+
+#### Scenario: 缓存探测失败时中止批处理
+- **GIVEN** 配置 skipProcessed = true
+- **AND** 云端缓存列表查询因网络错误、超时、5xx 或鉴权失败而无法完成
+- **WHEN** 系统开始一次批量处理
+- **THEN** 系统 MUST NOT 将探测失败当作「没有已处理缓存」
+- **AND** 系统中止批处理并记录错误，而不是对全部书籍重新处理
 
 ### Requirement: Sequential Processing
 系统 SHALL 在处理队列内使用缓存的“已处理文件”集合进行跳过判断，避免逐文件远程存在性检查。
@@ -136,3 +146,21 @@ TBD - created by archiving change add-batch-processing. Update Purpose after arc
 - **WHEN** 处理过程中
 - **THEN** 只输出关键进度和结果信息
 
+### Requirement: CLI 与前端产物契约一致
+CLI 输出的文件名、Markdown 结构与元数据字段 MUST 与前端 `formatUnifiedMarkdown` 一致，并有跨端样例测试保障。
+
+#### Scenario: 大写扩展名文件
+- **WHEN** 处理 `Book.EPUB`
+- **THEN** CLI 与前端生成相同的缓存文件名 `Book-完整摘要.md`
+
+#### Scenario: 章节失败
+- **WHEN** 部分章节处理失败
+- **THEN** 失败章节使用 `【处理失败】` 前缀，元数据 `isPartial: true`
+- **AND** 失败比例超过阈值时整本判失败且不上传
+
+### Requirement: CLI 分类重试与超时
+CLI MUST 只对 408、429、5xx 与网络错误按配置的 maxRetries/retryDelays 重试并遵循 Retry-After；其余 4xx 立即失败；AI 请求 MUST 设置超时。
+
+#### Scenario: 鉴权失败
+- **WHEN** AI 服务返回 401
+- **THEN** 不重试，立即记录失败
