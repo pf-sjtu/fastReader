@@ -1,15 +1,71 @@
 """
 章节提取器
 负责从 EPUB 和 PDF 文件中提取章节内容
+
+章节识别模式（与前端同名，CLI 支持其中两种，其余在启动校验时报错）：
+- normal：EPUB 按 spine 阅读顺序逐文档；PDF 按「第X章 / Chapter N」标记切分
+- epub-toc：EPUB 按目录（TOC）指定层级切分，相邻目录项之间的 spine 文档聚合为一章；
+  PDF 无目录概念，按 normal 处理并给出提示
 """
 
-import io
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 from ebooklib import epub
+import ebooklib
 from pypdf import PdfReader
+
+
+# 与前端 src/services/constants.ts SKIP_CHAPTER_KEYWORDS 保持一致
+SKIP_CHAPTER_KEYWORDS = [
+    # 英文
+    'acknowledgments', 'ack', 'acknowledgement', 'thanks', 'gratitude',
+    'recommended reading', 'further reading', 'bibliography', 'references',
+    'about the author', 'about author', 'author bio', 'biography',
+    'praise for', 'reviews', 'testimonials', 'endorsements',
+    'title page', 'copyright', 'dedication', 'contents', 'table of contents',
+    'index', 'glossary', 'appendix', 'appendices',
+    'notes', 'endnotes', 'footnotes',
+    'illustration credits', 'image credits', 'other titles', 'epigraph',
+    'about the book', 'also by', 'about the cover illustration',
+    'colophon', 'cast of characters', 'list of characters',
+    'preface', 'afterword', 'foreword',
+    # 中文
+    '作者简介', '译者简介', '作者／译者', '作者/译者', '关于作者', '关于译者',
+    '人物表', '登场人物', '角色表',
+    '致谢', '感谢',
+    '图片来源', '插图来源', '图片说明',
+    '版权', '版权页',
+    '封面', '书名页', '目录',
+    '献词', '献辞',
+    '索引', '附录', '参考文献', '参考书目', '推荐阅读',
+    '出版信息', '版本记录',
+]
+
+# 标题前导的编号/标点（如 "1. "、"§"、"— "），匹配前剥掉
+_LEADING_NOISE = re.compile(r'^[\W_\d]+', re.UNICODE)
+
+
+def matches_skip_title(title: str) -> bool:
+    """标题是否命中跳过词表。
+
+    与前端子串匹配不同，这里按「标题前缀 + 整词」匹配：
+    'About the Author' / 'Copyright ©' / '致谢' 命中；
+    'Authority and Power' / 'The Abouts' / 'Black Hack' 不会因 author/about/ack 子串被误杀。
+    """
+    if not title:
+        return False
+    normalized = _LEADING_NOISE.sub('', title.strip().lower())
+    for keyword in SKIP_CHAPTER_KEYWORDS:
+        k = keyword.lower()
+        if not normalized.startswith(k):
+            continue
+        rest = normalized[len(k):]
+        # 英文关键词需整词：后一个字符不能是字母/数字
+        if k[-1].isascii() and rest and rest[0].isalnum():
+            continue
+        return True
+    return False
 
 
 @dataclass
@@ -33,290 +89,254 @@ class BookContent:
 class ChapterExtractor(ABC):
     """章节提取器基类"""
 
+    def __init__(self, detection_mode: str = 'normal', toc_depth: int = 1):
+        self.detection_mode = detection_mode
+        self.toc_depth = max(1, toc_depth)
+        self.warnings: list[str] = []
+
     @abstractmethod
     def extract(self, file_path: str) -> BookContent:
         """提取章节内容"""
         pass
 
 
+def _html_to_text(content: bytes) -> str:
+    """HTML → 纯文本（保留段落换行）"""
+    try:
+        html_content = content.decode('utf-8', errors='ignore')
+        html_content = re.sub(r'<(script|style)[^>]*>[\s\S]*?</\1>', '', html_content, flags=re.IGNORECASE)
+        html_content = re.sub(r'<head[^>]*>[\s\S]*?</head>', '', html_content, flags=re.IGNORECASE)
+
+        text = re.sub(r'<br\s*/?>', '\n', html_content, flags=re.IGNORECASE)
+        text = re.sub(r'</p>', '\n\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'</div>', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'</h[1-6]>', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'<[^>]+>', '', text)
+
+        for entity, char in (('&nbsp;', ' '), ('&lt;', '<'), ('&gt;', '>'), ('&quot;', '"'), ('&amp;', '&')):
+            text = text.replace(entity, char)
+
+        lines = [line.strip() for line in text.split('\n')]
+        return '\n'.join(line for line in lines if line)
+    except Exception:
+        return ""
+
+
+def _extract_html_title(content: bytes) -> str:
+    """从章节 HTML 提取标题"""
+    try:
+        html_content = content.decode('utf-8', errors='ignore')
+        patterns = [
+            r'<h[1-6][^>]*>(.*?)</h[1-6]>',
+            r'<title>([^<]+)</title>',
+            r'<p[^>]*class="title"[^>]*>([^<]+)</p>',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, html_content, re.IGNORECASE | re.DOTALL)
+            if match:
+                title = re.sub(r'<[^>]+>', '', match.group(1)).strip()
+                if title:
+                    return title
+        for p in re.findall(r'<p[^>]*>([^<]+)</p>', html_content):
+            if len(p.strip()) > 10:
+                return p.strip()[:100]
+    except Exception:
+        pass
+    return ""
+
+
 class EPUBExtractor(ChapterExtractor):
     """EPUB 章节提取器"""
 
-    # Skip chapter keywords (same as frontend)
-    SKIP_CHAPTER_KEYWORDS = [
-        '封面', '封面图', '版权', '版权页', '前言', '序言', '说明', '介绍',
-        '目录', 'Contents', 'Preface', 'Introduction', 'Copyright',
-        'acknowledg', 'dedication', 'about', 'author', 'publisher',
-        'isbn', '书号', '定价', '出版', '印刷', 'contents'
-    ]
+    # 原始 HTML 小于该字节数视为空页
+    MIN_RAW_BYTES = 200
+    # 清洗后正文小于该字数不收录
+    MIN_TEXT_CHARS = 100
 
     def extract(self, file_path: str) -> BookContent:
         """从 EPUB 文件提取章节"""
         try:
-            # Read file
-            with open(file_path, 'rb') as f:
-                book = epub.read_epub(f)
-
-            # Get metadata
+            book = epub.read_epub(file_path)
             title = self._get_metadata(book, 'title', 'Unknown Title')
             author = self._get_metadata(book, 'creator', 'Unknown Author')
 
-            # Extract chapters from spine
-            chapters = []
-            chapter_index = 0
-
-            for item in book.get_items():
-                if item.get_type() == epub.ITEM_DOCUMENT:
-                    # Get chapter title from nav or spine
-                    item_name = item.get_name()
-                    chapter_title = self._extract_title(item.get_content())
-
-                    # Skip short or non-content chapters
-                    if self._should_skip_chapter(chapter_title, item.get_content()):
-                        continue
-
-                    # Clean and extract content
-                    content = self._clean_content(item.get_content())
-
-                    if len(content) > 100:  # Only include substantial chapters
-                        chapters.append(Chapter(
-                            title=chapter_title or f"Chapter {chapter_index + 1}",
-                            content=content,
-                            index=chapter_index
-                        ))
-                        chapter_index += 1
+            spine_docs = self._spine_documents(book)
+            chapters: list[Chapter] = []
+            if self.detection_mode == 'epub-toc':
+                chapters = self._chapters_from_toc(book, spine_docs)
+                if not chapters:
+                    self.warnings.append("EPUB 目录为空或无法对应正文，已回退为 normal 模式")
+            if not chapters:
+                chapters = self._chapters_from_spine(spine_docs)
 
             return BookContent(
-                title=title,
-                author=author,
-                chapters=chapters,
-                file_path=file_path,
-                file_type='epub'
+                title=title, author=author, chapters=chapters,
+                file_path=file_path, file_type='epub',
             )
-
         except Exception as e:
             raise Exception(f"EPUB 解析失败: {e}")
 
     def _get_metadata(self, book, key: str, default: str) -> str:
-        """获取元数据"""
-        meta = book.get_metadata(key)
-        if meta:
+        meta = book.get_metadata('DC', key)
+        if meta and meta[0][0]:
             return meta[0][0]
         return default
 
-    def _extract_title(self, content: bytes) -> str:
-        """从章节内容提取标题"""
-        try:
-            html_content = content.decode('utf-8', errors='ignore')
+    def _spine_documents(self, book) -> list:
+        """按 spine 阅读顺序返回正文文档（而非 manifest 清单顺序）"""
+        docs = []
+        for entry in book.spine:
+            idref = entry[0] if isinstance(entry, (tuple, list)) else entry
+            item = book.get_item_with_id(idref)
+            if item is not None and item.get_type() == ebooklib.ITEM_DOCUMENT:
+                docs.append(item)
+        return docs
 
-            # Try to find title in common patterns
-            patterns = [
-                r'<h[1-6][^>]*>([^<]+)</h[1-6]>',
-                r'<title>([^<]+)</title>',
-                r'<p[^>]*class="title"[^>]*>([^<]+)</p>',
-            ]
+    def _make_chapters(self, candidates: list[tuple[str, bytes]]) -> list[Chapter]:
+        chapters = []
+        for title, raw in candidates:
+            if matches_skip_title(title) or len(raw) < self.MIN_RAW_BYTES:
+                continue
+            content = _html_to_text(raw)
+            if len(content) > self.MIN_TEXT_CHARS:
+                chapters.append(Chapter(
+                    title=title or f"Chapter {len(chapters) + 1}",
+                    content=content,
+                    index=len(chapters),
+                ))
+        return chapters
 
-            for pattern in patterns:
-                match = re.search(pattern, html_content, re.IGNORECASE)
-                if match:
-                    return match.group(1).strip()
+    def _chapters_from_spine(self, spine_docs: list) -> list[Chapter]:
+        candidates = []
+        for item in spine_docs:
+            raw = item.get_content()
+            candidates.append((_extract_html_title(raw), raw))
+        return self._make_chapters(candidates)
 
-            # Try to get from first substantial paragraph
-            paragraphs = re.findall(r'<p[^>]*>([^<]+)</p>', html_content)
-            for p in paragraphs:
-                if len(p.strip()) > 10:
-                    return p.strip()[:100]
+    def _flatten_toc(self, entries, depth: int = 1) -> list[tuple[int, str, str]]:
+        """展开 TOC 为 (depth, title, href)"""
+        flat = []
+        for entry in entries:
+            if isinstance(entry, (tuple, list)) and len(entry) == 2:
+                section, children = entry
+                href = getattr(section, 'href', '') or ''
+                if href:
+                    flat.append((depth, getattr(section, 'title', '') or '', href))
+                flat.extend(self._flatten_toc(children, depth + 1))
+            elif hasattr(entry, 'href'):
+                flat.append((depth, entry.title or '', entry.href))
+        return flat
 
-        except Exception:
-            pass
+    def _chapters_from_toc(self, book, spine_docs: list) -> list[Chapter]:
+        flat = self._flatten_toc(book.toc)
+        targets = [e for e in flat if e[0] == self.toc_depth] or flat
+        name_to_pos = {item.get_name(): i for i, item in enumerate(spine_docs)}
 
-        return ""
+        # 目录项 → spine 起始位置（同一文档内的锚点项只保留第一个）
+        starts: list[tuple[str, int]] = []
+        for _, title, href in targets:
+            pos = name_to_pos.get(href.split('#', 1)[0])
+            if pos is None or any(p == pos for _, p in starts):
+                continue
+            starts.append((title, pos))
+        starts.sort(key=lambda x: x[1])
 
-    def _should_skip_chapter(self, title: str, content: bytes) -> bool:
-        """判断是否应该跳过该章节"""
-        title_lower = title.lower()
-
-        # Check skip keywords
-        for keyword in self.SKIP_CHAPTER_KEYWORDS:
-            if keyword.lower() in title_lower:
-                return True
-
-        # Skip very short chapters
-        content_length = len(content)
-        if content_length < 200:
-            return True
-
-        return False
-
-    def _clean_content(self, content: bytes) -> str:
-        """清理章节内容"""
-        try:
-            html_content = content.decode('utf-8', errors='ignore')
-
-            # Remove HTML tags but keep line breaks
-            text = re.sub(r'<br\s*/?>', '\n', html_content, flags=re.IGNORECASE)
-            text = re.sub(r'</p>', '\n\n', text)
-            text = re.sub(r'</div>', '\n', text)
-            text = re.sub(r'</h[1-6]>', '\n', text)
-            text = re.sub(r'<[^>]+>', '', text)
-
-            # Decode HTML entities
-            text = text.replace('&nbsp;', ' ')
-            text = text.replace('&amp;', '&')
-            text = text.replace('&lt;', '<')
-            text = text.replace('&gt;', '>')
-            text = text.replace('&quot;', '"')
-
-            # Clean up whitespace
-            lines = []
-            for line in text.split('\n'):
-                line = line.strip()
-                if line:
-                    lines.append(line)
-
-            return '\n'.join(lines)
-
-        except Exception:
-            return ""
+        candidates = []
+        for i, (title, pos) in enumerate(starts):
+            end = starts[i + 1][1] if i + 1 < len(starts) else len(spine_docs)
+            raw = b'\n'.join(spine_docs[j].get_content() for j in range(pos, end))
+            candidates.append((title, raw))
+        return self._make_chapters(candidates)
 
 
 class PDFExtractor(ChapterExtractor):
     """PDF 章节提取器"""
 
+    CHAPTER_PATTERNS = [
+        r'(?:^|\n)\s*(?:第[一二三四五六七八九十百零\d]+章|Chapter\s+\d+)\s*(?:[\n:：]|$)',
+        r'(?:^|\n)\s*\d+\s*\n(?:第[一二三四五六七八九十百零\d]+章|Chapter\s+\d+)',
+    ]
+    MIN_CHAPTER_CHARS = 200
+
     def extract(self, file_path: str) -> BookContent:
         """从 PDF 文件提取章节"""
+        if self.detection_mode == 'epub-toc':
+            self.warnings.append("PDF 不支持 epub-toc，按 normal 模式切分")
         try:
             reader = PdfReader(file_path)
+            meta = reader.metadata or {}
+            title = meta.get('/Title') or 'Unknown Title'
+            author = meta.get('/Author') or 'Unknown Author'
 
-            # Get metadata
-            title = reader.metadata.get('/Title', 'Unknown Title') if reader.metadata else 'Unknown Title'
-            author = reader.metadata.get('/Author', 'Unknown Author') if reader.metadata else 'Unknown Author'
-
-            # Extract text from all pages
-            all_text = []
+            pages = []
             for i, page in enumerate(reader.pages):
                 try:
                     text = page.extract_text()
                     if text:
-                        all_text.append((i + 1, text))
+                        pages.append((i + 1, text))
                 except Exception as e:
-                    print(f"⚠️  页面 {i + 1} 提取失败: {e}")
-
-            # Split into chapters (simple approach: split by double newlines and look for chapter markers)
-            chapters = self._split_into_chapters(all_text)
+                    self.warnings.append(f"页面 {i + 1} 提取失败: {e}")
 
             return BookContent(
-                title=title or 'Unknown Title',
-                author=author or 'Unknown Author',
-                chapters=chapters,
-                file_path=file_path,
-                file_type='pdf'
+                title=title, author=author, chapters=self._split_into_chapters(pages),
+                file_path=file_path, file_type='pdf',
             )
-
         except Exception as e:
             raise Exception(f"PDF 解析失败: {e}")
 
+    def _is_chapter_start(self, text: str) -> bool:
+        return any(re.search(p, text, re.IGNORECASE) for p in self.CHAPTER_PATTERNS)
+
     def _split_into_chapters(self, pages: list[tuple[int, str]]) -> list[Chapter]:
-        """将 PDF 页面分割成章节"""
-        chapters = []
-        chapter_index = 0
-
-        # Combine all text
-        full_text = '\n'.join([text for _, text in pages])
-
-        # Try to split by chapter markers
-        chapter_patterns = [
-            r'(?:^|\n)\s*(?:第[一二三四五六七八九十]+章|Chapter\s+\d+)\s*[\n:]',
-            r'(?:^|\n)\s*\d+\s*\n(?:第[一二三四五六七八九十]+章|Chapter\s+\d+)',
-        ]
-
-        # Simple approach: split by large gaps or chapter patterns
-        chunks = []
-        current_chunk = ""
-        current_page_start = 1
-
+        """按章节标记切分：遇到章节起始页先收束上一章，再以该页开启新章"""
+        chunks: list[str] = []
+        current = ""
         for page_num, text in pages:
-            # Add page break marker
-            text_with_break = f"\n[Page {page_num}]\n"
-            current_chunk += text_with_break
+            if self._is_chapter_start(text) and current.strip():
+                chunks.append(current)
+                current = ""
+            current += f"\n[Page {page_num}]\n{text}"
+        if current.strip():
+            chunks.append(current)
 
-            # Check if this page starts a new chapter
-            is_chapter_start = False
-            for pattern in chapter_patterns:
-                if re.search(pattern, text, re.IGNORECASE):
-                    is_chapter_start = True
-                    break
-
-            if is_chapter_start and current_chunk.strip():
-                chunks.append((current_page_start, current_chunk.strip()))
-                current_chunk = ""
-                current_page_start = page_num
-
-        # Add remaining content
-        if current_chunk.strip():
-            chunks.append((current_page_start, current_chunk.strip()))
-
-        # Create Chapter objects
-        for page_start, content in chunks:
-            # Clean content
-            cleaned = self._clean_content(content)
-            if len(cleaned) > 200:  # Only substantial content
-                # Extract title from first line
-                lines = cleaned.split('\n')
-                title = lines[0][:100] if lines else f"Chapter {chapter_index + 1}"
-
+        chapters = []
+        for chunk in chunks:
+            cleaned = self._clean_content(chunk)
+            if len(cleaned) > self.MIN_CHAPTER_CHARS:
+                first_line = cleaned.split('\n', 1)[0]
                 chapters.append(Chapter(
-                    title=title,
+                    title=first_line[:100] or f"Chapter {len(chapters) + 1}",
                     content=cleaned,
-                    index=chapter_index
+                    index=len(chapters),
                 ))
-                chapter_index += 1
 
-        # If no chapters found, treat entire PDF as one chapter
+        # 未切出有效章节时整本作为一章
         if not chapters:
-            full_text_cleaned = self._clean_content(full_text)
-            if full_text_cleaned:
-                chapters.append(Chapter(
-                    title="全文",
-                    content=full_text_cleaned,
-                    index=0
-                ))
-
+            full = self._clean_content('\n'.join(text for _, text in pages))
+            if full:
+                chapters.append(Chapter(title="全文", content=full, index=0))
         return chapters
 
     def _clean_content(self, content: str) -> str:
-        """清理内容"""
-        # Remove page numbers
         content = re.sub(r'\[Page \d+\]', '', content)
-
-        # Remove excessive newlines
-        content = re.sub(r'\n{3,}', '\n\n', content)
-
-        # Clean up whitespace
-        lines = []
-        for line in content.split('\n'):
-            line = line.strip()
-            if line:
-                lines.append(line)
-
-        return '\n'.join(lines)
+        lines = [line.strip() for line in content.split('\n')]
+        return '\n'.join(line for line in lines if line)
 
 
 class ChapterExtractorFactory:
     """章节提取器工厂"""
 
     @staticmethod
-    def create(file_path: str) -> ChapterExtractor:
+    def create(file_path: str, detection_mode: str = 'normal', toc_depth: int = 1) -> ChapterExtractor:
         """根据文件类型创建提取器"""
-        if file_path.lower().endswith('.epub'):
-            return EPUBExtractor()
-        elif file_path.lower().endswith('.pdf'):
-            return PDFExtractor()
-        else:
-            raise ValueError(f"不支持的文件格式: {file_path}")
+        lower = file_path.lower()
+        if lower.endswith('.epub'):
+            return EPUBExtractor(detection_mode, toc_depth)
+        if lower.endswith('.pdf'):
+            return PDFExtractor(detection_mode, toc_depth)
+        raise ValueError(f"不支持的文件格式: {file_path}")
 
     @staticmethod
-    def extract(file_path: str) -> BookContent:
+    def extract(file_path: str, detection_mode: str = 'normal', toc_depth: int = 1) -> BookContent:
         """直接提取章节内容"""
-        extractor = ChapterExtractorFactory.create(file_path)
-        return extractor.extract(file_path)
+        return ChapterExtractorFactory.create(file_path, detection_mode, toc_depth).extract(file_path)

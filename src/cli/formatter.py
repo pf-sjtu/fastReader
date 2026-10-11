@@ -1,14 +1,142 @@
 """
 结果格式化器
 负责生成处理结果的 Markdown 文件
+
+产物结构严格对齐前端 src/services/metadataFormatter.ts：
+- 元数据注释字段与顺序同 formatAsHTMLComment
+- 正文结构同 formatUnifiedMarkdown（chapterNamingMode='auto'）
+- 不在文末追加时间戳等额外行：前端 parseUnifiedMarkdown 的章节正则会把它吞进最后一章
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import json
 
-from .models import ChapterInfo, BookInfo, ProcessingResult
 from .logger import Logger
+
+
+def js_number(value) -> str:
+    """数字按 JS String(number) 的常见形态输出（7.0→'7'，0.00123→'0.00123'，避免 1e-05）"""
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    if isinstance(value, int):
+        return str(value)
+    text = f"{float(value):.10f}".rstrip('0').rstrip('.')
+    return text if text not in ('', '-0') else '0'
+
+
+def js_iso_now() -> str:
+    """等价 JS new Date().toISOString()：UTC、毫秒、Z 结尾"""
+    return datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+
+
+def build_metadata(
+    file_name: str,
+    model: str,
+    chapter_detection_mode: str,
+    selected_chapters: list,
+    chapter_count: int,
+    original_char_count: int,
+    processed_char_count: int,
+    input_tokens: int,
+    output_tokens: int,
+    cost_usd: float,
+    cost_cny: float,
+    skipped_chapters: Optional[int] = None,
+    is_partial: Optional[bool] = None,
+    epub_toc_depth: Optional[int] = None,
+    processed_at: Optional[str] = None,
+) -> dict:
+    """生成处理元数据（字段同前端 generateMetadata）"""
+    metadata = {
+        'source': 'WebDAV',
+        'fileName': file_name,
+        'processedAt': processed_at or js_iso_now(),
+        'model': model,
+        'chapterDetectionMode': chapter_detection_mode,
+        'epubTocDepth': epub_toc_depth,
+        'selectedChapters': ','.join(map(str, selected_chapters)),
+        'selectedChapterCount': len(selected_chapters),
+        'chapterCount': chapter_count,
+        'originalCharCount': original_char_count,
+        'processedCharCount': processed_char_count,
+        'inputTokens': input_tokens,
+        'outputTokens': output_tokens,
+        'costUSD': round(cost_usd, 5),
+        'costRMB': round(cost_cny, 5),
+    }
+    if skipped_chapters is not None:
+        metadata['skippedChapters'] = skipped_chapters
+    if is_partial is not None:
+        metadata['isPartial'] = is_partial
+    return metadata
+
+
+def format_metadata_comment(metadata: dict, exchange_rate: float = 7.0) -> str:
+    """HTML 注释元数据（字段顺序与格式同前端 formatAsHTMLComment）"""
+    depth = metadata.get('epubTocDepth')
+    lines = [
+        f"source: {metadata['source']}",
+        f"fileName: {metadata['fileName']}",
+        f"processedAt: {metadata['processedAt']}",
+        f"model: {metadata['model']}",
+        f"chapterDetectionMode: {metadata['chapterDetectionMode']}",
+        f"epubTocDepth: {'N/A' if depth is None else depth}",
+        f"selectedChapters: {metadata['selectedChapters']}",
+        f"selectedChapterCount: {metadata['selectedChapterCount']}",
+        f"chapterCount: {metadata['chapterCount']}",
+        f"originalCharCount: {metadata['originalCharCount']}",
+        f"processedCharCount: {metadata['processedCharCount']}",
+        f"inputTokens: {metadata['inputTokens']}",
+        f"outputTokens: {metadata['outputTokens']}",
+        f"costUSD: {js_number(metadata['costUSD'])}",
+        f"costRMB: {js_number(metadata['costRMB'])} (USD/CNY: {js_number(exchange_rate)})",
+    ]
+    if 'skippedChapters' in metadata:
+        lines.append(f"skippedChapters: {metadata['skippedChapters']}")
+    if 'isPartial' in metadata:
+        lines.append(f"isPartial: {js_number(bool(metadata['isPartial']))}")
+    return "<!--\n" + "\n".join(lines) + "\n-->"
+
+
+def format_unified_markdown(
+    title: str,
+    author: str,
+    chapters: list[tuple[str, str]],
+    overall_summary: str = "",
+    connections: str = "",
+    metadata: Optional[dict] = None,
+    exchange_rate: float = 7.0,
+) -> str:
+    """统一格式 Markdown（同前端 formatUnifiedMarkdown，chapters 为 (标题, 摘要)）"""
+    lines: list[str] = []
+
+    if metadata:
+        lines.append(format_metadata_comment(metadata, exchange_rate))
+        lines.append('')
+
+    lines.append(f"# {title}")
+    lines.append('')
+
+    if author:
+        lines.append(f"**作者**: {author}")
+        lines.append('')
+
+    if overall_summary:
+        lines.extend(['## 全书总结', '', overall_summary, ''])
+
+    if connections:
+        lines.extend(['## 章节关联分析', '', connections, ''])
+
+    if chapters:
+        lines.extend(['## 章节摘要', ''])
+        for index, (chapter_title, summary) in enumerate(chapters):
+            lines.append(f"### {chapter_title or f'第{index + 1}章'}")
+            lines.append('')
+            lines.append(summary or '（暂无总结）')
+            lines.append('')
+
+    return '\n'.join(lines)
 
 
 class ResultFormatter:
@@ -17,144 +145,13 @@ class ResultFormatter:
     def __init__(self, logger: Logger):
         self.logger = logger
 
-    def format_summary(
-        self,
-        book_info: BookInfo,
-        chapter_summaries: dict,
-        connections: str,
-        overall_summary: str,
-        metadata: dict
-    ) -> str:
-        """
-        格式化总结结果 - 统一格式
-
-        统一格式规范：
-        1. HTML 注释格式的头部元数据
-        2. 书名用一级标题 `# 书名`
-        3. 作者信息（如有）
-        4. 全书总结用二级标题 `## 全书总结`
-        5. 章节关联用二级标题 `## 章节关联分析`
-        6. 章节摘要用二级标题 `## 章节摘要`
-        7. 各章节用三级标题 `### 章节名`
-
-        Args:
-            book_info: 书籍信息
-            chapter_summaries: 章节总结字典 {chapter_id: summary}
-            connections: 章节关联分析
-            overall_summary: 全书总结
-            metadata: 处理元数据
-
-        Returns:
-            格式化的 Markdown 内容
-        """
-        lines = []
-
-        # 1. 处理元数据（HTML 注释格式）- 必须放在最前面
-        metadata_comment = self._format_metadata_comment(metadata)
-        if metadata_comment:
-            lines.append(metadata_comment)
-            lines.append("")
-
-        # 2. 书名 - 一级标题
-        lines.append(f"# {book_info.title}")
-        lines.append("")
-
-        # 3. 作者
-        if book_info.author:
-            lines.append(f"**作者**: {book_info.author}")
-            lines.append("")
-
-        # 4. 全书总结 - 二级标题
-        if overall_summary:
-            lines.append("## 全书总结")
-            lines.append("")
-            lines.append(overall_summary)
-            lines.append("")
-
-        # 5. 章节关联分析 - 二级标题
-        if connections:
-            lines.append("## 章节关联分析")
-            lines.append("")
-            lines.append(connections)
-            lines.append("")
-
-        # 6. 章节摘要 - 二级标题
-        if book_info.chapters:
-            lines.append("## 章节摘要")
-            lines.append("")
-
-            # 7. 各章节 - 三级标题
-            for i, chapter in enumerate(book_info.chapters):
-                chapter_key = str(i + 1)
-                summary = chapter_summaries.get(chapter_key, "（暂无总结）")
-
-                lines.append(f"### {chapter.title}")
-                lines.append("")
-                lines.append(summary)
-                lines.append("")
-
-        return "\n".join(lines)
-
-    def _format_metadata_comment(self, metadata: dict) -> str:
-        """格式化为 HTML 注释"""
-        lines = ["<!--"]
-
-        for key, value in metadata.items():
-            lines.append(f"{key}: {value}")
-
-        lines.append("-->")
-
-        return "\n".join(lines)
-
-    def format_metadata(
-        self,
-        file_name: str,
-        model: str,
-        chapter_detection_mode: str,
-        selected_chapters: list,
-        chapter_count: int,
-        original_char_count: int,
-        processed_char_count: int,
-        input_tokens: int,
-        output_tokens: int,
-        cost_usd: float,
-        cost_cny: float,
-        exchange_rate: float = 7.0
-    ) -> dict:
-        """生成处理元数据字典"""
-        return {
-            'source': 'WebDAV',
-            'fileName': file_name,
-            'processedAt': datetime.now().isoformat(),
-            'model': model,
-            'chapterDetectionMode': chapter_detection_mode,
-            'selectedChapters': ','.join(map(str, selected_chapters)),
-            'chapterCount': chapter_count,
-            'originalCharCount': original_char_count,
-            'processedCharCount': processed_char_count,
-            'inputTokens': input_tokens,
-            'outputTokens': output_tokens,
-            'costUSD': round(cost_usd, 5),
-            'costRMB': round(cost_cny, 5)
-        }
-
-    def format_metadata_as_html_comment(
-        self,
-        metadata: dict,
-        exchange_rate: float = 7.0
-    ) -> str:
-        """格式化为 HTML 注释"""
-        lines = ["<!--"]
-
-        for key, value in metadata.items():
-            if key == 'costRMB' and 'costUSD' in metadata:
-                lines.append(f"{key}: {value} (USD/CNY: {exchange_rate})")
-            else:
-                lines.append(f"{key}: {value}")
-
-        lines.append("-->")
-
-        return "\n".join(lines)
+    def format_summary(self, title: str, author: str, chapters: list[tuple[str, str]],
+                       connections: str, overall_summary: str, metadata: Optional[dict],
+                       exchange_rate: float = 7.0) -> str:
+        """格式化总结结果 - 统一格式（见 format_unified_markdown）"""
+        return format_unified_markdown(
+            title, author, chapters, overall_summary, connections, metadata, exchange_rate
+        )
 
     def save_to_file(self, content: str, output_dir: str, file_name: str) -> str:
         """
@@ -253,84 +250,6 @@ class ResultFormatter:
         file_path.write_text(content, encoding='utf-8')
 
         return str(file_path)
-
-    def format_result(
-        self,
-        title: str,
-        author: str,
-        chapters: dict,
-        overall_summary: str = "",
-        mode: str = "summary"
-    ) -> str:
-        """格式化处理结果为 Markdown"""
-        lines = []
-
-        # 标题
-        lines.append(f"# {title}")
-        lines.append("")
-
-        # 作者
-        if author and author != "Unknown Author":
-            lines.append(f"**作者**: {author}")
-            lines.append("")
-
-        # 处理模式
-        mode_names = {
-            'summary': '文字总结',
-            'mindmap': '思维导图',
-            'combined-mindmap': '综合思维导图'
-        }
-        lines.append(f"*处理模式: {mode_names.get(mode, mode)}*")
-        lines.append("")
-
-        # 分隔线
-        lines.append("---")
-        lines.append("")
-
-        # 全书总结
-        if overall_summary:
-            lines.append("## 全书总结")
-            lines.append("")
-            lines.append(overall_summary)
-            lines.append("")
-
-        # 章节摘要
-        lines.append("## 章节摘要")
-        lines.append("")
-
-        for idx in range(1, len(chapters) + 1):
-            chapter_key = str(idx)
-            summary = chapters.get(chapter_key, "（暂无总结）")
-
-            lines.append(f"### 第{idx}章")
-            lines.append("")
-            lines.append(summary)
-            lines.append("")
-
-        # 时间戳
-        lines.append(f"*由 fastReader 自动生成于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
-
-        return "\n".join(lines)
-
-    def format_with_metadata(
-        self,
-        content: str,
-        metadata: dict,
-        exchange_rate: float = 7.0
-    ) -> str:
-        """在内容前添加元数据 HTML 注释"""
-        lines = ["<!--"]
-
-        for key, value in metadata.items():
-            if key == 'costRMB':
-                lines.append(f"{key}: {value} (USD/CNY: {exchange_rate})")
-            else:
-                lines.append(f"{key}: {value}")
-
-        lines.append("-->")
-        lines.append("")
-
-        return "\n".join(lines) + content
 
     def format_json(self, data: dict) -> str:
         """格式化为 JSON 字符串"""

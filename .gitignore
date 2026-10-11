@@ -140,3 +140,4 @@ resources/
 *$py.class
 
 *config*.yaml
+!config.example.yaml

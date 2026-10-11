@@ -11,6 +11,14 @@ from pathlib import Path
 from typing import Optional
 
 
+# CLI 当前支持的选项（不支持的值在启动校验时报错，而不是静默忽略）
+SUPPORTED_MODES = ("summary",)
+SUPPORTED_DETECTION_MODES = ("normal", "epub-toc")
+SUPPORTED_PROVIDERS = ("gemini", "openai", "302.ai")
+DEFAULT_CHAPTER_CONCURRENCY = 3  # 与前端 chapterConcurrency 默认值一致
+DEFAULT_PROMPT_VERSION = "v1"    # 与前端 configStore currentPromptVersion 默认值一致
+
+
 @dataclass
 class WebDAVConfig:
     """WebDAV 配置"""
@@ -18,6 +26,7 @@ class WebDAVConfig:
     username: str = ""
     password: str = ""
     syncPath: str = "/fastReader"
+    missingEnvVars: list = field(default_factory=list)  # 引用了但未定义的环境变量
 
 
 @dataclass
@@ -31,6 +40,7 @@ class AIProviderConfig:
     proxyUrl: str = ""
     proxyEnabled: bool = False
     customFields: dict = field(default_factory=dict)
+    missingEnvVars: list = field(default_factory=list)  # 引用了但未定义的环境变量
 
 
 @dataclass
@@ -43,6 +53,7 @@ class AIConfig:
     model: str = ""
     apiUrl: str = ""
     temperature: float = 0.7
+    missingEnvVars: list = field(default_factory=list)  # 单提供商模式下未定义的环境变量
 
 
 @dataclass
@@ -52,6 +63,7 @@ class ProcessingConfig:
     bookType: str = "non-fiction"
     chapterDetectionMode: str = "normal"
     outputLanguage: str = "zh"
+    epubTocDepth: int = 1  # 仅 chapterDetectionMode=epub-toc 时生效
 
 
 @dataclass
@@ -61,7 +73,7 @@ class BatchConfig:
     maxFiles: int = 0
     skipProcessed: bool = True
     order: str = "sequential"
-    concurrency: int = 1
+    concurrency: int = DEFAULT_CHAPTER_CONCURRENCY  # 章节级并发数
     maxRetries: int = 3
     retryDelays: list = field(default_factory=lambda: [60, 120, 240, 480])
 
@@ -80,6 +92,8 @@ class AdvancedConfig:
     exchangeRate: float = 7.0
     debug: bool = False
     queuePrefetchCount: int = 10
+    requestTimeout: float = 120.0  # AI 请求超时（秒）
+    promptsDir: str = ""           # 共享 prompt YAML 目录覆盖（默认仓库内 src/services/prompts/config）
 
 
 @dataclass
@@ -98,7 +112,7 @@ class PromptVersionConfig:
 class PromptConfig:
     """Prompt 配置"""
     versions: dict = field(default_factory=dict)  # {"v1": PromptVersionConfig, "v2": ...}
-    currentVersion: str = "v2"  # 当前使用的版本
+    currentVersion: str = DEFAULT_PROMPT_VERSION  # 当前使用的版本
 
 
 @dataclass
@@ -144,7 +158,10 @@ class ConfigLoader:
             batch = self._parse_batch(raw_config)
             output = self._parse_output(raw_config)
             advanced = self._parse_advanced(raw_config)
-            prompts = self._parse_prompts(raw_config.get('promptVersionConfig', {}), raw_config.get('currentPromptVersion', 'v2'))
+            prompts = self._parse_prompts(
+                raw_config.get('promptVersionConfig', {}),
+                raw_config.get('currentPromptVersion', DEFAULT_PROMPT_VERSION),
+            )
 
             return Config(
                 webdav=webdav,
@@ -166,8 +183,12 @@ class ConfigLoader:
             print(f"❌ 配置加载失败: {e}")
             return None
 
-    def _replace_env_vars(self, value: str) -> str:
-        """替换环境变量引用 ${VAR_NAME}"""
+    def _replace_env_vars(self, value: str, missing: Optional[list] = None) -> str:
+        """替换环境变量引用 ${VAR_NAME}
+
+        未定义的变量替换为空串并记入 missing（由 validate_config 报错并指出变量名），
+        绝不把字面量 "${VAR}" 当作密钥发出去。
+        """
         if not isinstance(value, str):
             return value
 
@@ -176,7 +197,11 @@ class ConfigLoader:
 
         def replace(match):
             var_name = match.group(1)
-            return os.environ.get(var_name, match.group(0))
+            if var_name in os.environ:
+                return os.environ[var_name]
+            if missing is not None and var_name not in missing:
+                missing.append(var_name)
+            return ""
 
         return re.sub(pattern, replace, value)
 
@@ -188,11 +213,13 @@ class ConfigLoader:
         elif 'webdav' in data:
             data = data['webdav']
 
+        missing: list = []
         return WebDAVConfig(
-            serverUrl=self._replace_env_vars(data.get('serverUrl', data.get('server_url', ''))),
-            username=self._replace_env_vars(data.get('username', '')),
-            password=self._replace_env_vars(data.get('password', '')),
-            syncPath=data.get('syncPath', data.get('sync_path', '/fastReader'))
+            serverUrl=self._replace_env_vars(data.get('serverUrl', data.get('server_url', '')), missing),
+            username=self._replace_env_vars(data.get('username', ''), missing),
+            password=self._replace_env_vars(data.get('password', ''), missing),
+            syncPath=data.get('syncPath', data.get('sync_path', '/fastReader')),
+            missingEnvVars=missing,
         )
 
     def _parse_ai(self, data: dict) -> AIConfig:
@@ -210,34 +237,39 @@ class ConfigLoader:
         if 'providers' in data and isinstance(data['providers'], list):
             providers = []
             for p in data['providers']:
+                missing: list = []
                 providers.append(AIProviderConfig(
                     provider=p.get('provider', 'gemini'),
-                    apiKey=self._replace_env_vars(p.get('apiKey', '')),
-                    apiUrl=self._replace_env_vars(p.get('apiUrl', '')),
+                    apiKey=self._replace_env_vars(p.get('apiKey', ''), missing),
+                    apiUrl=self._replace_env_vars(p.get('apiUrl', ''), missing),
                     model=p.get('model', ''),
                     temperature=float(p.get('temperature', 0.7)),
-                    proxyUrl=self._replace_env_vars(p.get('proxyUrl', '')),
+                    proxyUrl=self._replace_env_vars(p.get('proxyUrl', ''), missing),
                     proxyEnabled=bool(p.get('proxyEnabled', False)),
-                    customFields=p.get('customFields', {})
+                    customFields=p.get('customFields', {}),
+                    missingEnvVars=missing,
                 ))
 
-            return AIConfig(
-                providers=providers,
-                # currentModelId 是 1-based (Web UI 约定)，转换为 0-based (Python 约定)
-                currentProviderIndex=max(0, int(data.get('currentModelId', data.get('currentProviderIndex', 1))) - 1)
-            )
+            # currentModelId 是 1-based（Web UI 约定）需减 1；currentProviderIndex 本身就是 0-based
+            if 'currentModelId' in data:
+                index = int(data['currentModelId']) - 1
+            else:
+                index = int(data.get('currentProviderIndex', 0))
+            return AIConfig(providers=providers, currentProviderIndex=index)
 
         # 处理单提供商模式下的 'ai' 键嵌套
         if 'ai' in data and isinstance(data['ai'], dict):
             data = data['ai']
 
         # 单提供商模式（兼容旧配置）
+        missing = []
         return AIConfig(
             provider=data.get('provider', 'gemini'),
-            apiKey=self._replace_env_vars(data.get('apiKey', '')),
+            apiKey=self._replace_env_vars(data.get('apiKey', ''), missing),
             model=data.get('model', ''),
-            apiUrl=self._replace_env_vars(data.get('apiUrl', '')),
-            temperature=float(data.get('temperature', 0.7))
+            apiUrl=self._replace_env_vars(data.get('apiUrl', ''), missing),
+            temperature=float(data.get('temperature', 0.7)),
+            missingEnvVars=missing,
         )
 
     def _parse_processing(self, data: dict) -> ProcessingConfig:
@@ -252,7 +284,8 @@ class ConfigLoader:
             mode=data.get('processingMode', data.get('mode', 'summary')),
             bookType=data.get('bookType', data.get('book_type', 'non-fiction')),
             chapterDetectionMode=data.get('chapterDetectionMode', data.get('chapter_detection_mode', 'normal')),
-            outputLanguage=data.get('outputLanguage', data.get('output_language', 'zh'))
+            outputLanguage=data.get('outputLanguage', data.get('output_language', 'zh')),
+            epubTocDepth=int(data.get('epubTocDepth', 1)),
         )
 
     def _parse_batch(self, data: dict) -> BatchConfig:
@@ -261,7 +294,6 @@ class ConfigLoader:
             data = data['batch']
 
         # 支持从环境变量覆盖配置
-        import os
         return BatchConfig(
             # 环境变量: FASTREADER_SOURCE_PATH
             sourcePath=os.environ.get('FASTREADER_SOURCE_PATH', data.get('sourcePath', '')),
@@ -271,8 +303,8 @@ class ConfigLoader:
             skipProcessed=os.environ.get('FASTREADER_SKIP_PROCESSED', str(data.get('skipProcessed', True))).lower() in ('true', '1', 'yes'),
             # 环境变量: FASTREADER_ORDER
             order=os.environ.get('FASTREADER_ORDER', data.get('order', 'sequential')),
-            # 环境变量: FASTREADER_CONCURRENCY
-            concurrency=int(os.environ.get('FASTREADER_CONCURRENCY', data.get('concurrency', 1))),
+            # 环境变量: FASTREADER_CONCURRENCY（章节级并发）
+            concurrency=int(os.environ.get('FASTREADER_CONCURRENCY', data.get('concurrency', DEFAULT_CHAPTER_CONCURRENCY))),
             # 环境变量: FASTREADER_MAX_RETRIES
             maxRetries=int(os.environ.get('FASTREADER_MAX_RETRIES', data.get('maxRetries', 3))),
             retryDelays=list(data.get('retryDelays', [60, 120, 240, 480]))
@@ -297,10 +329,12 @@ class ConfigLoader:
         return AdvancedConfig(
             exchangeRate=float(data.get('exchangeRate', 7.0)),
             debug=bool(data.get('debug', False)),
-            queuePrefetchCount=int(data.get('queuePrefetchCount', 10))
+            queuePrefetchCount=int(data.get('queuePrefetchCount', 10)),
+            requestTimeout=float(data.get('requestTimeout', 120)),
+            promptsDir=self._replace_env_vars(data.get('promptsDir', '')),
         )
 
-    def _parse_prompts(self, data: dict, current_version: str = 'v2') -> PromptConfig:
+    def _parse_prompts(self, data: dict, current_version: str = DEFAULT_PROMPT_VERSION) -> PromptConfig:
         """解析 Prompt 配置（支持多版本）"""
         versions = {}
 
@@ -324,8 +358,17 @@ class ConfigLoader:
         )
 
 
+def active_provider(ai: AIConfig):
+    """当前实际使用的提供商配置（多提供商取 currentProviderIndex，单提供商返回 ai 本身）；越界返回 None"""
+    if ai.providers:
+        if 0 <= ai.currentProviderIndex < len(ai.providers):
+            return ai.providers[ai.currentProviderIndex]
+        return None
+    return ai
+
+
 def validate_config(config: Config) -> list:
-    """验证配置有效性"""
+    """验证配置有效性，返回错误列表（空列表表示通过）"""
     errors = []
 
     if not config.webdav.serverUrl:
@@ -334,13 +377,49 @@ def validate_config(config: Config) -> list:
     if not config.webdav.username:
         errors.append("WebDAV username 不能为空")
 
-    if not config.ai.apiKey:
-        errors.append("AI apiKey 不能为空")
+    for var in config.webdav.missingEnvVars:
+        errors.append(f"环境变量未定义: {var}（webdav 配置引用）")
 
-    if not config.ai.model:
-        errors.append("AI model 不能为空")
+    provider = active_provider(config.ai)
+    if provider is None:
+        errors.append(
+            f"AI 提供商索引越界: currentProviderIndex={config.ai.currentProviderIndex}，"
+            f"共 {len(config.ai.providers)} 个提供商（currentModelId 为 1-based）"
+        )
+    else:
+        name = (provider.provider or "").lower()
+        if name not in SUPPORTED_PROVIDERS:
+            errors.append(f"CLI 暂不支持 AI 提供商: {provider.provider}（支持: {', '.join(SUPPORTED_PROVIDERS)}）")
+        for var in provider.missingEnvVars:
+            errors.append(f"环境变量未定义: {var}（AI 提供商 {provider.provider} 引用）")
+        if not provider.apiKey:
+            errors.append("AI apiKey 不能为空")
+        if not provider.model:
+            errors.append("AI model 不能为空")
 
     if not config.batch.sourcePath:
         errors.append("批量处理 sourcePath 不能为空")
+
+    if config.batch.concurrency < 1:
+        errors.append("batch.concurrency 必须 >= 1")
+
+    if config.batch.maxRetries < 0:
+        errors.append("batch.maxRetries 不能为负数")
+
+    if config.processing.mode not in SUPPORTED_MODES:
+        errors.append(
+            f"CLI 暂不支持 {config.processing.mode} 模式（mindmap / combined-mindmap 请在 Web 端使用），"
+            "请将 processing.mode 设为 summary"
+        )
+
+    if config.processing.chapterDetectionMode not in SUPPORTED_DETECTION_MODES:
+        errors.append(
+            f"CLI 暂不支持 chapterDetectionMode={config.processing.chapterDetectionMode}"
+            f"（支持: {', '.join(SUPPORTED_DETECTION_MODES)}）"
+        )
+
+    version = config.prompts.currentVersion
+    if version not in ("v1", "v2") and version not in config.prompts.versions:
+        errors.append(f"未知的 Prompt 版本: {version}（支持 v1 / v2）")
 
     return errors

@@ -1,18 +1,20 @@
 """
 WebDAV 客户端封装
 使用 webdav4 库 (https://github.com/skshetry/webdav4)
+
+远程路径一律用 posixpath 处理（Windows 上 pathlib 会产生反斜杠）。
 """
 
 from typing import Optional, Any, List, NoReturn
 
-
+import posixpath
 from pathlib import Path
 from datetime import datetime
 import os
-import time
 
-from .models import BookFile
+from .models import BookFile, CACHE_FILE_SUFFIX
 from .logger import Logger
+from .retry import RetryPolicy, call_with_retry
 
 
 class WebDAVProbeError(Exception):
@@ -38,6 +40,10 @@ except ImportError:
         """webdav4 未安装时的占位。"""
 
 
+# WebDAV 默认重试：比 AI 短（3 次，5/10/20 秒 + 抖动）
+DEFAULT_WEBDAV_RETRY = RetryPolicy(max_retries=3, delays=[5, 10, 20])
+
+
 def _is_not_found_error(exc: BaseException) -> bool:
     """404 / ResourceNotFound 视为资源确实不存在。"""
     if isinstance(exc, ResourceNotFound):
@@ -49,81 +55,61 @@ def _is_not_found_error(exc: BaseException) -> bool:
         return False
 
 
+def remote_join(base: str, name: str) -> str:
+    """拼接远程路径：保证以 / 开头、无重复斜杠"""
+    base = "/" + base.strip("/") if base.strip("/") else "/"
+    return posixpath.join(base, name.lstrip("/"))
+
+
 class WebDAVClientWrapper:
     """WebDAV 客户端封装"""
 
     SUPPORTED_EXTENSIONS = {".epub", ".pdf"}
 
-    # 重试配置
-    MAX_RETRIES = 3
-    RETRY_DELAY = 5  # 秒
-
-    def __init__(self, config, logger: Logger):
+    def __init__(self, config, logger: Logger, retry_policy: Optional[RetryPolicy] = None):
         """
         初始化 WebDAV 客户端
 
         Args:
             config: WebDAV 配置对象
             logger: 日志器
+            retry_policy: 重试策略（缺省 DEFAULT_WEBDAV_RETRY）
         """
         self.config = config
         self.logger = logger
         self.client: Optional[Any] = None
+        self.retry_policy = retry_policy or DEFAULT_WEBDAV_RETRY
 
         self._connected = False
 
-    def _with_retry(self, func, operation_name: str = "操作") -> bool:
-        """带重试的函数执行"""
-        last_error = None
-        for attempt in range(self.MAX_RETRIES):
-            try:
-                return func()
-            except HTTPError as e:
-                error_msg = str(e)
-                # 检查是否是 503 错误（服务暂时不可用）
-                if "503" in error_msg:
-                    last_error = e
-                    if attempt < self.MAX_RETRIES - 1:
-                        wait_time = self.RETRY_DELAY * (attempt + 1)
-                        self.logger.warning(
-                            f"{operation_name} 失败 (503), {wait_time}秒后重试..."
-                        )
-                        time.sleep(wait_time)
-                    else:
-                        self.logger.error(f"{operation_name} 多次失败: {e}")
-                else:
-                    raise
-            except Exception as e:
-                raise
-
-        return False
+    def _retry(self, func, operation_name: str):
+        """可重试错误（408/429/5xx/网络）按策略重试；404 等直接抛出"""
+        return call_with_retry(func, self.retry_policy, operation_name, on_retry=self.logger.warning)
 
     def connect(self) -> bool:
         """连接到 WebDAV 服务器"""
         if not _webdav_available:
-            self.logger.error("webdav4 库未安装，请运行: pip install webdav4")
+            self.logger.error("webdav4 库未安装，请运行: uv sync")
             return False
 
         try:
             # 构建 WebDAV URL（webdav4 会自动处理尾部斜杠）
             server_url = self.config.serverUrl.rstrip("/")
 
-            # 创建客户端（使用 auth 元组）
+            # 创建客户端（使用 auth 元组）；关闭 webdav4 内置重试，统一由 retry helper 负责
             assert _WebDAVClient is not None
             self.client = _WebDAVClient(
-                server_url, auth=(self.config.username, self.config.password)
+                server_url, auth=(self.config.username, self.config.password), retry=False
             )
 
             # 测试连接 - 检查同步路径是否存在（带重试）
-            sync_path = self.config.syncPath
-            if not sync_path.startswith("/"):
-                sync_path = "/" + sync_path
+            sync_path = remote_join(self.config.syncPath, "")
 
             def check_connection():
                 assert self.client is not None
                 return self.client.exists(sync_path)
 
-            if self._with_retry(check_connection, "WebDAV 连接"):
+            if self._retry(check_connection, "WebDAV 连接"):
                 self._connected = True
                 self.logger.success(f"WebDAV 连接成功: {server_url}")
                 return True
@@ -166,9 +152,8 @@ class WebDAVClientWrapper:
             if path.startswith("/"):
                 path = path[1:]
 
-            # webdav4 的 ls 方法
             assert self.client is not None
-            files = self.client.ls(path, detail=detail)
+            files = self._retry(lambda: self.client.ls(path, detail=detail), "列出文件")
             # 过滤掉 . 和 ..
             return [f for f in files if f not in [".", ".."]]
         except Exception as e:
@@ -181,9 +166,7 @@ class WebDAVClientWrapper:
         self._require_connected("扫描电子书")
 
         books = []
-        full_path = source_path
-        if not full_path.startswith("/"):
-            full_path = "/" + full_path
+        full_path = remote_join(source_path, "")
 
         try:
             items = self.list_files(full_path, detail=True)
@@ -201,22 +184,20 @@ class WebDAVClientWrapper:
                         or "2000-01-01T00:00:00"
                     )
 
-                ext = Path(file_name).suffix.lower()
+                file_name_only = posixpath.basename(file_name.rstrip("/"))
+                ext = posixpath.splitext(file_name_only)[1].lower()
                 if ext in self.SUPPORTED_EXTENSIONS:
-                    # webdav4 返回完整路径，需要提取文件名
-                    file_name_only = Path(file_name).name
-                    if full_path.endswith("/"):
-                        file_path = f"{full_path}{file_name_only}"
+                    if isinstance(modified, datetime):
+                        last_modified = modified
                     else:
-                        file_path = f"{full_path}/{file_name_only}"
-
+                        last_modified = datetime.fromisoformat(str(modified))
                     books.append(
                         BookFile(
                             name=file_name_only,
-                            path=file_path,
+                            path=remote_join(full_path, file_name_only),
                             extension=ext,
                             size=size,
-                            last_modified=datetime.fromisoformat(modified),
+                            last_modified=last_modified,
                         )
                     )
 
@@ -232,13 +213,12 @@ class WebDAVClientWrapper:
         self._require_connected("获取文件信息")
 
         try:
-            # webdav4 的 info 方法返回字典
             # path 需要是完整路径
             if not path.startswith("/"):
                 path = "/" + path
 
             assert self.client is not None
-            info = self.client.info(path)
+            info = self._retry(lambda: self.client.info(path), "获取文件信息")
             if info:
                 return {
                     "size": info.get("size", 0) or 0,
@@ -260,7 +240,7 @@ class WebDAVClientWrapper:
             if not path.startswith("/"):
                 path = "/" + path
             assert self.client is not None
-            return self.client.exists(path)
+            return self._retry(lambda: self.client.exists(path), "探测文件是否存在")
 
         except Exception as e:
             if _is_not_found_error(e):
@@ -274,12 +254,10 @@ class WebDAVClientWrapper:
 
         try:
             # 确保本地目录存在
-            local_dir = Path(local_path).parent
-            local_dir.mkdir(parents=True, exist_ok=True)
+            Path(local_path).parent.mkdir(parents=True, exist_ok=True)
 
-            # 下载文件 - webdav4 使用 download_file
             assert self.client is not None
-            self.client.download_file(remote_path, local_path)
+            self._retry(lambda: self.client.download_file(remote_path, local_path), "下载文件")
 
             return os.path.exists(local_path)
         except Exception as e:
@@ -311,19 +289,31 @@ class WebDAVClientWrapper:
             return False
 
         try:
-            # 确保目录存在 - webdav4 的 mkdir 会递归创建
+            # 确保目录存在 - 远程路径用 posixpath，避免 Windows 产生 \\fastReader
             assert self.client is not None
-            remote_dir = str(Path(remote_path).parent)
-            if remote_dir and remote_dir != "/" and not self.client.exists(remote_dir):
-                self.client.mkdir(remote_dir, create_parents=True)
+            self._ensure_dir(posixpath.dirname(remote_path))
 
-            # 上传文件 - webdav4 使用 upload
-            self.client.upload(remote_path, content.encode("utf-8"))
+            data = content.encode("utf-8")
+
+            def do_upload():
+                import io
+                self.client.upload_fileobj(io.BytesIO(data), remote_path, overwrite=True)
+
+            self._retry(do_upload, "上传文件")
             return True
 
         except Exception as e:
             self.logger.error(f"上传文件失败: {e}")
             return False
+
+    def _ensure_dir(self, remote_dir: str) -> None:
+        """逐级创建远程目录（webdav4 的 mkdir 不支持递归）"""
+        assert self.client is not None
+        current = "/"
+        for part in [p for p in remote_dir.split("/") if p]:
+            current = posixpath.join(current, part)
+            if not self._retry(lambda: self.client.exists(current), "探测目录"):
+                self._retry(lambda: self.client.mkdir(current), "创建目录")
 
     def mkdir(self, path: str) -> bool:
         """创建目录"""
@@ -331,41 +321,34 @@ class WebDAVClientWrapper:
             return False
 
         try:
-            assert self.client is not None
-            if not self.client.exists(path):
-                self.client.mkdir(path, create_parents=True)
+            self._ensure_dir(path)
             return True
 
         except Exception as e:
             self.logger.error(f"创建目录失败: {e}")
             return False
 
+    def cache_path_for(self, book: BookFile) -> str:
+        """云端缓存文件完整路径"""
+        return remote_join(self.config.syncPath, book.cache_file_name)
+
     def check_cache_exists(self, book: BookFile) -> bool:
         """检查缓存是否存在"""
-        sync_path = self.config.syncPath
-        if not sync_path.startswith("/"):
-            sync_path = "/" + sync_path
-
-        cache_file = f"{book.sanitized_name}-完整摘要.md"
-        cache_path = f"{sync_path}/{cache_file}"
-
-        return self.file_exists(cache_path)
+        return self.file_exists(self.cache_path_for(book))
 
     def list_cache_files(self) -> set[str]:
         """列出云端缓存文件名集合（{sanitizedName}-完整摘要.md）"""
-        sync_path = self.config.syncPath
-        if not sync_path.startswith("/"):
-            sync_path = "/" + sync_path
+        sync_path = remote_join(self.config.syncPath, "")
 
         cached = set()
         items = self.list_files(sync_path, detail=True)
         for item in items:
             if isinstance(item, str):
-                file_name = Path(item).name
+                file_name = posixpath.basename(item)
             else:
-                file_name = Path(item.get("name") or item.get("path") or "").name
+                file_name = posixpath.basename(item.get("name") or item.get("path") or "")
 
-            if file_name.endswith("-完整摘要.md"):
+            if file_name.endswith(CACHE_FILE_SUFFIX):
                 cached.add(file_name)
 
         return cached

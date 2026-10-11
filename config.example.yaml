@@ -1,0 +1,58 @@
+# fastReader CLI 示例配置文件
+# 将此文件复制为 config.yaml 并根据需要修改
+
+# WebDAV 配置
+webdav:
+  serverUrl: "https://dav.jianguoyun.com/dav/"  # 坚果云 WebDAV 地址
+  username: "your-email@example.com"           # 你的坚果云邮箱
+  password: "${JIANGUOYUN_PASSWORD}"           # 应用密码（建议使用环境变量）
+  syncPath: "/fastReader"                      # WebDAV 同步路径
+
+# AI 服务配置
+ai:
+  provider: "gemini"                           # AI 提供商（CLI 支持）: gemini, openai, 302.ai
+  apiKey: "${GEMINI_API_KEY}"                  # API 密钥（建议使用环境变量）
+  model: "gemini-1.5-pro"                      # AI 模型
+  apiUrl: ""                                   # 自定义 API URL（可选，openai 兼容端点/302.ai 需要）
+  temperature: 0.7                             # 生成温度 (0.0-1.0)
+
+# 处理选项
+processing:
+  mode: "summary"                              # 处理模式: CLI 仅支持 summary（mindmap 类请用 Web 端，配置了会启动即报错）
+  bookType: "non-fiction"                      # 书籍类型: fiction, non-fiction
+  chapterDetectionMode: "normal"               # 章节识别: normal, epub-toc（smart 仅 Web 端支持，配置了会启动即报错）
+  epubTocDepth: 1                              # epub-toc 模式下使用的目录层级（1 = 顶层）
+  outputLanguage: "zh"                         # 输出语言: auto(跟随原书语言), zh, en, ja, fr, de, es, ru
+
+# 批量处理配置
+batch:
+  sourcePath: "/books"                         # WebDAV 源文件夹路径（相对于 syncPath）
+  maxFiles: 0                                  # 最大处理文件数（0 表示处理全部）
+  skipProcessed: true                          # 是否跳过已处理的文件
+  order: "sequential"                          # 处理顺序: sequential, random
+  concurrency: 3                               # 章节级并发数（与 Web 端默认一致；书籍之间仍顺序处理）
+  maxRetries: 3                                # AI 请求最大重试次数（仅 408/429/5xx/网络超时重试，401/403/400 立即失败）
+  retryDelays: [60, 120, 240, 480]             # 第 N 次重试的基础等待（秒），叠加 0~20% 抖动；有 Retry-After 时以其为准
+
+# 输出配置
+output:
+  localDir: "output/"                          # 本地输出目录（.checkpoints/ 下为章节断点，重跑自动续）
+  logDir: "log/"                               # 日志目录
+  syncToWebDAV: true                           # 是否同步到 WebDAV
+
+# 高级配置
+advanced:
+  exchangeRate: 7.0                            # 汇率配置 USD -> CNY
+  debug: false                                 # 是否启用 debug 模式
+  queuePrefetchCount: 10                       # 队列预取数量
+  requestTimeout: 120                          # 单次 AI 请求超时（秒）
+  promptsDir: ""                               # Prompt YAML 目录（默认使用仓库 src/services/prompts/config）
+
+# Prompt 版本（可选，默认 v1，与 Web 端一致）；也可粘贴 Web 端导出的 promptVersionConfig 覆盖模板
+# currentPromptVersion: v1
+
+# 环境变量说明：
+# GEMINI_API_KEY - Gemini API 密钥
+# JIANGUOYUN_PASSWORD - 坚果云应用密码
+# 引用了未定义的环境变量（当前使用的提供商 / webdav）会在启动时报错并指出变量名
+# FASTREADER_PROMPTS_DIR - Prompt YAML 目录（可选，等同 advanced.promptsDir）

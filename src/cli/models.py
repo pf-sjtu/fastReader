@@ -6,6 +6,20 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 from enum import Enum
+import re
+
+CACHE_FILE_SUFFIX = "-完整摘要.md"
+
+
+def sanitize_file_name(file_name: str) -> str:
+    """严格对齐前端 cloudCacheService.ts sanitizeFileName（约定 C10）：
+    1. 只去掉最后一个扩展名：/\\.[^/.]+$/（与大小写无关）
+    2. 删除 Windows 非法字符 <>:"/\\|?*
+    3. 连续空白合并为一个空格并 trim（JS \\s 含 \\ufeff，Python 需显式补上）
+    """
+    without_ext = re.sub(r'\.[^/.]+\Z', '', file_name)
+    sanitized = re.sub(r'[<>:"/\\|?*]', '', without_ext)
+    return re.sub(r'[\s﻿]+', ' ', sanitized).strip()
 
 
 class QueueItemStatus(Enum):
@@ -28,16 +42,13 @@ class BookFile:
 
     @property
     def sanitized_name(self) -> str:
-        """获取清理后的名称"""
-        # 移除扩展名
-        name = self.name.replace(self.extension, '')
-        # 移除特殊字符
-        for char in '<>:"/\\|?*':
-            name = name.replace(char, '')
-        # 合并多个空格
-        import re
-        name = re.sub(r'\s+', ' ', name).strip()
-        return name
+        """获取清理后的名称（与前端 cloudCacheService.sanitizeFileName 一致）"""
+        return sanitize_file_name(self.name)
+
+    @property
+    def cache_file_name(self) -> str:
+        """云端缓存文件名 {sanitizedName}-完整摘要.md"""
+        return f"{self.sanitized_name}{CACHE_FILE_SUFFIX}"
 
 
 @dataclass
@@ -96,15 +107,6 @@ class ChapterInfo:
     content: str
     level: int = 0
     order: int = 0
-
-
-@dataclass
-class BookInfo:
-    """书籍信息"""
-    title: str
-    author: str
-    chapters: list[ChapterInfo]
-    total_char_count: int = 0
 
 
 @dataclass

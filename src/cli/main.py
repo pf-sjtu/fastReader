@@ -17,17 +17,19 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-# 加载 .env 文件
-try:
-    from dotenv import load_dotenv
+
+def _load_env() -> None:
+    """加载项目 .env（放在 main() 内执行，避免 import 本模块时改动进程环境）"""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return  # python-dotenv 未安装
     env_file = project_root / '.env'
     if env_file.exists():
         load_dotenv(env_file)
         print(f"✅ 已加载环境变量: {env_file}")
-except ImportError:
-    pass  # python-dotenv 未安装
 
-from .config import ConfigLoader
+from .config import ConfigLoader, validate_config, active_provider
 from .batch_processor import BatchProcessor
 from .logger import Logger
 
@@ -108,16 +110,21 @@ def cmd_batch(args: argparse.Namespace) -> int:
             print("❌ 配置加载失败")
             return 1
 
-        print(f"✅ 配置加载成功")
+        # 启动校验：越界索引 / 未定义环境变量 / 不支持的模式等一律在此报错
+        errors = validate_config(config)
+        if errors:
+            print("❌ 配置校验失败:")
+            for err in errors:
+                print(f"   - {err}")
+            return 1
 
-        # 显示 AI 提供商信息（支持多提供商）
-        if config.ai.providers:
-            provider = config.ai.providers[config.ai.currentProviderIndex]
-            print(f"   - AI 提供商: {provider.provider}")
-            print(f"   - 模型: {provider.model}")
-        else:
-            print(f"   - AI 提供商: {config.ai.provider}")
-            print(f"   - 模型: {config.ai.model}")
+        print("✅ 配置加载成功")
+        # 日志落到配置的 logDir，debug 开关生效
+        logger = Logger(log_dir=config.output.logDir, debug=config.advanced.debug)
+
+        provider = active_provider(config.ai)
+        print(f"   - AI 提供商: {provider.provider}")
+        print(f"   - 模型: {provider.model}")
 
         print(f"   - WebDAV: {config.webdav.serverUrl}")
         print(f"   - 源路径: {config.batch.sourcePath}")
@@ -169,6 +176,7 @@ def cmd_version() -> int:
 
 def main():
     """主入口函数"""
+    _load_env()
     parser = create_argparse()
     args = parser.parse_args()
 

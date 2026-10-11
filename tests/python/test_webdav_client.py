@@ -4,35 +4,12 @@ WebDAV 客户端和批量处理器测试
 """
 
 import os
-import sys
 import tempfile
-import types
 import pytest
-from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
-# 添加项目根目录到 Python 路径，并钉死本仓库的 src.cli
-# （开发机 site/.pth 上常有其他带 __init__.py 的 src 包，会抢走 `import src`）
-project_root = Path(__file__).parent.parent.parent
-_src_dir = project_root / "src"
-_cli_dir = _src_dir / "cli"
-sys.path.insert(0, str(project_root))
-
-for _name in list(sys.modules):
-    if _name == "src" or _name.startswith("src."):
-        del sys.modules[_name]
-
-_src_pkg = types.ModuleType("src")
-_src_pkg.__path__ = [str(_src_dir)]
-_src_pkg.__file__ = str(_src_dir / "__init__.py")
-sys.modules["src"] = _src_pkg
-
-_cli_pkg = types.ModuleType("src.cli")
-_cli_pkg.__path__ = [str(_cli_dir)]
-_cli_pkg.__file__ = str(_cli_dir / "__init__.py")
-sys.modules["src.cli"] = _cli_pkg
-
-from src.cli.config import ConfigLoader, Config
+# 导入路径由 tests/python/conftest.py 统一钉死到本仓库
+from src.cli.config import ConfigLoader
 from src.cli.webdav_client import (
     WebDAVClientWrapper,
     WebDAVProbeError,

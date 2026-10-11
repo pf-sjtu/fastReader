@@ -1,0 +1,2 @@
+# 跨端契约样例：前端/CLI 测试逐字节比对，禁止 checkout 时转换为 CRLF
+tests/fixtures/contract/*.md text eol=lf

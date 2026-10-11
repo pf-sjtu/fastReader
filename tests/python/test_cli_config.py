@@ -267,14 +267,22 @@ class TestPromptTemplates:
     """Prompt 模板测试"""
 
     def test_default_prompts_v2_non_fiction(self):
-        """测试 v2 非小说默认 Prompt"""
+        """v2 非小说 Prompt 来自共享 YAML（src/services/prompts/config/v2-prompts.yaml）"""
         from src.cli.ai_client import PromptTemplates
 
-        prompts = PromptTemplates(prompt_config=None)
+        prompts = PromptTemplates(prompt_config=PromptConfig(currentVersion="v2"))
         prompt = prompts.get_prompt('chapterSummary', 'non-fiction')
 
         assert prompt != ""
-        assert "角色" in prompt or "summarize" in prompt.lower()
+        assert "角色" in prompt
+
+    def test_default_version_matches_frontend_v1(self):
+        """未指定版本时与前端 configStore 默认一致（v1）"""
+        from src.cli.ai_client import PromptTemplates
+
+        prompts = PromptTemplates(prompt_config=None)
+        assert prompts.version == "v1"
+        assert "社科类书籍章节" in prompts.get_prompt('chapterSummary', 'non-fiction')
 
     def test_default_prompts_v2_fiction(self):
         """测试 v2 小说默认 Prompt"""

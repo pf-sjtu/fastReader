@@ -1,0 +1,36 @@
+[project]
+name = "fastreader-cli"
+version = "1.0.0"
+description = "fastReader 批量处理 CLI（python -m src.cli.main batch -c config.yaml）"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+    "ebooklib>=0.18",
+    "pypdf>=4.0",
+    "webdav4>=0.10",
+    "python-dotenv>=1.0",
+    "google-genai>=1.0",
+    "openai>=1.40",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[tool.uv]
+# 仅作依赖与测试环境管理，不打包安装（避免 editable 安装的 src 与其他项目冲突）
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests/python"]
+addopts = "-p no:cacheprovider"
+# 第三方 google-genai 在 Python 3.13 上的已知弃用告警，与本项目代码无关
+filterwarnings = ["ignore:'_UnionGenericAlias' is deprecated:DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["src/cli"]
+# 覆盖率数据放到已 gitignore 的 tmp/
+data_file = "tmp/.coverage"
