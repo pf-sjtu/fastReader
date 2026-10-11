@@ -94,6 +94,37 @@ export interface BatchProcessingState {
 }
 
 /**
+ * 页面刷新/崩溃后恢复队列：上次中断时的 processing 项没有任何执行者，
+ * 改回 pending 让其可重跑、可删除；currentItemIndex 与 stats 由队列重新推导。
+ */
+export function restoreBatchQueue(
+  persisted: unknown,
+  current: BatchProcessingState
+): BatchProcessingState {
+  if (!persisted) return current
+  const p = persisted as Partial<BatchProcessingState>
+  const queue = (Array.isArray(p.queue) ? p.queue : []).map((item) =>
+    item.status === 'processing' ? { ...item, status: 'pending' as QueueItemStatus, progress: 0 } : item
+  )
+  const count = (s: QueueItemStatus) => queue.filter((i) => i.status === s).length
+  return {
+    ...current,
+    queue,
+    config: p.config ?? current.config,
+    isPaused: typeof p.isPaused === 'boolean' ? p.isPaused : current.isPaused,
+    isProcessing: false,
+    currentItemIndex: -1,
+    stats: {
+      ...current.stats,
+      total: queue.length,
+      completed: count('completed'),
+      failed: count('failed'),
+      skipped: count('skipped')
+    }
+  }
+}
+
+/**
  * 批量队列状态管理 Store
  */
 export const useBatchQueueStore = create<BatchProcessingState>()(
@@ -354,14 +385,16 @@ export const useBatchQueueStore = create<BatchProcessingState>()(
     {
       name: 'fastReader-batch-queue',
       storage: createJSONStorage(() => localStorage),
+      version: 1,
       partialize: (state) => ({
         queue: state.queue.filter(
           (item) => item.status === 'pending' || item.status === 'processing'
         ),
         config: state.config,
-        currentItemIndex: state.currentItemIndex,
         isPaused: state.isPaused
-      })
+      }),
+      migrate: (persisted) => persisted as Partial<BatchProcessingState>,
+      merge: (persisted, current) => restoreBatchQueue(persisted, current)
     }
   )
 )

@@ -1,5 +1,6 @@
-import { createClient, WebDAVClient } from 'webdav'
+import { createClient, type WebDAVClient, type FileStat } from 'webdav'
 import type { WebDAVConfig } from '../stores/configStore'
+import { useWebDAVStore } from '../stores/webdav'
 import { buildWebdavProxyUrl, buildWebdavPath, normalizeDavPath, encodeDavHeaderPath } from './webdavProxyUtils'
 import { getMimeType, fileToArrayBuffer } from '../utils/file'
 
@@ -41,13 +42,69 @@ function getProcessedUrl(originalUrl: string): string {
 }
 
 
-function buildHeaderPath(config: WebDAVConfig, path: string): string {
-  // 返回未编码路径；编码统一在 setDavHeader → encodeDavHeaderPath 完成，避免双重 encode
-  return buildWebdavPath({
-    folder: config.browsePath || '/',
-    path
-  })
+/**
+ * 所有传入路径都是相对 serverUrl 的绝对路径（如 `/Books/a.epub`、`{syncPath}/x.md`），原样使用。
+ * browsePath 只是文件浏览器的「起始目录」，不参与拼接——旧实现把它当前缀，
+ * 导致浏览请求 /Books/Books、缓存写到 /Books/fastReader。传入已含 browsePath 的路径也不会被叠加。
+ * 返回未编码路径；编码统一在 setDavHeader / proxyFetch → encodeDavHeaderPath 完成，避免双重 encode。
+ */
+function buildHeaderPath(path: string): string {
+  return buildWebdavPath({ path })
 }
+
+/** 存在性三态（契约 C4） */
+export type DavExistsStatus = 'exists' | 'missing' | 'unknown'
+
+/** 5xx / 429 / 网络错误的最大尝试次数（含首次） */
+export const EXISTS_MAX_ATTEMPTS = 3
+/** 重试退避基数（毫秒），第 n 次重试等待 base * 2^(n-1) */
+export const EXISTS_RETRY_BASE_MS = 300
+
+/** 从 webdav 库错误（error.status / error.response.status）上取 HTTP 状态码；网络错误返回 undefined */
+export function getDavErrorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  const e = error as { status?: unknown; response?: { status?: unknown } }
+  if (typeof e.status === 'number') return e.status
+  if (typeof e.response?.status === 'number') return e.response.status
+  return undefined
+}
+
+/**
+ * 按 HTTP 状态分类存在性：2xx(200/207)→exists，404→missing，
+ * 5xx / 408 / 429 / 无状态(网络错误)→retry，其余(401/403/400/405/413…)→unknown。
+ * 代理自身的拒绝（403 Origin 不允许、400 base/path 非法、405、413）与上游同码，统一落到 unknown。
+ */
+export function classifyExistsStatus(status: number | undefined): DavExistsStatus | 'retry' {
+  if (status === undefined) return 'retry'
+  if (status === 404) return 'missing'
+  if (status >= 200 && status < 300) return 'exists'
+  if (status >= 500 || status === 408 || status === 429) return 'retry'
+  return 'unknown'
+}
+
+/** 连接测试错误 → 用户可读信息（按 HTTP 状态分类，不再匹配消息子串） */
+export function describeConnectionError(error: unknown): string {
+  const status = getDavErrorStatus(error)
+  switch (status) {
+    case 401:
+      return '认证失败，请检查用户名和密码'
+    case 403:
+      return '访问被拒绝，可能是权限问题或代理来源未在白名单'
+    case 404:
+      return '服务器地址不正确'
+    case 405:
+      return '请求方法不被支持，可能是代理配置问题'
+  }
+  if (typeof status === 'number') {
+    return status >= 500 ? `服务器错误 (HTTP ${status})` : `连接失败: HTTP ${status}`
+  }
+  if (error instanceof TypeError) {
+    return '网络连接失败，请检查服务器地址或网络'
+  }
+  return `连接失败: ${error instanceof Error ? error.message : '未知错误'}`
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`
@@ -134,7 +191,7 @@ export class WebDAVService {
       throw new Error('WebDAV配置未找到')
     }
     const normalizedPath = normalizeDavPath(filePath)
-    const headerPath = buildHeaderPath(this.config, normalizedPath)
+    const headerPath = buildHeaderPath(normalizedPath)
     const headers: Record<string, string> = {
       Authorization: basicAuthHeader(this.config.username, this.config.password),
       'X-WebDAV-Base': ensureTrailingSlash(this.config.serverUrl),
@@ -257,31 +314,10 @@ export class WebDAVService {
 
         return { success: true, data: true }
       } catch (error) {
-        let errorMessage = '连接失败'
-
-        if (error instanceof Error) {
-          if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-            errorMessage = '认证失败，请检查用户名和密码'
-          } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
-            errorMessage = '访问被拒绝，可能是权限问题或移动端兼容性问题'
-          } else if (error.message.includes('404') || error.message.includes('Not Found')) {
-            errorMessage = '服务器地址不正确'
-          } else if (error.message.includes('405') || error.message.includes('Method Not Allowed')) {
-            errorMessage = '请求方法不被支持，可能是代理配置问题'
-          } else if (error.message.includes('ENOTFOUND') || error.message.includes('Network')) {
-            errorMessage = '网络连接失败，请检查服务器地址'
-          } else if (error.message.includes('CORS')) {
-            errorMessage = 'CORS错误，请检查服务器配置'
-          } else if (error.message.includes('invalid response')) {
-            errorMessage = '响应格式无效，可能是代理服务器问题'
-          } else {
-            errorMessage = `连接失败: ${error.message}`
-          }
-        } else {
+        if (!(error instanceof Error)) {
           console.error('WebDAV连接测试失败 - 未知错误:', error)
-          errorMessage = '连接失败: 未知错误'
         }
-
+        const errorMessage = describeConnectionError(error)
         return { success: false, error: errorMessage }
       }
     })
@@ -304,11 +340,11 @@ export class WebDAVService {
     try {
       const rawPath = path || this.config?.browsePath || '/'
       const normalizedPath = normalizeDavPath(rawPath)
-      const headerPath = buildHeaderPath(this.config!, normalizedPath)
+      const headerPath = buildHeaderPath(normalizedPath)
 
       this.setDavHeader(headerPath)
 
-      const contents = await this.client!.getDirectoryContents('/', { deep })
+      const contents = (await this.client!.getDirectoryContents('/', { deep })) as FileStat[] | FileStat
 
       
       const contentList = Array.isArray(contents) ? contents : [contents]
@@ -336,7 +372,7 @@ export class WebDAVService {
           lastmod: item.lastmod,
           size: item.size || 0,
           type: item.type,
-          etag: item.etag,
+          etag: item.etag ?? undefined,
           mime: item.mime
         }
       })
@@ -418,7 +454,7 @@ export class WebDAVService {
         }
 
         const normalizedPath = normalizeDavPath(filePath)
-        const headerPath = buildHeaderPath(this.config, normalizedPath)
+        const headerPath = buildHeaderPath(normalizedPath)
 
         this.setDavHeader(headerPath)
 
@@ -455,40 +491,6 @@ export class WebDAVService {
   }
 
   /**
-   * 直接下载（已弃用，仅在特殊情况下使用）
-   * @param filePath 文件路径
-   * @deprecated 由于CORS限制，建议使用代理下载
-   */
-  private async directDownload(filePath: string): Promise<WebDAVOperationResult<ArrayBuffer>> {
-    if (!this.config) {
-      return { success: false, error: 'WebDAV配置未找到' }
-    }
-
-    try {
-      // 创建直接连接的客户端（不使用代理）
-      const directClient = createClient(this.config.serverUrl, {
-        username: this.config.username,
-        password: this.config.password
-      })
-
-      const binaryContent = await directClient.getFileContents(filePath, { format: 'binary' })
-
-      const arrayBuffer = await this.normalizeToArrayBuffer(binaryContent)
-
-      return { success: true, data: arrayBuffer }
-
-    } catch (error) {
-      return {
-        success: false,
-        error: `直接下载失败: ${error instanceof Error ? error.message : '未知错误'}
-
-提示：在开发环境下建议使用同源代理避免CORS问题。`
-      }
-    }
-  }
-
-
-  /**
    * 上传文件
    * @param filePath 目标文件路径
    * @param data 文件数据
@@ -517,11 +519,8 @@ export class WebDAVService {
           const dirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
           if (dirPath && dirPath !== '/' && this.client) {
             try {
-              const dirHeaderPath = buildHeaderPath(this.config, dirPath)
-              this.setDavHeader(dirHeaderPath)
-              const dirExists = await this.client.exists('/')
-              if (!dirExists) {
-                this.setDavHeader(dirHeaderPath)
+              if (classifyExistsStatus(await this.probeStatus(dirPath)) === 'missing') {
+                this.setDavHeader(buildHeaderPath(dirPath))
                 await this.client.createDirectory('/')
               }
             } catch (e) {
@@ -566,20 +565,17 @@ export class WebDAVService {
 
         const dirPath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
         if (dirPath && dirPath !== '/') {
-          const dirHeaderPath = buildHeaderPath(this.config, dirPath)
-          this.setDavHeader(dirHeaderPath)
-          const dirExists = await this.client.exists('/')
-          if (!dirExists) {
-            this.setDavHeader(dirHeaderPath)
+          if (classifyExistsStatus(await this.probeStatus(dirPath)) === 'missing') {
+            this.setDavHeader(buildHeaderPath(dirPath))
             await this.client.createDirectory('/')
           }
         }
 
-        const headerPath = buildHeaderPath(this.config, normalizedPath)
+        const headerPath = buildHeaderPath(normalizedPath)
         this.setDavHeader(headerPath)
         const result = await this.client.putFileContents(
           '/',
-          data as string | Buffer | ArrayBuffer | Blob,
+          data as unknown as string | ArrayBuffer,
           { overwrite }
         )
 
@@ -619,7 +615,7 @@ export class WebDAVService {
     return this.runExclusive(async () => {
       try {
         const normalizedPath = normalizeDavPath(path)
-        const headerPath = buildHeaderPath(this.config!, normalizedPath)
+        const headerPath = buildHeaderPath(normalizedPath)
         this.setDavHeader(headerPath)
         await this.client!.createDirectory('/')
         return { success: true, data: true }
@@ -645,7 +641,7 @@ export class WebDAVService {
     return this.runExclusive(async () => {
       try {
         const normalizedPath = normalizeDavPath(filePath)
-        const headerPath = buildHeaderPath(this.config!, normalizedPath)
+        const headerPath = buildHeaderPath(normalizedPath)
         this.setDavHeader(headerPath)
         await this.client!.deleteFile('/')
         return { success: true, data: true }
@@ -671,7 +667,7 @@ export class WebDAVService {
     return this.runExclusive(async () => {
       try {
         const normalizedPath = normalizeDavPath(dirPath)
-        const headerPath = buildHeaderPath(this.config!, normalizedPath)
+        const headerPath = buildHeaderPath(normalizedPath)
         this.setDavHeader(headerPath)
         await this.client!.deleteFile('/')
         return { success: true, data: true }
@@ -686,39 +682,65 @@ export class WebDAVService {
 
 
   /**
-   * 检查文件或目录是否存在
+   * 单次探测路径的 HTTP 状态（PROPFIND Depth:0）；网络错误返回 undefined。
+   * 不加锁：调用方需已在 runExclusive 内。
+   */
+  private async probeStatus(path: string): Promise<number | undefined> {
+    const normalizedPath = normalizeDavPath(path)
+    try {
+      if (this.isBrowserProxyMode()) {
+        const res = await this.proxyFetch('PROPFIND', normalizedPath, {
+          extraHeaders: { Depth: '0' },
+        })
+        return res.status
+      }
+      this.setDavHeader(buildHeaderPath(normalizedPath))
+      await this.client!.stat('/')
+      return 207
+    } catch (error) {
+      return getDavErrorStatus(error)
+    }
+  }
+
+  /** existsStatus 的详细版：附带最后一次 HTTP 状态，便于拼错误信息 */
+  private async existsDetail(path: string): Promise<{ status: DavExistsStatus; httpStatus?: number }> {
+    if (!this.client || !this.config) return { status: 'unknown' }
+    let httpStatus: number | undefined
+    for (let attempt = 1; ; attempt++) {
+      httpStatus = await this.runExclusive(() => this.probeStatus(path))
+      const kind = classifyExistsStatus(httpStatus)
+      if (kind !== 'retry') return { status: kind, httpStatus }
+      if (attempt >= EXISTS_MAX_ATTEMPTS) return { status: 'unknown', httpStatus }
+      // 退避期间不占锁，其他 DAV 操作可继续
+      await sleep(EXISTS_RETRY_BASE_MS * 2 ** (attempt - 1))
+    }
+  }
+
+  /**
+   * 存在性三态（契约 C4）：200/207→exists，404→missing；
+   * 401/403/其他 4xx→unknown（不重试）；5xx/408/429/网络错误指数退避重试，仍失败→unknown；未初始化→unknown。
+   * 调用方应把 unknown 当「不确定」，不要等同于不存在。
+   */
+  async existsStatus(path: string): Promise<DavExistsStatus> {
+    return (await this.existsDetail(path)).status
+  }
+
+  /**
+   * 检查文件或目录是否存在（兼容接口，内部复用 existsStatus）
+   * unknown 时 success=false 并带错误信息
    * @param path 路径
    */
   async exists(path: string): Promise<WebDAVOperationResult<boolean>> {
     if (!this.client) {
       return { success: false, error: 'WebDAV客户端未初始化' }
     }
-
-    return this.runExclusive(async () => {
-      try {
-        const normalizedPath = normalizeDavPath(path)
-        const headerPath = buildHeaderPath(this.config!, normalizedPath)
-
-        this.setDavHeader(headerPath)
-
-        const exists = await this.client!.exists('/')
-
-        return { success: true, data: exists }
-      } catch (error) {
-        // 对于 404 错误，返回 false 而不是错误
-        if (error instanceof Error && error.message.includes('404')) {
-          return { success: true, data: false }
-        }
-        console.error('检查路径失败:', error)
-        return {
-          success: false,
-          error: `检查路径失败: ${error instanceof Error ? error.message : '未知错误'}`
-        }
-      }
-    })
+    const { status, httpStatus } = await this.existsDetail(path)
+    if (status === 'exists') return { success: true, data: true }
+    if (status === 'missing') return { success: true, data: false }
+    const reason = httpStatus === undefined ? '网络错误' : `HTTP ${httpStatus}`
+    console.warn('[WebDAV] 检查路径失败:', path, reason)
+    return { success: false, error: `检查路径失败: ${reason}` }
   }
-
-
 
   /**
    * 简化的文件存在检查方法
@@ -742,11 +764,11 @@ export class WebDAVService {
     return this.runExclusive(async () => {
       try {
         const normalizedPath = normalizeDavPath(path)
-        const headerPath = buildHeaderPath(this.config!, normalizedPath)
+        const headerPath = buildHeaderPath(normalizedPath)
         this.setDavHeader(headerPath)
         const stat = await this.client!.stat('/')
 
-        const statRecord = stat as Record<string, unknown>
+        const statRecord = stat as unknown as Record<string, unknown>
         const fileInfo: WebDAVFileInfo = {
           filename: normalizedPath,
           basename:
@@ -972,6 +994,15 @@ export class WebDAVService {
 
 
   /**
+   * 合并非凭据类配置（syncPath / browsePath 等），未初始化时忽略
+   */
+  updateConfig(config: Partial<WebDAVConfig>): void {
+    if (this.config) {
+      this.config = { ...this.config, ...config }
+    }
+  }
+
+  /**
    * 断开连接
    */
   disconnect(): void {
@@ -980,8 +1011,28 @@ export class WebDAVService {
   }
 }
 
+/**
+ * 让服务跟随 WebDAV 配置 store：
+ * - serverUrl / username / password 变化 → disconnect，调用方见 isInitialized()=false 会用新配置重新 initialize
+ * - 其余字段（syncPath、browsePath…）变化 → 直接合并进当前配置
+ * @returns 取消订阅函数
+ */
+export function bindWebDAVServiceToStore(service: WebDAVService): () => void {
+  return useWebDAVStore.subscribe((next, prev) => {
+    const a = next.webdavConfig
+    const b = prev.webdavConfig
+    if (a === b) return
+    if (a.serverUrl !== b.serverUrl || a.username !== b.username || a.password !== b.password) {
+      service.disconnect()
+      return
+    }
+    service.updateConfig(a)
+  })
+}
+
 // 创建单例实例
 export const webdavService = new WebDAVService()
+bindWebDAVServiceToStore(webdavService)
 
 // 导出类型和工具函数
 export type { WebDAVConfig } from '../stores/configStore'

@@ -3,7 +3,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { WebDAVConfig } from '../types'
 
-const defaultWebDAVConfig: WebDAVConfig = {
+export const WEBDAV_STORAGE_KEY = 'ebook-webdav-config'
+
+export const defaultWebDAVConfig: WebDAVConfig = {
   enabled: false,
   serverUrl: 'https://dav.jianguoyun.com/dav/',
   username: '',
@@ -103,10 +105,17 @@ export const useWebDAVStore = create<WebDAVState>()(
         }))
     }),
     {
-      name: 'ebook-webdav-config',
+      name: WEBDAV_STORAGE_KEY,
+      version: 1,
       partialize: (state) => ({
         webdavConfig: state.webdavConfig
-      })
+      }),
+      migrate: (persisted) => persisted as { webdavConfig: WebDAVConfig },
+      // 旧数据缺字段时用默认值补齐
+      merge: (persisted, current) => {
+        const p = persisted as Partial<WebDAVState> | undefined
+        return { ...current, webdavConfig: { ...current.webdavConfig, ...(p?.webdavConfig || {}) } }
+      }
     }
   )
 )

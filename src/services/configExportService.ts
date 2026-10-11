@@ -1,6 +1,12 @@
 import { parse, stringify } from 'yaml'
 import type { ConfigState } from '../stores/configStore'
 
+/** 导出所需的配置数据（ConfigState 的子集；兼容壳与聚合状态都满足） */
+export type ConfigExportSource = Pick<
+  ConfigState,
+  'aiConfigManager' | 'processingOptions' | 'webdavConfig' | 'promptVersionConfig' | 'currentPromptVersion' | 'tokenUsage'
+>
+
 // 完整配置导出接口
 export interface FullConfigExport {
   version: string
@@ -24,21 +30,12 @@ export class ConfigExportService {
    * @param config 当前配置状态
    * @returns YAML格式的配置字符串
    */
-  static exportConfig(config: ConfigState): string {
+  static exportConfig(config: ConfigExportSource): string {
     // 过滤掉函数类型的属性，只序列化数据
-    const filteredConfig = this.filterConfigData(config)
-    
     const exportData: FullConfigExport = {
       version: this.CONFIG_VERSION,
       exportTime: new Date().toISOString(),
-      config: {
-        aiConfigManager: filteredConfig.aiConfigManager,
-        processingOptions: filteredConfig.processingOptions,
-        webdavConfig: filteredConfig.webdavConfig,
-        promptVersionConfig: filteredConfig.promptVersionConfig,
-        currentPromptVersion: filteredConfig.currentPromptVersion,
-        tokenUsage: filteredConfig.tokenUsage
-      }
+      config: this.filterConfigData(config)
     }
 
     try {
@@ -53,34 +50,21 @@ export class ConfigExportService {
    * @param config 原始配置
    * @returns 过滤后的配置数据
    */
-  private static filterConfigData(config: ConfigState): Record<string, unknown> {
-    const filtered: Record<string, unknown> = {}
+  private static filterConfigData(config: ConfigExportSource): FullConfigExport['config'] {
+    // aiConfigManager 只保留数据字段（providers + currentModelId），方法桩不导出
+    const aiConfigManager = {
+      providers: (config.aiConfigManager?.providers ?? []).map((provider) => ({ ...provider })),
+      currentModelId: config.aiConfigManager?.currentModelId ?? 1
+    } as FullConfigExport['config']['aiConfigManager']
 
-    // 过滤aiConfigManager (简化版 - 使用 currentModelId)
-    if (config.aiConfigManager) {
-      filtered.aiConfigManager = {
-        providers: config.aiConfigManager.providers.map((provider: Record<string, unknown>) => {
-          const { addProvider, updateProvider, deleteProvider, duplicateProvider,
-                  setCurrentModelId, getActiveProvider, getProviderByIndex,
-                  createFromTemplate, getAvailableTemplates, ...providerData } = provider
-          // 忽略解构的方法，只保留数据
-          void addProvider; void updateProvider; void deleteProvider; void duplicateProvider;
-          void setCurrentModelId; void getActiveProvider; void getProviderByIndex;
-          void createFromTemplate; void getAvailableTemplates;
-          return providerData
-        }),
-        currentModelId: config.aiConfigManager.currentModelId
-      }
+    return {
+      aiConfigManager,
+      processingOptions: config.processingOptions,
+      webdavConfig: config.webdavConfig,
+      promptVersionConfig: config.promptVersionConfig,
+      currentPromptVersion: config.currentPromptVersion,
+      tokenUsage: config.tokenUsage
     }
-
-    // 直接复制其他纯数据属性
-    filtered.processingOptions = config.processingOptions
-    filtered.webdavConfig = config.webdavConfig
-    filtered.promptVersionConfig = config.promptVersionConfig
-    filtered.currentPromptVersion = config.currentPromptVersion
-    filtered.tokenUsage = config.tokenUsage
-
-    return filtered
   }
 
   /**
@@ -202,19 +186,11 @@ export class ConfigExportService {
    * @param config 当前配置
    * @returns 备份配置数据
    */
-  static createBackup(config: ConfigState): FullConfigExport {
+  static createBackup(config: ConfigExportSource): FullConfigExport {
     return {
       version: this.CONFIG_VERSION,
       exportTime: new Date().toISOString(),
-      config: {
-        aiConfigManager: JSON.parse(JSON.stringify(config.aiConfigManager)),
-        processingOptions: JSON.parse(JSON.stringify(config.processingOptions)),
-        webdavConfig: JSON.parse(JSON.stringify(config.webdavConfig)),
-        promptConfig: JSON.parse(JSON.stringify((config as Record<string, unknown>).promptConfig)),
-        promptVersionConfig: JSON.parse(JSON.stringify((config as Record<string, unknown>).promptVersionConfig)),
-        currentPromptVersion: (config as Record<string, unknown>).currentPromptVersion,
-        tokenUsage: (config as Record<string, unknown>).tokenUsage
-      } as FullConfigExport['config']
+      config: JSON.parse(JSON.stringify(this.filterConfigData(config)))
     }
   }
 }

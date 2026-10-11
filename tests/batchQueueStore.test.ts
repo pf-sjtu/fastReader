@@ -386,3 +386,54 @@ describe('BatchQueueItem types', () => {
     expect(statuses.length).toBe(5)
   })
 })
+
+describe('persist 恢复：僵尸 processing 项', () => {
+  const item = (id: string, status: QueueItemStatus) => ({
+    id, fileName: `${id}.epub`, filePath: `/b/${id}.epub`, status, progress: status === 'processing' ? 42 : 0
+  })
+
+  it('刷新后 processing → pending，currentItemIndex 置 -1，stats 按队列重算', async () => {
+    localStorage.setItem(
+      'fastReader-batch-queue',
+      JSON.stringify({
+        state: {
+          queue: [item('a', 'processing'), item('b', 'pending'), item('c', 'processing')],
+          config: null,
+          currentItemIndex: 2,
+          isPaused: true
+        },
+        version: 0
+      })
+    )
+    await useBatchQueueStore.persist.rehydrate()
+    const s = useBatchQueueStore.getState()
+    expect(s.queue.map((i) => i.status)).toEqual(['pending', 'pending', 'pending'])
+    expect(s.queue[0].progress).toBe(0)
+    expect(s.currentItemIndex).toBe(-1)
+    expect(s.isProcessing).toBe(false)
+    expect(s.isPaused).toBe(true)
+    expect(s.stats.total).toBe(3)
+
+    // 恢复后可再次启动并删除
+    s.startProcessing()
+    expect(useBatchQueueStore.getState().currentItemIndex).toBe(0)
+    useBatchQueueStore.getState().removeFromQueue('a')
+    expect(useBatchQueueStore.getState().stats.total).toBe(2)
+  })
+
+  it('currentItemIndex 不再持久化，写回为 version 1', () => {
+    useBatchQueueStore.getState().addToQueue([{ fileName: 'x.epub', filePath: '/x.epub' }])
+    useBatchQueueStore.getState().startProcessing()
+    const saved = JSON.parse(localStorage.getItem('fastReader-batch-queue') || '{}')
+    expect(saved.version).toBe(1)
+    expect(saved.state.currentItemIndex).toBeUndefined()
+  })
+
+  it('无持久化数据时保持内存中的队列不变', async () => {
+    useBatchQueueStore.getState().clearQueue()
+    localStorage.removeItem('fastReader-batch-queue')
+    await useBatchQueueStore.persist.rehydrate()
+    expect(useBatchQueueStore.getState().queue).toEqual([])
+    expect(useBatchQueueStore.getState().stats.total).toBe(0)
+  })
+})

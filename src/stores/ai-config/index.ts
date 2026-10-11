@@ -3,6 +3,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AIProviderConfig, AIConfigManager } from '../types'
 
+export const AI_CONFIG_STORAGE_KEY = 'ebook-ai-config'
+
 // AI服务商模板配置
 const aiProviderTemplates: Record<string, AIProviderConfig & { name: string; description: string }> = {
   gemini: {
@@ -359,58 +361,37 @@ export const useAIConfigStore = create<AIConfigState>()(
         // 向后兼容的设置方法
         setAiProvider: (provider) => {
           const state = get()
-          const index = state.aiConfigManager.currentModelId - 1
-          if (index >= 0 && index < state.aiConfigManager.providers.length) {
-            state.updateAIProvider(index, { provider })
-          }
+          state.updateAIProvider(state.aiConfigManager.currentModelId, { provider })
         },
 
         setApiKey: (apiKey) => {
           const state = get()
-          const index = state.aiConfigManager.currentModelId - 1
-          if (index >= 0 && index < state.aiConfigManager.providers.length) {
-            state.updateAIProvider(index, { apiKey })
-          }
+          state.updateAIProvider(state.aiConfigManager.currentModelId, { apiKey })
         },
 
         setApiUrl: (apiUrl) => {
           const state = get()
-          const index = state.aiConfigManager.currentModelId - 1
-          if (index >= 0 && index < state.aiConfigManager.providers.length) {
-            state.updateAIProvider(index, { apiUrl })
-          }
+          state.updateAIProvider(state.aiConfigManager.currentModelId, { apiUrl })
         },
 
         setModel: (model) => {
           const state = get()
-          const index = state.aiConfigManager.currentModelId - 1
-          if (index >= 0 && index < state.aiConfigManager.providers.length) {
-            state.updateAIProvider(index, { model })
-          }
+          state.updateAIProvider(state.aiConfigManager.currentModelId, { model })
         },
 
         setTemperature: (temperature) => {
           const state = get()
-          const index = state.aiConfigManager.currentModelId - 1
-          if (index >= 0 && index < state.aiConfigManager.providers.length) {
-            state.updateAIProvider(index, { temperature })
-          }
+          state.updateAIProvider(state.aiConfigManager.currentModelId, { temperature })
         },
 
         setProxyUrl: (proxyUrl) => {
           const state = get()
-          const index = state.aiConfigManager.currentModelId - 1
-          if (index >= 0 && index < state.aiConfigManager.providers.length) {
-            state.updateAIProvider(index, { proxyUrl })
-          }
+          state.updateAIProvider(state.aiConfigManager.currentModelId, { proxyUrl })
         },
 
         setProxyEnabled: (enabled) => {
           const state = get()
-          const index = state.aiConfigManager.currentModelId - 1
-          if (index >= 0 && index < state.aiConfigManager.providers.length) {
-            state.updateAIProvider(index, { proxyEnabled: enabled })
-          }
+          state.updateAIProvider(state.aiConfigManager.currentModelId, { proxyEnabled: enabled })
         },
 
         resetAIConfig: () => {
@@ -423,14 +404,40 @@ export const useAIConfigStore = create<AIConfigState>()(
       }
     },
     {
-      name: 'ebook-ai-config',
+      name: AI_CONFIG_STORAGE_KEY,
+      version: 1,
+      // 只持久化服务商数据；aiConfig 由 manager 派生，不重复存储
       partialize: (state) => ({
-        aiConfigManager: state.aiConfigManager,
-        aiConfig: state.aiConfig
-      })
+        aiConfigManager: {
+          providers: state.aiConfigManager.providers,
+          currentModelId: state.aiConfigManager.currentModelId
+        }
+      }),
+      // v0 额外存了派生的 aiConfig，merge 时会按 manager 重算，无需转换
+      migrate: (persisted) => persisted as { aiConfigManager: Pick<AIConfigManager, 'providers' | 'currentModelId'> },
+      merge: (persisted, current) =>
+        mergeAIConfigManager(current, (persisted as Partial<AIConfigState> | undefined)?.aiConfigManager)
     }
   )
 )
+
+/**
+ * 把持久化/导入的服务商数据合并进当前 state（保留 manager 上的方法桩，并重算 aiConfig）。
+ * 数据无效（providers 非数组）时原样返回 current。
+ */
+export function mergeAIConfigManager<T extends Pick<AIConfigState, 'aiConfigManager' | 'aiConfig'>>(
+  current: T,
+  data: Partial<Pick<AIConfigManager, 'providers' | 'currentModelId'>> | undefined
+): T {
+  if (!data || !Array.isArray(data.providers)) return current
+  const aiConfigManager: AIConfigManager = {
+    ...current.aiConfigManager,
+    providers: data.providers,
+    currentModelId:
+      typeof data.currentModelId === 'number' ? data.currentModelId : current.aiConfigManager.currentModelId
+  }
+  return { ...current, aiConfigManager, aiConfig: computeAIConfig(aiConfigManager) }
+}
 
 // 便捷选择器
 export const useAIConfig = () => useAIConfigStore((state) => state.aiConfig)

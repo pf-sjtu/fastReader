@@ -39,7 +39,13 @@ export const useProcessingHistoryStore = create<ProcessingHistoryState>()(
       clearHistory: () => set({ records: [] })
     }),
     {
-      name: 'ebook-processing-history'
+      name: 'ebook-processing-history',
+      version: 1,
+      partialize: (state) => ({ records: state.records }),
+      migrate: (persisted) => {
+        const p = persisted as Partial<ProcessingHistoryState> | undefined
+        return { records: Array.isArray(p?.records) ? p.records : [] }
+      }
     }
   )
 )

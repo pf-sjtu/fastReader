@@ -3,6 +3,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AIServiceOptions } from '../types'
 
+export const CORE_STORAGE_KEY = 'ebook-core-config'
+
 const defaultAIServiceOptions: AIServiceOptions = {
   maxRetries: 3,
   baseRetryDelay: 60000 // 60秒
@@ -64,11 +66,24 @@ export const useCoreStore = create<CoreState>()(
         }))
     }),
     {
-      name: 'ebook-core-config',
+      name: CORE_STORAGE_KEY,
+      version: 1,
+      // tokenUsage 是会话内计数且每次 AI 调用都会变，不持久化，避免高频重写 localStorage
       partialize: (state) => ({
-        tokenUsage: state.tokenUsage,
         aiServiceOptions: state.aiServiceOptions
-      })
+      }),
+      // v0 含 tokenUsage：丢弃
+      migrate: (persisted) => {
+        const p = persisted as Partial<CoreState> | undefined
+        return { aiServiceOptions: p?.aiServiceOptions ?? defaultAIServiceOptions }
+      },
+      merge: (persisted, current) => {
+        const p = persisted as Partial<CoreState> | undefined
+        return {
+          ...current,
+          aiServiceOptions: { ...current.aiServiceOptions, ...(p?.aiServiceOptions || {}) }
+        }
+      }
     }
   )
 )

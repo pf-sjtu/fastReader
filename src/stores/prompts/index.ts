@@ -7,6 +7,8 @@ import {
   DEFAULT_PROMPT_CONFIG_V2
 } from '../../services/prompts/templates'
 
+export const PROMPT_STORAGE_KEY = 'ebook-prompt-config'
+
 const defaultPromptConfig: PromptConfig = DEFAULT_PROMPT_CONFIG
 const defaultPromptVersionConfig: PromptVersionConfig = {
   v1: DEFAULT_PROMPT_CONFIG,
@@ -162,12 +164,14 @@ export const usePromptStore = create<PromptState>()(
         })
     }),
     {
-      name: 'ebook-prompt-config',
+      name: PROMPT_STORAGE_KEY,
+      version: 1,
       partialize: (state) => ({
         promptConfig: state.promptConfig,
         promptVersionConfig: state.promptVersionConfig,
         currentPromptVersion: state.currentPromptVersion
-      })
+      }),
+      migrate: (persisted) => persisted as Pick<PromptState, 'promptConfig' | 'promptVersionConfig' | 'currentPromptVersion'>
     }
   )
 )

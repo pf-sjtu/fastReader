@@ -4,6 +4,8 @@ import { persist } from 'zustand/middleware'
 import type { ProcessingOptions } from '../types'
 import type { SupportedLanguage } from '../../services/prompts/utils'
 
+export const PROCESSING_STORAGE_KEY = 'ebook-processing-options'
+
 const defaultProcessingOptions: ProcessingOptions = {
   processingMode: 'mindmap',
   bookType: 'non-fiction',
@@ -113,10 +115,12 @@ export const useProcessingStore = create<ProcessingState>()(
         set({ processingOptions: defaultProcessingOptions })
     }),
     {
-      name: 'ebook-processing-options',
+      name: PROCESSING_STORAGE_KEY,
+      version: 1,
       partialize: (state) => ({
         processingOptions: state.processingOptions
       }),
+      migrate: (persisted) => persisted as { processingOptions: ProcessingOptions },
       // 旧持久化缺省字段补全
       merge: (persisted, current) => {
         const p = persisted as Partial<ProcessingState> | undefined
