@@ -4,20 +4,34 @@
 
 import type { BatchQueueItem } from '../stores/batchQueueStore'
 
-// ==================== 处理结果 ====================
+// ==================== 处理结果与回调（批量引擎使用） ====================
 
-/**
- * 单个文件的处理结果
- */
+export interface BatchProcessingCallbacks {
+  onItemStart?: (item: BatchQueueItem) => void
+  onItemProgress?: (itemId: string, progress: number, message: string) => void
+  onItemComplete?: (item: BatchQueueItem, result: BatchProcessingResult) => void
+  onItemError?: (item: BatchQueueItem, error: string) => void
+  onItemSkip?: (item: BatchQueueItem, reason: string) => void
+  onQueueComplete?: (results: BatchProcessingSummary) => void
+  onError?: (error: Error) => void
+}
+
+/** 单个文件的处理结果 */
 export interface BatchProcessingResult {
   success: boolean
   fileName: string
   outputPath?: string
   content?: string
+  /** 已有完整缓存而跳过 */
+  skipped?: boolean
   metadata?: {
     chapterCount: number
     processedChapters: number
     skippedChapters: number
+    /** AI 调用失败的章节数（失败章节不写入云端） */
+    failedChapters?: number
+    /** 命中本地缓存、未调用 AI 的章节数 */
+    cachedChapters?: number
     costUSD: number
     costRMB: number
     startTime: string
@@ -25,11 +39,11 @@ export interface BatchProcessingResult {
     isPartial?: boolean
   }
   error?: string
+  /** 致命错误（如无法确认云端缓存状态）：调用方应停止整个队列而不是继续下一本 */
+  fatal?: boolean
 }
 
-/**
- * 批量处理汇总结果
- */
+/** 批量处理汇总结果 */
 export interface BatchProcessingSummary {
   totalFiles: number
   successCount: number
@@ -39,21 +53,6 @@ export interface BatchProcessingSummary {
   totalCostRMB: number
   results: BatchProcessingResult[]
   duration: number // 毫秒
-}
-
-// ==================== 回调函数 ====================
-
-/**
- * 批量处理回调接口
- */
-export interface BatchProcessingCallbacks {
-  onItemStart?: (item: BatchQueueItem) => void
-  onItemProgress?: (itemId: string, progress: number, message: string) => void
-  onItemComplete?: (item: BatchQueueItem, result: BatchProcessingResult) => void
-  onItemError?: (item: BatchQueueItem, error: string) => void
-  onItemSkip?: (item: BatchQueueItem, reason: string) => void
-  onQueueComplete?: (results: BatchProcessingSummary) => void
-  onError?: (error: Error) => void
 }
 
 // ==================== 任务状态 ====================

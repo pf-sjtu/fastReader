@@ -19,7 +19,6 @@ vi.mock('../src/stores/configStore', () => ({
 }))
 
 import { cloudCacheService } from '../src/services/cloudCacheService'
-import { CacheService } from '../src/services/cacheService'
 import { formatUnifiedMarkdown, generateMetadata } from '../src/services/metadataFormatter'
 
 const md = formatUnifiedMarkdown(
@@ -131,61 +130,41 @@ describe('cloudCacheService 读写', () => {
   })
 })
 
-describe('CacheService 章节级读写与清除', () => {
-  beforeEach(() => {
-    const store: Record<string, string> = {}
-    Object.defineProperty(globalThis, 'localStorage', {
-      value: {
-        getItem: (k: string) => store[k] ?? null,
-        setItem: (k: string, v: string) => {
-          store[k] = v
-        },
-        removeItem: (k: string) => {
-          delete store[k]
-        },
-      },
-      writable: true,
-      configurable: true,
-    })
+describe('cloudCacheService 元数据与导图标记（批量 skipProcessed）', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('readCacheMetadata：读到解析元数据；失败 / 异常为 unknown', async () => {
+    webdavMock.getFileContents.mockResolvedValueOnce({ success: true, data: md })
+    const ok = await cloudCacheService.readCacheMetadata('a.epub')
+    expect(ok).toMatchObject({ status: 'ok', metadata: { fileName: 'a.epub' } })
+    webdavMock.getFileContents.mockResolvedValueOnce({ success: false, error: '500' })
+    expect(await cloudCacheService.readCacheMetadata('a.epub')).toEqual({ status: 'unknown', error: '500' })
+    webdavMock.getFileContents.mockRejectedValueOnce(new Error('net'))
+    expect(await cloudCacheService.readCacheMetadata('a.epub')).toEqual({ status: 'unknown', error: 'net' })
   })
 
-  it('getSummary / getCache 聚合章节键；clearChapterCache 只删该章', () => {
-    const cache = new CacheService()
-    expect(cache.getSummary('b.epub')).toBeNull()
-    cache.setCache('b.epub', 'summary', 's1', 'c1')
-    cache.setCache('b.epub', 'summary', 's2', 'c2')
-    cache.setCache('b.epub', 'connections', 'conn')
-    expect(cache.getCache('b.epub', 'summary')).toEqual({
-      chapters: [
-        { id: 'c1', summary: 's1' },
-        { id: 'c2', summary: 's2' },
-      ],
-      connections: 'conn',
-      overallSummary: '',
+  it('导图 manifest：路径与 missing / ok / 损坏 / unknown', async () => {
+    expect(cloudCacheService.getMindMapManifestPath('书.v2.epub')).toBe('/fr/书.v2/书.v2_mindmap_manifest.json')
+    webdavMock.existsStatus.mockResolvedValueOnce('missing')
+    expect(await cloudCacheService.readMindMapManifest('a.epub')).toEqual({ status: 'missing' })
+    webdavMock.existsStatus.mockResolvedValueOnce('exists')
+    webdavMock.getFileContents.mockResolvedValueOnce({ success: true, data: '{"mode":"mindmap","isPartial":false}' })
+    expect(await cloudCacheService.readMindMapManifest('a.epub')).toEqual({
+      status: 'ok',
+      manifest: { mode: 'mindmap', isPartial: false },
     })
-    expect(cache.getCache('b.epub', 'connections')).toBe('conn')
-
-    expect(cache.clearChapterCache('b.epub', 'c1', 'summary')).toBe(true)
-    expect(cache.getString('b.epub', 'summary', 'c1')).toBeNull()
-    expect(cache.getString('b.epub', 'summary', 'c2')).toBe('s2')
-    expect(cache.clearChapterCache('b.epub', 'c1', 'summary')).toBe(false)
-  })
-
-  it('思维导图章节键与整书导图；按模式清除', () => {
-    const cache = new CacheService()
-    const mm = { nodeData: { id: 'r', topic: 'x' } } as never
-    expect(cache.getMindMapData('m.epub')).toBeNull()
-    cache.setCache('m.epub', 'mindmap', mm, 'c1')
-    cache.setCache('m.epub', 'combined_mindmap', mm)
-    cache.setSelectedChapters('m.epub', new Set(['c1']))
-    expect(cache.getSelectedChapters('m.epub')).toEqual(['c1'])
-    expect(cache.getCache('m.epub', 'mindmap')).toEqual({
-      chapters: [{ id: 'c1', mindMap: mm }],
-      combinedMindMap: mm,
-    })
-    expect(cache.clearBookCache('m.epub', 'combined_mindmap')).toBeGreaterThan(0)
-    expect(cache.getMindMap('m.epub', 'combined_mindmap')).toBeNull()
-    expect(cache.clearSpecificCache('m.epub', 'key_charts')).toBe(false)
-    expect(cache.delete('m.epub', 'mindmap', 'c1')).toBe(true)
+    webdavMock.existsStatus.mockResolvedValueOnce('exists')
+    webdavMock.getFileContents.mockResolvedValueOnce({ success: true, data: '{坏' })
+    expect(await cloudCacheService.readMindMapManifest('a.epub')).toEqual({ status: 'ok', manifest: { isPartial: true } })
+    webdavMock.existsStatus.mockResolvedValueOnce('exists')
+    webdavMock.getFileContents.mockResolvedValueOnce({ success: true, data: 'null' })
+    expect(await cloudCacheService.readMindMapManifest('a.epub')).toEqual({ status: 'ok', manifest: { isPartial: true } })
+    webdavMock.existsStatus.mockResolvedValueOnce('unknown')
+    expect((await cloudCacheService.readMindMapManifest('a.epub')).status).toBe('unknown')
+    webdavMock.existsStatus.mockResolvedValueOnce('exists')
+    webdavMock.getFileContents.mockResolvedValueOnce({ success: false })
+    expect((await cloudCacheService.readMindMapManifest('a.epub')).status).toBe('unknown')
+    webdavMock.existsStatus.mockRejectedValueOnce(new Error('x'))
+    expect(await cloudCacheService.readMindMapManifest('a.epub')).toEqual({ status: 'unknown', error: 'x' })
   })
 })

@@ -8,6 +8,7 @@ const {
   metadataFormatterMock,
   aiBehavior,
   aiInstances,
+  cacheFactory,
 } = vi.hoisted(() => ({
   mockState: {
     aiConfig: {
@@ -43,7 +44,8 @@ const {
   },
   webdavServiceMock: {
     getFileContents: vi.fn(),
-    uploadFile: vi.fn()
+    uploadFile: vi.fn(),
+    syncFiles: vi.fn(),
   },
   cloudCacheServiceMock: {
     fetchCacheFileNamesStatus: vi.fn(),
@@ -52,6 +54,9 @@ const {
     getCacheFilePath: vi.fn(),
     getChartsCacheFilePath: vi.fn(),
     uploadChartsJson: vi.fn(),
+    readCacheMetadata: vi.fn(),
+    readMindMapManifest: vi.fn(),
+    getMindMapManifestPath: vi.fn(),
   },
   metadataFormatterMock: {
     generate: vi.fn(),
@@ -60,8 +65,10 @@ const {
   /** 可按测试覆写的章节摘要行为 */
   aiBehavior: {
     summarize: null as null | ((title: string, opts?: { signal?: AbortSignal }) => Promise<string>),
+    mindmap: null as null | ((title: string) => unknown),
   },
   aiInstances: [] as unknown[],
+  cacheFactory: { make: null as null | (() => unknown) },
 }))
 
 vi.mock('../src/stores/configStore', () => ({
@@ -81,6 +88,11 @@ vi.mock('../src/services/cloudCacheService', () => ({
 vi.mock('../src/services/metadataFormatter', () => ({
   metadataFormatter: metadataFormatterMock
 }))
+
+vi.mock('../src/services/pipeline/persistence', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../src/services/pipeline/persistence')>()
+  return { ...real, createLocalPipelineCache: async () => cacheFactory.make?.() ?? null }
+})
 
 vi.mock('../src/services/pdfProcessor', () => ({
   PdfProcessor: class {
@@ -122,6 +134,12 @@ vi.mock('../src/services/aiService', () => {
       entityTimeline: { entities: [{ id: 'p1', name: '测试' }], events: [] },
     })
 
+    generateChapterMindMap = vi.fn(async (title: string) => {
+      this.onTokenUsage?.(5)
+      return aiBehavior.mindmap ? aiBehavior.mindmap(title) : { nodeData: { id: 'r', topic: title } }
+    })
+    generateCombinedMindMap = vi.fn().mockResolvedValue({ nodeData: { id: 'r', topic: '整书' } })
+
     static isSkippedSummary(summary: string): boolean {
       return summary.startsWith('【已跳过】')
     }
@@ -142,9 +160,10 @@ type BatchProcessingEngineInternals = {
   createAIService: (...args: unknown[]) => unknown
   extractChapters: (...args: unknown[]) => Promise<unknown>
   getRequestThrottleMs: (...args: unknown[]) => number
-  processChapterSummary: (...args: unknown[]) => Promise<unknown>
   sleep: (...args: unknown[]) => Promise<void>
 }
+
+type MockAI = { [k: string]: ReturnType<typeof vi.fn> }
 
 const internals = (engine: BatchProcessingEngine) =>
   engine as unknown as BatchProcessingEngineInternals
@@ -178,7 +197,9 @@ describe('BatchProcessingEngine 行为测试', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     aiBehavior.summarize = null
+    aiBehavior.mindmap = null
     aiInstances.length = 0
+    cacheFactory.make = null
 
     mockState.processingOptions.processingMode = 'summary'
 
@@ -187,6 +208,10 @@ describe('BatchProcessingEngine 行为测试', () => {
     cloudCacheServiceMock.isCachedByFileName.mockReturnValue(false)
     cloudCacheServiceMock.getCacheFilePath.mockReturnValue('/cache/book-完整摘要.md')
     cloudCacheServiceMock.uploadChartsJson.mockResolvedValue({ success: true, path: '/x.json' })
+    cloudCacheServiceMock.readCacheMetadata.mockResolvedValue({ status: 'ok', metadata: { isPartial: false } })
+    cloudCacheServiceMock.readMindMapManifest.mockResolvedValue({ status: 'missing' })
+    cloudCacheServiceMock.getMindMapManifestPath.mockReturnValue('/cache/book/book_mindmap_manifest.json')
+    webdavServiceMock.syncFiles.mockResolvedValue({ success: true })
 
     webdavServiceMock.getFileContents.mockResolvedValue({
       success: true,
@@ -216,21 +241,16 @@ describe('BatchProcessingEngine 行为测试', () => {
     const engine = new BatchProcessingEngine()
     vi.spyOn(internals(engine), 'getRequestThrottleMs').mockReturnValue(123)
     vi.spyOn(internals(engine), 'extractChapters').mockResolvedValue(twoChapters)
-    const summarySpy = vi
-      .spyOn(internals(engine), 'processChapterSummary')
-      .mockResolvedValue('章节摘要内容')
     const sleepSpy = vi.spyOn(internals(engine), 'sleep').mockResolvedValue(undefined)
 
     const result = await engine.processItem({ ...baseItem, selectedChapters: [2] }, baseConfig)
 
-    expect(summarySpy).toHaveBeenCalledTimes(1)
-    expect(summarySpy).toHaveBeenCalledWith(
-      aiInstances[0],
-      expect.objectContaining({ title: '第二章' }),
-      'non-fiction',
-      'zh',
-      expect.any(AbortSignal)
-    )
+    const ai = aiInstances[0] as MockAI
+    expect(ai.summarizeChapter).toHaveBeenCalledTimes(1)
+    const call = ai.summarizeChapter.mock.calls[0]
+    expect(call[0]).toBe('第二章')
+    expect(call.slice(2, 4)).toEqual(['non-fiction', 'zh'])
+    expect(call[5].signal).toBeInstanceOf(AbortSignal)
     expect(sleepSpy).toHaveBeenCalledWith(123)
     expect(result.success).toBe(true)
   })
@@ -243,8 +263,9 @@ describe('BatchProcessingEngine 行为测试', () => {
 
     const result = await engine.processItem(baseItem, { ...baseConfig, skipProcessed: true }, new Set(['x']))
 
-    expect(result.success).toBe(true)
+    expect(result).toMatchObject({ success: true, skipped: true })
     expect(result.error).toContain('已跳过')
+    expect(cloudCacheServiceMock.readCacheMetadata).toHaveBeenCalledWith('book.epub')
     expect(onItemSkip).toHaveBeenCalledWith(expect.objectContaining({ id: baseItem.id }), '已有缓存')
     expect(webdavServiceMock.getFileContents).not.toHaveBeenCalled()
   })
@@ -276,18 +297,14 @@ describe('BatchProcessingEngine 行为测试', () => {
     expect(engine.getStatus().isRunning).toBe(false)
   })
 
-  it('mindmap / combined-mindmap 模式明确拒绝，不下载不上传', async () => {
-    for (const mode of ['mindmap', 'combined-mindmap']) {
-      mockState.processingOptions.processingMode = mode
-      const engine = new BatchProcessingEngine()
-      await expect(engine.startProcessing([baseItem], baseConfig)).rejects.toThrow(
-        BATCH_UNSUPPORTED_MODE_ERROR
-      )
-      const result = await engine.processItem(baseItem, baseConfig)
-      expect(result).toMatchObject({ success: false, error: BATCH_UNSUPPORTED_MODE_ERROR })
-    }
+  it('未知模式明确拒绝，不下载不上传', async () => {
+    mockState.processingOptions.processingMode = 'weird'
+    const engine = new BatchProcessingEngine()
+    await expect(engine.startProcessing([baseItem], baseConfig)).rejects.toThrow(BATCH_UNSUPPORTED_MODE_ERROR)
+    const result = await engine.processItem(baseItem, baseConfig)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain(BATCH_UNSUPPORTED_MODE_ERROR)
     expect(webdavServiceMock.getFileContents).not.toHaveBeenCalled()
-    expect(webdavServiceMock.uploadFile).not.toHaveBeenCalled()
   })
 
   it('单章失败只写占位：其余章节照常，后处理与上传只含可用章节并标记 isPartial', async () => {
@@ -396,5 +413,134 @@ describe('BatchProcessingEngine 行为测试', () => {
     if (allIgnored.every((c) => matchesDefaultUnselectTitle(c.title))) {
       expect(defaultBatchChapterSelection(allIgnored)).toEqual([1, 2])
     }
+  })
+  describe('w2pipe：skipProcessed 读元数据 / 导图模式 / 本地缓存', () => {
+    const skipCfg = { ...baseConfig, skipProcessed: true }
+
+    it('summary：文件名命中但 isPartial=true 不跳过；元数据读不到按已处理跳过', async () => {
+      const engine = new BatchProcessingEngine()
+      vi.spyOn(internals(engine), 'extractChapters').mockResolvedValue(twoChapters)
+      cloudCacheServiceMock.isCachedByFileName.mockReturnValue(true)
+      cloudCacheServiceMock.readCacheMetadata.mockResolvedValueOnce({ status: 'ok', metadata: { isPartial: true } })
+      const r1 = await engine.processItem(baseItem, skipCfg, new Set(['x']))
+      expect(r1.skipped).toBeUndefined()
+      expect(r1.success).toBe(true)
+      expect(webdavServiceMock.uploadFile).toHaveBeenCalledTimes(1)
+
+      cloudCacheServiceMock.readCacheMetadata.mockResolvedValueOnce({ status: 'unknown', error: 'x' })
+      expect((await engine.processItem(baseItem, skipCfg, new Set(['x']))).skipped).toBe(true)
+      // 列表未命中、三态 exists 时同样读元数据
+      cloudCacheServiceMock.isCachedByFileName.mockReturnValue(false)
+      cloudCacheServiceMock.checkCacheStatus.mockResolvedValueOnce('exists')
+      cloudCacheServiceMock.readCacheMetadata.mockResolvedValueOnce({ status: 'ok', metadata: null })
+      expect((await engine.processItem(baseItem, skipCfg, new Set())).skipped).toBe(true)
+    })
+
+    it('汇总按 skipped 字段统计跳过数', async () => {
+      const engine = new BatchProcessingEngine()
+      vi.spyOn(internals(engine), 'extractChapters').mockResolvedValue(twoChapters)
+      cloudCacheServiceMock.isCachedByFileName.mockImplementation((name: string) => name === 'book.epub')
+      const summary = await engine.startProcessing(
+        [baseItem, { ...baseItem, id: 'i2', fileName: 'other.epub' }],
+        skipCfg
+      )
+      expect(summary).toMatchObject({ skippedCount: 1, successCount: 1, failedCount: 0 })
+    })
+
+    it('mindmap：处理并上传导图包，失败章节使 isPartial；不列 MD 目录', async () => {
+      mockState.processingOptions.processingMode = 'mindmap'
+      const engine = new BatchProcessingEngine()
+      vi.spyOn(internals(engine), 'extractChapters').mockResolvedValue(twoChapters)
+      aiBehavior.mindmap = (title) => (title === '第二章' ? null : { nodeData: { id: 'r', topic: title } })
+      const summary = await engine.startProcessing([baseItem], skipCfg)
+      expect(cloudCacheServiceMock.fetchCacheFileNamesStatus).not.toHaveBeenCalled()
+      expect(summary.successCount).toBe(1)
+      const res = summary.results[0]
+      expect(res.metadata).toMatchObject({ processedChapters: 1, failedChapters: 1, isPartial: true })
+      expect(res.outputPath).toBe('/cache/book/book_mindmap_manifest.json')
+      expect(webdavServiceMock.syncFiles).toHaveBeenCalledTimes(1)
+      const manifest = JSON.parse(webdavServiceMock.uploadFile.mock.calls[0][1])
+      expect(manifest).toMatchObject({ mode: 'mindmap', isPartial: true, failedChapters: 1 })
+      const ai = aiInstances[0] as MockAI
+      expect(ai.generateCombinedMindMap).not.toHaveBeenCalled()
+    })
+
+    it('combined-mindmap：生成整书导图；全部失败或上传失败时报错不写标记', async () => {
+      mockState.processingOptions.processingMode = 'combined-mindmap'
+      const engine = new BatchProcessingEngine()
+      vi.spyOn(internals(engine), 'extractChapters').mockResolvedValue(twoChapters)
+      const ok = await engine.processItem(baseItem, baseConfig)
+      expect(ok.metadata?.isPartial).toBe(false)
+      expect((aiInstances[0] as MockAI).generateCombinedMindMap).toHaveBeenCalledTimes(1)
+
+      aiBehavior.mindmap = () => null
+      const none = await engine.processItem(baseItem, baseConfig)
+      expect(none.error).toMatch(/没有可用的章节导图/)
+
+      aiBehavior.mindmap = null
+      webdavServiceMock.syncFiles.mockResolvedValueOnce({ success: false, error: '部分文件上传失败' })
+      webdavServiceMock.uploadFile.mockClear()
+      const failed = await engine.processItem(baseItem, baseConfig)
+      expect(failed).toMatchObject({ success: false, error: '部分文件上传失败' })
+      expect(webdavServiceMock.uploadFile).not.toHaveBeenCalled()
+    })
+
+    it('导图 skipProcessed：完整标记跳过；不完整 / 模式不符处理；未知致命', async () => {
+      mockState.processingOptions.processingMode = 'combined-mindmap'
+      const engine = new BatchProcessingEngine()
+      vi.spyOn(internals(engine), 'extractChapters').mockResolvedValue(twoChapters)
+      const m = cloudCacheServiceMock.readMindMapManifest
+      m.mockResolvedValueOnce({ status: 'ok', manifest: { mode: 'combined-mindmap', isPartial: false } })
+      expect((await engine.processItem(baseItem, skipCfg)).skipped).toBe(true)
+      m.mockResolvedValueOnce({ status: 'ok', manifest: { mode: 'mindmap', isPartial: false } })
+      expect((await engine.processItem(baseItem, skipCfg)).skipped).toBeUndefined()
+      m.mockResolvedValueOnce({ status: 'ok', manifest: { mode: 'combined-mindmap', isPartial: true } })
+      expect((await engine.processItem(baseItem, skipCfg)).skipped).toBeUndefined()
+      m.mockResolvedValueOnce({ status: 'unknown', error: 'x' })
+      expect(await engine.processItem(baseItem, skipCfg)).toMatchObject({ fatal: true })
+
+      mockState.processingOptions.processingMode = 'mindmap'
+      m.mockResolvedValueOnce({ status: 'ok', manifest: { mode: 'combined-mindmap', isPartial: false } })
+      expect((await engine.processItem(baseItem, skipCfg)).skipped).toBe(true)
+    })
+
+    it('本地缓存：重跑同一本时命中章节不再调用 AI', async () => {
+      const store = new Map<string, unknown>()
+      cacheFactory.make = () => ({
+        getChapter: async (_k: string, ch: { id: string }) => store.get(ch.id) ?? null,
+        setChapter: async (_k: string, ch: { id: string }, v: unknown) => void store.set(ch.id, v),
+        getBook: async (k: string) => store.get(k) ?? null,
+        setBook: async (k: string, _i: string, v: unknown) => void store.set(k, v),
+      })
+      const engine = new BatchProcessingEngine()
+      vi.spyOn(internals(engine), 'extractChapters').mockResolvedValue(twoChapters)
+      await engine.processItem(baseItem, baseConfig)
+      const second = await engine.processItem(baseItem, baseConfig)
+      expect((aiInstances[1] as MockAI).summarizeChapter).not.toHaveBeenCalled()
+      expect(second.metadata).toMatchObject({ cachedChapters: 2, isPartial: false })
+    })
+
+    it('下载失败、无章节、上传失败时报错', async () => {
+      const engine = new BatchProcessingEngine()
+      webdavServiceMock.getFileContents.mockResolvedValueOnce({ success: false, error: '404' })
+      expect((await engine.processItem(baseItem, baseConfig)).error).toBe('404')
+      webdavServiceMock.getFileContents.mockRejectedValueOnce(new Error('断网'))
+      expect((await engine.processItem(baseItem, baseConfig)).error).toBe('断网')
+      vi.spyOn(internals(engine), 'extractChapters').mockResolvedValue([])
+      expect((await engine.processItem(baseItem, baseConfig)).error).toBe('未能提取到任何章节')
+      webdavServiceMock.uploadFile.mockResolvedValueOnce({ success: false, error: '满了' })
+      vi.spyOn(internals(engine), 'extractChapters').mockResolvedValue(twoChapters)
+      expect((await engine.processItem(baseItem, baseConfig)).error).toBe('满了')
+    })
+
+    it('pause / resume / getRequestThrottleMs 默认值', () => {
+      const engine = new BatchProcessingEngine()
+      engine.pause()
+      expect(engine.getStatus().isPaused).toBe(true)
+      engine.resume()
+      expect(engine.getStatus().isPaused).toBe(false)
+      expect(internals(engine).getRequestThrottleMs({ ...baseConfig, requestThrottleMs: undefined })).toBe(100)
+      expect(internals(engine).getRequestThrottleMs({ ...baseConfig, requestThrottleMs: -5 })).toBe(0)
+    })
   })
 })

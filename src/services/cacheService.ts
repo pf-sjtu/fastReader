@@ -1,490 +1,232 @@
-import type { MindElixirData } from 'mind-elixir'
-import { debounce } from '../utils/async'
+/**
+ * 本地结果缓存（IndexedDB，idb-keyval）
+ *
+ * - 键由调用方构造（见 services/pipeline/cacheKeys.ts），本服务只负责存取与淘汰
+ * - 键按书分组：`frc1:{bookId}:{kind}:{slot}:{hash}`，可按前缀清除整书 / 某类 / 某章
+ * - 按字节近似 LRU 淘汰（上限 CACHE_MAX_BYTES）；配额错误先淘汰再重试一次
+ * - 旧 localStorage 缓存（键不含模型/prompt/内容指纹）不迁移，首次使用时直接清理
+ */
+import { createStore, del, delMany, get, keys, set, type UseStore } from 'idb-keyval'
+import { logger } from '@/lib/logger'
 
-// 定义缓存键类型
-export type CacheKeyType =
-  // 章节级缓存
-  | 'summary'           // 章节总结
-  | 'mindmap'          // 章节思维导图
-  // 书籍级缓存
-  | 'connections'      // 章节关联分析
-  | 'overall_summary'  // 全书总结
-  | 'key_charts'       // 关键图表 JSON（实体关系 + 时间线）
-  | 'combined_mindmap' // 整书思维导图（直接从整书内容生成）
-  | 'merged_mindmap'   // 合并思维导图（从章节思维导图合并生成）
-  | 'mindmap_arrows'   // 思维导图箭头
-  | 'selected_chapters' // 选中的章节
+export const CACHE_KEY_PREFIX = 'frc1:'
+export const CACHE_MAX_BYTES = 50 * 1024 * 1024
+export const LEGACY_STORAGE_KEY = 'ebook-processor-cache'
+const INDEX_KEY = '__index__'
+const DEFAULT_DB = 'fastReader-cache'
+const DEFAULT_STORE = 'entries'
+const TOUCH_PERSIST_DELAY_MS = 1000
 
-// 定义缓存值的类型
-export type CacheValue = string | MindElixirData | string[] | null
-
-// 定义存储在 localStorage 中的缓存项结构
-interface CacheItem {
-  data: CacheValue
-  timestamp: number
+interface IndexEntry {
+  size: number
   lastAccessed: number
 }
 
-interface ChapterSummaryItem {
-  id: string
-  summary: string
+export interface CacheServiceOptions {
+  dbName?: string
+  storeName?: string
+  maxBytes?: number
+  now?: () => number
 }
 
-interface SummaryCacheData {
-  chapters: ChapterSummaryItem[]
-  connections: string
-  overallSummary: string
+/** 值的近似字节数（UTF-16：字符数 × 2） */
+export function approxBytes(value: unknown): number {
+  try {
+    return (typeof value === 'string' ? value.length : JSON.stringify(value)?.length ?? 0) * 2
+  } catch {
+    return 0
+  }
 }
 
-interface ChapterMindMapItem {
-  id: string
-  mindMap: MindElixirData
+function isQuotaError(err: unknown): boolean {
+  const name = (err as { name?: string } | null)?.name
+  return name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED'
 }
 
-interface MindMapCacheData {
-  chapters: ChapterMindMapItem[]
-  combinedMindMap: MindElixirData | null
+/** 清理旧版 localStorage 整份缓存（不迁移：旧键无版本信息，迁移可能命中错误结果） */
+export function clearLegacyLocalCache(): void {
+  try {
+    globalThis.localStorage?.removeItem(LEGACY_STORAGE_KEY)
+  } catch {
+    // 隐私模式等环境下访问 localStorage 可能抛错，忽略
+  }
 }
-
-type GenericCacheData = string | SummaryCacheData | MindMapCacheData | null
-
-interface IdleDeadlineLike {
-  readonly didTimeout: boolean
-  timeRemaining: () => number
-}
-
-type IdleCallback = (deadline: IdleDeadlineLike) => void
-
-type RequestIdleCallbackFn = (callback: IdleCallback, options?: { timeout: number }) => number
 
 export class CacheService {
-  private cache: Map<string, CacheValue>
-  private cacheMeta: Map<string, { timestamp: number; lastAccessed: number }>
-  private readonly STORAGE_KEY = 'ebook-processor-cache'
-  private readonly MAX_CACHE_SIZE = 100 // 最大缓存条目数
-  private readonly CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000 // 7天
-  private readonly SAVE_DEBOUNCE_DELAY = 500
-  private scheduleSaveToLocalStorage: () => void
-  private pendingSave = false
-  private idleSaveId: number | null = null
+  private storeHandle: UseStore | null = null
+  private readonly dbName: string
+  private readonly storeName: string
+  private readonly maxBytes: number
+  private readonly now: () => number
+  private index: Map<string, IndexEntry> | null = null
+  private indexLoading: Promise<Map<string, IndexEntry>> | null = null
+  private touchTimer: ReturnType<typeof setTimeout> | null = null
 
-  constructor() {
-    this.cache = new Map()
-    this.cacheMeta = new Map()
-    this.scheduleSaveToLocalStorage = debounce(() => {
-      this.pendingSave = true
-      this.scheduleIdleSave()
-    }, this.SAVE_DEBOUNCE_DELAY)
-    this.loadFromLocalStorage()
+  constructor(options: CacheServiceOptions = {}) {
+    this.dbName = options.dbName ?? DEFAULT_DB
+    this.storeName = options.storeName ?? DEFAULT_STORE
+    this.maxBytes = options.maxBytes ?? CACHE_MAX_BYTES
+    this.now = options.now ?? Date.now
   }
 
-  // 从localStorage加载缓存
-  private loadFromLocalStorage(): void {
+  /** 惰性打开 IndexedDB（模块加载时不触碰；无 IndexedDB 的环境在各操作的 try 中降级） */
+  private get store(): UseStore {
+    if (!this.storeHandle) {
+      if (typeof indexedDB === 'undefined') throw new Error('IndexedDB 不可用')
+      this.storeHandle = createStore(this.dbName, this.storeName)
+    }
+    return this.storeHandle
+  }
+
+  private loadIndex(): Promise<Map<string, IndexEntry>> {
+    if (this.index) return Promise.resolve(this.index)
+    if (!this.indexLoading) {
+      this.indexLoading = (async () => {
+        clearLegacyLocalCache()
+        let raw: Record<string, IndexEntry> | undefined
+        try {
+          raw = await get<Record<string, IndexEntry>>(INDEX_KEY, this.store)
+        } catch (e) {
+          logger.warn('[cache] 读取索引失败，按空索引处理:', e)
+        }
+        this.index = new Map(Object.entries(raw ?? {}))
+        return this.index
+      })()
+    }
+    return this.indexLoading
+  }
+
+  private async persistIndex(): Promise<void> {
+    if (!this.index) return
     try {
-      const stored = localStorage.getItem(this.STORAGE_KEY)
-      if (stored) {
-        const data = JSON.parse(stored) as Record<string, CacheItem>
-        const now = Date.now()
-
-        // 过滤过期的缓存项
-        Object.entries(data).forEach(([key, value]: [string, CacheItem]) => {
-          if (value.timestamp && (now - value.timestamp) < this.CACHE_EXPIRY) {
-            this.cache.set(key, value.data)
-            this.cacheMeta.set(key, {
-              timestamp: value.timestamp,
-              lastAccessed: value.lastAccessed ?? value.timestamp
-            })
-          }
-        })
-      }
-    } catch (error) {
-      console.warn('加载缓存失败:', error)
-      // 清除损坏的缓存
-      localStorage.removeItem(this.STORAGE_KEY)
+      await set(INDEX_KEY, Object.fromEntries(this.index), this.store)
+    } catch (e) {
+      logger.warn('[cache] 写入索引失败:', e)
     }
   }
 
-  private getRequestIdleCallback(): RequestIdleCallbackFn | undefined {
-    return (globalThis as typeof globalThis & { requestIdleCallback?: RequestIdleCallbackFn }).requestIdleCallback
+  private schedulePersistIndex(): void {
+    if (this.touchTimer) return
+    this.touchTimer = setTimeout(() => {
+      this.touchTimer = null
+      void this.persistIndex()
+    }, TOUCH_PERSIST_DELAY_MS)
   }
 
-  private scheduleIdleSave(): void {
-    if (!this.pendingSave) {
-      return
-    }
-
-    if (this.idleSaveId !== null) {
-      return
-    }
-
-    const requestIdleCallback = this.getRequestIdleCallback()
-    if (requestIdleCallback) {
-      this.idleSaveId = requestIdleCallback(() => {
-        this.idleSaveId = null
-        this.flushSaveToLocalStorage()
-      }, { timeout: 1000 })
-      return
-    }
-
-    setTimeout(() => {
-      this.flushSaveToLocalStorage()
-    }, 0)
+  /** 当前索引中的总字节数 */
+  async totalBytes(): Promise<number> {
+    const index = await this.loadIndex()
+    let total = 0
+    index.forEach((e) => (total += e.size))
+    return total
   }
 
-  // 保存缓存到localStorage
-  private flushSaveToLocalStorage(): void {
-    if (!this.pendingSave) {
-      return
-    }
-
-    this.pendingSave = false
-
+  async get<T>(key: string): Promise<T | null> {
+    const index = await this.loadIndex()
     try {
-      const data: Record<string, CacheItem> = {}
-      const now = Date.now()
-
-      this.cache.forEach((value, key) => {
-        const existingMeta = this.cacheMeta.get(key)
-        const meta = existingMeta ?? { timestamp: now, lastAccessed: now }
-
-        data[key] = {
-          data: value,
-          timestamp: meta.timestamp,
-          lastAccessed: meta.lastAccessed
-        }
-      })
-
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data))
-    } catch (error) {
-      console.warn('保存缓存失败:', error)
-    }
-  }
-
-  private touchKey(key: string): void {
-    const now = Date.now()
-    const meta = this.cacheMeta.get(key)
-
-    if (meta) {
-      meta.lastAccessed = now
-      this.cacheMeta.set(key, meta)
-      return
-    }
-
-    this.cacheMeta.set(key, {
-      timestamp: now,
-      lastAccessed: now
-    })
-  }
-
-  private upsertKey(key: string, value: CacheValue): void {
-    const now = Date.now()
-    const existed = this.cache.has(key)
-
-    if (existed) {
-      this.cache.delete(key)
-    }
-
-    this.cache.set(key, value)
-
-    const meta = this.cacheMeta.get(key)
-    this.cacheMeta.set(key, {
-      timestamp: meta?.timestamp ?? now,
-      lastAccessed: now
-    })
-
-    this.evictIfNeeded()
-    this.scheduleSaveToLocalStorage()
-  }
-
-  private evictIfNeeded(): void {
-    while (this.cache.size > this.MAX_CACHE_SIZE) {
-      let lruKey: string | null = null
-      let lruLastAccessed = Number.POSITIVE_INFINITY
-
-      this.cache.forEach((_, key) => {
-        const lastAccessed = this.cacheMeta.get(key)?.lastAccessed ?? 0
-        if (lastAccessed < lruLastAccessed) {
-          lruLastAccessed = lastAccessed
-          lruKey = key
-        }
-      })
-
-      if (!lruKey) {
-        break
+      const value = await get<T>(key, this.store)
+      if (value === undefined) {
+        if (index.delete(key)) this.schedulePersistIndex()
+        return null
       }
-
-      this.cache.delete(lruKey)
-      this.cacheMeta.delete(lruKey)
-    }
-  }
-
-  // 获取字符串类型的缓存值
-  getString(filename: string, type: CacheKeyType, chapterId?: string): string | null {
-    const key = CacheService.generateKey(filename, type, chapterId)
-    const value = this.cache.get(key)
-    if (value !== undefined) {
-      this.touchKey(key)
-      this.scheduleSaveToLocalStorage()
-    }
-    return typeof value === 'string' ? value : null
-  }
-
-  // 获取思维导图类型的缓存值
-  getMindMap(filename: string, type: CacheKeyType, chapterId?: string): MindElixirData | null {
-    const key = CacheService.generateKey(filename, type, chapterId)
-    const value = this.cache.get(key)
-    if (value !== undefined) {
-      this.touchKey(key)
-      this.scheduleSaveToLocalStorage()
-    }
-    return value && typeof value === 'object' && 'nodeData' in value ? value as MindElixirData : null
-  }
-
-  // 获取选中章节的缓存值
-  getSelectedChapters(filename: string): string[] | null {
-    const key = CacheService.generateKey(filename, 'selected_chapters')
-    const value = this.cache.get(key)
-    if (value !== undefined) {
-      this.touchKey(key)
-      this.scheduleSaveToLocalStorage()
-    }
-    return Array.isArray(value) ? value : null
-  }
-
-  // 获取书籍总结缓存
-  getSummary(filename: string): SummaryCacheData | null {
-    const stats = this.getStats()
-    const cleanFilename = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')
-    
-    // 获取所有章节总结
-    const chapterKeys = stats.keys.filter(key =>
-      key.includes(`book_${cleanFilename}_chapter_`) &&
-      key.endsWith('_summary')
-    )
-
-    const chapters: ChapterSummaryItem[] = []
-    for (const key of chapterKeys) {
-      const value = this.cache.get(key)
-      if (typeof value === 'string') {
-        // 从key中提取chapterId
-        const match = key.match(/_chapter_(.+)_summary$/)
-        if (match) {
-          const chapterId = match[1]
-          chapters.push({
-            id: chapterId,
-            summary: value
-          })
-        }
-      }
-    }
-    
-    // 获取书籍级缓存
-    const connections = this.getString(filename, 'connections')
-    const overallSummary = this.getString(filename, 'overall_summary')
-    
-    if (chapters.length === 0 && !connections && !overallSummary) {
+      const entry = index.get(key)
+      index.set(key, { size: entry?.size ?? approxBytes(value), lastAccessed: this.now() })
+      this.schedulePersistIndex()
+      return value
+    } catch (e) {
+      logger.warn('[cache] 读取失败:', e)
       return null
     }
-    
-    return {
-      chapters,
-      connections: connections || '',
-      overallSummary: overallSummary || ''
-    }
   }
 
-  // 获取思维导图数据
-  getMindMapData(filename: string): MindMapCacheData | null {
-    const stats = this.getStats()
-    const cleanFilename = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')
-    
-    // 获取所有章节思维导图
-    const chapterKeys = stats.keys.filter(key =>
-      key.includes(`book_${cleanFilename}_chapter_`) &&
-      key.endsWith('_mindmap')
-    )
-
-    const chapters: ChapterMindMapItem[] = []
-    for (const key of chapterKeys) {
-      const value = this.cache.get(key)
-      if (value && typeof value === 'object' && 'nodeData' in value) {
-        // 从key中提取chapterId
-        const match = key.match(/_chapter_(.+)_mindmap$/)
-        if (match) {
-          const chapterId = match[1]
-          chapters.push({
-            id: chapterId,
-            mindMap: value
-          })
-        }
+  /** 写入；返回是否成功（失败不抛，缓存是可选能力） */
+  async set(key: string, value: unknown): Promise<boolean> {
+    const index = await this.loadIndex()
+    const size = approxBytes(value)
+    if (size > this.maxBytes) {
+      logger.warn('[cache] 单条超过容量上限，不缓存:', key)
+      return false
+    }
+    index.delete(key)
+    await this.evictUntil(this.maxBytes - size)
+    try {
+      await set(key, value, this.store)
+    } catch (e) {
+      if (!isQuotaError(e)) {
+        logger.warn('[cache] 写入失败:', e)
+        return false
+      }
+      // 配额错误：淘汰约四分之一（至少腾出本条大小）后重试一次
+      const total = await this.totalBytes()
+      await this.evictUntil(Math.min(total * 0.75, total - size))
+      try {
+        await set(key, value, this.store)
+      } catch (retryErr) {
+        logger.warn('[cache] 淘汰后重试仍失败:', retryErr)
+        await this.persistIndex()
+        return false
       }
     }
-    
-    // 获取整书思维导图
-    const combinedMindMap = this.getMindMap(filename, 'combined_mindmap')
-    
-    if (chapters.length === 0 && !combinedMindMap) {
-      return null
+    index.set(key, { size, lastAccessed: this.now() })
+    await this.persistIndex()
+    return true
+  }
+
+  /** 按最久未访问淘汰，直到总字节数 ≤ targetBytes */
+  private async evictUntil(targetBytes: number): Promise<void> {
+    const index = await this.loadIndex()
+    let total = await this.totalBytes()
+    if (total <= targetBytes) return
+    const victims: string[] = []
+    const ordered = [...index.entries()].sort((a, b) => a[1].lastAccessed - b[1].lastAccessed)
+    for (const [key, entry] of ordered) {
+      if (total <= targetBytes) break
+      victims.push(key)
+      total -= entry.size
+      index.delete(key)
     }
-    
-    return {
-      chapters,
-      combinedMindMap
-    }
-  }
-
-  // 获取通用缓存
-  getCache(filename: string, type: CacheKeyType): GenericCacheData {
-    if (type === 'summary') {
-      return this.getSummary(filename)
-    } else if (type === 'mindmap') {
-      return this.getMindMapData(filename)
-    } else {
-      return this.getString(filename, type)
-    }
-  }
-
-  // 设置缓存值（兼容测试的简化接口）
-  set(filename: string, type: CacheKeyType, value: CacheValue, chapterId?: string): void {
-    this.setCache(filename, type, value, chapterId)
-  }
-
-  // 设置缓存值
-  setCache(filename: string, type: CacheKeyType, value: CacheValue, chapterId?: string): void {
-    const key = CacheService.generateKey(filename, type, chapterId)
-    this.upsertKey(key, value)
-  }
-
-  // 缓存选中的章节
-  setSelectedChapters(filename: string, selectedChapters: Set<string>): void {
-    const key = CacheService.generateKey(filename, 'selected_chapters')
-    const value = Array.from(selectedChapters)
-    this.upsertKey(key, value)
-  }
-
-  // 删除缓存（公共接口，兼容测试）
-  delete(filename: string, type: CacheKeyType, chapterId?: string): boolean {
-    return this.deleteCache(filename, type, chapterId)
-  }
-
-  // 删除缓存
-  private deleteCache(filename: string, type: CacheKeyType, chapterId?: string): boolean {
-    const key = CacheService.generateKey(filename, type, chapterId)
-    return this.deleteByKey(key)
-  }
-
-  // 通过键删除缓存
-  private deleteByKey(key: string): boolean {
-    const result = this.cache.delete(key)
-    if (result) {
-      this.cacheMeta.delete(key)
-      this.scheduleSaveToLocalStorage()
-    }
-    return result
-  }
-
-  // 获取缓存统计信息（用于清除整本书缓存时查找相关键）
-  getStats(): { totalEntries: number; keys: string[] } {
-    const keys = Array.from(this.cache.keys())
-    return {
-      totalEntries: keys.length,
-      keys: keys
+    if (!victims.length) return
+    try {
+      await delMany(victims, this.store)
+    } catch (e) {
+      logger.warn('[cache] 淘汰删除失败:', e)
     }
   }
 
-  // 统一的缓存键生成规则
-  static generateKey(filename: string, type: CacheKeyType, chapterId?: string): string {
-    // 清理文件名，移除扩展名和特殊字符
-    const cleanFilename = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')
-
-    if (chapterId) {
-      // 章节级缓存：book_filename_chapter_chapterId_type
-      return `book_${cleanFilename}_chapter_${chapterId}_${type}`
-    } else {
-      // 书籍级缓存：book_filename_type
-      return `book_${cleanFilename}_${type}`
+  async delete(key: string): Promise<boolean> {
+    const index = await this.loadIndex()
+    const existed = index.delete(key)
+    try {
+      await del(key, this.store)
+    } catch (e) {
+      logger.warn('[cache] 删除失败:', e)
     }
+    if (existed) await this.persistIndex()
+    return existed
   }
 
-  // 清除章节缓存
-  clearChapterCache(fileName: string, chapterId: string, type: 'summary' | 'mindmap'): boolean {
-    const cacheType: CacheKeyType = type
-    return this.deleteCache(fileName, cacheType, chapterId)
-  }
-
-  // 清除特定类型缓存
-  clearSpecificCache(fileName: string, cacheType: 'connections' | 'overall_summary' | 'key_charts' | 'combined_mindmap' | 'merged_mindmap' | 'selected_chapters'): boolean {
-    const type: CacheKeyType = cacheType
-    return this.deleteCache(fileName, type)
-  }
-
-  // 清除整本书缓存
-  clearBookCache(fileName: string, processingMode?: 'summary' | 'mindmap' | 'combined_mindmap'): number {
-    let deletedCount = 0
-
-    // 清除选中章节缓存
-    if (this.deleteCache(fileName, 'selected_chapters')) deletedCount++
-
-    // 如果没有指定 processingMode，清除所有相关缓存
-    if (!processingMode) {
-      // 清除所有书籍级缓存
-      if (this.deleteCache(fileName, 'summary')) deletedCount++
-      if (this.deleteCache(fileName, 'connections')) deletedCount++
-      if (this.deleteCache(fileName, 'overall_summary')) deletedCount++
-      if (this.deleteCache(fileName, 'key_charts')) deletedCount++
-      if (this.deleteCache(fileName, 'mindmap_arrows')) deletedCount++
-      if (this.deleteCache(fileName, 'merged_mindmap')) deletedCount++
-      if (this.deleteCache(fileName, 'combined_mindmap')) deletedCount++
-
-      // 清除所有章节的缓存（任何类型）
-      const stats = this.getStats()
-      const cleanFilename = fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')
-      const chapterKeys = stats.keys.filter(key =>
-        key.includes(`book_${cleanFilename}_chapter_`)
-      )
-      chapterKeys.forEach(key => {
-        if (this.deleteByKey(key)) deletedCount++
-      })
-
-      return deletedCount
+  /** 删除某前缀下的全部条目（整书 / 某类 / 某章），返回删除条数 */
+  async deleteByPrefix(prefix: string): Promise<number> {
+    const index = await this.loadIndex()
+    const targets = new Set([...index.keys()].filter((k) => k.startsWith(prefix)))
+    try {
+      // 索引可能落后于实际存储（如索引写入失败），再扫一遍真实键
+      for (const k of await keys(this.store)) {
+        if (typeof k === 'string' && k.startsWith(prefix)) targets.add(k)
+      }
+    } catch (e) {
+      logger.warn('[cache] 枚举键失败:', e)
     }
-
-    if (processingMode === 'summary') {
-      // 文字总结模式：清除章节总结、章节关联、全书总结、关键图表
-      if (this.deleteCache(fileName, 'connections')) deletedCount++
-      if (this.deleteCache(fileName, 'overall_summary')) deletedCount++
-      if (this.deleteCache(fileName, 'key_charts')) deletedCount++
-
-      // 清除所有章节的总结缓存
-      const stats = this.getStats()
-      const chapterKeys = stats.keys.filter(key =>
-        key.includes(`book_${fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}_chapter_`) &&
-        key.endsWith('_summary')
-      )
-      chapterKeys.forEach(key => {
-        if (this.deleteByKey(key)) deletedCount++
-      })
-
-    } else if (processingMode === 'mindmap') {
-      // 章节思维导图模式：清除章节思维导图、思维导图箭头、合并思维导图相关缓存
-      if (this.deleteCache(fileName, 'mindmap_arrows')) deletedCount++
-      if (this.deleteCache(fileName, 'merged_mindmap')) deletedCount++
-
-      // 清除所有章节的思维导图缓存
-      const stats = this.getStats()
-      const chapterKeys = stats.keys.filter(key =>
-        key.includes(`book_${fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}_chapter_`) &&
-        key.endsWith('_mindmap')
-      )
-      chapterKeys.forEach(key => {
-        if (this.deleteByKey(key)) deletedCount++
-      })
-
-    } else if (processingMode === 'combined_mindmap') {
-      // 整书思维导图模式：清除整书思维导图相关缓存
-      if (this.deleteCache(fileName, 'combined_mindmap')) deletedCount++
+    if (!targets.size) return 0
+    targets.forEach((k) => index.delete(k))
+    try {
+      await delMany([...targets], this.store)
+    } catch (e) {
+      logger.warn('[cache] 批量删除失败:', e)
     }
-
-    return deletedCount
+    await this.persistIndex()
+    return targets.size
   }
 }
+
+export const cacheService = new CacheService()

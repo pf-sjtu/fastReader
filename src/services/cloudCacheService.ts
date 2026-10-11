@@ -156,6 +156,61 @@ export class CloudCacheService {
   }
 
   /**
+   * 只读取 MD 文件头元数据（skipProcessed 判定 isPartial 用）。
+   * webdavService 不支持 Range，只能整文件读取；调用方应只对文件名已命中的书调用。
+   */
+  async readCacheMetadata(
+    fileName: string
+  ): Promise<{ status: 'ok'; metadata: ProcessingMetadata | null } | { status: 'unknown'; error: string }> {
+    try {
+      const result = await this.webdavService.getFileContents(this.getCacheFilePath(fileName), 'text')
+      if (!result.success || typeof result.data !== 'string') {
+        return { status: 'unknown', error: result.error || '读取缓存失败' }
+      }
+      return { status: 'ok', metadata: this.parseMetadata(result.data) }
+    } catch (error) {
+      return { status: 'unknown', error: error instanceof Error ? error.message : '读取缓存失败' }
+    }
+  }
+
+  /**
+   * 批量导图的「已处理」标记：与单书 syncMindMap 同目录（{syncPath}/{书名}/）
+   */
+  getMindMapManifestPath(fileName: string): string {
+    const base = fileName.replace(/\.[^/.]+$/, '')
+    const syncPath = useConfigStore.getState().webdavConfig.syncPath || '/fastReader'
+    return `${syncPath}/${base}/${base}_mindmap_manifest.json`
+  }
+
+  /** 读取导图 manifest：missing / ok（含 isPartial、mode）/ unknown */
+  async readMindMapManifest(fileName: string): Promise<
+    | { status: 'missing' }
+    | { status: 'ok'; manifest: { mode?: string; isPartial?: boolean } }
+    | { status: 'unknown'; error: string }
+  > {
+    const path = this.getMindMapManifestPath(fileName)
+    try {
+      const exists = await this.webdavService.existsStatus(path)
+      if (exists === 'missing') return { status: 'missing' }
+      if (exists === 'unknown') return { status: 'unknown', error: '无法确认导图标记状态' }
+      const result = await this.webdavService.getFileContents(path, 'text')
+      if (!result.success || typeof result.data !== 'string') {
+        return { status: 'unknown', error: result.error || '读取导图标记失败' }
+      }
+      let manifest: { mode?: string; isPartial?: boolean }
+      try {
+        manifest = JSON.parse(result.data) as { mode?: string; isPartial?: boolean }
+      } catch {
+        // 标记损坏：按不完整处理（重跑），不阻断整批
+        manifest = { isPartial: true }
+      }
+      return { status: 'ok', manifest: manifest && typeof manifest === 'object' ? manifest : { isPartial: true } }
+    } catch (error) {
+      return { status: 'unknown', error: error instanceof Error ? error.message : '读取导图标记失败' }
+    }
+  }
+
+  /**
    * 读取关键图表同名 JSON（404 视为无文件，非失败）
    */
   async readChartsJson(fileName: string): Promise<{

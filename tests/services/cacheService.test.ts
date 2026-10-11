@@ -1,332 +1,124 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { CacheService } from '../../src/services/cacheService'
+import 'fake-indexeddb/auto'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { del, set as idbSet, createStore } from 'idb-keyval'
+import {
+  CacheService,
+  LEGACY_STORAGE_KEY,
+  approxBytes,
+  clearLegacyLocalCache,
+} from '../../src/services/cacheService'
 
-// Mock localStorage for Node.js test environment
-const createMockStorage = () => {
-  let store: Record<string, string> = {}
-  return {
-    getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => { store[key] = value },
-    removeItem: (key: string) => { delete store[key] },
-    clear: () => { store = {} }
-  }
-}
+let dbSeq = 0
+const freshDb = () => `w2pipe-cache-test-${++dbSeq}`
 
-// Mock requestIdleCallback for Node.js environment
-declare global {
-  var requestIdleCallback: ((callback: IdleRequestCallback, options?: IdleRequestOptions) => number) | undefined
-  var cancelIdleCallback: ((handle: number) => void) | undefined
-}
-
-describe('CacheService', () => {
-  let cacheService: CacheService
-  const mockFilename = 'test-book.epub'
+describe('CacheService（IndexedDB + 字节 LRU）', () => {
+  let clock = 1000
+  const now = () => clock
 
   beforeEach(() => {
-    // Mock localStorage for Node.js environment
-    Object.defineProperty(global, 'localStorage', {
-      value: createMockStorage(),
-      writable: true
-    })
-    localStorage.clear()
-    cacheService = new CacheService()
+    clock = 1000
   })
 
-  afterEach(() => {
-    vi.restoreAllMocks()
+  it('读写 / 不存在返回 null / 删除', async () => {
+    const cache = new CacheService({ dbName: freshDb(), now })
+    expect(await cache.get('frc1:b:summary:c1:x')).toBeNull()
+    expect(await cache.set('frc1:b:summary:c1:x', '摘要')).toBe(true)
+    expect(await cache.get<string>('frc1:b:summary:c1:x')).toBe('摘要')
+    const map = { nodeData: { id: 'r', topic: 't' } }
+    await cache.set('frc1:b:mindmap:c1:y', map)
+    expect(await cache.get('frc1:b:mindmap:c1:y')).toEqual(map)
+    expect(await cache.delete('frc1:b:summary:c1:x')).toBe(true)
+    expect(await cache.delete('frc1:b:summary:c1:x')).toBe(false)
+    expect(await cache.get('frc1:b:summary:c1:x')).toBeNull()
   })
 
-  describe('set and get', () => {
-    it('should store and retrieve string value', () => {
-      cacheService.set(mockFilename, 'summary', 'test content')
-      const result = cacheService.getString(mockFilename, 'summary')
-      expect(result).toBe('test content')
-    })
+  it('按前缀删除：整书 / 某类 / 某章互不影响', async () => {
+    const cache = new CacheService({ dbName: freshDb(), now })
+    await cache.set('frc1:A:summary:c1:h1', 'a1')
+    await cache.set('frc1:A:summary:c2:h2', 'a2')
+    await cache.set('frc1:A:connections:_:h3', 'conn')
+    await cache.set('frc1:B:summary:c1:h4', 'b1')
 
-    it('should store and retrieve mindmap value', () => {
-      const mindmapData = {
-        nodeData: { id: 'root', topic: 'Test' },
-        linkData: {}
-      }
-      cacheService.set(mockFilename, 'mindmap', mindmapData)
-      const result = cacheService.getMindMap(mockFilename, 'mindmap')
-      expect(result).toEqual(mindmapData)
-    })
-
-    it('should return null for non-existent key', () => {
-      const result = cacheService.getString(mockFilename, 'summary')
-      expect(result).toBeNull()
-    })
+    expect(await cache.deleteByPrefix('frc1:A:summary:c1:')).toBe(1)
+    expect(await cache.get('frc1:A:summary:c2:h2')).toBe('a2')
+    expect(await cache.deleteByPrefix('frc1:A:')).toBe(2)
+    expect(await cache.get('frc1:A:connections:_:h3')).toBeNull()
+    expect(await cache.get('frc1:B:summary:c1:h4')).toBe('b1')
+    expect(await cache.deleteByPrefix('frc1:none:')).toBe(0)
   })
 
-  describe('delete', () => {
-    it('should delete cached value', () => {
-      cacheService.set(mockFilename, 'summary', 'test content')
-      cacheService.delete(mockFilename, 'summary')
-      const result = cacheService.getString(mockFilename, 'summary')
-      expect(result).toBeNull()
-    })
+  it('索引落后于存储时，前缀删除仍能扫到真实键', async () => {
+    const dbName = freshDb()
+    const store = createStore(dbName, 'entries')
+    await idbSet('frc1:Z:summary:c1:h', 'orphan', store)
+    const cache = new CacheService({ dbName, now })
+    expect(await cache.deleteByPrefix('frc1:Z:')).toBe(1)
   })
 
-  describe('clearBookCache', () => {
-    it('should clear all cache for a book', () => {
-      cacheService.set(mockFilename, 'summary', 'summary content')
-      cacheService.set(mockFilename, 'connections', 'connections content')
-      
-      cacheService.clearBookCache(mockFilename)
-      
-      expect(cacheService.getString(mockFilename, 'summary')).toBeNull()
-      expect(cacheService.getString(mockFilename, 'connections')).toBeNull()
-    })
+  it('超过字节上限按最久未访问淘汰（读取会刷新访问时间）', async () => {
+    const cache = new CacheService({ dbName: freshDb(), maxBytes: 100, now })
+    await cache.set('k1', 'a'.repeat(20)) // 40 bytes
+    clock = 2000
+    await cache.set('k2', 'b'.repeat(20))
+    clock = 3000
+    await cache.get('k1') // k1 变成最近访问
+    clock = 4000
+    await cache.set('k3', 'c'.repeat(20)) // 共 120 > 100，淘汰最久未访问 k2
+    expect(await cache.get('k2')).toBeNull()
+    expect(await cache.get('k1')).toBe('a'.repeat(20))
+    expect(await cache.get('k3')).toBe('c'.repeat(20))
+    expect(await cache.totalBytes()).toBe(80)
   })
 
-  describe('getStats', () => {
-    it('should return cache statistics', () => {
-      cacheService.set(mockFilename, 'summary', 'test')
-      cacheService.set('another.epub', 'summary', 'test2')
-
-      const stats = cacheService.getStats()
-      expect(stats.totalEntries).toBe(2)
-      expect(stats.keys).toHaveLength(2)
-    })
+  it('覆盖写同一键不重复计入大小；单条超上限不缓存', async () => {
+    const cache = new CacheService({ dbName: freshDb(), maxBytes: 100, now })
+    await cache.set('k', 'x'.repeat(10))
+    await cache.set('k', 'y'.repeat(15))
+    expect(await cache.totalBytes()).toBe(30)
+    expect(await cache.set('big', 'z'.repeat(60))).toBe(false)
+    expect(await cache.get('big')).toBeNull()
   })
 
-  describe('LRU eviction', () => {
-    beforeEach(() => {
-      vi.useFakeTimers()
-    })
-
-    afterEach(() => {
-      vi.useRealTimers()
-    })
-
-    it('should evict least recently used items when exceeding MAX_CACHE_SIZE', () => {
-      // MAX_CACHE_SIZE is 100, test with smaller number for performance
-      const maxSize = 5
-      const service = new CacheService()
-
-      // Set cache size via reflection for testing
-      // @ts-expect-error - accessing private field for testing
-      service.MAX_CACHE_SIZE = maxSize
-
-      // Add items up to max size with time advancement
-      for (let i = 0; i < maxSize; i++) {
-        vi.advanceTimersByTime(10)
-        service.set(`book-${i}.epub`, 'summary', `content-${i}`)
-      }
-
-      expect(service.getStats().totalEntries).toBe(maxSize)
-
-      // Access first item to make it recently used
-      vi.advanceTimersByTime(10)
-      service.getString('book-0.epub', 'summary')
-
-      // Add one more item, should evict the least recently used (book-1, not book-0)
-      vi.advanceTimersByTime(10)
-      service.set('new-book.epub', 'summary', 'new content')
-
-      expect(service.getStats().totalEntries).toBe(maxSize)
-      expect(service.getString('book-0.epub', 'summary')).toBe('content-0') // Should still exist
-      expect(service.getString('book-1.epub', 'summary')).toBeNull() // Should be evicted
-    })
-
-    it('should update lastAccessed on get operations', () => {
-      const service = new CacheService()
-
-      vi.advanceTimersByTime(10)
-      service.set('book-a.epub', 'summary', 'content-a')
-      vi.advanceTimersByTime(10)
-      service.set('book-b.epub', 'summary', 'content-b')
-
-      // Access book-a to update its lastAccessed
-      vi.advanceTimersByTime(100)
-      service.getString('book-a.epub', 'summary')
-
-      // @ts-expect-error - accessing private field for testing
-      service.MAX_CACHE_SIZE = 2
-
-      // Add a new item, book-b should be evicted (older access time)
-      vi.advanceTimersByTime(10)
-      service.set('book-c.epub', 'summary', 'content-c')
-
-      expect(service.getString('book-a.epub', 'summary')).toBe('content-a')
-      expect(service.getString('book-b.epub', 'summary')).toBeNull()
-    })
+  it('读取已被外部删除的键：返回 null 并清理索引', async () => {
+    const dbName = freshDb()
+    const cache = new CacheService({ dbName, now })
+    await cache.set('k', 'v')
+    await del('k', createStore(dbName, 'entries'))
+    expect(await cache.get('k')).toBeNull()
+    expect(await cache.totalBytes()).toBe(0)
   })
 
-  describe('debounced persistence', () => {
-    beforeEach(() => {
-      vi.useFakeTimers()
-    })
-
-    afterEach(() => {
-      vi.useRealTimers()
-    })
-
-    it('should schedule save with debounce', () => {
-      const service = new CacheService()
-      const setItemSpy = vi.spyOn(localStorage, 'setItem')
-
-      service.set('book.epub', 'summary', 'content-1')
-
-      // Immediately after set, localStorage should not be called yet (debounced)
-      expect(setItemSpy).not.toHaveBeenCalled()
-
-      // Advance timers past debounce delay (500ms)
-      vi.advanceTimersByTime(600)
-
-      // Now localStorage should have been called
-      expect(setItemSpy).toHaveBeenCalled()
-    })
-
-    it('should reset debounce timer on multiple rapid sets', () => {
-      const service = new CacheService()
-      const setItemSpy = vi.spyOn(localStorage, 'setItem')
-
-      service.set('book.epub', 'summary', 'content-1')
-      vi.advanceTimersByTime(300)
-      service.set('book.epub', 'connections', 'content-2')
-      vi.advanceTimersByTime(300)
-      service.set('book.epub', 'overall_summary', 'content-3')
-
-      // Should not have saved yet
-      expect(setItemSpy).not.toHaveBeenCalled()
-
-      // Advance past the last debounce
-      vi.advanceTimersByTime(600)
-
-      // Should have saved now
-      expect(setItemSpy).toHaveBeenCalledTimes(1)
-    })
+  it('新实例从持久化索引恢复大小统计', async () => {
+    const dbName = freshDb()
+    const a = new CacheService({ dbName, now })
+    await a.set('k', 'abcd')
+    const b = new CacheService({ dbName, now })
+    expect(await b.totalBytes()).toBe(8)
+    expect(await b.get('k')).toBe('abcd')
   })
 
-  describe('idle callback persistence', () => {
-    beforeEach(() => {
-      vi.useFakeTimers()
+  it('首次使用清理旧 localStorage 整份缓存（不迁移）', async () => {
+    localStorage.setItem(LEGACY_STORAGE_KEY, '{"book_x_summary":{}}')
+    const cache = new CacheService({ dbName: freshDb(), now })
+    await cache.get('anything')
+    expect(localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull()
+    // 访问 localStorage 抛错也不影响
+    const orig = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('denied')
+      },
     })
-
-    afterEach(() => {
-      vi.useRealTimers()
-      delete global.requestIdleCallback
-    })
-
-    it('should use requestIdleCallback when available', () => {
-      const mockIdleCallback = vi.fn((callback: () => void) => {
-        // Immediately invoke callback for testing
-        callback()
-        return 123 // fake handle
-      })
-      global.requestIdleCallback = mockIdleCallback as unknown as typeof global.requestIdleCallback
-
-      const service = new CacheService()
-      const setItemSpy = vi.spyOn(localStorage, 'setItem')
-
-      service.set('book.epub', 'summary', 'content')
-
-      // Manually trigger the debounced save
-      vi.advanceTimersByTime(600)
-
-      expect(mockIdleCallback).toHaveBeenCalled()
-      expect(setItemSpy).toHaveBeenCalled()
-    })
-
-    it('should fallback to setTimeout when requestIdleCallback is not available', () => {
-      // Ensure requestIdleCallback is not available
-      delete global.requestIdleCallback
-
-      const service = new CacheService()
-      const setItemSpy = vi.spyOn(localStorage, 'setItem')
-
-      service.set('book.epub', 'summary', 'content')
-
-      // Advance timers
-      vi.advanceTimersByTime(600)
-
-      expect(setItemSpy).toHaveBeenCalled()
-    })
+    expect(() => clearLegacyLocalCache()).not.toThrow()
+    if (orig) Object.defineProperty(globalThis, 'localStorage', orig)
   })
 
-  describe('cache loading with expiry', () => {
-    it('should filter expired cache entries on load', () => {
-      const now = Date.now()
-      const expiredTime = now - 8 * 24 * 60 * 60 * 1000 // 8 days ago (expired)
-      const validTime = now - 1 * 24 * 60 * 60 * 1000 // 1 day ago (valid)
-
-      const storedData = {
-        'book_expired_summary': {
-          data: 'expired content',
-          timestamp: expiredTime,
-          lastAccessed: expiredTime
-        },
-        'book_valid_summary': {
-          data: 'valid content',
-          timestamp: validTime,
-          lastAccessed: validTime
-        }
-      }
-
-      localStorage.setItem('ebook-processor-cache', JSON.stringify(storedData))
-
-      const service = new CacheService()
-
-      expect(service.getString('expired.epub', 'summary')).toBeNull()
-      expect(service.getString('valid.epub', 'summary')).toBe('valid content')
-    })
-
-    it('should handle corrupted localStorage data gracefully', () => {
-      localStorage.setItem('ebook-processor-cache', 'invalid-json{}}')
-
-      // Should not throw
-      expect(() => new CacheService()).not.toThrow()
-    })
-  })
-
-  describe('clearBookCache with processingMode', () => {
-    it('should clear only summary-related caches for summary mode', () => {
-      const service = new CacheService()
-
-      // Set up various caches
-      service.set('book.epub', 'summary', 'summary content')
-      service.set('book.epub', 'connections', 'connections content')
-      service.set('book.epub', 'overall_summary', 'overall content')
-      service.set('book.epub', 'mindmap', { nodeData: { id: '1', topic: 'Test' } })
-
-      const deletedCount = service.clearBookCache('book.epub', 'summary')
-
-      expect(deletedCount).toBeGreaterThan(0)
-      expect(service.getString('book.epub', 'connections')).toBeNull()
-      expect(service.getString('book.epub', 'overall_summary')).toBeNull()
-    })
-
-    it('should clear only mindmap-related caches for mindmap mode', () => {
-      const service = new CacheService()
-
-      service.set('book.epub', 'summary', 'summary content')
-      service.set('book.epub', 'mindmap', { nodeData: { id: '1', topic: 'Test' } })
-      service.set('book.epub', 'merged_mindmap', { nodeData: { id: '2', topic: 'Merged' } })
-
-      const deletedCount = service.clearBookCache('book.epub', 'mindmap')
-
-      expect(deletedCount).toBeGreaterThan(0)
-      expect(service.getString('book.epub', 'summary')).toBe('summary content') // Should remain
-      expect(service.getMindMap('book.epub', 'merged_mindmap')).toBeNull()
-    })
-
-    it('should clear all caches when no processingMode specified', () => {
-      const service = new CacheService()
-
-      // Set caches that clearBookCache will actually delete
-      service.set('book.epub', 'summary', 'summary content')
-      service.set('book.epub', 'connections', 'connections content')
-      service.set('book.epub', 'overall_summary', 'overall content')
-      service.set('book.epub', 'combined_mindmap', { nodeData: { id: '1', topic: 'Test' } })
-      service.set('book.epub', 'selected_chapters', ['ch1', 'ch2'])
-
-      const deletedCount = service.clearBookCache('book.epub')
-
-      // Should delete the items we created
-      expect(deletedCount).toBeGreaterThanOrEqual(4)
-      expect(service.getStats().totalEntries).toBe(0)
-    })
+  it('approxBytes：字符串 / 对象 / 不可序列化', () => {
+    expect(approxBytes('ab')).toBe(4)
+    expect(approxBytes({ a: 1 })).toBe(14)
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    expect(approxBytes(cyclic)).toBe(0)
   })
 })
