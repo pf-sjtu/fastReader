@@ -20,6 +20,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm exec vite build
+      - run: node scripts/check-chunk-cycles.mjs
 
   cli:
     runs-on: ubuntu-latest

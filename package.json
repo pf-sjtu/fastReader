@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
-    "build:pages": "vite build",
+    "build:pages": "vite build && node scripts/check-chunk-cycles.mjs",
     "lint": "eslint --config config/eslint.config.js .",
     "lint:css": "stylelint \"src/**/*.{css,scss,less}\"",
     "lint:all": "pnpm lint && pnpm lint:css",
