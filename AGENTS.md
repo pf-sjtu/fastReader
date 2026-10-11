@@ -88,10 +88,13 @@ git push -u origin HEAD
 - **MindMap**: mind-elixir
 
 ## Key Patterns
-- Service layer (`services/`) handles business logic
-- Centralized store (`stores/configStore.ts`) manages state
-- Prompts versioned (v1/v2) in `services/prompts/`
-- Chapter-level caching to avoid re-computation
+- Service layer (`services/`) handles business logic；单书与批量共用 `services/pipeline/bookPipeline.ts`
+- `useBookProcessing` 只做组合，逻辑在 `useBookFile` / `useProcessingRun` / `useKeyCharts` / `useReaderPanel`
+- Store：每类持久化数据只在一个子 store（`stores/*/index.ts`，带 version/migrate）；`configStore` 是不持久化的兼容壳；订阅一律用 selector
+- Prompts versioned (v1/v2) YAML in `services/prompts/config/`，前端 `renderPrompt` 与 CLI `render_prompt` 同语义（见该目录 README）
+- 章节缓存：IndexedDB，键含文件指纹/内容/模型/prompt/语言（`services/pipeline/cacheKeys.ts`）
+- 结果状态统一用 `utils/resultStatus.ts`（失败/跳过前缀），书籍 HTML 入 DOM 前必经 `utils/sanitizeHtml.ts`
+- 前端与 CLI 的共享契约以 `tests/fixtures/` 下的样例为准（两端测试都读）
 
 ## Cloud Cache Reading
 - 检查 WebDAV 上 `{syncPath}/{sanitizedName}-完整摘要.md` 是否存在
@@ -104,11 +107,11 @@ git push -u origin HEAD
 - 支持汇率配置（USD -> CNY，默认 7.0）
 
 ## CLI Tool (src/cli/)
-- 命令：`python -m src.cli.main batch -c config.yaml`
+- 命令：`uv run python -m src.cli.main batch -c config.yaml`（依赖见 `pyproject.toml`，测试 `uv run pytest -q`）
 - 配置：YAML 格式，支持环境变量替换 `${VAR_NAME}`
 - 输出：`output/` 目录生成处理结果
 - 日志：`log/` 目录记录处理过程和错误
-- 错误处理：指数退避重试机制
+- 错误处理：仅 408/429/5xx/网络错误按配置重试并遵循 Retry-After；仅支持 summary 模式
 
 ## Constraints
 - Browser-only (no backend)
@@ -119,4 +122,5 @@ git push -u origin HEAD
 ## WebDAV CORS 代理
 - 前端 WebDAV 请求走同源 `/api/dav`
 - Cloudflare Pages Functions 代理读取 `X-WebDAV-Base` 与 `X-WebDAV-Path`
-- 代理必须校验 Origin 白名单与 https base URL
+- 代理必须校验 Origin 白名单与 https base URL，最终上游 URL 必须与 base 同源且在其路径下；代理自身错误带 `X-Proxy-Error: 1`
+- CSP 在 `public/_headers`；connect-src 不收窄到具体主机（用户自定义 AI 服务商）

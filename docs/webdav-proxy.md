@@ -71,6 +71,7 @@
 
 ```
 https://fast-read.pages.dev
+https://read-app.navira.blog
 http://localhost:3000
 http://localhost:5173
 http://127.0.0.1:5173
@@ -89,18 +90,26 @@ http://127.0.0.1:5173
 仅允许指定来源调用代理。默认白名单：
 
 - `https://fast-read.pages.dev`
+- `https://read-app.navira.blog`
 - `http://localhost:3000`
 - `http://localhost:5173`
 - `http://127.0.0.1:5173`
 
-修改位置：`functions/api/dav/[[path]].js` → `ALLOWED_ORIGINS`
+优先通过环境变量 `ALLOWED_ORIGINS` 配置（见上文）；未设置时使用 `functions/api/dav/[[path]].js` 中的默认值。
+Origin 头优先；可伪造的 `X-Request-Origin` 不能单独放行。AI 代理（`functions/api/ai`）使用同一规则。
 
 ### 3) base URL 校验（防 SSRF）
 
-- 必须为 `https://`
-- 禁止 URL 内含用户名/密码
+- 必须为 `https://`，禁止 URL 内含用户名/密码
+- 主机经 WHATWG URL 规范化后判断：拒绝 localhost、私网/回环/链路本地 IPv4（含整数、八进制、短写形式）、
+  `::`、`::1`、`::ffff:` 映射、fe80::/10、fc00::/7 等 IPv6 字面量
+- **最终上游 URL** 必须与 base 同源且路径位于 base 之下：path 为绝对 URL、协议相对（`//host`）、反斜杠、`../` 及其编码变体一律 400
+- 重定向目标做同样校验；跨源重定向不跟随，Authorization 不会外发
+- 请求体上限 50MB（`MAX_BODY_BYTES`），超限 413
 
-对应函数：`isValidUpstreamBase`
+对应函数：`isValidUpstreamBase`、`resolveScopedUpstreamUrl`、`isWithinUpstreamScope`（`src/services/webdavProxyUtils.ts`，两个代理共用）
+
+注意：仅按字面量拦截，无法防御解析到私网的域名（DNS rebinding）；Cloudflare Workers 本身无法访问内网，实际风险低。
 
 ### 4) 预检处理（OPTIONS）
 
@@ -115,6 +124,8 @@ http://127.0.0.1:5173
 
 - 透传 Authorization / Depth / If-* / Range 等
 - 移除 `Origin / Referer / Host / X-WebDAV-*`
+- 响应头只回传白名单：content-type、content-length、etag、last-modified、dav、content-range、accept-ranges、location（仅作用域内）
+- 代理**自身**产生的错误（405 / 403 Origin / 400 / 413 / 502 上游不可达）带 `X-Proxy-Error: 1`，前端据此与上游错误区分，不会把代理拒绝误判为文件不存在
 
 ## 前端改造说明
 
@@ -150,7 +161,7 @@ Cloudflare Pages 会自动识别该目录并部署 Functions。
 2. 左侧菜单进入 Pages → Create a project
 3. 选择 Git 仓库并授权
 4. 构建设置：
-   - Build command：按你的项目设置（如 `npm run build`）
+   - Build command：`pnpm build:pages`（类型检查由 CI 负责）
    - Build output directory：`dist`
    - Framework preset：选择你项目实际框架（Vite 通常可自动识别）
 5. 点击 Save and Deploy
@@ -166,10 +177,7 @@ Pages 会自动识别 `functions/` 目录并启用 Functions。
 
 ### 4) 配置 CORS 白名单（关键步骤）
 
-CORS 不在 Cloudflare 控制台里配置，**只能在函数代码中配置**。
-
-1. 打开 `functions/api/dav/[[path]].js`
-2. 更新 `ALLOWED_ORIGINS`：
+通过上文「环境变量配置」设置 `ALLOWED_ORIGINS`（推荐）；也可修改函数中的默认值后重新部署。白名单应包含：
    - 生产域名（Pages 默认域名 + 你绑定的自定义域名）
    - 本地开发域名（如 `http://localhost:5173`）
 3. 保存后重新部署（推送代码即可触发）
@@ -189,13 +197,16 @@ CORS 不在 Cloudflare 控制台里配置，**只能在函数代码中配置**�
 
 ### 6) 代理开关与调试
 
-不需要任何环境变量或 Secrets。
+除可选的 `ALLOWED_ORIGINS` 外不需要其他环境变量或 Secrets。
 
 常见错误定位：
 
 - 403：Origin 不在白名单
-- 400：Server URL 非 https 或含凭证
+- 400：Server URL 非 https / 含凭证 / 指向私网，或 path 逃出 base
 - 405：方法未在白名单
+- 413：请求体超过 50MB
+- 502：上游不可达
+（以上均带 `X-Proxy-Error: 1`）
 
 ### 7) 部署后验证
 
@@ -230,7 +241,11 @@ npx wrangler pages dev --local-protocol=https ./dist
 - `403 Origin not allowed`
   - Origin 不在白名单
 - `400 Invalid upstream base URL`
-  - Server URL 非 https 或含凭证
+  - Server URL 非 https、含凭证或指向私网 / 本机
+- `400` path 校验失败
+  - 目标路径逃出 base（绝对 URL、`//host`、`../`）
+- `413 Payload too large`
+  - 请求体超过 50MB
 - `405 Method not allowed`
   - 请求方法不在白名单
 - `401/403 Unauthorized`

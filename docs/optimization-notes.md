@@ -36,3 +36,29 @@
 - 统一使用 **pnpm**（`packageManager` 字段锁定版本），只提交 `pnpm-lock.yaml`；`package-lock.json` 已忽略
 - `pnpm build` = `tsc -b`（真实类型检查）+ `vite build`；`pnpm typecheck` 单独跑类型检查
 - vite 配置只保留根目录 `vite.config.ts` 一份
+
+## 2026-10 全量整改（详见 openspec/changes/update-audit-remediation-2026-10、refactor-unified-book-pipeline）
+
+### 首屏分包
+- Rollup 的两个 CJS 虚拟模块 `\0commonjsHelpers.js` 与 `\0commonjs-dynamic-modules` 必须单独成 `cjs-helpers` 块：
+  它们不含 `node_modules`，`manualChunks` 返回 undefined 时会被并入第一个依赖它们的手动块（曾先后把 cytoscape、epubjs 拖进首屏）
+- 解析器（pdfjs / epubjs）一律按格式动态 import；首屏 JS 2.43MB → 1.19MB
+- 排查方法：`dist/index.html` 的 modulepreload 列表；sourcemap 不含 `\0` 模块，需临时插件在 `generateBundle` 中打印 `chunk.modules`
+
+### 取消与重试
+- `AICallOptions.signal` 贯穿到 fetch 与重试等待；Gemini SDK 仅客户端放弃等待，服务端可能仍计费
+- 只重试 408/429/5xx/网络错误，上下文超长优先判定；Retry-After 优先，否则指数退避 + 抖动；同一服务商 429 共享冷却
+
+### 结果可信度
+- 失败章节 `processed:false` + `utils/resultStatus.ts` 前缀；有失败即元数据 `isPartial`
+- 云端存在性三态（exists / missing / unknown），unknown 时批量中止，避免网络抖动触发整库重跑覆盖
+
+### 缓存
+- IndexedDB，键见 `services/pipeline/cacheKeys.ts`；书级结果同样缓存，强制重跑需先清缓存
+- 批量拿不到可靠修改时间，指纹的 lastModified 记 0（仅按大小 + 前 64KB 区分）
+- 无 `crypto.subtle`（非安全上下文）或无 IndexedDB 时缓存静默停用
+
+### 已知取舍
+- CSP `connect-src` 只放行 https 与本机 http：局域网 http Ollama（如 `192.168.x.x:11434`）会被拦截，需改用 https 反代或本机地址
+- AI 代理只接受 https 公网 base：公网 IP 上的 http 自建服务商会被拒
+- 输出语言 auto：前端跟随界面语言，CLI 跟随原书语言（CLI 无界面）

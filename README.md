@@ -28,8 +28,8 @@
 
 ### 💾 高效缓存机制
 
-- **智能缓存**：自动缓存 AI 处理结果，避免重复计算
-- **缓存管理**：支持按模式清除缓存，节省存储空间
+- **章节级缓存**：结果存于 IndexedDB，键包含文件指纹、章节内容、模型、prompt 版本与输出语言，换模型或改 prompt 不会命中旧结果
+- **只重跑失败章节**：重新处理时命中缓存的章节不再调用 AI；可清除单章或整书缓存强制重跑
 - **离线查看**：已处理的内容可离线查看
 
 ### 🎨 现代化界面
@@ -61,8 +61,8 @@
 
 ### 环境要求
 
-- Node.js 18+
-- pnpm（推荐）或 npm
+- Node.js 20.19+（Vite 7 要求）
+- pnpm（版本由 `package.json` 的 `packageManager` 锁定，仓库只维护 `pnpm-lock.yaml`）
 
 ### 安装依赖
 
@@ -73,19 +73,27 @@ cd ebook-to-mindmap
 
 # 安装依赖
 pnpm install
-# 或
-npm install
 ```
 
 ### 启动开发服务器
 
 ```bash
 pnpm dev
-# 或
-npm run dev
 ```
 
 访问 `http://localhost:5173` 开始使用。
+
+### 开发检查
+
+```bash
+pnpm typecheck   # tsc -b，真实类型检查
+pnpm lint
+pnpm test        # vitest
+uv run pytest -q # CLI 测试
+pnpm build       # typecheck + vite build
+```
+
+CI（`.github/workflows/ci.yml`）在每次推送执行以上全部检查。
 
 ### 💻 命令行工具（CLI）
 
@@ -94,14 +102,14 @@ npm run dev
 **快速开始：**
 
 ```bash
-# 安装 Python 依赖
-pip install -r requirements-cli.txt
+# 安装 Python 依赖（uv，依赖见 pyproject.toml）
+uv sync
 
 # 查看帮助
-python -m src.cli.main --help
+uv run python -m src.cli.main --help
 
-# 运行批量处理（需要配置文件）
-python -m src.cli.main batch -c config.yaml
+# 运行批量处理（需要配置文件，示例见 config.example.yaml）
+uv run python -m src.cli.main batch -c config.yaml
 ```
 
 **配置文件示例：**
@@ -119,7 +127,7 @@ ai:
   model: "gemini-1.5-pro"
 
 processing:
-  mode: "summary"        # summary, mindmap, combined-mindmap
+  mode: "summary"        # CLI 仅支持 summary；导图模式请用 Web 端批量处理
   bookType: "non-fiction"  # fiction, non-fiction
   outputLanguage: "zh"
 
@@ -138,7 +146,7 @@ output:
 可以直接使用 Web UI 导出的配置文件：
 
 ```bash
-python -m src.cli.main batch -c ebook-to-mindmap-config-v2.yaml --dry-run
+uv run python -m src.cli.main batch -c ebook-to-mindmap-config-v2.yaml --dry-run
 ```
 
 CLI 会自动：
@@ -315,17 +323,17 @@ ebook-to-mindmap/
 
 ### 缓存管理
 
-系统会自动缓存 AI 处理结果，提高效率：
+章节与书级结果（关联、全书总结、图表、整书导图）缓存在浏览器 IndexedDB：
 
-- **自动缓存**：处理结果会自动保存到本地
-- **智能复用**：相同内容不会重复处理
-- **缓存清理**：可按模式清除特定类型的缓存
-- **存储优化**：缓存数据经过压缩，节省存储空间
+- **版本化键**：文件指纹（大小 + 修改时间 + 前 64KB 哈希）+ 章节内容哈希 + 模型 + prompt 模板 + 输出语言 + 处理类型，任一变化即视为新结果
+- **命中跳过**：重新处理只对失败或未缓存的章节调用 AI；需要强制重跑时先清除对应章节或整书缓存
+- **容量**：约 50MB，按字节近似 LRU 淘汰；旧版 localStorage 缓存升级后自动清除（不含版本信息，不迁移）
+- **云端**：处理结果可同步到 WebDAV；含失败章节的结果标记 `isPartial`，不会被当作完整缓存或在批量中被跳过
 
 ### 批量处理
 
 - **章节选择**：支持批量选择/取消选择章节
-- **并发处理**：多个章节可并行处理（受 API 限制）
+- **并发处理**：章节并行数可配置（默认 3），结果按章节顺序呈现；遇 429 时同一服务商共享冷却期
 - **断点续传**：处理中断后可从上次位置继续
 
 ### 导出功能
