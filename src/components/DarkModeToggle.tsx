@@ -1,6 +1,6 @@
 import React from 'react';
 import { Moon, Sun } from 'lucide-react';
-import { useTheme } from './ThemeProvider';
+import { useTheme } from './useTheme';
 import { Button } from '@/components/ui/button';
 
 export const DarkModeToggle: React.FC = () => {

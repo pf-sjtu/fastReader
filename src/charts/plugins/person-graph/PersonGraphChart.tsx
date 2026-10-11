@@ -185,7 +185,7 @@ export function PersonGraphChart({ charts }: Props) {
   }, [])
 
   const applyTheme = useCallback((cy: Core) => {
-    const theme = readChartTheme(containerRef.current)
+    const theme = readChartTheme()
     cy.style().fromJson(buildStyles(theme)).update()
     if (containerRef.current) {
       containerRef.current.style.backgroundColor = theme.card
@@ -246,7 +246,7 @@ export function PersonGraphChart({ charts }: Props) {
 
         if (cancelled || !containerRef.current) return
 
-        const theme = readChartTheme(containerRef.current)
+        const theme = readChartTheme()
         containerRef.current.style.backgroundColor = theme.card
 
         cy = cytoscape({
@@ -303,8 +303,10 @@ export function PersonGraphChart({ charts }: Props) {
         cy.on('dragfree', 'node', () => {
           if (!cy) return
           window.setTimeout(() => {
-            if (cyRef.current === cy) {
-              runForceLayout(cy, forceRef.current, false)
+            // 卸载后 cy / cyRef 均为 null：两者相等也不能直接跑布局
+            const current = cyRef.current
+            if (current && current === cy) {
+              runForceLayout(current, forceRef.current, false)
             }
           }, 80)
         })

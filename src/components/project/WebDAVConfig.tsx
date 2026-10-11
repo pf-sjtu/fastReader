@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,36 +21,30 @@ import {
 import { useState, useEffect } from 'react'
 import { useWebDAVConfig, useConfigStore } from '../../stores/configStore'
 import { webdavService } from '../../services/webdavService'
-import { useTranslation } from 'react-i18next'
 
 export function WebDAVConfig() {
-  const { t } = useTranslation()
   const webdavConfig = useWebDAVConfig()
-  const {
-    setWebDAVEnabled,
-    setWebDAVServerUrl,
-    setWebDAVUsername,
-    setWebDAVPassword,
-    setWebDAVAppName,
-    setWebDAVAutoSync,
-    setWebDAVSyncPath,
-    setWebDAVBrowsePath,
-    setWebDAVConnectionStatus,
-    resetWebDAVConfig
-  } = useConfigStore()
+  const { setWebDAVEnabled, setWebDAVServerUrl, setWebDAVUsername, setWebDAVPassword, setWebDAVAppName, setWebDAVAutoSync, setWebDAVSyncPath, setWebDAVBrowsePath, setWebDAVConnectionStatus, resetWebDAVConfig } = useConfigStore(
+    useShallow((s) => ({
+      setWebDAVEnabled: s.setWebDAVEnabled,
+      setWebDAVServerUrl: s.setWebDAVServerUrl,
+      setWebDAVUsername: s.setWebDAVUsername,
+      setWebDAVPassword: s.setWebDAVPassword,
+      setWebDAVAppName: s.setWebDAVAppName,
+      setWebDAVAutoSync: s.setWebDAVAutoSync,
+      setWebDAVSyncPath: s.setWebDAVSyncPath,
+      setWebDAVBrowsePath: s.setWebDAVBrowsePath,
+      setWebDAVConnectionStatus: s.setWebDAVConnectionStatus,
+      resetWebDAVConfig: s.resetWebDAVConfig,
+    }))
+  )
 
 
   // 组件状态
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [connectionTestResult, setConnectionTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [showPassword, setShowPassword] = useState(false)
-  const [isInitialized, setIsInitialized] = useState(false)
   const [lastConfigHash, setLastConfigHash] = useState('')
-
-  // 检查WebDAV服务状态
-  useEffect(() => {
-    setIsInitialized(webdavService.isInitialized())
-  }, [webdavConfig])
 
   // 生成配置哈希用于检测配置变化
   const getConfigHash = () => {
@@ -140,7 +135,6 @@ export function WebDAVConfig() {
     resetWebDAVConfig()
     setConnectionTestResult(null)
     webdavService.disconnect()
-    setIsInitialized(false)
   }
 
   // 获取连接状态图标

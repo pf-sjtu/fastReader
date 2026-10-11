@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,8 +10,10 @@ import { MarkdownCard } from '@/components/MarkdownCard'
 import { MindMapCard } from '@/components/MindMapCard'
 import { UploadToWebDAVButton } from '@/components/UploadToWebDAVButton'
 import { ChartsPanel } from '@/charts'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { isUsableText } from '@/utils/resultStatus'
 import type { MindElixirData, Options } from 'mind-elixir'
-import type { Chapter, BookSummary, BookMindMap, ProcessingMode } from '@/hooks/useBookProcessing'
+import type { BookSummary, BookMindMap, ProcessingMode } from '@/hooks/useBookProcessing'
 
 const mindElixirOptions = { direction: 1, alignment: 'nodes' } as Options
 
@@ -21,7 +23,6 @@ interface ResultsSectionProps {
   bookMindMap: BookMindMap | null
   file: File | null
   expandedChapters: Set<string>
-  currentViewingChapterSummary: string
   onClearChapterCache: (chapterId: string) => void
   onClearSpecificCache: (cacheType: string) => void
   onChapterExpandChange: (chapterId: string, isExpanded: boolean) => void
@@ -32,13 +33,12 @@ interface ResultsSectionProps {
   chartsGenerating?: boolean
 }
 
-export function ResultsSection({
+export const ResultsSection = memo(function ResultsSection({
   processingMode,
   bookSummary,
   bookMindMap,
   file,
   expandedChapters,
-  currentViewingChapterSummary,
   onClearChapterCache,
   onClearSpecificCache,
   onChapterExpandChange,
@@ -51,6 +51,15 @@ export function ResultsSection({
   const { t } = useTranslation()
   // 受控 Tab，避免切换时整树 default 重置
   const [summaryTab, setSummaryTab] = useState('chapters')
+
+  // 稳定回调：MarkdownCard 为 memo 组件，内联箭头会让每张卡在任何父级更新时重渲染
+  const handleExpandChange = useCallback(
+    (isExpanded: boolean, chapterId: string) => onChapterExpandChange(chapterId, isExpanded),
+    [onChapterExpandChange]
+  )
+  const clearConnections = useCallback(() => onClearSpecificCache('connections'), [onClearSpecificCache])
+  const clearOverall = useCallback(() => onClearSpecificCache('overall_summary'), [onClearSpecificCache])
+  const clearCharts = useCallback(() => onClearSpecificCache('key_charts'), [onClearSpecificCache])
 
   if (!bookSummary && !bookMindMap) {
     return null
@@ -117,7 +126,7 @@ export function ResultsSection({
                 {t('results.tabs.overallSummary')}
               </TabsTrigger>
               <TabsTrigger value="charts" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
-                {t('results.tabs.keyCharts', '关键图表')}
+                {t('results.tabs.keyCharts')}
               </TabsTrigger>
             </TabsList>
 
@@ -132,9 +141,9 @@ export function ResultsSection({
                   index={index}
                   defaultCollapsed={index > 0}
                   isExpanded={expandedChapters.has(chapter.id)}
-                  onExpandChange={(isExpanded) => onChapterExpandChange(chapter.id, isExpanded)}
-                  onClearCache={() => onClearChapterCache(chapter.id)}
-                  onReadChapter={() => onReadChapter(chapter.id)}
+                  onExpandChange={handleExpandChange}
+                  onClearCache={onClearChapterCache}
+                  onReadChapter={onReadChapter}
                 />
               ))}
             </TabsContent>
@@ -149,7 +158,7 @@ export function ResultsSection({
                 showClearCache={true}
                 showViewContent={false}
                 showCopyButton={true}
-                onClearCache={() => onClearSpecificCache('connections')}
+                onClearCache={clearConnections}
               />
             </TabsContent>
 
@@ -163,7 +172,7 @@ export function ResultsSection({
                 showClearCache={true}
                 showViewContent={false}
                 showCopyButton={true}
-                onClearCache={() => onClearSpecificCache('overall_summary')}
+                onClearCache={clearOverall}
               />
             </TabsContent>
 
@@ -176,18 +185,19 @@ export function ResultsSection({
                 summaryTab !== 'charts' && 'hidden'
               )}
             >
-              <ChartsPanel
-                charts={bookSummary.charts}
-                chartsError={bookSummary.chartsError}
-                generating={chartsGenerating}
-                onClearCache={() => onClearSpecificCache('key_charts')}
-                onRegenerate={onRegenerateKeyCharts}
-                canRegenerate={
-                  !!bookSummary.overallSummary &&
-                  !bookSummary.overallSummary.startsWith('【全书总结失败】') &&
-                  bookSummary.chapters.length > 0
-                }
-              />
+              <ErrorBoundary section={t('results.tabs.keyCharts')}>
+                <ChartsPanel
+                  charts={bookSummary.charts}
+                  chartsError={bookSummary.chartsError}
+                  generating={chartsGenerating}
+                  onClearCache={clearCharts}
+                  onRegenerate={onRegenerateKeyCharts}
+                  canRegenerate={
+                    isUsableText(bookSummary.overallSummary) &&
+                    bookSummary.chapters.length > 0
+                  }
+                />
+              </ErrorBoundary>
             </TabsContent>
           </Tabs>
         ) : processingMode === 'mindmap' && bookMindMap ? (
@@ -212,7 +222,7 @@ export function ResultsSection({
                     mindMapData={chapter.mindMap}
                     index={index}
                     showCopyButton={false}
-                    onClearCache={() => onClearChapterCache(chapter.id)}
+                    onClearCache={onClearChapterCache}
                     onDownloadMindMap={onDownloadMindMap}
                     showOpenInMindElixir={false}
                     mindElixirOptions={mindElixirOptions}
@@ -279,4 +289,4 @@ export function ResultsSection({
       </CardContent>
     </Card>
   )
-}
+})

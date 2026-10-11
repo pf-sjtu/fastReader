@@ -11,7 +11,7 @@ import { List, Brain, Loader2, BookOpen, Filter, ArrowRight } from 'lucide-react
 import { toast } from 'sonner'
 import { useConfigStore } from '@/stores/configStore'
 import type { ChapterData } from '@/services/epubProcessor'
-import { useState, useMemo, useEffect } from 'react'
+import { memo, useState, useMemo, useEffect } from 'react'
 
 interface ChapterSelectionSectionProps {
   extractedChapters: ChapterData[]
@@ -22,12 +22,14 @@ interface ChapterSelectionSectionProps {
   extractingChapters: boolean
   onChapterSelect: (chapterId: string, checked: boolean) => void
   onSelectAll: (checked: boolean) => void
+  /** 一次性设置选中集合（筛选/范围模式用，避免 1 次清空 + N 次单选） */
+  onSetSelection: (chapterIds: string[]) => void
   onCustomPromptChange: (value: string) => void
   onViewChapterContent: (chapter: ChapterData) => void
   onStartProcessing: () => void
 }
 
-export function ChapterSelectionSection({
+export const ChapterSelectionSection = memo(function ChapterSelectionSection({
   extractedChapters,
   bookData,
   selectedChapters,
@@ -36,12 +38,13 @@ export function ChapterSelectionSection({
   extractingChapters,
   onChapterSelect,
   onSelectAll,
+  onSetSelection,
   onCustomPromptChange,
   onViewChapterContent,
   onStartProcessing
 }: ChapterSelectionSectionProps) {
   const { t } = useTranslation()
-  const { apiKey } = useConfigStore(state => state.aiConfig)
+  const apiKey = useConfigStore(state => state.aiConfig.apiKey)
 
   // 全选模式：'all' = 全选所有, 'filter' = 按字符数筛选, 'range' = 定义首尾章节
   const [selectAllMode, setSelectAllMode] = useState<'all' | 'filter' | 'range'>('all')
@@ -90,20 +93,20 @@ export function ChapterSelectionSection({
       onSelectAll(true)
     } else if (mode === 'filter') {
       // 按字符数筛选后全选
-      const threshold = charThreshold[0]
-      // 先取消全选
-      onSelectAll(false)
-      // 然后选择满足条件的章节
-      extractedChapters.forEach(chapter => {
-        const count = chapterCharCounts[chapter.id] || 0
-        if (count >= threshold) {
-          onChapterSelect(chapter.id, true)
-        }
-      })
+      applyThreshold(charThreshold[0])
     } else if (mode === 'range') {
       // 首尾章节模式：根据当前选择的首尾章节更新选中状态
       updateRangeSelection(startChapterId, endChapterId)
     }
+  }
+
+  // 选中字符数 >= 阈值的章节（一次性设置）
+  const applyThreshold = (threshold: number) => {
+    onSetSelection(
+      extractedChapters
+        .filter(chapter => (chapterCharCounts[chapter.id] || 0) >= threshold)
+        .map(chapter => chapter.id)
+    )
   }
 
   // 根据首尾章节ID更新选中状态
@@ -118,12 +121,7 @@ export function ChapterSelectionSection({
     const actualStart = Math.min(startIndex, endIndex)
     const actualEnd = Math.max(startIndex, endIndex)
 
-    // 先取消全选
-    onSelectAll(false)
-    // 然后选择范围内的章节
-    for (let i = actualStart; i <= actualEnd; i++) {
-      onChapterSelect(extractedChapters[i].id, true)
-    }
+    onSetSelection(extractedChapters.slice(actualStart, actualEnd + 1).map(ch => ch.id))
   }
 
   // 处理起始章节变更
@@ -147,14 +145,7 @@ export function ChapterSelectionSection({
     setCharThreshold(value)
     // 如果当前是筛选模式，更新选中状态
     if (selectAllMode === 'filter') {
-      const threshold = value[0]
-      onSelectAll(false)
-      extractedChapters.forEach(chapter => {
-        const count = chapterCharCounts[chapter.id] || 0
-        if (count >= threshold) {
-          onChapterSelect(chapter.id, true)
-        }
-      })
+      applyThreshold(value[0])
     }
   }
 
@@ -163,14 +154,6 @@ export function ChapterSelectionSection({
     if (extractedChapters.length === 0) return false
     return extractedChapters.every(ch => selectedChapters.has(ch.id))
   }, [extractedChapters, selectedChapters])
-
-  // 检查是否满足筛选条件的章节都被选中
-  const filteredChaptersSelected = useMemo(() => {
-    if (extractedChapters.length === 0) return false
-    const filteredChapters = extractedChapters.filter(ch => (chapterCharCounts[ch.id] || 0) >= charThreshold[0])
-    if (filteredChapters.length === 0) return false
-    return filteredChapters.every(ch => selectedChapters.has(ch.id))
-  }, [extractedChapters, selectedChapters, charThreshold, chapterCharCounts])
 
   const handleStartProcessing = () => {
     if (!apiKey) {
@@ -333,6 +316,8 @@ export function ChapterSelectionSection({
                   variant="outline"
                   size="sm"
                   onClick={() => onViewChapterContent(chapter)}
+                  aria-label={t('chapters.viewChapterContent', { title: chapter.title })}
+                  title={t('chapters.viewChapterContent', { title: chapter.title })}
                 >
                   <BookOpen className="h-3 w-3" />
                 </Button>
@@ -379,4 +364,4 @@ export function ChapterSelectionSection({
       </CardContent>
     </Card>
   )
-}
+})

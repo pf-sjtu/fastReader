@@ -24,12 +24,13 @@ export default defineConfig({
         manualChunks(id) {
           // Rollup 的 CJS 互操作 helper 必须独立成块：否则会被分进首个 CJS 依赖（cytoscape）的 chunk，
           // 导致所有首屏 chunk 静态依赖它，cytoscape 的懒加载失效
-          if (id.includes("commonjsHelpers")) return "cjs-helpers"
+          if (id.includes("commonjsHelpers") || id.includes("commonjs-dynamic-modules")) return "cjs-helpers"
           if (!id.includes("node_modules")) return
           if (id.includes("cytoscape")) return "cytoscape"
           if (id.includes("pdfjs-dist")) return "pdfjs"
           if (id.includes("mind-elixir")) return "mind-elixir"
-          if (id.includes("@ssshooter/epubjs") || id.includes("epubjs")) return "epubjs"
+          // 精确匹配包目录：pnpm 嵌套布局下 epubjs 自身的依赖路径也含 "epubjs"，宽匹配会把共用依赖拖进 epubjs 块
+          if (/[\\/]node_modules[\\/]@ssshooter[\\/]epubjs[\\/]/.test(id)) return "epubjs"
           if (id.includes("react-dom") || id.includes("/react/") || id.includes("\\react\\"))
             return "react-vendor"
           if (id.includes("i18next")) return "i18n"

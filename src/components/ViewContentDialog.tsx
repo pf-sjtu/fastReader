@@ -7,6 +7,10 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkCjkFriendly from "remark-cjk-friendly";
 import { prepareMarkdownForRender } from '@/lib/markdown'
+import { sanitizeBookHtml } from '@/utils/sanitizeHtml'
+
+// 模块级常量：避免每次渲染新建插件数组
+const REMARK_PLUGINS = [remarkGfm, remarkCjkFriendly]
 
 interface ViewContentDialogProps {
   title: string
@@ -23,7 +27,7 @@ export function ViewContentDialog({ title, content, chapterIndex, contentType = 
       case 'markdown':
         return (
           <div className="markdown-card-content prose prose-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]}>
+            <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>
               {prepareMarkdownForRender(content)}
             </ReactMarkdown>
           </div>
@@ -32,7 +36,7 @@ export function ViewContentDialog({ title, content, chapterIndex, contentType = 
         return (
           <div 
             className="text-gray-700 dark:text-gray-200 leading-relaxed text-sm max-w-none w-full break-words"
-            dangerouslySetInnerHTML={{ __html: content || '' }}
+            dangerouslySetInnerHTML={{ __html: sanitizeBookHtml(content || '') }}
           />
         )
       default:
@@ -50,6 +54,8 @@ export function ViewContentDialog({ title, content, chapterIndex, contentType = 
         <Button
           variant="outline"
           size="sm"
+          aria-label={t('viewContent.originalText')}
+          title={t('viewContent.originalText')}
         >
           <Eye className="h-4 w-4 " />
         </Button>

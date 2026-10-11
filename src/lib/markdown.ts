@@ -137,6 +137,8 @@ function withProtectedCode(input: string, fn: (body: string) => string): string 
   s = s.replace(/```[\s\S]*?```/g, stash)
   s = s.replace(/`[^`\n]+`/g, stash)
   s = fn(s)
+  // NUL 是上方 stash 写入的哨兵字符，故意匹配控制字符
+  // eslint-disable-next-line no-control-regex
   s = s.replace(/\u0000MDCODE(\d+)\u0000/g, (_, n) => slots[Number(n)] ?? '')
   return s
 }

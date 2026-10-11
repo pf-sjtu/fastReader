@@ -19,5 +19,12 @@ export default tseslint.config([
       ecmaVersion: 2022,
       globals: globals.browser,
     },
+    rules: {
+      // `_` 前缀表示刻意不用；解构剔除字段（const { a: _, ...rest }）是常见写法
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
+    },
   },
 ])

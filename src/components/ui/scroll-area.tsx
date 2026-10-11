@@ -8,8 +8,12 @@ import { cn } from "@/lib/utils"
 function ScrollArea({
   className,
   children,
+  horizontal = false,
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+}: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
+  /** 同时启用横向滚动条（内容宽于容器时） */
+  horizontal?: boolean
+}) {
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
@@ -23,6 +27,7 @@ function ScrollArea({
         {children}
       </ScrollAreaPrimitive.Viewport>
       <ScrollBar />
+      {horizontal && <ScrollBar orientation="horizontal" />}
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   )

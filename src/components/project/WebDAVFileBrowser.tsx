@@ -1,10 +1,9 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { EmptyState } from '@/components/ui/empty-state'
 import {
@@ -14,17 +13,14 @@ import {
   FolderOpen,
   Download,
   Search,
-  Filter,
   Loader2,
   CheckCircle,
   XCircle,
-  Info,
   FileText,
   Book,
   FileText as FilePdf,
   RefreshCw,
   File,
-  ArrowUpDown,
   ArrowUp,
   ArrowDown,
   Shuffle
@@ -250,8 +246,16 @@ export function WebDAVFileBrowser({
     }
   }
 
+  // 行点击 / Enter / Space：目录进入，文件选中
+  const activateEntry = (file: WebDAVFileInfo) => {
+    if (file.type === 'directory') handleDirectoryClick(file)
+    else handleFileClick(file)
+  }
+
   // 处理文件下载
-  const handleDownloadFile = async () => {
+  // target 显式传入：行内下载按钮 setSelectedFile 后 state 尚未更新，不能读闭包里的 selectedFile
+  const handleDownloadFile = async (target: WebDAVFileInfo | null = selectedFile) => {
+    const selectedFile = target
     if (selectedFile && selectedFile.type === 'file') {
       setIsDownloading(true)
       try {
@@ -272,7 +276,7 @@ export function WebDAVFileBrowser({
         link.click()
         document.body.removeChild(link)
         URL.revokeObjectURL(url)
-      } catch (error) {
+      } catch {
         setError('文件下载失败')
       } finally {
         setIsDownloading(false)
@@ -296,7 +300,7 @@ export function WebDAVFileBrowser({
         // 传递下载的File对象给父组件
         onFileSelect(downloadResult.data)
         onClose()
-      } catch (error) {
+      } catch {
         setError('文件选择失败')
       } finally {
         setIsDownloading(false)
@@ -543,7 +547,7 @@ export function WebDAVFileBrowser({
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <CardContent className="flex-1 p-0 overflow-hidden">
-                <ScrollArea className="h-full w-full" orientation="both">
+                <ScrollArea className="h-full w-full" horizontal>
                   {isLoading ? (
                     <div className="flex items-center justify-center h-32">
                       <Loader2 className="h-6 w-6 animate-spin" />
@@ -557,13 +561,24 @@ export function WebDAVFileBrowser({
                     />
                   ) : (
                     <div className="min-w-[800px]">
-                      {sortedFilteredFiles.map((file, index) => (
+                      {sortedFilteredFiles.map((file) => (
                         <div
-                          key={index}
-                          className={`flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer border-b border-gray-100 dark:border-gray-800 ${
+                          key={file.filename}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={file.type === 'file' ? selectedFile?.filename === file.filename : undefined}
+                          className={`flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer border-b border-gray-100 dark:border-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                             selectedFile?.filename === file.filename ? 'bg-accent' : ''
                           }`}
-                          onClick={() => file.type === 'directory' ? handleDirectoryClick(file) : handleFileClick(file)}
+                          onClick={() => activateEntry(file)}
+                          onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+                            // 只响应行本身（行内下载按钮自带键盘行为）
+                            if (e.target !== e.currentTarget) return
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              activateEntry(file)
+                            }
+                          }}
                         >
                           {getFileIcon(file)}
                           <div className="flex-1 min-w-0 flex-shrink-0">
@@ -586,9 +601,10 @@ export function WebDAVFileBrowser({
                               onClick={(e: React.MouseEvent) => {
                                 e.stopPropagation()
                                 setSelectedFile(file)
-                                handleDownloadFile()
+                                handleDownloadFile(file)
                               }}
                               title="下载文件"
+                              aria-label={`下载文件 ${file.basename}`}
                             >
                               <Download className="h-4 w-4" />
                             </Button>

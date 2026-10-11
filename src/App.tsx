@@ -14,6 +14,7 @@ import { BookOpen, Brain, ChevronUp, List, Eye } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
 import type { MindElixirData } from 'mind-elixir'
+import { useShallow } from 'zustand/react/shallow'
 
 import { webdavService } from '@/services/webdavService'
 import { scrollToTop } from '@/utils/index'
@@ -23,6 +24,7 @@ import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
 import { useChapterScrollSpy } from '@/hooks/useChapterScrollSpy'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import type { ProcessingHistoryRecord } from '@/stores/processingHistory'
 
 import { BUILD_VERSION } from '@/buildInfo'
@@ -49,7 +51,14 @@ const BatchQueuePanel = lazy(() =>
 
 function App() {
   const { t } = useTranslation()
-  const { aiConfig, processingOptions, webdavConfig } = useConfigStore()
+  // selector 订阅：tokenUsage 等高频字段变化不触发 App 重渲染
+  const { aiConfig, processingOptions, webdavConfig } = useConfigStore(
+    useShallow((s) => ({
+      aiConfig: s.aiConfig,
+      processingOptions: s.processingOptions,
+      webdavConfig: s.webdavConfig,
+    }))
+  )
   const isMobile = useIsMobile()
 
   // 页面步骤状态 (1: 配置, 2: 结果)
@@ -78,13 +87,13 @@ function App() {
     isCheckingCloudCache,
     cloudCacheContent,
     cloudChartsFileFound,
+    cloudCacheIsPartial,
+    cloudCacheStatusUnknown,
     rightPanelContent,
     currentViewingChapterSummary,
     previewFontSize,
     isPreviewFullscreen,
-    previewCardRef,
     isWebDAVBrowserOpen,
-    tokenUsage,
     processingMode,
     fullBookData,
 
@@ -100,7 +109,6 @@ function App() {
     handleCloseRightPanel,
     handleChapterExpandChange,
     clearChapterCache,
-    clearChapterMindMapCache,
     clearSpecificCache,
     regenerateKeyCharts,
     chartsGenerating,
@@ -117,6 +125,7 @@ function App() {
 
     // 设置器
     setCustomPrompt,
+    setSelectedChapters,
     setIsWebDAVBrowserOpen,
     setCurrentViewingChapterSummary,
   } = useBookProcessing()
@@ -216,6 +225,36 @@ function App() {
     setCurrentStepIndex(1)
   }, [cancelProcessing])
 
+  // 处理中「返回配置」的二次确认在 UnifiedStatusBar 内完成，这里只负责切换视图
+  const handleToggleView = useCallback(() => {
+    setCurrentStepIndex((step) => (step === 1 ? 2 : 1))
+  }, [])
+
+  const handleSetSelection = useCallback(
+    (chapterIds: string[]) => setSelectedChapters(new Set(chapterIds)),
+    [setSelectedChapters]
+  )
+
+  const handleReadChapter = useCallback(
+    (chapterId: string) => {
+      const chapter = extractedChapters?.find((ch) => ch.id === chapterId)
+      if (chapter) handleViewChapterContent(chapter)
+    },
+    [extractedChapters, handleViewChapterContent]
+  )
+
+  const handleCloseWebDAVBrowser = useCallback(
+    () => setIsWebDAVBrowserOpen(false),
+    [setIsWebDAVBrowserOpen]
+  )
+
+  const handleLoadFromCloudCache = useCallback(() => {
+    void (async () => {
+      const ok = await loadFromCloudCache()
+      if (ok) setCurrentStepIndex(2)
+    })()
+  }, [loadFromCloudCache])
+
   // 按当前配置重新处理（可先在配置页改设置再点）
   const handleRestartProcessing = useCallback(async () => {
     setCurrentStepIndex(2)
@@ -255,8 +294,8 @@ function App() {
     setPreviewSheetOpen(open)
   }, [])
 
-  const summaryNavChapters = bookSummary?.chapters || []
-  const mindmapNavChapters = bookMindMap?.chapters || []
+  const summaryNavChapters = useMemo(() => bookSummary?.chapters || [], [bookSummary])
+  const mindmapNavChapters = useMemo(() => bookMindMap?.chapters || [], [bookMindMap])
   const showSummaryNav =
     currentStepIndex === 2 &&
     processingMode === 'summary' &&
@@ -332,13 +371,15 @@ function App() {
   return (
     <div className="min-h-screen bg-background px-1.5 py-2.5 sm:p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
       <Toaster />
-      <Suspense fallback={null}>
-        <WebDAVFileBrowser
-          isOpen={isWebDAVBrowserOpen}
-          onClose={() => setIsWebDAVBrowserOpen(false)}
-          onFileSelect={handleWebDAVFileSelect}
-        />
-      </Suspense>
+      <ErrorBoundary section={t('errorBoundary.webdavBrowser')}>
+        <Suspense fallback={null}>
+          <WebDAVFileBrowser
+            isOpen={isWebDAVBrowserOpen}
+            onClose={handleCloseWebDAVBrowser}
+            onFileSelect={handleWebDAVFileSelect}
+          />
+        </Suspense>
+      </ErrorBoundary>
 
       <div className="max-w-full xl:max-w-7xl space-y-2.5 sm:space-y-4 w-full flex-1 min-w-0">
         {/* Header */}
@@ -372,17 +413,9 @@ function App() {
           progress={progress}
           currentStep={currentStep}
           currentModel={aiConfig.model}
-          tokenUsage={tokenUsage}
           hasApiKey={Boolean(aiConfig.apiKey?.trim())}
           processingMode={processingMode}
-          onToggleView={() => {
-            if (processing) {
-              // 处理中切回配置：中止并返回
-              handleAbortToConfig()
-              return
-            }
-            setCurrentStepIndex(currentStepIndex === 1 ? 2 : 1)
-          }}
+          onToggleView={handleToggleView}
           onLoadFromHistory={handleLoadFromHistory}
           onCancelProcessing={cancelProcessing}
           onRestartProcessing={
@@ -394,9 +427,11 @@ function App() {
         />
 
         {/* 批量处理队列面板 */}
-        <Suspense fallback={null}>
-          <BatchQueuePanel />
-        </Suspense>
+        <ErrorBoundary section={t('errorBoundary.batchQueue')}>
+          <Suspense fallback={null}>
+            <BatchQueuePanel />
+          </Suspense>
+        </ErrorBoundary>
 
         {/* 移动端：章节导航 / 预览 触发条 */}
         {(showMobileNavTrigger || (isMobile && rightPanelContent)) && (
@@ -443,18 +478,15 @@ function App() {
                 cloudCacheMetadata={cloudCacheMetadata}
                 cloudCacheContent={cloudCacheContent}
                 cloudChartsFileFound={cloudChartsFileFound}
+                cloudCacheIsPartial={cloudCacheIsPartial}
+                cloudCacheStatusUnknown={cloudCacheStatusUnknown}
                 webdavEnabled={webdavConfig.enabled}
                 webdavInitialized={webdavService.isInitialized()}
                 onFileSelect={handleFileSelect}
                 onExtractChapters={extractChapters}
                 onClearCache={clearBookCache}
                 onOpenWebDAVBrowser={openWebDAVBrowser}
-                onLoadFromCloudCache={() => {
-                  void (async () => {
-                    const ok = await loadFromCloudCache()
-                    if (ok) setCurrentStepIndex(2)
-                  })()
-                }}
+                onLoadFromCloudCache={handleLoadFromCloudCache}
               />
 
               {extractedChapters && bookData && (
@@ -467,6 +499,7 @@ function App() {
                   extractingChapters={extractingChapters}
                   onChapterSelect={handleChapterSelect}
                   onSelectAll={handleSelectAll}
+                  onSetSelection={handleSetSelection}
                   onCustomPromptChange={setCustomPrompt}
                   onViewChapterContent={handleViewChapterContent}
                   onStartProcessing={handleStartProcessing}
@@ -508,35 +541,33 @@ function App() {
             {/* 中间结果展示 */}
             <div className="flex-1 min-w-0">
               {(bookSummary || bookMindMap) ? (
-                <Suspense
-                  fallback={
-                    <Card>
-                      <CardContent className="py-12 text-center text-muted-foreground">
-                        {t('progress.loading') || '加载中…'}
-                      </CardContent>
-                    </Card>
-                  }
-                >
-                  <ResultsSection
-                    processingMode={processingMode}
-                    bookSummary={bookSummary}
-                    bookMindMap={bookMindMap}
-                    file={file}
-                    expandedChapters={expandedChapters}
-                    currentViewingChapterSummary={currentViewingChapterSummary}
-                    onClearChapterCache={clearChapterCache}
-                    onClearSpecificCache={clearSpecificCache}
-                    onChapterExpandChange={handleChapterExpandChange}
-                    onReadChapter={(chapterId) => {
-                      const chapter = extractedChapters?.find(ch => ch.id === chapterId)
-                      if (chapter) handleViewChapterContent(chapter)
-                    }}
-                    onDownloadAllMarkdown={downloadAllMarkdown}
-                    onDownloadMindMap={downloadMindMap}
-                    onRegenerateKeyCharts={regenerateKeyCharts}
-                    chartsGenerating={chartsGenerating}
-                  />
-                </Suspense>
+                <ErrorBoundary section={t('results.title')}>
+                  <Suspense
+                    fallback={
+                      <Card>
+                        <CardContent className="py-12 text-center text-muted-foreground">
+                          {t('progress.loading')}
+                        </CardContent>
+                      </Card>
+                    }
+                  >
+                    <ResultsSection
+                      processingMode={processingMode}
+                      bookSummary={bookSummary}
+                      bookMindMap={bookMindMap}
+                      file={file}
+                      expandedChapters={expandedChapters}
+                      onClearChapterCache={clearChapterCache}
+                      onClearSpecificCache={clearSpecificCache}
+                      onChapterExpandChange={handleChapterExpandChange}
+                      onReadChapter={handleReadChapter}
+                      onDownloadAllMarkdown={downloadAllMarkdown}
+                      onDownloadMindMap={downloadMindMap}
+                      onRegenerateKeyCharts={regenerateKeyCharts}
+                      chartsGenerating={chartsGenerating}
+                    />
+                  </Suspense>
+                </ErrorBoundary>
               ) : (
                 <Card>
                   <CardContent className="py-12 text-center">

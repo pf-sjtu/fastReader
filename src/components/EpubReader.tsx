@@ -3,15 +3,33 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { BookOpen, Loader2, Plus, Minus, Maximize2, Minimize2 } from 'lucide-react'
-import type { ChapterData, BookData } from '@/services/epubProcessor'
-import { EpubProcessor } from '@/services/epubProcessor'
+import type { EpubBookData, EpubChapterData } from '@/types/chapter'
+import type { EpubProcessor } from '@/services/epubProcessor'
+import { sanitizeBookHtml } from '@/utils/sanitizeHtml'
 import { cn } from '@/lib/utils'
 import { useTranslation } from 'react-i18next'
-import { useTheme } from './ThemeProvider'
+import { useIsDarkMode } from './useTheme'
+
+// 旧版 Safari / IE 的带前缀全屏 API
+type VendorFullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => void
+  msRequestFullscreen?: () => void
+}
+type VendorFullscreenDocument = Document & {
+  webkitExitFullscreen?: () => void
+  msExitFullscreen?: () => void
+}
+
+// epubjs 体积大：动态 import，避免进入首屏 modulepreload
+let epubProcessorPromise: Promise<EpubProcessor> | null = null
+function getEpubProcessor(): Promise<EpubProcessor> {
+  epubProcessorPromise ??= import('@/services/epubProcessor').then((m) => new m.EpubProcessor())
+  return epubProcessorPromise
+}
 
 interface EpubReaderProps {
-  chapter: ChapterData
-  bookData?: BookData
+  chapter: EpubChapterData
+  bookData?: EpubBookData
   onClose: () => void
   className?: string
   showHeader?: boolean
@@ -31,29 +49,22 @@ export function EpubReader({
   onToggleFullscreen 
 }: EpubReaderProps) {
   const { t } = useTranslation()
-  const { theme } = useTheme()
   const [chapterHtmlContent, setChapterHtmlContent] = useState<string>('')
   const [isLoadingHtml, setIsLoadingHtml] = useState(false)
-  const [epubProcessor] = useState(() => new EpubProcessor())
   const [internalFontSize, setInternalFontSize] = useState(16)
   const [internalIsFullscreen, setIsInternalFullscreen] = useState(false)
   const shadowRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
+  // 上次写入 Shadow DOM 的内容：仅内容变化时滚动归零（主题切换保留阅读位置）
+  const renderedContentRef = useRef<string>('')
 
   // 使用外部传入的字体大小或内部状态
   const fontSize = externalFontSize || internalFontSize
   const isFullscreen = externalFullscreen !== undefined ? externalFullscreen : internalIsFullscreen
 
-  // 获取当前实际的主题模式
-  const getCurrentTheme = () => {
-    if (theme === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-    }
-    return theme
-  }
-
-  const isDarkMode = getCurrentTheme() === 'dark'
+  // 当前实际主题（应用内开关优先，system 时订阅系统变化）
+  const isDarkMode = useIsDarkMode()
 
   // 字体大小调节函数（只在非外部控制时使用）
   const increaseFontSize = () => {
@@ -77,21 +88,23 @@ export function EpubReader({
       
       if (!isFullscreen) {
         // 进入全屏
-        if (cardRef.current.requestFullscreen) {
-          cardRef.current.requestFullscreen()
-        } else if ((cardRef.current as any).webkitRequestFullscreen) {
-          (cardRef.current as any).webkitRequestFullscreen()
-        } else if ((cardRef.current as any).msRequestFullscreen) {
-          (cardRef.current as any).msRequestFullscreen()
+        const el = cardRef.current as VendorFullscreenElement
+        if (el.requestFullscreen) {
+          el.requestFullscreen()
+        } else if (el.webkitRequestFullscreen) {
+          el.webkitRequestFullscreen()
+        } else if (el.msRequestFullscreen) {
+          el.msRequestFullscreen()
         }
       } else {
         // 退出全屏
-        if (document.exitFullscreen) {
-          document.exitFullscreen()
-        } else if ((document as any).webkitExitFullscreen) {
-          (document as any).webkitExitFullscreen()
-        } else if ((document as any).msExitFullscreen) {
-          (document as any).msExitFullscreen()
+        const doc = document as VendorFullscreenDocument
+        if (doc.exitFullscreen) {
+          doc.exitFullscreen()
+        } else if (doc.webkitExitFullscreen) {
+          doc.webkitExitFullscreen()
+        } else if (doc.msExitFullscreen) {
+          doc.msExitFullscreen()
         }
       }
     }
@@ -144,7 +157,7 @@ export function EpubReader({
         overflow-wrap: break-word;
         max-width: 100%;
         box-sizing: border-box;
-        font-size: ${fontSize}px;
+        font-size: var(--reader-font-size, 16px);
       }
       
       /* 确保所有文本元素都不会溢出 */
@@ -311,11 +324,14 @@ export function EpubReader({
     
     // 创建内容容器
     const contentDiv = document.createElement('div')
-    contentDiv.innerHTML = content
+    // 书籍 HTML 来自外部文件，写入 DOM 前必须净化（C9）
+    contentDiv.innerHTML = sanitizeBookHtml(content)
     
     // 添加内容到Shadow DOM
     shadowRoot.appendChild(contentDiv)
     
+    if (renderedContentRef.current === content) return
+    renderedContentRef.current = content
     // 确保内容完全渲染后滚动到顶部
     requestAnimationFrame(() => {
       if (scrollAreaRef.current) {
@@ -326,22 +342,31 @@ export function EpubReader({
       }
     })
     
-  }, [chapterHtmlContent, chapter.content, chapter.title, fontSize, isDarkMode]) // 添加 isDarkMode 依赖确保主题变化时重新渲染
+    // isLoadingHtml：加载结束后宿主 div 会重新挂载，需重新写入；字号走 CSS 变量，不在依赖中
+  }, [chapterHtmlContent, chapter.content, isDarkMode, isLoadingHtml])
+
+  // 字号通过宿主上的 CSS 变量传入 Shadow DOM（自定义属性可穿透继承），不重建 DOM、不丢滚动位置
+  useEffect(() => {
+    shadowRef.current?.style.setProperty('--reader-font-size', `${fontSize}px`)
+  }, [fontSize, isLoadingHtml])
 
   // 加载章节的HTML内容
   useEffect(() => {
+    // 快速切章时丢弃旧请求结果，避免旧内容覆盖新内容
+    let cancelled = false
     const loadChapterHtml = async () => {
       if (!chapter || !bookData) {
         setChapterHtmlContent('')
+        setIsLoadingHtml(false)
         return
       }
 
       setIsLoadingHtml(true)
       try {
-        // 增加延迟确保Shadow DOM已准备好
-        await new Promise(resolve => setTimeout(resolve, 50))
-        
-        const htmlContent = await epubProcessor.getSingleChapterHTML(bookData.book, chapter.href || '')
+        // 原先此处有 50ms 人为延迟“等待 Shadow DOM”，但写入由上方 effect 在内容变化后执行，延迟无实际作用，已移除
+        const processor = await getEpubProcessor()
+        const htmlContent = await processor.getSingleChapterHTML(bookData.book, chapter.href || '')
+        if (cancelled) return
         
         // 确保HTML内容有效后再设置
         if (htmlContent && htmlContent.trim()) {
@@ -352,16 +377,20 @@ export function EpubReader({
           setChapterHtmlContent(chapter.content)
         }
       } catch (error) {
+        if (cancelled) return
         console.error('加载章节HTML失败:', error)
         // 如果获取HTML失败，回退到使用原始content
         setChapterHtmlContent(chapter.content)
       } finally {
-        setIsLoadingHtml(false)
+        if (!cancelled) setIsLoadingHtml(false)
       }
     }
 
     loadChapterHtml()
-  }, [chapter, bookData, epubProcessor])
+    return () => {
+      cancelled = true
+    }
+  }, [chapter, bookData])
 
   // 确保内容变化时重新渲染Shadow DOM
   useEffect(() => {
@@ -513,12 +542,13 @@ export function EpubReader({
           >
             <div className="epub-reader-content prose prose-sm">
               {isLoadingHtml ? (
-                <div className="flex items-center justify-center py-8">
+                <div key="loading" className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin mr-2" />
                   <span>{t('reader.epub.loadingContent')}</span>
                 </div>
               ) : (
-                <div ref={shadowRef} className="w-full min-h-[200px]" />
+                // key 区分：同为 div 时 React 会复用节点，残留的 shadowRoot 会遮住加载提示
+                <div key="content" ref={shadowRef} className="w-full min-h-[200px]" />
               )}
             </div>
           </ScrollArea>

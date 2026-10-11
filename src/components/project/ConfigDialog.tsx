@@ -14,10 +14,21 @@ import { AIProviderConfig } from './AIProviderConfig'
 import { ConfigExportImport } from '../ConfigExportImport'
 import { useTranslation } from 'react-i18next'
 import { useState, useEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useConfigStore, useAIConfig, useProcessingOptions, useAIServiceOptions } from '../../stores/configStore'
 import type { SupportedLanguage } from '../../services/prompts/utils'
 import { chapterPreviewService } from '../../services/chapterPreviewService'
 import { AIService } from '../../services/aiService'
+
+const BROWSER_PROXY_UNSUPPORTED = '浏览器环境不支持代理功能'
+
+interface ProviderSetting {
+  apiKeyLabel: string
+  apiKeyPlaceholder: string
+  modelPlaceholder: string
+  apiUrlPlaceholder: string
+  url: string
+}
 
 interface ConfigDialogProps {
   processing: boolean
@@ -38,7 +49,9 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [connectionTestResult, setConnectionTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [isTestingProxy, setIsTestingProxy] = useState(false)
-  const [proxyTestResult, setProxyTestResult] = useState<{ success: boolean; message: string; details?: any } | null>(null)
+  const [proxyTestResult, setProxyTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  // 受控 open：章节预览仅在对话框打开时解析文件
+  const [open, setOpen] = useState(false)
 
   const {
     setAiProvider,
@@ -50,9 +63,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
     setProxyEnabled,
     setProcessingMode,
     setBookType,
-    setUseSmartDetection,
     setSkipNonEssentialChapters,
-    setMaxSubChapterDepth,
     setOutputLanguage,
     setChapterNamingMode,
     setEnableNotification,
@@ -61,14 +72,34 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
     setChapterConcurrency,
     setMaxRetries,
     setBaseRetryDelay
-  } = useConfigStore()
+  } = useConfigStore(
+    useShallow((s) => ({
+      setAiProvider: s.setAiProvider,
+      setApiKey: s.setApiKey,
+      setApiUrl: s.setApiUrl,
+      setModel: s.setModel,
+      setTemperature: s.setTemperature,
+      setProxyUrl: s.setProxyUrl,
+      setProxyEnabled: s.setProxyEnabled,
+      setProcessingMode: s.setProcessingMode,
+      setBookType: s.setBookType,
+      setSkipNonEssentialChapters: s.setSkipNonEssentialChapters,
+      setOutputLanguage: s.setOutputLanguage,
+      setChapterNamingMode: s.setChapterNamingMode,
+      setEnableNotification: s.setEnableNotification,
+      setChapterDetectionMode: s.setChapterDetectionMode,
+      setEpubTocDepth: s.setEpubTocDepth,
+      setChapterConcurrency: s.setChapterConcurrency,
+      setMaxRetries: s.setMaxRetries,
+      setBaseRetryDelay: s.setBaseRetryDelay,
+    }))
+  )
 
   // 从store中解构状态值
   const { provider: aiProvider, apiKey, apiUrl, model, temperature } = aiConfig
   const { 
     processingMode, 
     bookType, 
-    useSmartDetection, 
     skipNonEssentialChapters, 
     outputLanguage,
     chapterNamingMode,
@@ -98,11 +129,13 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
       const aiService = new AIService(aiConfig, undefined, {
         ...aiServiceOptions
       })
-      const result = await aiService.testConnection()
+      const { success: result, error } = await aiService.testConnection()
       
       setConnectionTestResult({
         success: result,
-        message: result ? t('config.connection.aiSuccess') : t('config.connection.aiFailed')
+        message: result
+          ? t('config.connection.aiSuccess')
+          : error ? `${t('config.connection.aiFailed')}: ${error}` : t('config.connection.aiFailed')
       })
       
       console.log('AI 连接测试详细结果:', {
@@ -136,63 +169,44 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
     }
     
     setIsTestingProxy(true)
-    setProxyTestResult(null)
-    
-    try {
-      const aiService = new AIService(aiConfig, undefined, {
-        ...aiServiceOptions
-      })
-      const result = await aiService.testProxyConnection()
-      
-      setProxyTestResult(result)
-      
-      console.log('代理测试详细结果:', {
-        proxyUrl: aiConfig.proxyUrl,
-        ...result
-      })
-    } catch (error) {
-      setProxyTestResult({
-        success: false,
-        message: t('config.connection.proxyTestFailed', { error: error instanceof Error ? error.message : t('config.connection.unknownError') })
-      })
-      
-      console.error('代理测试失败:', error)
-    } finally {
-      setIsTestingProxy(false)
-    }
+    // 浏览器无法直接使用 HTTP 代理（AIService 也未提供代理探测），直接给出说明
+    setProxyTestResult({ success: false, message: BROWSER_PROXY_UNSUPPORTED })
+    setIsTestingProxy(false)
   }
 
-  // 章节预览函数
-  const loadChapterPreview = async () => {
-    if (!file) {
+  // 章节预览：仅在对话框打开且有文件时解析；依赖变化/关闭时取消旧请求并丢弃过期结果
+  useEffect(() => {
+    if (!open || !file) {
       setPreviewChapters([])
+      setIsPreviewLoading(false)
       return
     }
-
+    const controller = new AbortController()
     setIsPreviewLoading(true)
-    try {
-      const chapters = await chapterPreviewService.previewChapters(
+    chapterPreviewService
+      .previewChapters(
         file,
         chapterDetectionMode,
         epubTocDepth || 1,
         chapterNamingMode,
-        20 // 最多预览20个章节
+        20, // 最多预览20个章节
+        controller.signal
       )
-      setPreviewChapters(chapters)
-    } catch (error) {
-      console.error('加载章节预览失败:', error)
-      setPreviewChapters([])
-    } finally {
-      setIsPreviewLoading(false)
-    }
-  }
+      .then((chapters) => {
+        if (!controller.signal.aborted) setPreviewChapters(chapters)
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return
+        console.error('加载章节预览失败:', error)
+        setPreviewChapters([])
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsPreviewLoading(false)
+      })
+    return () => controller.abort()
+  }, [open, file, chapterDetectionMode, epubTocDepth, chapterNamingMode])
 
-  // 当章节识别模式或文件改变时，重新加载预览
-  useEffect(() => {
-    loadChapterPreview()
-  }, [file, chapterDetectionMode, epubTocDepth, chapterNamingMode])
-
-  const providerSettings = {
+  const providerSettings: Record<string, ProviderSetting> = {
     gemini: {
       apiKeyLabel: 'Gemini API Key',
       apiKeyPlaceholder: t('config.enterGeminiApiKey'),
@@ -224,7 +238,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
           variant="outline"
@@ -358,7 +372,6 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
                             </TooltipTrigger>
                             <TooltipContent>
                               <p className="max-w-xs">
-                                {aiProvider === 'gemini' && t('config.geminiApiUrlDescription')}
                                 {aiProvider === 'openai' && t('config.openaiApiUrlDescription')}
                                 {aiProvider === 'ollama' && t('config.ollamaApiUrlDescription')}
                                 {aiProvider === '302.ai' && t('config.ai302ApiUrlDescription')}
@@ -554,7 +567,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
                         <div>{proxyTestResult.message}</div>
                         
                         {/* 浏览器环境特殊提示 */}
-                        {proxyTestResult.message === '浏览器环境不支持代理功能' && (
+                        {proxyTestResult.message === BROWSER_PROXY_UNSUPPORTED && (
                           <div className="space-y-2 text-xs opacity-90">
                             <div>
                               💡 <strong>原因：</strong>浏览器出于安全考虑无法直接使用系统代理。
@@ -578,11 +591,6 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
                               </a>
                             </div>
                           </div>
-                        )}
-                        
-                        {/* 其他错误信息 */}
-                        {proxyTestResult.details?.proxyIP && (
-                          <div className="text-xs opacity-75">代理IP: {proxyTestResult.details.proxyIP}</div>
                         )}
                       </div>
                     </div>

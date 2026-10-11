@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -11,39 +12,29 @@ import {
   usePromptConfig, 
   useProcessingOptions, 
   useConfigStore, 
-  useCurrentPromptVersion,
-  usePromptVersionConfig 
+  useCurrentPromptVersion
 } from '../../stores/configStore'
 import { RotateCcw, Save, Eye, Copy } from 'lucide-react'
-import { 
-  CHAPTER_SUMMARY_TEMPLATES, 
-  MINDMAP_TEMPLATES, 
-  CONNECTION_ANALYSIS_TEMPLATES, 
-  OVERALL_SUMMARY_TEMPLATES,
-  CHAPTER_SUMMARY_TEMPLATES_V2,
-  MINDMAP_TEMPLATES_V2,
-  CONNECTION_ANALYSIS_TEMPLATES_V2,
-  OVERALL_SUMMARY_TEMPLATES_V2
-} from '../../services/prompts/templates'
 
 export function PromptEditor() {
   const { t } = useTranslation()
   const promptConfig = usePromptConfig()
   const processingOptions = useProcessingOptions()
   const currentPromptVersion = useCurrentPromptVersion()
-  const promptVersionConfig = usePromptVersionConfig()
   const [activeTab, setActiveTab] = useState('chapterSummary')
   const [previewMode, setPreviewMode] = useState(false)
   
   // Store方法
-  const { 
-    setChapterSummaryPrompt, 
-    setMindmapPrompt, 
-    setConnectionAnalysisPrompt, 
-    setOverallSummaryPrompt, 
-    resetPromptsToDefault,
-    setCurrentPromptVersion
-  } = useConfigStore()
+  const { setChapterSummaryPrompt, setMindmapPrompt, setConnectionAnalysisPrompt, setOverallSummaryPrompt, resetPromptsToDefault, setCurrentPromptVersion } = useConfigStore(
+    useShallow((s) => ({
+      setChapterSummaryPrompt: s.setChapterSummaryPrompt,
+      setMindmapPrompt: s.setMindmapPrompt,
+      setConnectionAnalysisPrompt: s.setConnectionAnalysisPrompt,
+      setOverallSummaryPrompt: s.setOverallSummaryPrompt,
+      resetPromptsToDefault: s.resetPromptsToDefault,
+      setCurrentPromptVersion: s.setCurrentPromptVersion,
+    }))
+  )
 
   // 获取当前应该显示的提示词
   const getCurrentPrompt = () => {
@@ -62,29 +53,6 @@ export function PromptEditor() {
         return promptConfig.connectionAnalysis
       case 'overallSummary':
         return promptConfig.overallSummary
-      default:
-        return ''
-    }
-  }
-
-  // 获取默认提示词（根据当前版本）
-  const getDefaultPrompt = () => {
-    const isV2 = currentPromptVersion === 'v2'
-    switch (activeTab) {
-      case 'chapterSummary':
-        return processingOptions.bookType === 'fiction'
-          ? (isV2 ? CHAPTER_SUMMARY_TEMPLATES_V2.fiction.template : CHAPTER_SUMMARY_TEMPLATES.fiction.template)
-          : (isV2 ? CHAPTER_SUMMARY_TEMPLATES_V2.nonFiction.template : CHAPTER_SUMMARY_TEMPLATES.nonFiction.template)
-      case 'mindmap':
-        return processingOptions.processingMode === 'summary'
-          ? (isV2 ? MINDMAP_TEMPLATES_V2.chapter.template : MINDMAP_TEMPLATES.chapter.template)
-          : processingOptions.processingMode === 'mindmap'
-          ? (isV2 ? MINDMAP_TEMPLATES_V2.chapter.template : MINDMAP_TEMPLATES.chapter.template)
-          : (isV2 ? MINDMAP_TEMPLATES_V2.combined.template : MINDMAP_TEMPLATES.combined.template)
-      case 'connectionAnalysis':
-        return isV2 ? CONNECTION_ANALYSIS_TEMPLATES_V2.standard.template : CONNECTION_ANALYSIS_TEMPLATES.standard.template
-      case 'overallSummary':
-        return isV2 ? OVERALL_SUMMARY_TEMPLATES_V2.standard.template : OVERALL_SUMMARY_TEMPLATES.standard.template
       default:
         return ''
     }
@@ -140,11 +108,12 @@ export function PromptEditor() {
       case 'chapterSummary':
         setChapterSummaryPrompt(processingOptions.bookType, value)
         break
-      case 'mindmap':
+      case 'mindmap': {
         const mindmapType = processingOptions.processingMode === 'summary' ? 'chapter' : 
                            processingOptions.processingMode === 'mindmap' ? 'chapter' : 'combined'
         setMindmapPrompt(mindmapType, value)
         break
+      }
       case 'connectionAnalysis':
         setConnectionAnalysisPrompt(value)
         break

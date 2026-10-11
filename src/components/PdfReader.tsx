@@ -4,11 +4,16 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { FileText, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { ChapterData, BookData } from '@/services/pdfProcessor'
-import { PdfProcessor } from '@/services/pdfProcessor'
+import type { ChapterData, BookData, PdfProcessor } from '@/services/pdfProcessor'
 import { cn } from '@/lib/utils'
 import { useTranslation } from 'react-i18next'
-import { useTheme } from './ThemeProvider'
+
+// pdfjs 体积大：动态 import，避免进入首屏 modulepreload
+let pdfProcessorPromise: Promise<PdfProcessor> | null = null
+function getPdfProcessor(): Promise<PdfProcessor> {
+  pdfProcessorPromise ??= import('@/services/pdfProcessor').then((m) => new m.PdfProcessor())
+  return pdfProcessorPromise
+}
 
 interface PdfReaderProps {
   chapter: ChapterData
@@ -27,11 +32,11 @@ export function PdfReader({ chapter, bookData, onClose, className, showHeader = 
   const [chapterPages, setChapterPages] = useState<PageContent[]>([])
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [isLoadingPages, setIsLoadingPages] = useState(false)
-  const [pdfProcessor] = useState(() => new PdfProcessor())
   const canvasContainerRef = useRef<HTMLDivElement>(null)
 
   // 加载章节的页面内容
   useEffect(() => {
+    let cancelled = false
     const loadChapterPages = async () => {
       if (!chapter || !bookData?.pdfDocument) {
         setChapterPages([])
@@ -40,20 +45,27 @@ export function PdfReader({ chapter, bookData, onClose, className, showHeader = 
 
       setIsLoadingPages(true)
       try {
-        const pages = await pdfProcessor.getChapterPages(bookData.pdfDocument, chapter)
+        const processor = await getPdfProcessor()
+        const pages = await processor.getChapterPages(bookData.pdfDocument, chapter)
+        if (cancelled) return
         setChapterPages(pages)
         setCurrentPageIndex(0)
       } catch (error) {
+        if (cancelled) return
         console.error('加载PDF章节页面失败:', error)
         // 如果获取页面失败，设置空数组
         setChapterPages([])
       } finally {
-        setIsLoadingPages(false)
+        if (!cancelled) setIsLoadingPages(false)
       }
     }
 
     loadChapterPages()
-  }, [chapter, bookData, pdfProcessor])
+    return () => {
+      // 快速切章时丢弃旧结果
+      cancelled = true
+    }
+  }, [chapter, bookData])
 
   // 渲染当前页面的canvas
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -24,7 +25,12 @@ export function ProcessingHistoryDialog({
   onSelectRecord
 }: ProcessingHistoryDialogProps) {
   const { t, i18n } = useTranslation()
-  const { records, clearHistory } = useProcessingHistoryStore()
+  const { records, clearHistory } = useProcessingHistoryStore(
+    useShallow((s) => ({
+      records: s.records,
+      clearHistory: s.clearHistory,
+    }))
+  )
   const [loadingFileName, setLoadingFileName] = useState<string | null>(null)
 
   const handleSelect = async (record: ProcessingHistoryRecord) => {

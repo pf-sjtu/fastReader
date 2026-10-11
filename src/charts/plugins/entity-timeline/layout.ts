@@ -88,6 +88,7 @@ export function layoutEntityTimeline(
     : Array.from(new Set(data.events.flatMap((e) => e.entityIds || []))).map((id) => ({
         id,
         name: id,
+        color: undefined as string | undefined,
       }))
 
   const entityColor = new Map<string, string>()

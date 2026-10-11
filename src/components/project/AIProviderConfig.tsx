@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -21,9 +22,30 @@ import {
   Zap
 } from 'lucide-react'
 import { useConfigStore } from '../../stores/configStore'
-import type { AIProviderConfig } from '../../stores/configStore'
+import type { AIProviderConfig } from '../../stores/types'
 import { AIService } from '../../services/aiService'
 import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+
+const EMPTY_FORM: Partial<AIProviderConfig> = {
+  provider: 'gemini',
+  apiKey: '',
+  apiUrl: '',
+  model: '',
+  temperature: 0.7,
+  proxyUrl: '',
+  proxyEnabled: false,
+  customFields: {}
+}
 
 // 从 apiUrl 和 model 派生显示名称
 function getDisplayName(apiUrl: string, model: string): string {
@@ -59,18 +81,17 @@ interface AIProviderDialogProps {
 }
 
 function AIProviderDialog({ trigger, provider, index, mode, open, onOpenChange, onSave }: AIProviderDialogProps) {
-  const { getAvailableAITemplates, aiConfigManager } = useConfigStore()
+  const { getAvailableAITemplates, aiConfigManager } = useConfigStore(
+    useShallow((s) => ({
+      getAvailableAITemplates: s.getAvailableAITemplates,
+      aiConfigManager: s.aiConfigManager,
+    }))
+  )
 
-  const [formData, setFormData] = useState<Partial<AIProviderConfig>>({
-    provider: 'gemini',
-    apiKey: '',
-    apiUrl: '',
-    model: '',
-    temperature: 0.7,
-    proxyUrl: '',
-    proxyEnabled: false,
-    customFields: {}
-  })
+  const [formData, setFormData] = useState<Partial<AIProviderConfig>>(EMPTY_FORM)
+  // 打开时的表单快照：用于判断是否有未保存改动
+  const [initialData, setInitialData] = useState<Partial<AIProviderConfig>>(EMPTY_FORM)
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
 
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
   const [isTesting, setIsTesting] = useState(false)
@@ -82,18 +103,11 @@ function AIProviderDialog({ trigger, provider, index, mode, open, onOpenChange, 
   useEffect(() => {
     if (mode === 'edit' && provider) {
       setFormData(provider)
+      setInitialData(provider)
       setDuplicateError(null)
     } else if (mode === 'create') {
-      setFormData({
-        provider: 'gemini',
-        apiKey: '',
-        apiUrl: '',
-        model: '',
-        temperature: 0.7,
-        proxyUrl: '',
-        proxyEnabled: false,
-        customFields: {}
-      })
+      setFormData(EMPTY_FORM)
+      setInitialData(EMPTY_FORM)
       setSelectedTemplate('')
       setTestResult(null)
       setDuplicateError(null)
@@ -111,7 +125,7 @@ function AIProviderDialog({ trigger, provider, index, mode, open, onOpenChange, 
       if (templateConfig) {
         setFormData(prev => ({
           ...prev,
-          provider: templateId as any,
+          provider: templateId as AIProviderConfig['provider'],
           apiUrl: templateConfig.apiUrl,
           model: templateConfig.model,
           temperature: templateConfig.temperature
@@ -144,7 +158,7 @@ function AIProviderDialog({ trigger, provider, index, mode, open, onOpenChange, 
 
     try {
       const aiService = new AIService({
-        provider: formData.provider as any,
+        provider: formData.provider as AIProviderConfig['provider'],
         apiKey: formData.apiKey,
         apiUrl: formData.apiUrl,
         model: formData.model,
@@ -153,13 +167,14 @@ function AIProviderDialog({ trigger, provider, index, mode, open, onOpenChange, 
         proxyEnabled: formData.proxyEnabled || false
       })
 
-      const isConnected = await aiService.testConnection()
+      // testConnection 返回 { success, error }（对象恒为 truthy，不能直接当布尔用）
+      const { success: isConnected, error } = await aiService.testConnection()
 
       if (isConnected) {
         setTestResult({ success: true, message: '连接测试成功！' })
         toast.success('AI服务连接测试成功')
       } else {
-        setTestResult({ success: false, message: 'AI服务连接失败' })
+        setTestResult({ success: false, message: error ? `AI服务连接失败: ${error}` : 'AI服务连接失败' })
         toast.error('AI服务连接测试失败')
       }
     } catch (error) {
@@ -185,7 +200,7 @@ function AIProviderDialog({ trigger, provider, index, mode, open, onOpenChange, 
     }
 
     const newProvider: AIProviderConfig = {
-      provider: formData.provider as any,
+      provider: formData.provider as AIProviderConfig['provider'],
       apiKey: formData.apiKey,
       apiUrl: formData.apiUrl,
       model: formData.model,
@@ -210,8 +225,23 @@ function AIProviderDialog({ trigger, provider, index, mode, open, onOpenChange, 
     }
   }
 
+  // 有未保存改动时关闭（Esc / 点遮罩 / 取消）需二次确认
+  const isDirty = JSON.stringify(formData) !== JSON.stringify(initialData)
+  const requestClose = () => {
+    if (isDirty) {
+      setConfirmDiscardOpen(true)
+      return
+    }
+    onOpenChange(false)
+  }
+  const handleDialogOpenChange = (next: boolean) => {
+    if (next) onOpenChange(true)
+    else requestClose()
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-hidden">
         <DialogHeader>
@@ -268,7 +298,7 @@ function AIProviderDialog({ trigger, provider, index, mode, open, onOpenChange, 
                     <label className="text-xs font-medium">服务商类型</label>
                     <select
                       value={formData.provider}
-                      onChange={(e) => setFormData(prev => ({ ...prev, provider: e.target.value as any }))}
+                      onChange={(e) => setFormData(prev => ({ ...prev, provider: e.target.value as AIProviderConfig['provider'] }))}
                       className="w-full h-8 px-2 text-sm border rounded-md box-border bg-background text-foreground border-border"
                     >
                       <option value="gemini">Google Gemini</option>
@@ -414,7 +444,7 @@ function AIProviderDialog({ trigger, provider, index, mode, open, onOpenChange, 
           </Button>
 
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" size="sm" onClick={requestClose}>
               取消
             </Button>
             <Button size="sm" onClick={handleSave}>
@@ -424,6 +454,27 @@ function AIProviderDialog({ trigger, provider, index, mode, open, onOpenChange, 
         </div>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={confirmDiscardOpen} onOpenChange={setConfirmDiscardOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>放弃未保存的修改？</AlertDialogTitle>
+          <AlertDialogDescription>当前服务商配置有未保存的改动，关闭后这些改动将丢失。</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>继续编辑</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              setConfirmDiscardOpen(false)
+              onOpenChange(false)
+            }}
+          >
+            放弃修改
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }
 
@@ -501,13 +552,13 @@ function AIProviderListItem({ index, provider, isActive, onActivate, onEdit, onD
         >
           {isActive ? '使用中' : '使用'}
         </Button>
-        <Button size="sm" variant="ghost" onClick={onEdit} className="h-8 w-8 p-0">
+        <Button size="sm" variant="ghost" onClick={onEdit} className="h-8 w-8 p-0" aria-label={`编辑 ${displayName}`} title="编辑">
           <Edit className="h-3 w-3" />
         </Button>
-        <Button size="sm" variant="ghost" onClick={onDuplicate} className="h-8 w-8 p-0">
+        <Button size="sm" variant="ghost" onClick={onDuplicate} className="h-8 w-8 p-0" aria-label={`复制 ${displayName}`} title="复制">
           <Copy className="h-3 w-3" />
         </Button>
-        <Button size="sm" variant="ghost" onClick={onDelete} className="h-8 w-8 p-0">
+        <Button size="sm" variant="ghost" onClick={onDelete} className="h-8 w-8 p-0" aria-label={`删除 ${displayName}`} title="删除">
           <Trash2 className="h-3 w-3" />
         </Button>
       </div>
@@ -516,14 +567,16 @@ function AIProviderListItem({ index, provider, isActive, onActivate, onEdit, onD
 }
 
 export function AIProviderConfig() {
-  const {
-    aiConfigManager,
-    setCurrentModelId,
-    addAIProvider,
-    updateAIProvider,
-    deleteAIProvider,
-    duplicateAIProvider
-  } = useConfigStore()
+  const { aiConfigManager, setCurrentModelId, addAIProvider, updateAIProvider, deleteAIProvider, duplicateAIProvider } = useConfigStore(
+    useShallow((s) => ({
+      aiConfigManager: s.aiConfigManager,
+      setCurrentModelId: s.setCurrentModelId,
+      addAIProvider: s.addAIProvider,
+      updateAIProvider: s.updateAIProvider,
+      deleteAIProvider: s.deleteAIProvider,
+      duplicateAIProvider: s.duplicateAIProvider,
+    }))
+  )
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<AIProviderConfig | null>(null)
@@ -551,8 +604,8 @@ export function AIProviderConfig() {
     setIsEditDialogOpen(true)
   }
 
-  const handleUpdateProvider = (provider: AIProviderConfig, index: number) => {
-    updateAIProvider(index, provider)
+  const handleUpdateProvider = (provider: AIProviderConfig, index?: number) => {
+    updateAIProvider(index ?? editingIndex, provider)
   }
 
   const handleDuplicateProvider = (index: number) => {

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useShallow } from 'zustand/react/shallow'
+import { useState, useEffect, useRef } from 'react'
 
 import {
   Collapsible,
@@ -25,28 +26,26 @@ import {
 } from 'lucide-react'
 
 import { useBatchQueueStore, useBatchProcessingStatus, useBatchStats, type BatchQueueItem } from '../../stores/batchQueueStore'
-import { batchProcessingEngine, type BatchProcessingResult } from '../../services/batchProcessingEngine'
+import { batchProcessingEngine, assertBatchModeSupported } from '../../services/batchProcessingEngine'
 import { cloudCacheService } from '../../services/cloudCacheService'
 
 import { useConfigStore } from '../../stores/configStore'
+import { runBatchQueue } from './batchQueueRunner'
 import { toast } from 'sonner'
 
 export function BatchQueuePanel() {
   // Store
-  const {
-    queue,
-    clearQueue,
-    startProcessing: startStoreProcessing,
-    pauseProcessing: pauseStoreProcessing,
-    resumeProcessing: resumeStoreProcessing,
-    stopProcessing: stopStoreProcessing,
-    removeFromQueue,
-    updateItem,
-    markItemCompleted,
-    markItemFailed,
-    markItemSkipped,
-    nextItem
-  } = useBatchQueueStore()
+  const { queue, clearQueue, startProcessing: startStoreProcessing, pauseProcessing: pauseStoreProcessing, resumeProcessing: resumeStoreProcessing, stopProcessing: stopStoreProcessing, removeFromQueue } = useBatchQueueStore(
+    useShallow((s) => ({
+      queue: s.queue,
+      clearQueue: s.clearQueue,
+      startProcessing: s.startProcessing,
+      pauseProcessing: s.pauseProcessing,
+      resumeProcessing: s.resumeProcessing,
+      stopProcessing: s.stopProcessing,
+      removeFromQueue: s.removeFromQueue,
+    }))
+  )
 
   const { isProcessing: isStoreProcessing, isPaused: isStorePaused, currentItem } = useBatchProcessingStatus()
   const stats = useBatchStats()
@@ -54,90 +53,9 @@ export function BatchQueuePanel() {
   // UI state
   const [isOpen, setIsOpen] = useState(false)
 
-  const cachedFilesRef = useRef<Set<string>>(new Set())
-
-
-  // Process next item when processing is started
-  const processNextItem = useCallback(async () => {
-
-    const state = useBatchQueueStore.getState()
-    const nextPending = state.queue.find((i) => i.status === 'pending')
-
-    if (!nextPending) {
-      // No more pending items
-      stopStoreProcessing()
-      toast('处理完成', {
-        description: `批量处理已完成，成功 ${stats.completed} 个，失败 ${stats.failed} 个`
-      })
-      return
-    }
-
-    // Find the index of the next pending item
-    const nextIndex = state.queue.findIndex((i) => i.id === nextPending.id)
-
-    // Update item to processing
-    updateItem(nextPending.id, { status: 'processing', progress: 0 })
-
-    // Get processing config from store
-    const config = useConfigStore.getState().processingOptions
-    if (cachedFilesRef.current.size === 0) {
-      cachedFilesRef.current = await cloudCacheService.fetchCacheFileNames()
-    }
-
-    const batchConfig = {
-      sourcePath: '',
-      maxFiles: 0,
-      skipProcessed: true,
-      order: 'sequential' as const,
-      bookType: config.bookType,
-      processingMode: config.processingMode,
-      chapterDetectionMode: config.chapterDetectionMode,
-      outputLanguage: config.outputLanguage
-    }
-
-    try {
-      // Process the item using the engine
-      const result = await batchProcessingEngine.processItem(nextPending, batchConfig, cachedFilesRef.current)
-
-
-      if (result.success && !result.error?.includes('已跳过')) {
-        markItemCompleted(nextPending.id, {
-          chapterCount: result.metadata?.chapterCount || 0,
-          processedChapters: result.metadata?.processedChapters || 0,
-          skippedChapters: result.metadata?.skippedChapters || 0,
-          startTime: result.metadata?.startTime || new Date().toISOString(),
-          endTime: result.metadata?.endTime || new Date().toISOString(),
-          costUSD: result.metadata?.costUSD || 0,
-          costRMB: result.metadata?.costRMB || 0,
-          isPartial: result.metadata?.isPartial || false
-        })
-
-        if (result.metadata?.isPartial) {
-          toast.warning(`处理完成但不完整: ${nextPending.fileName}`, {
-            description: `有 ${result.metadata.skippedChapters ?? 0} 章因内容过滤被跳过`
-          })
-        } else {
-          toast.success(`处理完成: ${nextPending.fileName}`)
-        }
-
-      } else if (result.error?.includes('已跳过')) {
-        markItemSkipped(nextPending.id)
-      } else {
-        markItemFailed(nextPending.id, result.error || '处理失败')
-        toast.error(`处理失败: ${nextPending.fileName}`, {
-          description: result.error
-        })
-      }
-    } catch (error) {
-      markItemFailed(nextPending.id, error instanceof Error ? error.message : '未知错误')
-      toast.error(`处理失败: ${nextPending.fileName}`, {
-        description: error instanceof Error ? error.message : '未知错误'
-      })
-    }
-
-    // Move to next item
-    nextItem()
-  }, [stats.completed, stats.failed, stopStoreProcessing, updateItem, markItemCompleted, markItemFailed, markItemSkipped, nextItem])
+  const cachedFilesRef = useRef<Set<string> | null>(null)
+  // 循环是否在跑：暂停后立即继续时，旧循环处理完当前项会自行接着跑，不能再开第二个循环并发处理
+  const loopRunningRef = useRef(false)
 
   // Handle pause/resume
   const handleTogglePause = () => {
@@ -193,45 +111,37 @@ export function BatchQueuePanel() {
       return
     }
 
+    try {
+      assertBatchModeSupported(useConfigStore.getState().processingOptions.processingMode)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+      return
+    }
+
+    // 先确认云端缓存状态再开始：列目录失败不能当成「没有缓存」而重跑覆盖
+    const status = await cloudCacheService.fetchCacheFileNamesStatus()
+    if (status.status === 'unknown') {
+      toast.error('无法确认云端缓存状态，未开始批量处理', { description: status.error })
+      return
+    }
+
     batchProcessingEngine.resetStopFlag()
     startStoreProcessing()
-    cachedFilesRef.current = await cloudCacheService.fetchCacheFileNames()
     toast('开始处理', {
       description: `共 ${pendingCount} 个文件待处理`
     })
-
   }
 
-
-  // Effect to process items when processing is active
+  // 处理循环只随 isProcessing / isPaused 启停；完成项数变化不会重启循环
   useEffect(() => {
-    let isMounted = true
-
-    const processQueue = async () => {
-      while (isStoreProcessing && !isStorePaused && isMounted) {
-        const state = useBatchQueueStore.getState()
-        const hasPending = state.queue.some((i) => i.status === 'pending')
-
-        if (!hasPending) {
-          stopStoreProcessing()
-          toast('处理完成', {
-            description: `批量处理已完成，成功 ${stats.completed} 个，失败 ${stats.failed} 个`
-          })
-          break
-        }
-
-        await processNextItem()
-      }
-    }
-
-    if (isStoreProcessing) {
-      processQueue()
-    }
-
-    return () => {
-      isMounted = false
-    }
-  }, [isStoreProcessing, isStorePaused, stats.completed, stats.failed, stopStoreProcessing, processNextItem])
+    if (!isStoreProcessing || isStorePaused || loopRunningRef.current) return
+    loopRunningRef.current = true
+    // 每次启动循环都重新确认云端缓存（队列也可能由 BatchProcessingDialog 启动）
+    cachedFilesRef.current = null
+    void runBatchQueue(cachedFilesRef).finally(() => {
+      loopRunningRef.current = false
+    })
+  }, [isStoreProcessing, isStorePaused])
 
   // Get status badge
   const getStatusBadge = (status: BatchQueueItem['status']) => {
@@ -261,7 +171,10 @@ export function BatchQueuePanel() {
 
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full">
       <CollapsibleTrigger asChild>
-        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted/70 transition-colors">
+        <button
+          type="button"
+          className="w-full text-left flex items-center justify-between p-3 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <div className="flex items-center gap-3">
             <FolderOpen className="h-4 w-4" />
             <span className="font-medium text-sm">批量处理队列</span>
@@ -283,7 +196,7 @@ export function BatchQueuePanel() {
               <ChevronDown className="h-4 w-4" />
             )}
           </div>
-        </div>
+        </button>
       </CollapsibleTrigger>
 
       <CollapsibleContent>
@@ -339,6 +252,8 @@ export function BatchQueuePanel() {
                       size="icon"
                       className="h-6 w-6"
                       onClick={() => handleRemoveItem(item)}
+                      aria-label={`移出队列 ${item.fileName}`}
+                      title="移出队列"
                     >
                       <X className="h-3 w-3" />
                     </Button>
@@ -411,6 +326,8 @@ export function BatchQueuePanel() {
               variant="outline"
               size="sm"
               onClick={handleClear}
+              aria-label="清空队列"
+              title="清空队列"
             >
               <Trash2 className="h-3 w-3" />
             </Button>

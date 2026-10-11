@@ -11,15 +11,28 @@ import {
   Loader2,
   Bot,
   Zap,
-  BookOpen,
   History,
   ExternalLink
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useProcessingHistoryStore } from '@/stores/processingHistory'
+import { useTokenUsage } from '@/stores/configStore'
 import { ProcessingHistoryDialog } from '@/components/ProcessingHistoryDialog'
 import type { ProcessingHistoryRecord } from '@/stores/processingHistory'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+
+/** 需二次确认的破坏性操作：仅中止 / 中止并返回配置 */
+type PendingAction = 'abort' | 'abortToConfig' | null
 
 interface UnifiedStatusBarProps {
   currentView: 'config' | 'processing'
@@ -27,7 +40,6 @@ interface UnifiedStatusBarProps {
   progress?: number
   currentStep?: string
   currentModel?: string
-  tokenUsage?: number
   hasApiKey?: boolean
   processingMode?: 'summary' | 'mindmap' | 'combined-mindmap'
   onToggleView?: () => void
@@ -52,7 +64,6 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
   progress = 0,
   currentStep = '',
   currentModel = '',
-  tokenUsage = 0,
   hasApiKey = true,
   processingMode,
   onToggleView,
@@ -63,8 +74,11 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
   className
 }: UnifiedStatusBarProps) {
   const { t } = useTranslation()
-  const { records } = useProcessingHistoryStore()
+  const records = useProcessingHistoryStore((s) => s.records)
+  // 状态栏自行订阅 token 计数：高频变化只重渲染状态栏，不波及 App
+  const tokenUsage = useTokenUsage()
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [loadingFileName, setLoadingFileName] = useState<string | null>(null)
 
   // 最近 2 条记录
@@ -102,6 +116,26 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
     }
   }
 
+  // 处理中点「返回配置」会中止处理：先确认，避免误触丢失进度
+  const handleToggleView = () => {
+    if (processing && currentView === 'processing' && onAbortToConfig) {
+      setPendingAction('abortToConfig')
+      return
+    }
+    onToggleView?.()
+  }
+
+  // 等待确认期间处理已自然结束：撤销确认框（渲染期调整 state，避免下次处理时残留弹出）
+  if (!processing && pendingAction !== null) {
+    setPendingAction(null)
+  }
+
+  const handleConfirmPending = () => {
+    if (pendingAction === 'abort') onCancelProcessing?.()
+    else if (pendingAction === 'abortToConfig') onAbortToConfig?.()
+    setPendingAction(null)
+  }
+
   // 显示最近历史的条件：配置视图 + 无处理中 + 有历史记录 + 有回调
   const showRecentHistory =
     currentView === 'config' &&
@@ -124,7 +158,7 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={onToggleView}
+                onClick={handleToggleView}
                 className="flex items-center gap-1.5 h-8 min-h-8"
               >
                 {currentView === 'config' ? (
@@ -179,9 +213,9 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                           variant="outline"
                           size="sm"
                           className="h-7 px-2 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
-                          onClick={onCancelProcessing}
+                          onClick={() => setPendingAction('abort')}
                         >
-                          {t('progress.abort') || '中止'}
+                          {t('progress.abort')}
                         </Button>
                       )}
                       {processing && onAbortToConfig && (
@@ -189,10 +223,10 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-xs hidden sm:inline-flex"
-                          onClick={onAbortToConfig}
-                          title={t('progress.abortAndEditSettings') || '中止并返回改设置'}
+                          onClick={() => setPendingAction('abortToConfig')}
+                          title={t('progress.abortAndEditSettings')}
                         >
-                          {t('progress.abortAndEditSettingsShort') || '改设置'}
+                          {t('progress.abortAndEditSettingsShort')}
                         </Button>
                       )}
                       {!processing && progress > 0 && progress < 100 && onRestartProcessing && (
@@ -202,7 +236,7 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                           className="h-7 px-2 text-xs"
                           onClick={onRestartProcessing}
                         >
-                          {t('progress.restart') || '重新处理'}
+                          {t('progress.restart')}
                         </Button>
                       )}
                       {!processing && progress >= 100 && onRestartProcessing && (
@@ -212,7 +246,7 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                           className="h-7 px-2 text-xs"
                           onClick={onRestartProcessing}
                         >
-                          {t('progress.restart') || '重新处理'}
+                          {t('progress.restart')}
                         </Button>
                       )}
                     </div>
@@ -316,6 +350,36 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={pendingAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingAction(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingAction === 'abortToConfig'
+                ? t('progress.confirmAbortToConfigTitle')
+                : t('progress.confirmAbortTitle')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingAction === 'abortToConfig'
+                ? t('progress.confirmAbortToConfigDescription')
+                : t('progress.confirmAbortDescription')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmPending}>
+              {pendingAction === 'abortToConfig'
+                ? t('progress.abortAndEditSettings')
+                : t('progress.abort')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ProcessingHistoryDialog
         open={historyDialogOpen}

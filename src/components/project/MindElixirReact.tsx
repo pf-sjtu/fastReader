@@ -5,13 +5,16 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState
 } from "react"
+import { useIsDarkMode } from "../useTheme"
 
 interface MindElixirReactProps {
   data: MindElixirData
   options?: Partial<Options>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   plugins?: any[]
   initScale?: number
   className?: string
@@ -22,116 +25,110 @@ export interface MindElixirReactRef {
   instance: MindElixirInstance | null
 }
 
+// 进入视口前预留的提前量：滚动接近时就初始化，避免空白闪烁
+const LAZY_ROOT_MARGIN = "200px"
+
 const MindElixirReact = forwardRef<MindElixirReactRef, MindElixirReactProps>(
   ({ data, options, plugins, initScale, className, fitPage }, ref) => {
     const mindmapEl = useRef<HTMLDivElement>(null)
     const meInstance = useRef<MindElixirInstance | null>(null)
-    const isInitialized = useRef<boolean>(false)
-    const [dataHash, setDataHash] = useState<string>("")
+    const isDark = useIsDarkMode()
+    // 无 IntersectionObserver 的环境（旧浏览器/测试）直接挂载
+    const [visible, setVisible] = useState(() => typeof IntersectionObserver === "undefined")
 
+    // 初始化时读取最新值，但不让它们触发重建
+    const latest = useRef({ data, fitPage, isDark, dataHash: "" })
+    // 已应用到实例上的数据指纹，避免初始化后立刻重复 refresh
+    const appliedHash = useRef("")
+
+    // getter：实例是懒创建的，外部读取时始终拿到当前实例
     useImperativeHandle(ref, () => ({
-      instance: meInstance.current
-    }))
-
-    const sanitizeNodeData = (nodeData: MindElixirData["nodeData"]) => {
-      if (!nodeData) return
-      if (nodeData.children) {
-        for (const child of nodeData.children) {
-          sanitizeNodeData(child)
-        }
+      get instance() {
+        return meInstance.current
       }
-    }
+    }), [])
 
-    // 计算数据的简单哈希值，用于比较数据是否变化
+    // 简单数据指纹：只有根节点或一级子节点数变化才刷新
+    const dataHash = useMemo(
+      () =>
+        data
+          ? JSON.stringify(data.nodeData.id) +
+            JSON.stringify(data.nodeData.topic) +
+            (data.nodeData.children?.length || 0)
+          : "",
+      [data]
+    )
+
     useEffect(() => {
-      if (data) {
-        // 使用简单的字符串化方法创建哈希
-        // 注意：这不是真正的哈希，只是一种简单的比较方法
-        const hash =
-          JSON.stringify(data.nodeData.id) +
-          JSON.stringify(data.nodeData.topic) +
-          (data.nodeData.children?.length || 0)
-        setDataHash(hash)
-      }
-    }, [data])
+      latest.current = { data, fitPage, isDark, dataHash }
+    })
 
-    // Load MindElixir dynamically and initialize
+    // 懒挂载：进入视口才初始化（结果页每章一个实例，全部立即初始化开销很大）
     useEffect(() => {
-      if (!mindmapEl.current || typeof window === "undefined") return
-
-      const initializeMindElixir = async () => {
-        const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
-        const changeTheme = (e: MediaQueryListEvent) => {
-          if (e.matches) {
-            meInstance.current?.changeTheme(MindElixir.DARK_THEME)
-          } else {
-            meInstance.current?.changeTheme(MindElixir.THEME)
+      if (visible || !mindmapEl.current) return
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            setVisible(true)
+            observer.disconnect()
           }
-        }
+        },
+        { rootMargin: LAZY_ROOT_MARGIN }
+      )
+      observer.observe(mindmapEl.current)
+      return () => observer.disconnect()
+    }, [visible])
 
-        const mergedOptions = {
-          ...(options || {}),
-          el: mindmapEl.current!
-        }
+    // 创建实例；options 等变化时先 destroy 旧实例再重建，卸载时 destroy
+    useEffect(() => {
+      if (!visible || !mindmapEl.current) return
+      const { data: initData, fitPage: initFit, isDark: initDark, dataHash: initHash } = latest.current
 
-        meInstance.current = new MindElixir(mergedOptions)
-
-        // Install plugins
-        if (plugins) {
-          for (const plugin of plugins) {
-            meInstance.current?.install(plugin)
-          }
-        }
-
-        // Set initial scale
-        if (initScale && meInstance.current) {
-          meInstance.current.scaleVal = initScale
-          meInstance.current.map.style.transform = `scale(${initScale})`
-        }
-
-        if (meInstance.current) {
-          meInstance.current.map.style.opacity = "0"
-        }
-
-        mediaQuery.addEventListener("change", changeTheme)
-        isInitialized.current = true
-
-        // Initialize with data if available
-        if (data && meInstance.current) {
-          sanitizeNodeData(data.nodeData)
-          meInstance.current.init(data)
-          meInstance.current.toCenter()
-          meInstance.current.scale(0.5)          
-          fitPage && meInstance.current.scaleFit()
-          meInstance.current.map.style.opacity = "1"
-        }
-
-        // Return cleanup function
-        return () => {
-          mediaQuery.removeEventListener("change", changeTheme)
-        }
-      }
-
-      let cleanup: (() => void) | undefined
-      initializeMindElixir().then((cleanupFn) => {
-        cleanup = cleanupFn
+      const instance = new MindElixir({
+        ...(options || {}),
+        el: mindmapEl.current,
+        theme: initDark ? MindElixir.DARK_THEME : MindElixir.THEME,
       })
+      meInstance.current = instance
+
+      if (plugins) {
+        for (const plugin of plugins) {
+          instance.install(plugin)
+        }
+      }
+
+      if (initScale) {
+        instance.scaleVal = initScale
+        instance.map.style.transform = `scale(${initScale})`
+      }
+
+      if (initData) {
+        appliedHash.current = initHash
+        instance.init(initData)
+        instance.toCenter()
+        instance.scale(0.5)
+        if (initFit) instance.scaleFit()
+      }
 
       return () => {
-        cleanup?.()
+        instance.destroy()
+        if (meInstance.current === instance) meInstance.current = null
       }
-    }, [options, plugins, initScale])
+    }, [visible, options, plugins, initScale])
 
-    // 使用dataHash作为依赖项，只有当数据真正变化时才刷新
+    // 跟随应用内主题（ThemeProvider），而非仅系统主题
     useEffect(() => {
-      if (!data || !meInstance.current || !isInitialized.current || !dataHash)
-        return
+      meInstance.current?.changeTheme(isDark ? MindElixir.DARK_THEME : MindElixir.THEME)
+    }, [isDark])
 
-      sanitizeNodeData(data.nodeData)
-      meInstance.current.refresh(data)
-      meInstance.current.toCenter()
-      fitPage && meInstance.current.scaleFit()
-      meInstance.current.map.style.opacity = "1"
+    // 使用 dataHash 作为依赖项，只有当数据真正变化时才刷新
+    useEffect(() => {
+      const instance = meInstance.current
+      if (!instance || !dataHash || appliedHash.current === dataHash) return
+      appliedHash.current = dataHash
+      instance.refresh(latest.current.data)
+      instance.toCenter()
+      if (fitPage) instance.scaleFit()
     }, [dataHash, fitPage])
 
     return (

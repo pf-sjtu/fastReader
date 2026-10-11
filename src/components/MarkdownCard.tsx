@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { memo, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,9 @@ import { CopyButton } from '@/components/ui/copy-button'
 import { ViewContentDialog } from './ViewContentDialog'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+
+// 模块级常量：避免每次渲染新建插件数组导致 ReactMarkdown 重新处理
+const REMARK_PLUGINS = [remarkGfm, remarkCjkFriendly]
 
 interface MarkdownCardProps {
   /** 章节ID */
@@ -25,8 +28,8 @@ interface MarkdownCardProps {
   index: number
   /** 清除缓存的回调函数 */
   onClearCache?: (chapterId: string) => void
-  /** 阅读章节的回调函数 */
-  onReadChapter?: () => void
+  /** 阅读章节的回调函数（参数为章节ID，便于父组件传稳定引用） */
+  onReadChapter?: (chapterId: string) => void
   /** 是否显示清除缓存按钮 */
   showClearCache?: boolean
   /** 是否显示查看内容按钮 */
@@ -41,11 +44,11 @@ interface MarkdownCardProps {
   defaultCollapsed?: boolean
   /** 外部控制是否展开 */
   isExpanded?: boolean
-  /** 章节展开状态变化的回调 */
-  onExpandChange?: (expanded: boolean) => void
+  /** 章节展开状态变化的回调（第二参数为章节ID，便于父组件传稳定引用） */
+  onExpandChange?: (expanded: boolean, chapterId: string) => void
 }
 
-export const MarkdownCard: React.FC<MarkdownCardProps> = ({
+export const MarkdownCard = memo(function MarkdownCard({
   id,
   title,
   content,
@@ -61,7 +64,7 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
   defaultCollapsed = false,
   isExpanded,
   onExpandChange,
-}) => {
+}: MarkdownCardProps) {
   const { t } = useTranslation()
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed)
 
@@ -78,12 +81,15 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
   const handleToggleCollapse = () => {
     if (isExpanded !== undefined) {
       // 外部控制模式
-      onExpandChange?.(!isExpanded)
+      onExpandChange?.(!isExpanded, id)
     } else {
       // 内部控制模式
       setIsCollapsed(!isCollapsed)
     }
   }
+
+  // 预处理只依赖内容：流式更新其他章节时不重复计算
+  const renderedMarkdown = useMemo(() => prepareMarkdownForRender(markdownContent), [markdownContent])
 
   return (
     <Card
@@ -103,6 +109,8 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
               onClick={handleToggleCollapse}
               className="shrink-0 h-8 w-8 p-0 sm:hidden"
               title={actualIsCollapsed ? t('common.expand') : t('common.collapse')}
+              aria-label={actualIsCollapsed ? t('common.expand') : t('common.collapse')}
+              aria-expanded={!actualIsCollapsed}
             >
               {actualIsCollapsed ? (
                 <ChevronDown className="h-4 w-4" />
@@ -125,13 +133,21 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
                 size="sm"
                 onClick={() => onClearCache(id)}
                 title={t('common.clearCache')}
+                aria-label={t('common.clearCache')}
                 className="h-8 w-8 p-0"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
             )}
             {showReadButton && onReadChapter && (
-              <Button variant="outline" size="sm" onClick={onReadChapter} className="h-8 w-8 p-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onReadChapter(id)}
+                className="h-8 w-8 p-0"
+                title={t('common.readChapter')}
+                aria-label={t('common.readChapter')}
+              >
                 <BookOpen className="h-3 w-3" />
               </Button>
             )}
@@ -149,6 +165,8 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
               onClick={handleToggleCollapse}
               className="hidden sm:inline-flex h-8 w-8 p-0"
               title={actualIsCollapsed ? t('common.expand') : t('common.collapse')}
+              aria-label={actualIsCollapsed ? t('common.expand') : t('common.collapse')}
+              aria-expanded={!actualIsCollapsed}
             >
               {actualIsCollapsed ? (
                 <ChevronDown className="h-4 w-4" />
@@ -166,12 +184,12 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
               强调作用域：micromark (CommonMark delimiter run) + remark-cjk-friendly
               预处理只清 AI 脏源文（内侧空格、段中 >），不手写配对。
             */}
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]}>
-              {prepareMarkdownForRender(markdownContent)}
+            <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>
+              {renderedMarkdown}
             </ReactMarkdown>
           </div>
         </CardContent>
       )}
     </Card>
   )
-}
+})

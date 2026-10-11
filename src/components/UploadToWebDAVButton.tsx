@@ -3,15 +3,8 @@ import { Upload, Cloud, Check, AlertCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from './ui/button'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from './ui/dropdown-menu'
-import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -22,9 +15,10 @@ import { webdavService } from '../services/webdavService'
 import { cloudCacheService } from '../services/cloudCacheService'
 import { metadataFormatter } from '../services/metadataFormatter'
 import { toast } from 'sonner'
+import type { BookSummary } from '../hooks/useBookProcessing'
 
 interface UploadToWebDAVButtonProps {
-  bookSummary: any
+  bookSummary: BookSummary
   file: File | null
   className?: string
   chapterNamingMode?: 'auto' | 'numbered'
@@ -51,20 +45,20 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
 
     // 计算原始内容字符数
     const originalCharCount = bookSummary.chapters.reduce(
-      (total: number, chapter: any) => total + (chapter.content?.length || 0),
+      (total: number, chapter: BookSummary['chapters'][number]) => total + (chapter.content?.length || 0),
       0
     )
 
     // 计算处理后内容字符数
     const processedCharCount = bookSummary.chapters.reduce(
-      (total: number, chapter: any) => total + (chapter.summary?.length || 0),
+      (total: number, chapter: BookSummary['chapters'][number]) => total + (chapter.summary?.length || 0),
       0
     )
 
     // 选中的章节
     const selectedChapters = bookSummary.chapters
-      .map((_: any, index: number) => index + 1)
-      .filter((_: any, index: number) => {
+      .map((_: unknown, index: number) => index + 1)
+      .filter((_: unknown, index: number) => {
         // 如果有 summary 就算选中
         return bookSummary.chapters[index]?.summary
       })
@@ -87,7 +81,7 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
     if (!bookSummary || !file) return ''
 
     // 准备章节数据
-    const chapters = bookSummary.chapters.map((chapter: any) => ({
+    const chapters = bookSummary.chapters.map((chapter) => ({
       id: chapter.id,
       title: chapter.title,
       summary: chapter.summary || ''
@@ -132,16 +126,17 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
     try {
       const fileName = generateFileName()
       const remotePath = `${webdavConfig.syncPath}/${fileName}`
-      const exists = await webdavService.fileExists(remotePath)
+      // 三态：unknown（网络/鉴权异常）不能当成不存在
+      const status = await webdavService.existsStatus(remotePath)
       
-      if (exists) {
+      if (status === 'exists') {
         setUploadStatus('exists')
         setFileName(fileName)
       } else {
         setUploadStatus('idle')
       }
       
-      return exists
+      return status === 'exists'
     } catch (error) {
       console.error('检查文件存在失败:', error)
       setUploadStatus('error')
@@ -170,12 +165,20 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
       const remotePath = `${webdavConfig.syncPath}/${fileName}`
 
       // 检查是否需要覆盖确认
-      if (!forceOverwrite && await webdavService.fileExists(remotePath)) {
-        console.log('设置文件名到状态:', fileName)
-        setFileName(fileName)
-        setShowConfirmDialog(true)
-        setIsUploading(false)
-        return
+      if (!forceOverwrite) {
+        const status = await webdavService.existsStatus(remotePath)
+        if (status === 'unknown') {
+          // 无法确认是否已有同名文件：不冒险覆盖
+          toast.error('无法确认云端是否已存在同名文件，已取消上传，请检查网络或 WebDAV 配置后重试')
+          setIsUploading(false)
+          return
+        }
+        if (status === 'exists') {
+          setFileName(fileName)
+          setShowConfirmDialog(true)
+          setIsUploading(false)
+          return
+        }
       }
 
       // 上传 MD
@@ -185,9 +188,12 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
         throw new Error(uploadResult.error || '上传失败')
       }
 
-      const verifyResult = await webdavService.fileExists(remotePath)
-      if (!verifyResult) {
+      const verifyStatus = await webdavService.existsStatus(remotePath)
+      if (verifyStatus === 'missing') {
         throw new Error('文件上传后验证失败：文件在服务器上未找到')
+      }
+      if (verifyStatus === 'unknown') {
+        toast.warning('上传已完成，但无法确认云端文件状态')
       }
 
       // 有关键图表则上传同名 JSON（{name}-完整摘要.json）

@@ -91,15 +91,13 @@ function readCssVarAsHex(
   return cssColorToHex(v, fallbackHex)
 }
 
-/** 在浏览器中读取当前主题；全部输出 #rrggbb */
-export function readChartTheme(el?: Element | null): ChartThemeColors {
+/** 在浏览器中读取当前主题；全部输出 #rrggbb。主题变量定义在 :root / .dark，统一从 root 读取 */
+export function readChartTheme(): ChartThemeColors {
   if (typeof document === 'undefined') return FALLBACK_LIGHT
 
   const isDark = document.documentElement.classList.contains('dark')
   const fb = isDark ? FALLBACK_DARK : FALLBACK_LIGHT
   const rootStyle = getComputedStyle(document.documentElement)
-  // 优先 root：主题变量定义在 :root / .dark
-  const style = el ? getComputedStyle(el as Element) : rootStyle
 
   const chartKeys = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5'] as const
   const basePalette = chartKeys.map((k, i) =>

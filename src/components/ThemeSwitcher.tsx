@@ -1,6 +1,6 @@
 import React from 'react';
 import { Moon, Sun, Monitor } from 'lucide-react';
-import { useTheme } from './ThemeProvider';
+import { useTheme } from './useTheme';
 import { cn } from '../lib/utils';
 
 export const ThemeSwitcher: React.FC<{ className?: string }> = ({ className }) => {

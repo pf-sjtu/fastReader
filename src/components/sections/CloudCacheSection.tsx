@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Loader2, CheckCircle } from 'lucide-react'
+import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { ProcessingMetadata } from '@/services/cloudCacheService'
@@ -10,6 +10,10 @@ interface CloudCacheSectionProps {
   cloudCacheContent: string | null
   /** 同名 .json 是否在云端存在 */
   cloudChartsFileFound?: boolean
+  /** 云缓存存在但不完整（含失败章节） */
+  cloudCacheIsPartial?: boolean
+  /** 无法确认云端缓存状态（网络/鉴权异常），不等于无缓存 */
+  cloudCacheStatusUnknown?: boolean
   file: File | null
   webdavEnabled: boolean
   webdavInitialized: boolean
@@ -21,6 +25,8 @@ export function CloudCacheSection({
   cloudCacheMetadata,
   cloudCacheContent,
   cloudChartsFileFound = false,
+  cloudCacheIsPartial = false,
+  cloudCacheStatusUnknown = false,
   file,
   webdavEnabled,
   webdavInitialized,
@@ -55,6 +61,12 @@ export function CloudCacheSection({
           <p>{t('cloudCache.processedAt')}: {new Date(cloudCacheMetadata.processedAt).toLocaleString()}</p>
           <p>{t('cloudCache.model')}: {cloudCacheMetadata.model}</p>
           <p>{t('cloudCache.chapterCount')}: {cloudCacheMetadata.chapterCount}</p>
+          {cloudCacheIsPartial && (
+            <p className="flex items-start gap-1 text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+              {t('cloudCache.partialLoaded')}
+            </p>
+          )}
           {includesKeyCharts ? (
             <p className="text-foreground/80">
               {cloudChartsFileFound
@@ -79,6 +91,15 @@ export function CloudCacheSection({
         >
           {t('cloudCache.useCache')}
         </Button>
+      </div>
+    )
+  }
+
+  if (cloudCacheStatusUnknown && file && webdavEnabled) {
+    return (
+      <div role="status" className="flex items-start gap-1 text-xs text-amber-700 dark:text-amber-400">
+        <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+        {t('cloudCache.statusUnknown')}
       </div>
     )
   }

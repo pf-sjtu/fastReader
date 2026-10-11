@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useState, useEffect } from 'react'
 import {
   Dialog,
@@ -41,7 +42,7 @@ import { webdavService, type WebDAVFileInfo } from '../../services/webdavService
 import { normalizeDavPath } from '../../services/webdavProxyUtils'
 
 import { cloudCacheService } from '../../services/cloudCacheService'
-import { batchProcessingEngine } from '../../services/batchProcessingEngine'
+import { batchProcessingEngine, assertBatchModeSupported } from '../../services/batchProcessingEngine'
 import { useBatchQueueStore, useBatchProcessingStatus, useBatchStats, type BatchQueueItem } from '../../stores/batchQueueStore'
 import { toast } from 'sonner'
 
@@ -58,7 +59,19 @@ export function BatchProcessingDialog({
   triggerSize = 'sm'
 }: BatchProcessingDialogProps) {
   // Store
-  const { queue, addToQueue, clearQueue, startProcessing, pauseProcessing, resumeProcessing, stopProcessing, removeFromQueue, setConfig } = useBatchQueueStore()
+  const { queue, addToQueue, clearQueue, startProcessing, pauseProcessing, resumeProcessing, stopProcessing, removeFromQueue, setConfig } = useBatchQueueStore(
+    useShallow((s) => ({
+      queue: s.queue,
+      addToQueue: s.addToQueue,
+      clearQueue: s.clearQueue,
+      startProcessing: s.startProcessing,
+      pauseProcessing: s.pauseProcessing,
+      resumeProcessing: s.resumeProcessing,
+      stopProcessing: s.stopProcessing,
+      removeFromQueue: s.removeFromQueue,
+      setConfig: s.setConfig,
+    }))
+  )
 
   const { isProcessing, isPaused, currentItem } = useBatchProcessingStatus()
   const stats = useBatchStats()
@@ -72,7 +85,8 @@ export function BatchProcessingDialog({
   const [activeTab, setActiveTab] = useState<'config' | 'queue'>('config')
 
   // Folder selection state
-  const [currentPath, setCurrentPath] = useState('/')
+  // 从配置的浏览路径开始（browsePath 为 serverUrl 下的绝对路径）
+  const [currentPath, setCurrentPath] = useState(() => webdavConfig.browsePath || '/')
   const [files, setFiles] = useState<WebDAVFileInfo[]>([])
   const [isLoadingFiles, setIsLoadingFiles] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -171,7 +185,12 @@ export function BatchProcessingDialog({
     setIsCheckingCache(true)
     const statusMap = new Map<string, boolean>()
 
-    const cachedNames = await cloudCacheService.fetchCacheFileNames()
+    const cacheStatus = await cloudCacheService.fetchCacheFileNamesStatus()
+    if (cacheStatus.status === 'unknown') {
+      // 无法确认 ≠ 没有缓存：提示用户，真正开始处理时队列会再次确认并在失败时中止
+      toast.warning('无法确认云端缓存状态', { description: cacheStatus.error })
+    }
+    const cachedNames = cacheStatus.status === 'ok' ? cacheStatus.names : new Set<string>()
 
     for (const file of filesToCheck) {
       if (file.type === 'file') {
@@ -233,6 +252,13 @@ export function BatchProcessingDialog({
       toast.error('请选择文件', {
         description: '请至少选择一个要处理的文件'
       })
+      return
+    }
+
+    try {
+      assertBatchModeSupported(processingOptions.processingMode || 'summary')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
       return
     }
 

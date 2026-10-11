@@ -7,7 +7,7 @@ import { EpubReader } from '@/components/EpubReader'
 import { PdfReader } from '@/components/PdfReader'
 import { cn } from '@/lib/utils'
 import type { ChapterData } from '@/services/epubProcessor'
-import type { BookData as EpubBookData } from '@/services/epubProcessor'
+import type { EpubBookData } from '@/types/chapter'
 import type { BookData as PdfBookData } from '@/services/pdfProcessor'
 
 interface PreviewPanelProps {

@@ -26,6 +26,10 @@ interface FileUploadCardProps {
   cloudCacheMetadata: ProcessingMetadata | null
   cloudCacheContent: string | null
   cloudChartsFileFound?: boolean
+  /** 云缓存存在但不完整（含失败章节） */
+  cloudCacheIsPartial?: boolean
+  /** 无法确认云端缓存状态（网络/鉴权异常），不等于无缓存 */
+  cloudCacheStatusUnknown?: boolean
   webdavEnabled: boolean
   webdavInitialized: boolean
   onFileSelect: (file: File) => void
@@ -43,6 +47,8 @@ export function FileUploadCard({
   cloudCacheMetadata,
   cloudCacheContent,
   cloudChartsFileFound = false,
+  cloudCacheIsPartial = false,
+  cloudCacheStatusUnknown = false,
   webdavEnabled,
   webdavInitialized,
   onFileSelect,
@@ -78,7 +84,7 @@ export function FileUploadCard({
       <CardContent className="space-y-4">
         {/* 处理模式：主路径可见，不必进配置 Dialog */}
         <div className="space-y-2">
-          <Label>{t('config.processingMode') || '处理模式'}</Label>
+          <Label>{t('config.processingMode')}</Label>
           <Select
             value={processingMode}
             onValueChange={(value: 'summary' | 'mindmap' | 'combined-mindmap') =>
@@ -90,10 +96,10 @@ export function FileUploadCard({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="summary">{t('config.summaryMode') || '章节总结'}</SelectItem>
-              <SelectItem value="mindmap">{t('config.mindmapMode') || '章节思维导图'}</SelectItem>
+              <SelectItem value="summary">{t('config.summaryMode')}</SelectItem>
+              <SelectItem value="mindmap">{t('config.mindmapMode')}</SelectItem>
               <SelectItem value="combined-mindmap">
-                {t('config.combinedMindmapMode') || '整书思维导图'}
+                {t('config.combinedMindmapMode')}
               </SelectItem>
             </SelectContent>
           </Select>
@@ -182,6 +188,8 @@ export function FileUploadCard({
           cloudCacheMetadata={cloudCacheMetadata}
           cloudCacheContent={cloudCacheContent}
           cloudChartsFileFound={cloudChartsFileFound}
+          cloudCacheIsPartial={cloudCacheIsPartial}
+          cloudCacheStatusUnknown={cloudCacheStatusUnknown}
           file={file}
           webdavEnabled={webdavEnabled}
           webdavInitialized={webdavInitialized}
