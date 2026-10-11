@@ -96,7 +96,7 @@ http://127.0.0.1:5173
 - `http://127.0.0.1:5173`
 
 优先通过环境变量 `ALLOWED_ORIGINS` 配置（见上文）；未设置时使用 `functions/api/dav/[[path]].js` 中的默认值。
-Origin 头优先；可伪造的 `X-Request-Origin` 不能单独放行。AI 代理（`functions/api/ai`）使用同一规则。
+判定规则：请求带 `Origin` 头时只看它（此时伪造的 `X-Request-Origin` 无效）；浏览器的同源 GET/HEAD 不带 `Origin`，此时才回退到 `X-Request-Origin`。AI 代理（`functions/api/ai`）使用同一规则。
 
 ### 3) base URL 校验（防 SSRF）
 

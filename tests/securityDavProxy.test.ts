@@ -150,6 +150,25 @@ describe('DAV 代理：响应头白名单', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe(ORIGIN)
   })
 
+  it('上游压缩（content-encoding）时丢弃 content-length；未压缩时保留', async () => {
+    // fetch 已解码正文，但上游 content-length 是压缩后的长度：透传会让客户端截断正文（真实 WebDAV 联调中暴露）
+    fetchMock.mockResolvedValueOnce(new Response('<xml>decoded body longer than header</xml>', {
+      status: 207,
+      headers: { 'content-type': 'application/xml', 'content-encoding': 'gzip', 'content-length': '12' },
+    }))
+    let res = await davRequest({ method: 'PROPFIND' })
+    expect(res.headers.get('content-length')).toBeNull()
+    expect(res.headers.get('content-encoding')).toBeNull()
+    expect(await res.text()).toContain('decoded body longer')
+
+    fetchMock.mockResolvedValueOnce(new Response('abcdef', {
+      status: 200,
+      headers: { 'content-length': '6', 'content-encoding': 'identity' },
+    }))
+    res = await davRequest({ method: 'GET' })
+    expect(res.headers.get('content-length')).toBe('6')
+  })
+
   it('非 3xx 的 location 仅在同源作用域内保留', async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 201, headers: { location: '/dav/Books/a.md' } }))
     let res = await davRequest({ method: 'PUT', body: 'x' })

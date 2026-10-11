@@ -73,13 +73,46 @@ export function getFileContents(
   })
 }
 
-/** 父目录不存在时创建（先探测再 MKCOL）；浏览器模式下失败不阻断后续 PUT */
+/**
+ * 已确认存在的目录（按服务器 + 账号区分）：上传一本书的几十个文件时不必逐级重复探测。
+ * PUT 失败时清空对应账号的缓存，下次重新探测（目录可能被外部删除）。
+ */
+const confirmedDirs = new Map<string, Set<string>>()
+
+function confirmedSet(ctx: DavContext): Set<string> {
+  const key = `${ctx.config?.serverUrl ?? ''}|${ctx.config?.username ?? ''}`
+  let set = confirmedDirs.get(key)
+  if (!set) confirmedDirs.set(key, (set = new Set()))
+  return set
+}
+
+/** 仅供测试：清空目录确认缓存 */
+export function resetConfirmedDirs(): void {
+  confirmedDirs.clear()
+}
+
+/**
+ * 确保 dirPath 及其所有祖先目录存在：自顶向下逐级「先探测再 MKCOL」。
+ * 标准 WebDAV 服务器（如 Apache mod_dav）对缺少上级目录的 MKCOL 返回 409，因此不能只建最后一级。
+ * 浏览器模式下失败不阻断后续 PUT（由 PUT 的结果为准）。
+ */
 async function ensureParentDir(ctx: DavContext, dirPath: string, tolerant: boolean): Promise<void> {
+  const known = confirmedSet(ctx)
   const create = async () => {
-    const probe = await probeStatus(ctx, dirPath)
-    if (classifyExistsStatus(probe.status, !!probe.proxyError) === 'missing') {
-      ctx.setDavHeader(buildHeaderPath(dirPath))
-      await ctx.client!.createDirectory('/')
+    let current = ''
+    for (const segment of dirPath.split('/').filter(Boolean)) {
+      current += `/${segment}`
+      if (known.has(current)) continue
+      const probe = await probeStatus(ctx, current)
+      const kind = classifyExistsStatus(probe.status, !!probe.proxyError)
+      if (kind === 'missing') {
+        ctx.setDavHeader(buildHeaderPath(current))
+        await ctx.client!.createDirectory('/')
+        known.add(current)
+      } else if (kind === 'exists') {
+        known.add(current)
+      }
+      // unknown（鉴权/网络/5xx）：按存在处理继续，但不缓存，下次重新探测
     }
   }
   if (!tolerant) return create()
@@ -121,6 +154,8 @@ export function putFileContents(
           console.log(`[WebDAV:proxy] PUT ok status=${res.status} path=${normalizedPath}`)
           return { success: true, data: true }
         }
+        // 403/404/409 可能意味着目录已被外部删除：下次重新探测（412 等是正常的业务拒绝，不清）
+        if (res.status === 403 || res.status === 404 || res.status === 409) confirmedSet(ctx).clear()
         const error = await failureText('上传文件失败', res, 120)
         console.warn(`[WebDAV:proxy] PUT fail status=${res.status} path=${normalizedPath}`, error.slice(0, 200))
         return { success: false, error }

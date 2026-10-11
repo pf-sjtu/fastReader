@@ -104,7 +104,12 @@ function resolveRedirectTarget(base, location, currentUrl) {
 
 function filterResponseHeaders(headers, base, currentUrl) {
   const out = new Headers()
+  // 上游做了内容编码（gzip 等）时，fetch 已把正文解码，content-length 仍是压缩后的长度；
+  // 透传会让客户端按错误长度截断正文（PROPFIND 列表解析为空），此时必须丢弃该头
+  const encoding = (headers.get('content-encoding') || '').trim().toLowerCase()
+  const bodyTransformed = encoding !== '' && encoding !== 'identity'
   RESPONSE_HEADER_ALLOWLIST.forEach((key) => {
+    if (key === 'content-length' && bodyTransformed) return
     const value = headers.get(key)
     if (value !== null) out.set(key, value)
   })

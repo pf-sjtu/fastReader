@@ -36,6 +36,7 @@ import {
   describeConnectionError,
   EXISTS_MAX_ATTEMPTS
 } from '../src/services/webdavService'
+import { resetConfirmedDirs } from '../src/services/webdav/transfer'
 import { useWebDAVStore, defaultWebDAVConfig } from '../src/stores/webdav'
 import type { WebDAVConfig } from '../src/stores/types'
 
@@ -67,6 +68,7 @@ async function ready(cfg: Partial<WebDAVConfig> = {}) {
 }
 
 beforeEach(() => {
+  resetConfirmedDirs() // 目录确认缓存是模块级的：用例间必须隔离
   vi.stubGlobal('fetch', fetchMock)
   fetchMock.mockReset()
   h.createClient.mockClear()
@@ -213,12 +215,16 @@ describe('路径：只用绝对路径，不叠加 browsePath', () => {
     expect(sup.data?.map((f) => f.basename)).toEqual(['a.epub'])
   })
 
-  it('上传：父目录 404 时 MKCOL，PUT 目标为绝对路径', async () => {
+  it('上传：逐级确认祖先目录，缺失的一级 MKCOL，PUT 目标为绝对路径', async () => {
     const svc = await ready({ browsePath: '/Books' })
-    fetchMock.mockResolvedValueOnce(res(404)).mockResolvedValueOnce(res(201))
+    fetchMock
+      .mockResolvedValueOnce(res(207)) // /fastReader 已存在
+      .mockResolvedValueOnce(res(404)) // /fastReader/a 缺失 → MKCOL
+      .mockResolvedValueOnce(res(201)) // PUT
     const r = await svc.uploadFile('/fastReader/a/b.md', '内容')
     expect(r).toEqual({ success: true, data: true })
-    expect(lastFetch(0)).toMatchObject({ method: 'PROPFIND', path: '/fastReader/a' })
+    expect(lastFetch(0)).toMatchObject({ method: 'PROPFIND', path: '/fastReader' })
+    expect(lastFetch(1)).toMatchObject({ method: 'PROPFIND', path: '/fastReader/a' })
     expect(h.client.paths).toEqual(['/fastReader/a'])
     expect(h.client.createDirectory).toHaveBeenCalledTimes(1)
     expect(lastFetch()).toMatchObject({ method: 'PUT', path: '/fastReader/a/b.md' })
@@ -268,7 +274,8 @@ describe('路径：只用绝对路径，不叠加 browsePath', () => {
     const svc = await ready()
     fetchMock
       .mockResolvedValueOnce(res(404)) // ensureSyncDirectory: /fastReader 不存在
-      .mockResolvedValueOnce(res(207)) // PUT 前父目录检查
+      .mockResolvedValueOnce(res(207)) // PUT 前祖先检查：/fastReader
+      .mockResolvedValueOnce(res(207)) // PUT 前祖先检查：/fastReader/b
       .mockResolvedValueOnce(res(201)) // PUT
     const progress: number[] = []
     const r = await svc.syncFiles([{ name: 'a.json', content: '{}', path: 'b/a.json' }], (p) => progress.push(p))

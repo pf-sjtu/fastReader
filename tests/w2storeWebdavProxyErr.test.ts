@@ -25,6 +25,7 @@ const h = vi.hoisted(() => {
 vi.mock('webdav', () => ({ createClient: h.createClient }))
 
 import { WebDAVService, classifyExistsStatus, describeConnectionError } from '../src/services/webdavService'
+import { resetConfirmedDirs } from '../src/services/webdav/transfer'
 import { defaultWebDAVConfig } from '../src/stores/webdav'
 import {
   describeProxyError,
@@ -53,6 +54,7 @@ async function ready() {
 }
 
 beforeEach(() => {
+  resetConfirmedDirs() // 目录确认缓存是模块级的：用例间必须隔离
   vi.stubGlobal('fetch', fetchMock)
   fetchMock.mockReset()
   h.client.getDirectoryContents.mockReset().mockResolvedValue([])
@@ -163,13 +165,14 @@ describe('下载/上传遇到代理错误', () => {
 
   it('PUT 代理 413 给出代理原因；成功时父目录缺失会 MKCOL', async () => {
     const svc = await ready()
-    fetchMock.mockResolvedValueOnce(new Response('', { status: 404 })) // 探测父目录缺失
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 207 })) // /fastReader 已存在
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 404 })) // /fastReader/sub 缺失 → MKCOL
     fetchMock.mockResolvedValueOnce(proxyRes(413)) // PUT
     const r = await svc.putFileContents('/fastReader/sub/a.md', 'x')
     expect(h.client.createDirectory).toHaveBeenCalledTimes(1)
     expect(r.error).toBe('上传文件失败: 代理拒绝：请求体过大')
 
-    fetchMock.mockResolvedValueOnce(new Response('', { status: 207 }))
+    // 413 是业务拒绝，不清「已确认目录」缓存：第二个文件不再探测，直接 PUT
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 201 }))
     expect((await svc.putFileContents('/fastReader/sub/b.md', new Blob(['x']), false)).success).toBe(true)
     const init = fetchMock.mock.calls.at(-1)![1] as RequestInit & { headers: Record<string, string> }

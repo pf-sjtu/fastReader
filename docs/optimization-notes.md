@@ -63,4 +63,5 @@
 - AI 代理只接受 https 公网 base：公网 IP 上的 http 自建服务商会被拒
 - 默认 prompt 版本为 v2（v2 结构更完整）：前端 `DEFAULT_PROMPT_VERSION` 与 CLI `DEFAULT_PROMPT_VERSION` 必须一致；已持久化为 v1 的用户保持 v1（无法区分「主动选择」与「沿用旧默认」，不擅自改动）
 - 旧版导出配置（`tests/fixtures/config/legacy-export-2026-08.yaml`，由真实导出脱敏）前端 `importConfig` 与 CLI `ConfigLoader` 均可直接读取；导入时 `connectionStatus` 重置为 `disconnected`（运行时状态不随备份迁移），`customFields` 空值归一化为对象
+- 真实 WebDAV 联调（`tests/tour/liveWebdav.test.ts`，设置 `E2E_CONFIG` 才运行，只写专用沙盒目录）发现两类 mock 测试永远发现不了的问题：（1）代理响应头白名单保留了 `content-length` 却丢了 `content-encoding`——上游 gzip 时 fetch 已解压，长度头是压缩后的，正文被截断；现在上游有内容编码时丢弃 `content-length`。（2）上传前只创建最后一级目录，`{书名}/mindmaps/` 这类两级新目录在标准 WebDAV 服务器（MKCOL 缺上级返回 409）上必然失败；现在自顶向下逐级创建，并缓存已确认存在的目录
 - 输出语言 auto：前端跟随界面语言，CLI 跟随原书语言（CLI 无界面）
