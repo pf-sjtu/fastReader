@@ -26,7 +26,7 @@ processing:
 
 # 批量处理配置
 batch:
-  sourcePath: "/books"                         # WebDAV 源文件夹路径（相对于 syncPath）
+  sourcePath: "/books"                         # WebDAV 源文件夹路径（服务器根下的绝对路径，不是相对 syncPath）
   maxFiles: 0                                  # 最大处理文件数（0 表示处理全部）
   skipProcessed: true                          # 是否跳过已处理的文件
   order: "sequential"                          # 处理顺序: sequential, random

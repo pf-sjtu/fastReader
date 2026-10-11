@@ -166,3 +166,13 @@ class TestJsNumber:
 
     def test_iso_now(self):
         assert js_iso_now().endswith("Z")
+
+
+def test_save_to_file_writes_lf_even_on_windows(tmp_path):
+    """Windows 的 write_text 默认写 CRLF，会让 Web 端按 \n\n 解析章节失败（真实联调发现）。"""
+    from unittest.mock import MagicMock
+
+    from src.cli.formatter import ResultFormatter
+
+    path = ResultFormatter(MagicMock()).save_to_file("# 标题\n\n## 章节摘要\n\n### 一\n\n正文\n", str(tmp_path), "a.md")
+    assert b"\r" not in Path(path).read_bytes()

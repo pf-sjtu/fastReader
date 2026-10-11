@@ -171,7 +171,7 @@ class ResultFormatter:
         output_path.mkdir(parents=True, exist_ok=True)
 
         file_path = output_path / file_name
-        file_path.write_text(content, encoding='utf-8')
+        file_path.write_text(content, encoding='utf-8', newline='\n')  # Windows 默认写 CRLF，Web 端解析章节依赖 LF
 
         self.logger.debug_log(f"保存文件: {file_path}")
         return str(file_path)
@@ -247,7 +247,7 @@ class ResultFormatter:
 
         file_name = f"batch_report_{datetime.now().strftime('%Y%m%d')}.md"
         file_path = log_path / file_name
-        file_path.write_text(content, encoding='utf-8')
+        file_path.write_text(content, encoding='utf-8', newline='\n')  # Windows 默认写 CRLF，Web 端解析章节依赖 LF
 
         return str(file_path)
 

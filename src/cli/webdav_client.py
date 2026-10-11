@@ -40,6 +40,22 @@ except ImportError:
         """webdav4 未安装时的占位。"""
 
 
+def _patch_propfind_defaults(client: Any) -> None:
+    """修正 webdav4 propfind 的两个对真实服务器不友好的默认值（仅作用于这一个实例）。
+
+    1. follow_redirects=False：InfiniCLOUD 等对「不带尾斜杠的目录」返回 301（带斜杠版本），
+       exists("/dir") 会抛 HTTPError(301)、连接直接失败 → 默认跟随重定向。
+    2. 不带 Depth 头：按 RFC 4918 缺省为 infinity，服务器对集合通常拒绝（403）→ 默认 Depth: 0。
+    """
+    propfind = client.propfind
+
+    def wrapped(path, data=None, headers=None, follow_redirects=True):
+        merged = {"Depth": "0", **(headers or {})}
+        return propfind(path, data, merged, follow_redirects)
+
+    client.propfind = wrapped
+
+
 # WebDAV 默认重试：比 AI 短（3 次，5/10/20 秒 + 抖动）
 DEFAULT_WEBDAV_RETRY = RetryPolicy(max_retries=3, delays=[5, 10, 20])
 
@@ -101,6 +117,7 @@ class WebDAVClientWrapper:
             self.client = _WebDAVClient(
                 server_url, auth=(self.config.username, self.config.password), retry=False
             )
+            _patch_propfind_defaults(self.client)
 
             # 测试连接 - 检查同步路径是否存在（带重试）
             sync_path = remote_join(self.config.syncPath, "")

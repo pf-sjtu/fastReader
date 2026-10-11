@@ -353,3 +353,13 @@ describe('统一格式 Markdown 测试', () => {
     })
   })
 })
+
+describe('CRLF 换行（Windows CLI 产物 / 编辑器保存）', () => {
+  it('与 LF 版本解析结果一致，章节不丢失', () => {
+    const lf = '# 书\n\n## 全书总结\n\n总结正文\n\n## 章节关联分析\n\n关联正文\n\n## 章节摘要\n\n### 第一章\n\n摘要一\n\n### 第二章\n\n摘要二\n'
+    const a = parseUnifiedMarkdown(lf)
+    const b = parseUnifiedMarkdown(lf.replace(/\n/g, '\r\n'))
+    expect(b.data.chapters.map((c) => c.title)).toEqual(['第一章', '第二章'])
+    expect(b.data).toEqual(a.data)
+  })
+})

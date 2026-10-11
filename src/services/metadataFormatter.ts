@@ -534,8 +534,9 @@ export function parseUnifiedMarkdown(content: string): {
   data: UnifiedBookSummaryData
 } {
   // 解析元数据
+  content = content.replace(/\r\n?/g, '\n') // CRLF（Windows 编辑器 / 旧版 CLI 产物）会让下方依赖 \n\n 的正则失效
   const metadata = parseMetadataFromContent(content)
-  
+
   // 移除元数据，获取纯内容
   const cleanContent = stripMetadataFromContent(content)
   
