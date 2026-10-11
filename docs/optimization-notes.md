@@ -33,4 +33,6 @@
 
 ## 包管理
 
-- 仓库同时可能存在 `package-lock.json` 与 `pnpm-lock.yaml`；推荐团队统一一种（Agents 偏好 **pnpm**），避免交叉 `install`。
+- 统一使用 **pnpm**（`packageManager` 字段锁定版本），只提交 `pnpm-lock.yaml`；`package-lock.json` 已忽略
+- `pnpm build` = `tsc -b`（真实类型检查）+ `vite build`；`pnpm typecheck` 单独跑类型检查
+- vite 配置只保留根目录 `vite.config.ts` 一份

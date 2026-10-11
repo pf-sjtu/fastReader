@@ -1,5 +1,4 @@
-import { defineConfig, type ViteDevServer } from 'vite'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import { defineConfig } from 'vite'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import react from '@vitejs/plugin-react-swc'
@@ -26,6 +25,9 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Rollup 的 CJS 互操作 helper 必须独立成块：否则会被分进首个 CJS 依赖（cytoscape）的 chunk，
+          // 导致所有首屏 chunk 静态依赖它，cytoscape 的懒加载失效
+          if (id.includes("commonjsHelpers")) return "cjs-helpers"
           if (!id.includes("node_modules")) return
           if (id.includes("cytoscape")) return "cytoscape"
           if (id.includes("pdfjs-dist")) return "pdfjs"
@@ -109,19 +111,5 @@ export default defineConfig({
       }
     }
   },
-  // 添加静态文件处理配置
   publicDir: 'public',
-  // 确保 favicon.ico 请求被正确处理
-  configureServer: (server: ViteDevServer) => {
-    server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
-      if (req.url === '/favicon.ico') {
-        // 重定向到 SVG favicon
-        res.statusCode = 302;
-        res.setHeader('Location', '/favicon.svg');
-        res.end();
-        return;
-      }
-      next();
-    });
-  }
 })

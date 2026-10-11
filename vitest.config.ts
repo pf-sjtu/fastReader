@@ -1,5 +1,5 @@
 import { defineConfig, mergeConfig } from 'vitest/config'
-import viteConfig from './config/vite.config'
+import viteConfig from './vite.config'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 
