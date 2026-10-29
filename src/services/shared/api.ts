@@ -154,8 +154,19 @@ export const sharedApi = {
     return (await response.json()) as SectionSnapshot<T>
   },
 
-  async catalog(): Promise<unknown> {
+  /** 服务商预设（~15KB）；元数据请用 catalogLookup 按需查询 */
+  async catalogPresets(): Promise<{ presets: Array<{ id: string; name: string; api: string; modelCount: number }>; degraded?: boolean }> {
     const response = await request('/api/catalog', { headers: { Accept: 'application/json' } })
+    return await response.json()
+  },
+
+  /** 只查这些模型的元数据（服务端合并 models.dev + OpenRouter + LiteLLM） */
+  async catalogLookup(ids: string[], catalogId?: string): Promise<{ models: Record<string, unknown>; degraded?: boolean }> {
+    const response = await request('/api/catalog/lookup', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ ids, ...(catalogId ? { catalogId } : {}) }),
+    })
     return await response.json()
   },
 

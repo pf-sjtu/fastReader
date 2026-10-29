@@ -32,6 +32,8 @@ export interface ProviderModelMeta {
   outputCost?: number
   reasoning?: boolean
   temperature?: boolean
+  /** 支持 OpenAI 风格的 reasoning_effort 参数（来源：OpenRouter supported_parameters） */
+  reasoningEffort?: boolean
 }
 
 /**
@@ -45,6 +47,8 @@ export interface ProviderModel {
   source: 'auto' | 'manual'
   /** 覆盖全局默认温度 */
   temperature?: number
+  /** 覆盖全局默认思考强度 */
+  reasoningEffort?: ReasoningEffort
   meta?: ProviderModelMeta
 }
 
@@ -69,13 +73,30 @@ export interface ProviderEntry {
   models: ProviderModel[]
   /** 上次从服务商拉取模型列表的时间 */
   modelsFetchedAt?: string
+  /**
+   * 自动同步时的模型过滤（前缀或 /正则/）。聚合网关常有几百个模型，只想要其中一类时用它，
+   * 例如 navira 只要转接商汤的模型：`{ include: ['sensenova/'] }`
+   */
+  modelFilter?: { include?: string[]; exclude?: string[] }
 }
+
+/**
+ * 思考强度：
+ * - auto：不发任何参数，由服务商默认决定（兼容性最好）
+ * - off / low / medium / high：OpenAI 兼容端点映射为 reasoning_effort（off→minimal），
+ *   Anthropic 映射为 thinking.budget_tokens，Gemini 映射为 thinkingBudget
+ * 服务商不支持时自动去掉参数重试一次，不会因此失败。
+ */
+export type ReasoningEffort = 'auto' | 'off' | 'low' | 'medium' | 'high'
+export const REASONING_EFFORTS: ReasoningEffort[] = ['auto', 'off', 'low', 'medium', 'high']
 
 /** AI 共享状态：服务商列表 + 当前模型 */
 export interface AIState {
   providers: ProviderEntry[]
   active: { providerId: string; modelId: string }
   defaultTemperature: number
+  /** 全局默认思考强度；缺省 auto */
+  reasoningEffort?: ReasoningEffort
 }
 
 /**
@@ -87,11 +108,18 @@ export interface AIProviderConfig {
   provider: AIProviderType
   /** 服务商 id：请求代理时用于在服务端定位 baseUrl 与凭据 */
   providerId?: string
+  /**
+   * 当前服务商是否已具备可用凭据（服务端已保存密钥，或 Ollama 这类无需密钥的协议）。
+   * 运行时视图不含明文 apiKey——UI 判断「是否已配置」必须看这个字段，不能看 apiKey。
+   */
+  hasCredentials?: boolean
   /** 仅在直连模式（Ollama）或测试中使用 */
   apiKey?: string
   apiUrl: string
   model: string
   temperature: number
+  /** 本次运行生效的思考强度（模型级覆盖 > 全局默认 > auto） */
+  reasoningEffort?: ReasoningEffort
   proxyUrl?: string
   proxyEnabled?: boolean
   /** 历史字段：旧配置的附加项，导入时忽略 */

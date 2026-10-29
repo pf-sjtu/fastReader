@@ -9,6 +9,7 @@
  */
 import { create } from 'zustand'
 import type {
+  ReasoningEffort,
   AIProtocol,
   AIProviderConfig,
   AIState,
@@ -47,6 +48,7 @@ export interface AIConfigState {
   // 当前模型
   setActiveModel: (providerId: string, modelId: string) => void
   setDefaultTemperature: (temperature: number) => void
+  setReasoningEffort: (effort: ReasoningEffort) => void
 
   // 整体替换（导入 / hydrate / 测试）
   replaceAI: (ai: AIState) => void
@@ -65,7 +67,7 @@ export function computeAIConfig(ai: AIState): AIProviderConfig {
     ai.providers.find((p) => p.models.some((m) => m.enabled)) ??
     ai.providers[0]
   if (!provider) {
-    return { provider: 'openai', apiUrl: '', model: '', temperature: ai.defaultTemperature }
+    return { provider: 'openai', apiUrl: '', model: '', temperature: ai.defaultTemperature, hasCredentials: false }
   }
 
   const model =
@@ -79,6 +81,9 @@ export function computeAIConfig(ai: AIState): AIProviderConfig {
     apiUrl: provider.baseUrl,
     model: model?.id ?? '',
     temperature: model?.temperature ?? ai.defaultTemperature ?? DEFAULT_TEMPERATURE,
+    reasoningEffort: model?.reasoningEffort ?? ai.reasoningEffort ?? 'auto',
+    // Ollama 本机直连不需要密钥；其它协议看服务端是否已保存（或本会话待提交）
+    hasCredentials: provider.type === 'ollama' || Boolean(provider.apiKey?.hasSecret) || pendingSecrets.has(provider.id),
   }
 }
 
@@ -154,6 +159,7 @@ export const useAIConfigStore = create<AIConfigState>()((set, get) => {
         ...(entry.apiKey ? { apiKey: entry.apiKey } : {}),
         ...(entry.catalogId ? { catalogId: entry.catalogId } : {}),
         ...(entry.modelsFetchedAt ? { modelsFetchedAt: entry.modelsFetchedAt } : {}),
+        ...(entry.modelFilter ? { modelFilter: entry.modelFilter } : {}),
         models: entry.models ?? [],
       }
       const ai = get().ai
@@ -270,6 +276,11 @@ export const useAIConfigStore = create<AIConfigState>()((set, get) => {
       commit({ ...ai, defaultTemperature: temperature })
     },
 
+    setReasoningEffort: (effort) => {
+      const ai = get().ai
+      commit({ ...ai, reasoningEffort: effort })
+    },
+
     replaceAI: (ai) => {
       pendingSecrets.clear()
       commit(ai)
@@ -318,6 +329,7 @@ registerSection<AIStateWire>(
         active: data?.active ?? { providerId: '', modelId: '' },
         defaultTemperature:
           typeof data?.defaultTemperature === 'number' ? data.defaultTemperature : DEFAULT_TEMPERATURE,
+        ...(data?.reasoningEffort ? { reasoningEffort: data.reasoningEffort } : {}),
       }
       useAIConfigStore.setState(withDerived(ai))
     },

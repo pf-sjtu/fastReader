@@ -64,10 +64,7 @@ export function WizardPresetStep({ catalog, onPick }: WizardPresetStepProps) {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
 
-  const presets: CatalogPreset[] = useMemo(
-    () => (catalog.lib && catalog.catalog ? catalog.lib.listPresets(catalog.catalog) : []),
-    [catalog.lib, catalog.catalog]
-  )
+  const presets: CatalogPreset[] = catalog.presets
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     const list = q

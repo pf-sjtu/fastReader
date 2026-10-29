@@ -718,7 +718,7 @@
     "deleteTitle": "删除服务商？",
     "deleted": "已删除「{{name}}」",
     "introOne": "一条配置 = 一个服务商（地址 + 密钥），其下可以启用多个模型。",
-    "introFetch": "填写地址与密钥后点「获取模型」，再勾选要用的模型；拉取失败时也可以手动填写模型 ID。",
+    "introFetch": "保存后自动拉取模型列表、逐个实测可用性，并从 models.dev / OpenRouter / LiteLLM 补全上下文与价格；不可用的模型会自动停用并注明原因。",
     "introSecret": "密钥只保存在服务端，浏览器只知道「已配置」；AI 请求经服务端代理转发（Ollama 除外，它由浏览器直连本机）。",
     "activeModel": "当前模型",
     "selectModel": "选择模型",
@@ -826,9 +826,16 @@
       "presetModels": "{{count}} 个模型",
       "morePresets": "还有 {{count}} 家，请输入关键字缩小范围",
       "fetched": "获取到 {{count}} 个模型",
-      "moreModels": "还有 {{count}} 个，请输入关键字筛选"
+      "moreModels": "还有 {{count}} 个，请输入关键字筛选",
+      "modelInclude": "模型筛选（可选）",
+      "modelIncludePlaceholder": "例如 sensenova/ 或 /flash$/",
+      "modelIncludeHint": "聚合网关模型很多时用：只同步匹配这些前缀或 /正则/ 的模型，逗号分隔；留空则同步全部对话模型。"
     },
-    "refreshDone": "「{{name}}」共 {{count}} 个模型"
+    "refreshDone": "「{{name}}」共 {{count}} 个模型",
+    "sync": {
+      "done": "「{{name}}」模型已同步：{{usable}}/{{total}} 个可用",
+      "disabled": "已停用：{{list}}"
+    }
   },
   "batch": {
     "cacheUnknown": "无法确认云端缓存状态",
@@ -1053,5 +1060,21 @@
     "hasPassword": "含密码",
     "noPassword": "无密码",
     "apply": "确认导入"
+  },
+  "modelSwitcher": {
+    "trigger": "当前模型：{{model}}，点击切换",
+    "none": "未选择模型",
+    "search": "搜索模型或服务商",
+    "models": "可用模型",
+    "reasoning": "推理模型",
+    "effortLabel": "思考强度",
+    "effortHint": "越强越慢、越费 token。「自动」交给服务商默认；不支持的模型会自动忽略该设置。",
+    "effort": {
+      "auto": "自动",
+      "off": "关闭",
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    }
   }
 }

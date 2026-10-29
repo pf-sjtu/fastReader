@@ -718,7 +718,7 @@
     "deleteTitle": "Delete provider?",
     "deleted": "Deleted \"{{name}}\"",
     "introOne": "One entry = one provider (base URL + key) that can enable many models.",
-    "introFetch": "Enter the URL and key, click \"Fetch models\", then tick the models you want. If fetching fails you can type model IDs by hand.",
+    "introFetch": "After saving, the model list is fetched automatically, each model is probed, and context/pricing is filled from models.dev / OpenRouter / LiteLLM. Unusable models are disabled with the reason shown.",
     "introSecret": "Keys are stored on the server only; the browser just knows a key is set. AI requests go through the server proxy (except Ollama, which the browser calls directly on your machine).",
     "activeModel": "Current model",
     "selectModel": "Select a model",
@@ -826,9 +826,16 @@
       "presetModels": "{{count}} models",
       "morePresets": "{{count}} more, type to narrow down",
       "fetched": "Fetched {{count}} models",
-      "moreModels": "{{count}} more, type to filter"
+      "moreModels": "{{count}} more, type to filter",
+      "modelInclude": "Model filter (optional)",
+      "modelIncludePlaceholder": "e.g. sensenova/ or /flash$/",
+      "modelIncludeHint": "For aggregator gateways: only sync models matching these prefixes or /regex/, comma separated. Leave empty to sync all chat models."
     },
-    "refreshDone": "\"{{name}}\": {{count}} models"
+    "refreshDone": "\"{{name}}\": {{count}} models",
+    "sync": {
+      "done": "\"{{name}}\" models synced: {{usable}}/{{total}} usable",
+      "disabled": "Disabled: {{list}}"
+    }
   },
   "batch": {
     "cacheUnknown": "Couldn't check the cloud cache",
@@ -1053,5 +1060,21 @@
     "hasPassword": "with password",
     "noPassword": "no password",
     "apply": "Import"
+  },
+  "modelSwitcher": {
+    "trigger": "Current model: {{model}}. Click to switch",
+    "none": "No model selected",
+    "search": "Search models or providers",
+    "models": "Available models",
+    "reasoning": "Reasoning model",
+    "effortLabel": "Reasoning effort",
+    "effortHint": "Higher is slower and uses more tokens. \"Auto\" uses the provider default; unsupported models ignore this setting.",
+    "effort": {
+      "auto": "Auto",
+      "off": "Off",
+      "low": "Low",
+      "medium": "Med",
+      "high": "High"
+    }
   }
 }

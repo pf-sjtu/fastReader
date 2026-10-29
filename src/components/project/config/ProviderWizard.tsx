@@ -31,14 +31,14 @@ import {
   reconcileActiveModel,
 } from './provider-utils'
 
-/** 首次获取时模型不多就默认全选；多（网关常见上百个）则让用户挑 */
+/** 预览时模型不多就默认全选（最终列表以保存后的自动同步为准） */
 const AUTO_SELECT_LIMIT = 30
 
 type Step = 1 | 2
 
 function initialDraft(provider: ProviderEntry | undefined): WizardDraft {
   if (!provider) {
-    return { type: 'openai', name: '', baseUrl: '', apiKey: '', modelIds: [], selected: new Set(), manualIds: '' }
+    return { type: 'openai', name: '', baseUrl: '', apiKey: '', modelIds: [], selected: new Set(), manualIds: '', modelInclude: '' }
   }
   return {
     type: provider.type,
@@ -49,6 +49,7 @@ function initialDraft(provider: ProviderEntry | undefined): WizardDraft {
     modelIds: provider.models.map((m) => m.id),
     selected: new Set(provider.models.map((m) => m.id)),
     manualIds: '',
+    modelInclude: (provider.modelFilter?.include ?? []).join(', '),
   }
 }
 
@@ -63,9 +64,11 @@ interface ProviderWizardProps {
   /** 编辑时传入；不传为新建 */
   provider?: ProviderEntry
   catalog: CatalogState
+  /** 保存后回调：父组件据此触发模型自动同步（拉 /models → 实测 → 补元数据） */
+  onSaved?: (providerId: string) => void
 }
 
-export function ProviderWizard({ open, onOpenChange, provider, catalog }: ProviderWizardProps) {
+export function ProviderWizard({ open, onOpenChange, provider, catalog, onSaved }: ProviderWizardProps) {
   const { t } = useTranslation()
   const isEdit = !!provider
   const [step, setStep] = useState<Step>(isEdit ? 2 : 1)
@@ -160,6 +163,10 @@ export function ProviderWizard({ open, onOpenChange, provider, catalog }: Provid
       baseUrl: draft.baseUrl.trim().replace(/\/+$/, ''),
       ...(draft.catalogId ? { catalogId: draft.catalogId } : {}),
       ...(fetchedAt ? { modelsFetchedAt: fetchedAt } : {}),
+      modelFilter: (() => {
+        const include = draft.modelInclude.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean)
+        return include.length > 0 ? { include } : undefined
+      })(),
     }
 
     let id: string
@@ -170,19 +177,14 @@ export function ProviderWizard({ open, onOpenChange, provider, catalog }: Provid
       id = store.addProvider({ ...fields, models })
     }
 
-    // 补齐 models.dev 元数据（目录未加载时跳过，下次刷新模型时再补）
-    const saved = useAIConfigStore.getState().getProvider(id)
-    if (saved && catalog.lib && catalog.catalog) {
-      store.setProviderModels(id, catalog.lib.enrichProviderMeta(catalog.catalog, saved).models)
-    }
-
     const apiKey = draft.apiKey.trim()
     if (apiKey && draft.type !== 'ollama') store.setProviderSecret(id, apiKey)
 
     reconcileActiveModel()
     toast.success(isEdit ? t('aiProvider.updated') : t('aiProvider.created'))
-    if (ids.length === 0) toast.info(t('aiProvider.wizard.savedWithoutModels'))
     onOpenChange(false)
+    // 模型列表交给自动同步：用户不必在向导里逐个勾选
+    onSaved?.(id)
   }
 
   // 有未保存改动时关闭（Esc / 点遮罩 / 取消）需二次确认

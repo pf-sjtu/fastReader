@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import { ModelSwitcher } from './ModelSwitcher'
 import { Badge } from '@/components/ui/badge'
 import {
   Settings,
@@ -9,8 +10,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Loader2,
-  Bot,
-  Zap,
   History,
   ExternalLink
 } from 'lucide-react'
@@ -39,8 +38,6 @@ interface UnifiedStatusBarProps {
   processing?: boolean
   progress?: number
   currentStep?: string
-  currentModel?: string
-  hasApiKey?: boolean
   processingMode?: 'summary' | 'mindmap' | 'combined-mindmap'
   onToggleView?: () => void
   onLoadFromHistory?: (record: ProcessingHistoryRecord) => Promise<boolean>
@@ -63,8 +60,6 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
   processing = false,
   progress = 0,
   currentStep = '',
-  currentModel = '',
-  hasApiKey = true,
   processingMode,
   onToggleView,
   onLoadFromHistory,
@@ -84,24 +79,6 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
   // 最近 2 条记录
   const recentRecords = records.slice(0, 2)
   const hasMore = records.length > 2
-
-  const formatTokenCount = (tokens: number) => {
-    if (tokens >= 1000000) {
-      return `${(tokens / 1000000).toFixed(1)}M`
-    } else if (tokens >= 1000) {
-      return `${(tokens / 1000).toFixed(1)}K`
-    }
-    return tokens.toString()
-  }
-
-  const getModelIcon = (model: string) => {
-    if (model.toLowerCase().includes('gemini')) {
-      return <Bot className="h-3 w-3" />
-    } else if (model.toLowerCase().includes('gpt')) {
-      return <Zap className="h-3 w-3" />
-    }
-    return <Brain className="h-3 w-3" />
-  }
 
   const handleHistorySelect = async (record: ProcessingHistoryRecord) => {
     if (!onLoadFromHistory) return
@@ -182,17 +159,8 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
               </Button>
 
               <div className="flex items-center gap-2 sm:hidden">
-                {currentModel && (
-                  <Badge variant="secondary" className="flex items-center gap-1 max-w-[10rem]">
-                    {getModelIcon(currentModel)}
-                    <span className="text-xs truncate">{currentModel}</span>
-                    {tokenUsage > 0 && (
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        ({formatTokenCount(tokenUsage)})
-                      </span>
-                    )}
-                  </Badge>
-                )}
+                {/* 模型徽章即切换器：换模型 / 调思考强度 都在这里 */}
+                <ModelSwitcher disabled={processing} tokenUsage={tokenUsage} className="max-w-[11rem]" />
                 {processing && (
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 )}
@@ -320,22 +288,8 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                   {MODE_LABEL_KEY[processingMode] ? t(MODE_LABEL_KEY[processingMode]) : processingMode}
                 </Badge>
               )}
-              {!hasApiKey && (
-                <Badge variant="destructive" className="text-xs font-normal">
-                  {t('statusBar.noApiKey')}
-                </Badge>
-              )}
-              {currentModel && (
-                <Badge variant="secondary" className="flex items-center gap-1 max-w-[14rem]">
-                  {getModelIcon(currentModel)}
-                  <span className="text-xs truncate">{currentModel}</span>
-                  {tokenUsage > 0 && (
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      ({formatTokenCount(tokenUsage)})
-                    </span>
-                  )}
-                </Badge>
-              )}
+              {/* 未配置密钥时切换器本身会标红并显示提示，不再单独放一个红色徽章 */}
+              <ModelSwitcher disabled={processing} tokenUsage={tokenUsage} />
 
               {processing && (
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />

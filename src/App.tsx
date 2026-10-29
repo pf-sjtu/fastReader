@@ -32,7 +32,6 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { UnifiedStatusBar } from '@/components/UnifiedStatusBar'
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator'
-import { ActiveModelSelect } from '@/components/project/config/ActiveModelSelect'
 import { ChapterSummaryNavigation } from '@/components/ChapterSummaryNavigation'
 import { TimelineNavigation } from '@/components/TimelineNavigation'
 
@@ -428,8 +427,6 @@ function App() {
           processing={processing}
           progress={progress}
           currentStep={currentStep}
-          currentModel={aiConfig.model}
-          hasApiKey={Boolean(aiConfig.apiKey?.trim())}
           processingMode={processingMode}
           onToggleView={handleToggleView}
           onLoadFromHistory={handleLoadFromHistory}
@@ -441,11 +438,6 @@ function App() {
           }
           onAbortToConfig={handleAbortToConfig}
         />
-
-        {/* 当前模型快捷切换：处理页也能直接换模型，不必进设置 */}
-        <div className="flex items-center justify-end">
-          <ActiveModelSelect className="max-w-full sm:max-w-xs" disabled={processing} />
-        </div>
 
         {/* 批量处理队列面板 */}
         <ErrorBoundary section={t('errorBoundary.batchQueue')}>

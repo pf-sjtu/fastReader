@@ -118,7 +118,10 @@ export function useProcessingRun(deps: ProcessingRunDeps) {
       const total = chapters.length
       const cache = await createLocalPipelineCache({
         bookId: (await getBookId()) ?? '',
-        modelId: `${aiConfig.provider}:${aiConfig.model}`,
+        // 思考强度会改变输出：auto 之外的取值进入缓存键，切换后不会命中旧结果
+        modelId: `${aiConfig.provider}:${aiConfig.model}${
+          aiConfig.reasoningEffort && aiConfig.reasoningEffort !== 'auto' ? `@${aiConfig.reasoningEffort}` : ''
+        }`,
         outputLanguage: processingOptions.outputLanguage,
         bookType: processingOptions.bookType,
         promptConfig: useConfigStore.getState().promptConfig,

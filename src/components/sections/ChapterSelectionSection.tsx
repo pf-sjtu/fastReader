@@ -44,7 +44,8 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
   onStartProcessing
 }: ChapterSelectionSectionProps) {
   const { t } = useTranslation()
-  const apiKey = useConfigStore(state => state.aiConfig.apiKey)
+  // 密钥只在服务端：这里看「当前模型是否有可用凭据」，而不是明文 apiKey
+  const hasCredentials = useConfigStore(state => state.aiConfig.hasCredentials === true && Boolean(state.aiConfig.model))
 
   // 全选模式：'all' = 全选所有, 'filter' = 按字符数筛选, 'range' = 定义首尾章节
   const [selectAllMode, setSelectAllMode] = useState<'all' | 'filter' | 'range'>('all')
@@ -152,7 +153,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
   }, [extractedChapters, selectedChapters])
 
   const handleStartProcessing = () => {
-    if (!apiKey) {
+    if (!hasCredentials) {
       toast.error(t('chapters.apiKeyRequired'), {
         duration: 3000,
         position: 'top-center',

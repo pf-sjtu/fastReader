@@ -103,6 +103,11 @@ class BatchProcessor:
                 print("\n⚠️  未找到可处理的电子书")
                 return BatchResult()
 
+            if self.config.batch.include:
+                wanted = set(self.config.batch.include)
+                books = [b for b in books if b.name in wanted]
+                print(f"   🎯 只处理指定书目: {len(books)}/{len(wanted)} 本")
+
             cached_files = self._load_cached_file_names()
             skipped = 0
             if self.config.batch.skipProcessed and cached_files:
@@ -115,6 +120,9 @@ class BatchProcessor:
             if self.config.batch.order == "random":
                 random.shuffle(books)
                 print("🎲 处理顺序: 随机")
+            elif self.config.batch.order == "smallest-first":
+                books.sort(key=lambda b: (b.size or 0, b.name))
+                print("📏 处理顺序: 小书优先")
             else:
                 books.sort(key=lambda b: b.name)
                 print("📄 处理顺序: 顺序")

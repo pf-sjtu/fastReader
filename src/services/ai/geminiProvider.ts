@@ -7,6 +7,7 @@
 import type { AICallOptions, AIGenerateResult, GenerateContentRequest } from './types'
 import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
+import { geminiReasoningParams, isUnsupportedParamError } from './reasoning'
 
 const DEFAULT_MODEL = 'gemini-2.5-flash'
 
@@ -34,15 +35,24 @@ export class GeminiProvider extends BaseAIProvider {
     const finalPrompt = systemPrompt ? `${prompt}\n\n**${systemPrompt}**` : prompt
 
     const url = `${this.apiUrl.replace(/\/+$/, '')}/models/${encodeURIComponent(this.model)}:generateContent`
-    const response = await this.fetchWithProxy(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
-        generationConfig: { temperature: temperature ?? this.temperature },
-      }),
-      signal: opts?.signal,
-    })
+    const thinking = geminiReasoningParams(this.config.reasoningEffort)
+    const thinkingOn = Object.keys(thinking).length > 0
+    const send = (withThinking: boolean) =>
+      this.fetchWithProxy(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
+          generationConfig: { temperature: temperature ?? this.temperature, ...(withThinking ? thinking : {}) },
+        }),
+        signal: opts?.signal,
+      })
+
+    let response = await send(thinkingOn)
+    if (thinkingOn && !response.ok) {
+      const body = await response.clone().text().catch(() => '')
+      if (isUnsupportedParamError(response.status, body)) response = await send(false)
+    }
 
     if (!response.ok) {
       const error = await this.createHttpError(response, this.name)

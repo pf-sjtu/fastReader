@@ -125,12 +125,20 @@ class AIClient:
         self.exchange_rate = exchange_rate
 
     def get_pricing(self) -> Optional[dict]:
-        """获取模型定价；未登记返回 None（不再拿别的模型顶替）"""
+        """获取模型定价：配置里的单价（2.0.0 的 models[].meta）优先，其次内置表；未登记返回 None"""
+        inp = getattr(self.config, 'inputCost', None)
+        out = getattr(self.config, 'outputCost', None)
+        if isinstance(inp, (int, float)) and isinstance(out, (int, float)):
+            return {'input': float(inp), 'output': float(out)}
         return MODEL_PRICING.get(self.model)
 
     def calculate_cost(self, input_tokens: int, output_tokens: int) -> tuple:
-        """计算处理费用（使用配置的汇率）"""
-        return calculate_cost(self.model, input_tokens, output_tokens, self.exchange_rate)
+        """计算处理费用（使用配置的汇率）；优先用配置里的单价"""
+        pricing = self.get_pricing()
+        if not pricing:
+            return 0.0, 0.0
+        usd = (pricing['input'] / 1_000_000) * input_tokens + (pricing['output'] / 1_000_000) * output_tokens
+        return round(usd, 5), round(usd * self.exchange_rate, 5)
 
     # ---- 底层调用 ----
 

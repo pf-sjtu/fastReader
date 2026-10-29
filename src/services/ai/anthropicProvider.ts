@@ -8,6 +8,7 @@ import type { AICallOptions, AIGenerateResult, AIProviderConfig, AIServiceOption
 import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
+import { anthropicReasoningParams, isUnsupportedParamError } from './reasoning'
 
 /** Anthropic 要求显式 max_tokens；章节摘要/导图 JSON 在 8K 内足够 */
 const DEFAULT_MAX_TOKENS = 8192
@@ -39,18 +40,32 @@ export class AnthropicProvider extends BaseAIProvider {
     const { prompt, systemPrompt, temperature } = request
     const url = `${this.apiUrl}/messages`
 
-    const response = await this.fetchWithProxy(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: this.model,
-        max_tokens: DEFAULT_MAX_TOKENS,
-        ...(systemPrompt ? { system: systemPrompt } : {}),
-        messages: [{ role: 'user', content: prompt }],
-        temperature: temperature ?? this.temperature,
-      }),
-      signal: opts?.signal,
-    })
+    const reasoning = anthropicReasoningParams(this.config.reasoningEffort, DEFAULT_MAX_TOKENS)
+    const thinkingOn = Object.keys(reasoning.params).length > 0
+    const send = (withThinking: boolean) =>
+      this.fetchWithProxy(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.model,
+          max_tokens: withThinking ? reasoning.maxTokens : DEFAULT_MAX_TOKENS,
+          ...(systemPrompt ? { system: systemPrompt } : {}),
+          messages: [{ role: 'user', content: prompt }],
+          // 开启 thinking 时 Anthropic 只接受 temperature=1
+          temperature: withThinking ? 1 : (temperature ?? this.temperature),
+          ...(withThinking ? reasoning.params : {}),
+        }),
+        signal: opts?.signal,
+      })
+
+    let response = await send(thinkingOn)
+    if (thinkingOn && !response.ok) {
+      const body = await response.clone().text().catch(() => '')
+      if (isUnsupportedParamError(response.status, body)) {
+        logger.warn(`[${this.name}] ${this.model} 不支持 thinking，已按默认重试`)
+        response = await send(false)
+      }
+    }
 
     if (!response.ok) {
       const error = await this.createHttpError(response, this.name)

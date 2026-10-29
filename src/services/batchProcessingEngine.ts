@@ -69,9 +69,9 @@ export class BatchProcessingEngine {
   /** 为单个文件创建 AI 服务（局部实例，避免文件级并行时 token 计数串号） */
   private createAIService(onTokenUsage?: (tokens: number) => void): AIService {
     const { aiConfig, aiServiceOptions } = useConfigStore.getState()
-    const { provider, apiKey, apiUrl, model, temperature, proxyUrl, proxyEnabled } = aiConfig
+    // 必须带上 providerId：浏览器内请求走 /api/ai，服务端靠它定位 baseUrl 与密钥
     return new AIService(
-      { provider, apiKey, apiUrl, model, temperature, proxyUrl, proxyEnabled },
+      { ...aiConfig },
       () => useConfigStore.getState().promptConfig,
       { maxRetries: aiServiceOptions.maxRetries, baseRetryDelay: aiServiceOptions.baseRetryDelay, onTokenUsage }
     )
@@ -266,7 +266,10 @@ export class BatchProcessingEngine {
         .map(({ chapter, n }) => ({ id: chapter.id || `chapter-${n}`, title: chapter.title, content: chapter.content }))
       const { aiConfig, promptConfig } = useConfigStore.getState()
       const cache = await createBatchCache(download.data, {
-        modelId: `${aiConfig.provider}:${aiConfig.model}`,
+        // 思考强度会改变输出：auto 之外的取值进入缓存键，切换后不会命中旧结果
+        modelId: `${aiConfig.provider}:${aiConfig.model}${
+          aiConfig.reasoningEffort && aiConfig.reasoningEffort !== 'auto' ? `@${aiConfig.reasoningEffort}` : ''
+        }`,
         outputLanguage: processingOptions.outputLanguage,
         bookType: processingOptions.bookType,
         promptConfig,

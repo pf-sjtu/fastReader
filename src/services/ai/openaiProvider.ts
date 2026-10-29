@@ -13,6 +13,7 @@ import type {
 import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
+import { isUnsupportedParamError, openAIReasoningParams } from './reasoning'
 
 export class OpenAIProvider extends BaseAIProvider {
   readonly type: AIProviderConfig['provider']
@@ -54,19 +55,32 @@ export class OpenAIProvider extends BaseAIProvider {
     messages.push({ role: 'user', content: prompt })
 
     const url = `${this.apiUrl}/chat/completions`
-    const response = await this.fetchWithProxy(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.config.apiKey}`
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        temperature: temperature ?? this.temperature
-      }),
-      signal: opts?.signal
-    })
+    const send = (withReasoning: boolean) =>
+      this.fetchWithProxy(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.config.apiKey}`
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          temperature: temperature ?? this.temperature,
+          ...(withReasoning ? openAIReasoningParams(this.config.reasoningEffort) : {})
+        }),
+        signal: opts?.signal
+      })
+
+    const wantsReasoning = Object.keys(openAIReasoningParams(this.config.reasoningEffort)).length > 0
+    let response = await send(wantsReasoning)
+    // 服务商不认识 reasoning_effort：去掉参数重试一次，而不是让整章失败
+    if (wantsReasoning && !response.ok) {
+      const body = await response.clone().text().catch(() => '')
+      if (isUnsupportedParamError(response.status, body)) {
+        logger.warn(`[${this.name}] ${this.model} 不支持思考强度参数，已按默认重试`)
+        response = await send(false)
+      }
+    }
 
     if (!response.ok) {
       const error = await this.createHttpError(response, this.name)

@@ -24,7 +24,8 @@ import { ProviderWizard } from './config/ProviderWizard'
 import { TemperatureInput } from './config/TemperatureInput'
 import { useAIConnectionTest } from './config/useAIConnectionTest'
 import { useCatalog } from './config/useCatalog'
-import { describeFetchError, fetchProviderModelIds, mergeFetchedModels, reconcileActiveModel } from './config/provider-utils'
+import { useAutoRefreshStaleProviders, useModelSync } from './config/useModelSync'
+import { reconcileActiveModel } from './config/provider-utils'
 
 /** 向导状态：每次打开换 key，让草稿从头初始化 */
 interface WizardState {
@@ -120,13 +121,16 @@ export function AIProviderConfig() {
   const providers = useAIConfigStore((s) => s.ai.providers)
   const active = useAIConfigStore((s) => s.ai.active)
   const defaultTemperature = useAIConfigStore((s) => s.ai.defaultTemperature)
-  // 面板挂载（即页签被打开）时才拉取目录
+  // 面板挂载（即页签被打开）时才拉取预设列表
   const catalog = useCatalog()
+  // 模型自动同步：/models → 实测 → 多数据源元数据；超过 7 天没同步的服务商在后台自动刷新
+  const modelSync = useModelSync()
+  useAutoRefreshStaleProviders(modelSync.sync)
 
   const [wizard, setWizard] = useState<WizardState | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<ProviderEntry | null>(null)
-  const [refreshing, setRefreshing] = useState<ReadonlySet<string>>(new Set())
+  const refreshing = modelSync.syncing
 
   const openWizard = (providerId?: string) => {
     setWizard((w) => ({ key: (w?.key ?? 0) + 1, providerId }))
@@ -142,33 +146,8 @@ export function AIProviderConfig() {
     useAIConfigStore.getState().setActiveModel(provider.id, model.id)
   }
 
-  const handleRefresh = async (provider: ProviderEntry) => {
-    setRefreshing((s) => new Set(s).add(provider.id))
-    try {
-      const ids = await fetchProviderModelIds({ providerId: provider.id, type: provider.type, baseUrl: provider.baseUrl })
-      const store = useAIConfigStore.getState()
-      const current = store.getProvider(provider.id)
-      if (!current) return
-      const { models, added, removed } = mergeFetchedModels(current.models, ids)
-      const enriched =
-        catalog.lib && catalog.catalog
-          ? catalog.lib.enrichProviderMeta(catalog.catalog, { ...current, models }).models
-          : models
-      store.updateProvider(provider.id, { models: enriched, modelsFetchedAt: new Date().toISOString() })
-      reconcileActiveModel()
-      toast.success(t('aiProvider.refreshDone', { name: provider.name, count: ids.length }), {
-        description: t('aiProvider.refreshDiff', { added, removed }),
-      })
-    } catch (error) {
-      toast.error(t('aiProvider.refreshFailed', { name: provider.name }), { description: describeFetchError(error, t) })
-    } finally {
-      setRefreshing((s) => {
-        const next = new Set(s)
-        next.delete(provider.id)
-        return next
-      })
-    }
-  }
+  // 「刷新模型」就是完整的自动同步（含实测，不可用的模型会自动停用并注明原因）
+  const handleRefresh = (provider: ProviderEntry) => modelSync.sync(provider.id)
 
   const confirmDelete = () => {
     if (!pendingDelete) return
@@ -232,6 +211,7 @@ export function AIProviderConfig() {
           onOpenChange={setWizardOpen}
           provider={editing}
           catalog={catalog}
+          onSaved={(id) => void modelSync.sync(id)}
         />
       )}
 

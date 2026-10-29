@@ -21,6 +21,8 @@ export interface WizardDraft {
   selected: Set<string>
   /** 手动填写的模型 ID（逗号 / 换行分隔） */
   manualIds: string
+  /** 自动同步只保留这些前缀/正则的模型（逗号分隔）；聚合网关常用 */
+  modelInclude: string
 }
 
 export type FetchState =
@@ -107,6 +109,25 @@ export function WizardCredentialsStep({
             placeholder={t('aiProvider.wizard.namePlaceholder')}
             autoComplete="off"
           />
+        </div>
+
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="wizard-model-include" className="text-xs">
+            {t('aiProvider.wizard.modelInclude')}
+          </Label>
+          <Input
+            id="wizard-model-include"
+            value={draft.modelInclude}
+            onChange={(e) => onChange({ modelInclude: e.target.value })}
+            placeholder={t('aiProvider.wizard.modelIncludePlaceholder')}
+            className="font-mono text-sm"
+            autoComplete="off"
+            spellCheck={false}
+            aria-describedby="wizard-model-include-hint"
+          />
+          <p id="wizard-model-include-hint" className="text-xs text-muted-foreground">
+            {t('aiProvider.wizard.modelIncludeHint')}
+          </p>
         </div>
 
         {!isOllama && (

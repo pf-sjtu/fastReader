@@ -152,7 +152,7 @@ describe('渲染隔离：tokenUsage 变化不重渲染结果区', () => {
     act(() =>
       root.render(
         <Profiler id="bar" onRender={spy}>
-          <UnifiedStatusBar currentView="processing" currentModel="gemini-pro" />
+          <UnifiedStatusBar currentView="processing" />
         </Profiler>
       )
     )

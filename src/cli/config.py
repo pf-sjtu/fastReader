@@ -41,6 +41,9 @@ class AIProviderConfig:
     proxyEnabled: bool = False
     customFields: dict = field(default_factory=dict)
     missingEnvVars: list = field(default_factory=list)  # 引用了但未定义的环境变量
+    # 单价（USD / 1M tokens）：2.0.0 配置里来自 models[].meta（models.dev），缺省则查内置表
+    inputCost: Optional[float] = None
+    outputCost: Optional[float] = None
 
 
 @dataclass
@@ -72,7 +75,10 @@ class BatchConfig:
     sourcePath: str = ""
     maxFiles: int = 0
     skipProcessed: bool = True
+    # sequential（按名）/ random / smallest-first（小书先跑：便宜、快，早暴露问题）
     order: str = "sequential"
+    # 只处理这些文件名（精确匹配 basename）；空 = 不过滤。用于试跑指定书目
+    include: list = field(default_factory=list)
     concurrency: int = DEFAULT_CHAPTER_CONCURRENCY  # 章节级并发数
     maxRetries: int = 3
     retryDelays: list = field(default_factory=lambda: [60, 120, 240, 480])
@@ -255,6 +261,7 @@ class ConfigLoader:
                 if (str(provider.get('id') or '') == active_provider
                         and model_id == active_model):
                     current_index = len(providers)
+                meta = model.get('meta') if isinstance(model.get('meta'), dict) else {}
                 providers.append(AIProviderConfig(
                     provider=protocol,
                     apiKey=api_key,
@@ -262,6 +269,8 @@ class ConfigLoader:
                     model=model_id,
                     temperature=float(model.get('temperature', ai.get('defaultTemperature', 0.7)) or 0.7),
                     missingEnvVars=list(missing),
+                    inputCost=meta.get('inputCost') if isinstance(meta.get('inputCost'), (int, float)) else None,
+                    outputCost=meta.get('outputCost') if isinstance(meta.get('outputCost'), (int, float)) else None,
                 ))
 
         if not providers:
@@ -354,6 +363,7 @@ class ConfigLoader:
             skipProcessed=os.environ.get('FASTREADER_SKIP_PROCESSED', str(data.get('skipProcessed', True))).lower() in ('true', '1', 'yes'),
             # 环境变量: FASTREADER_ORDER
             order=os.environ.get('FASTREADER_ORDER', data.get('order', 'sequential')),
+            include=[str(x) for x in (data.get('include') or [])],
             # 环境变量: FASTREADER_CONCURRENCY（章节级并发）
             concurrency=int(os.environ.get('FASTREADER_CONCURRENCY', data.get('concurrency', DEFAULT_CHAPTER_CONCURRENCY))),
             # 环境变量: FASTREADER_MAX_RETRIES
