@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
 import { LoginPage } from './LoginPage'
 import { InitWizard } from '@/components/onboarding/InitWizard'
-import { sharedApi, UnauthorizedError } from '@/services/shared/api'
+import { sharedApi, SESSION_EXPIRED_EVENT, UnauthorizedError } from '@/services/shared/api'
 import { installAutoFlush, loadAll, useSyncStatusStore } from '@/services/shared/sharedState'
 import { logger } from '@/lib/logger'
 
@@ -53,6 +53,13 @@ export function AuthGate({ children }: AuthGateProps) {
       cancelled = true
     }
   }, [bootstrap])
+
+  // 会话失效（改了密码 / 过期 / 登出于他处）→ 回登录页，而不是让用户继续编辑却写不进去
+  useEffect(() => {
+    const onExpired = () => setState('login')
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired)
+  }, [])
 
   // 登录后：定期/聚焦刷新 + 卸载前落盘
   useEffect(() => {

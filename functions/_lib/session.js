@@ -85,6 +85,16 @@ export function constantTimeEqual(a, b) {
   return diff === 0
 }
 
+/** 密码比较：先各自 SHA-256 成定长摘要再常数时间比较，长度与内容都不泄漏 */
+export async function passwordMatches(input, expected) {
+  if (typeof input !== 'string' || typeof expected !== 'string') return false
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(input)),
+    crypto.subtle.digest('SHA-256', encoder.encode(expected)),
+  ])
+  return constantTimeEqual(toHex(new Uint8Array(a)), toHex(new Uint8Array(b)))
+}
+
 /** 签发会话 token */
 export async function createSessionToken(env, nowMs = Date.now()) {
   const payload = {

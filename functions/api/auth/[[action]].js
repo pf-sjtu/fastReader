@@ -2,12 +2,12 @@
 import {
   buildSessionCookie,
   clearSessionCookie,
-  constantTimeEqual,
   createSessionToken,
   getPassword,
   isAuthenticated,
   isLocalRequest,
   isPasswordConfigured,
+  passwordMatches,
 } from '../../_lib/session.js'
 import { getAllowedOrigins, isAllowedOrigin, isSameOriginRequest, corsHeaders } from '../../_lib/origin.js'
 
@@ -157,7 +157,7 @@ export async function onRequest(context) {
     password = ''
   }
 
-  if (!constantTimeEqual(password, getPassword(env))) {
+  if (!(await passwordMatches(password, getPassword(env)))) {
     await bumpFailCount(env, key)
     return json({ error: 'invalid_password' }, 401, cors)
   }

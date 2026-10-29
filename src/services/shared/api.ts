@@ -49,6 +49,13 @@ export interface StateResponse {
   missing: string[]
 }
 
+/** 会话失效（401）时广播，AuthGate 据此退回登录页，避免用户继续编辑却全部写不进去 */
+export const SESSION_EXPIRED_EVENT = 'fastreader:session-expired'
+
+function notifySessionExpired(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
+}
+
 async function parseError(response: Response): Promise<never> {
   let body: { error?: string; message?: string } = {}
   try {
@@ -56,7 +63,10 @@ async function parseError(response: Response): Promise<never> {
   } catch {
     // 非 JSON 错误
   }
-  if (response.status === 401) throw new UnauthorizedError()
+  if (response.status === 401) {
+    notifySessionExpired()
+    throw new UnauthorizedError()
+  }
   throw new SharedApiError(response.status, body.message || body.error || `HTTP ${response.status}`, body.error)
 }
 
@@ -106,14 +116,22 @@ export const sharedApi = {
   },
 
   /** 写入某节；`rev` 为上次同步到的版本，0 表示「新建」 */
-  async putSection<T>(section: string, data: T, rev: number): Promise<{ rev: number; updatedAt: string }> {
+  async putSection<T>(
+    section: string,
+    data: T,
+    rev: number,
+    options: { keepalive?: boolean } = {}
+  ): Promise<{ rev: number; updatedAt: string }> {
+    const body = JSON.stringify({ data })
     let response: Response
     try {
       response = await fetch(`/api/state/${section}`, {
         method: 'PUT',
         credentials: 'same-origin',
         headers: { ...JSON_HEADERS, 'If-Match': String(rev) },
-        body: JSON.stringify({ data }),
+        body,
+        // 关页/切走时浏览器会取消普通请求；keepalive 有 64KB 上限，超了只能放弃该特性
+        keepalive: options.keepalive === true && body.length < 60_000,
       })
     } catch (error) {
       throw new SharedApiError(0, error instanceof Error ? error.message : 'network error', 'network')

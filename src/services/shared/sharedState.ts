@@ -176,7 +176,7 @@ function scheduleFlush(section: SectionName, binding: SectionBinding, delay: num
 export async function flushSection(
   section: SectionName,
   bindingOverride?: SectionBinding,
-  options: { force?: boolean } = {}
+  options: { force?: boolean; keepalive?: boolean } = {}
 ): Promise<void> {
   const binding = bindingOverride ?? bindings.get(section)
   if (!binding) return
@@ -196,7 +196,7 @@ export async function flushSection(
   useSyncStatusStore.getState().setStatus('syncing')
   try {
     const rev = revs.get(section) ?? 0
-    const result = await sharedApi.putSection(section, local, rev)
+    const result = await sharedApi.putSection(section, local, rev, { keepalive: options.keepalive })
     revs.set(section, result.rev)
     binding.afterFlush?.()
 
@@ -396,7 +396,9 @@ export function installAutoFlush(): () => void {
 
   const flushAll = () => {
     for (const [section, binding] of bindings.entries()) {
-      void flushSection(section, binding)
+      // 有挂起的防抖才需要立即写；keepalive 让请求在页面卸载后仍能发出
+      if (!timers.has(section)) continue
+      void flushSection(section, binding, { keepalive: true })
     }
   }
   const onVisibility = () => {

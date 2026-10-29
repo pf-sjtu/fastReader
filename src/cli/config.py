@@ -469,8 +469,9 @@ def validate_config(config: Config) -> list:
             f"（支持: {', '.join(SUPPORTED_DETECTION_MODES)}）"
         )
 
+    # v1 已废弃：声明 v1 时 prompts.py 会告警并回退 v2，这里不报错，保证旧配置可跑
     version = config.prompts.currentVersion
     if version not in ("v1", "v2") and version not in config.prompts.versions:
-        errors.append(f"未知的 Prompt 版本: {version}（支持 v1 / v2）")
+        errors.append(f"未知的 Prompt 版本: {version}（仅支持 v2）")
 
     return errors

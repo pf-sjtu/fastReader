@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { onRequest as authHandler, __resetRateLimit } from '../functions/api/auth/[[action]].js'
 import { onRequest as stateHandler } from '../functions/api/state/[[section]].js'
 import { onRequest as middleware } from '../functions/_middleware.js'
-import { SESSION_COOKIE, createSessionToken } from '../functions/_lib/session.js'
+import { SESSION_COOKIE, createSessionToken, passwordMatches } from '../functions/_lib/session.js'
 import { maskSecrets, mergeSecrets } from '../functions/_lib/secrets.js'
 import { createEnv } from './__mocks__/memoryKv'
 
@@ -111,6 +111,15 @@ describe('登录与会话', () => {
     expect((await login(env, '123456a')).status).toBe(200)
     // 清零后仍能继续尝试 5 次而不是立刻 429
     for (let i = 0; i < 5; i++) expect((await login(env, 'bad')).status).toBe(401)
+  })
+})
+
+describe('密码比较', () => {
+  it('相等 / 不等 / 长度不同 / 非字符串', async () => {
+    expect(await passwordMatches('123456a', '123456a')).toBe(true)
+    expect(await passwordMatches('123456b', '123456a')).toBe(false)
+    expect(await passwordMatches('1', '123456a')).toBe(false)
+    expect(await passwordMatches(undefined as unknown as string, '123456a')).toBe(false)
   })
 })
 

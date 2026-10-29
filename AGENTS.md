@@ -117,6 +117,7 @@ git push -u origin HEAD
 - 环境变量：`APP_PASSWORD`（缺省 `123456a`）、`SESSION_SECRET`（可选，缺省由密码派生）、`ALLOWED_ORIGINS`（可选）
 - 本地开发只能用 `wrangler pages dev`（见 `docs/deploy.md`）；`vite.config.ts` 不再有 dev proxy
 - 改密码会让所有已签发的会话立即失效（Cookie 签名里带密码指纹）
+- 改 `functions/` 后跑 `pnpm check:functions`：单测不经过打包器，相对 import 写错只有它能提前发现
 
 ## Processing Metadata
 - 保存处理结果时在文件头部添加 HTML 注释格式的元数据

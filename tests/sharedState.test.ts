@@ -2,6 +2,7 @@
  * 共享状态层：三方合并规则与写入节流。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { SESSION_EXPIRED_EVENT } from '../src/services/shared/api'
 import {
   __resetSharedState,
   deepEqual,
@@ -328,6 +329,24 @@ describe('写入节流与冲突重试', () => {
     // 最后一次编辑最终必须落到服务端
     expect((remote.processing.data as { processingOptions: { processingMode: string } }).processingOptions.processingMode)
       .toBe('combined-mindmap')
+  })
+
+  it('写入遇到 401 广播会话失效事件（AuthGate 据此回登录页）', async () => {
+    let data: unknown = { processingOptions: { processingMode: 'summary', chapterConcurrency: 3 } }
+    registerSection(
+      'processing',
+      { getData: () => data, setData: (next) => { data = next }, debounceMs: 0 },
+      { autoWrite: false }
+    )
+    await loadAll()
+
+    const onExpired = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired)
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'unauthorized' }, 401))
+    data = { processingOptions: { processingMode: 'mindmap', chapterConcurrency: 3 } }
+    await expect(flushSection('processing')).rejects.toThrow()
+    expect(onExpired).toHaveBeenCalledTimes(1)
+    window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired)
   })
 
   it('网络失败进入 offline 并保留本地改动', async () => {
