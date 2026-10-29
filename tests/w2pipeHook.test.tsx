@@ -34,7 +34,7 @@ vi.mock('../src/services/webdavService', () => ({ webdavService: h.webdav }))
 vi.mock('../src/services/notificationService', () => ({
   notificationService: { sendTaskCompleteNotification: vi.fn(), sendErrorNotification: vi.fn() },
 }))
-vi.mock('../src/services/aiService', () => ({
+vi.mock('../src/services/ai', () => ({
   AIService: class {
     summarizeChapter = h.ai.summarize
     analyzeConnections = h.ai.connections
@@ -64,7 +64,16 @@ vi.mock('../src/stores/configStore', () => {
     resetTokenUsage: vi.fn(),
     aiConfig: { provider: 'openai', model: 'gpt-4o', apiKey: 'k', apiUrl: '', temperature: 0.7 },
     aiServiceOptions: { maxRetries: 1, baseRetryDelay: 1 },
-    promptConfig: null,
+    // 提示词只有 v2（覆盖项模型）：这里给一份完整模板，pipeline 会读 chapterSummary.*
+    promptConfig: {
+      chapterSummary: {
+        fiction: '小说 {{title}} \n{{content}}',
+        nonFiction: '社科 {{title}} \n{{content}}',
+      },
+      mindmap: { chapter: '导图 {{title}}', arrow: '箭头', combined: '整书导图' },
+      connectionAnalysis: '关联 {{chapterSummaries}}',
+      overallSummary: '全书 《{{bookTitle}}》',
+    },
     processingOptions: {
       processingMode: 'summary', bookType: 'non-fiction', useSmartDetection: false,
       skipNonEssentialChapters: true, maxSubChapterDepth: 0, outputLanguage: 'zh',

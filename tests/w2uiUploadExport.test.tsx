@@ -18,6 +18,7 @@ vi.mock('sonner', () => ({ toast: toastFn }))
 import { UploadToWebDAVButton } from '../src/components/UploadToWebDAVButton'
 import { ConfigExportImport } from '../src/components/ConfigExportImport'
 import { useConfigStore } from '../src/stores/configStore'
+import { useAIConfigStore } from '../src/stores/ai-config'
 import type { BookSummary } from '../src/hooks/useBookProcessing'
 
 const t = (k: string, o?: Record<string, unknown>) => i18n.t(k, o)
@@ -108,7 +109,7 @@ describe('UploadToWebDAVButton', () => {
 })
 
 describe('ConfigExportImport', () => {
-  it('导出生成下载；空内容不导入；导入成功与失败；重置需确认', async () => {
+  it('导出生成下载；空内容不导入；先预览再导入；重置需确认', async () => {
     const createURL = vi.fn(() => 'blob:y')
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: createURL, revokeObjectURL: vi.fn() }))
     const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
@@ -124,24 +125,39 @@ describe('ConfigExportImport', () => {
       textarea.dispatchEvent(new Event('input', { bubbles: true }))
     }
     const { act } = await import('react')
+    // 先建一个服务商，否则导出的配置里没有可导入的内容（校验会拒绝空配置）
+    act(() => {
+      useAIConfigStore.getState().addProvider({
+        name: 'demo',
+        type: 'openai',
+        baseUrl: 'https://api.demo.com/v1',
+        models: [{ id: 'm1', enabled: true, source: 'manual' }],
+      })
+    })
+
+    // 导入分两步：先预览，确认后才写入服务端（导入按钮在预览前是禁用的）
     act(() => setValue(useConfigStore.getState().exportConfig()))
+    expect(findButton(t('configIO.importButton'))!.disabled).toBe(true)
+    click(findButton(t('configIO.previewButton')))
+    expect(document.body.textContent).toContain(t('configIO.previewTitle'))
+    expect(findButton(t('configIO.importButton'))!.disabled).toBe(false)
+
     click(findButton(t('configIO.importButton')))
     expect(toastFn.success).toHaveBeenCalledWith(t('configIO.importSuccess'))
     expect(document.body.textContent).toContain(t('configIO.importSuccessDetail'))
 
     act(() => setValue(': : not yaml ['))
-    click(findButton(t('configIO.importButton')))
+    click(findButton(t('configIO.previewButton')))
     expect(toastFn.error).toHaveBeenCalled()
 
     click(findButton(t('configIO.clear')))
     expect(document.querySelector('textarea')!.value).toBe('')
 
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    // 重置改用 AlertDialog 二次确认（不再是 window.confirm）
     click(findButton(t('configIO.resetButton')))
     expect(toastFn.success).not.toHaveBeenCalledWith(t('configIO.resetDone'))
-    click(findButton(t('configIO.resetButton')))
+    click(findButton(t('common.confirm')))
     expect(toastFn.success).toHaveBeenCalledWith(t('configIO.resetDone'))
-    confirmSpy.mockRestore()
     anchorClick.mockRestore()
     vi.unstubAllGlobals()
   })

@@ -18,45 +18,56 @@ export async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+/** 代理请求所需的上下文：服务商 id 与它的 baseUrl（服务端据此注入 base 与凭据） */
+export interface ProxyTargetContext {
+  providerId?: string
+  /** 服务商 baseUrl；用于把完整请求 URL 折算成相对 base 的端点路径 */
+  apiBase?: string
+}
+
 /**
- * 构建 AI 代理目标：base 为 origin（chat 端点保留其前缀路径），path 为去前导 `/` 的端点路径。
- * 例：https://x/v1/chat/completions → base=https://x/v1, path=chat/completions；
- *     https://x/v1/models → base=https://x, path=v1/models
+ * 把完整请求 URL 折算成「相对服务商 baseUrl 的端点路径」。
+ *
+ * 例：apiBase=https://x/v1，url=https://x/v1/chat/completions → chat/completions
+ *     apiBase=https://y/v1beta，url=https://y/v1beta/models/m:generateContent → models/m:generateContent
  */
-export function buildAiProxyTarget(url: string): { base: string; path: string } {
-  const apiUrl = new URL(url)
-  const pathname = apiUrl.pathname.replace(/\/+$/, '')
-  const match = pathname.match(/^(.*)\/(chat\/completions|api\/chat)$/)
-
-  if (match) {
-    return {
-      base: apiUrl.origin + (match[1] || ''),
-      path: match[2],
-    }
+export function toEndpointPath(url: string, apiBase: string | undefined): string {
+  const normalizedBase = (apiBase || '').replace(/\/+$/, '')
+  if (normalizedBase && url.startsWith(normalizedBase)) {
+    return url.slice(normalizedBase.length).replace(/^\/+/, '')
   }
-
-  return {
-    base: apiUrl.origin,
-    path: pathname.replace(/^\/+/, ''),
+  // 兜底：按 origin 折算（服务端仍会校验最终 URL 落在 base 内）
+  try {
+    return new URL(url).pathname.replace(/^\/+/, '')
+  } catch {
+    return url.replace(/^\/+/, '')
   }
 }
 
-/** 浏览器内走同源 /api/ai 代理（Cloudflare Pages Function），规避 CORS */
-export async function proxyFetch(url: string, options: RequestInit): Promise<Response> {
+/**
+ * 浏览器内走同源 /api/ai 代理（Cloudflare Pages Function），规避 CORS。
+ *
+ * 上游 base 与凭据都在服务端：这里只传服务商 id 与端点路径，
+ * 客户端无法指定任意上游地址，也无需接触 API Key。
+ */
+export async function proxyFetch(
+  url: string,
+  options: RequestInit,
+  context: ProxyTargetContext = {}
+): Promise<Response> {
   if (!isBrowser) {
     return fetch(url, options)
   }
 
   const origin = window.location.origin
-  const target = buildAiProxyTarget(url)
-  const proxyUrlObj = new URL('/api/ai', origin)
-  proxyUrlObj.searchParams.set('path', target.path)
+  const proxyUrl = new URL('/api/ai', origin)
+  proxyUrl.searchParams.set('path', toEndpointPath(url, context.apiBase))
 
   const headers = new Headers(options.headers)
-  headers.set('X-AI-Base', target.base)
+  if (context.providerId) headers.set('X-Provider-Id', context.providerId)
   headers.set('X-Request-Origin', origin)
 
-  return fetch(proxyUrlObj.toString(), {
+  return fetch(proxyUrl.toString(), {
     ...options,
     headers,
   })

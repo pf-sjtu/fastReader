@@ -1,23 +1,44 @@
-// 一次性迁移：拆分 store 之前的 ebook-mindmap-config → 各子 store 的独立键
-// 拆分前的老用户只有旧键，子 store 是默认值；若不迁移，首次调用 setter 会用默认值覆盖服务商配置。
-import type { AIConfigManager, PromptVersionConfig, ProcessingOptions, WebDAVConfig, AIServiceOptions } from './types'
-import { useAIConfigStore, mergeAIConfigManager, AI_CONFIG_STORAGE_KEY } from './ai-config'
-import { useProcessingStore, PROCESSING_STORAGE_KEY } from './processing'
-import { useWebDAVStore, WEBDAV_STORAGE_KEY } from './webdav'
-import { usePromptStore, PROMPT_STORAGE_KEY } from './prompts'
-import { useCoreStore, CORE_STORAGE_KEY } from './core'
-import { logger } from '../lib/logger'
-import { DEFAULT_PROMPT_VERSION } from '../services/prompts/templates'
+/**
+ * 本机旧配置的一次性导入。
+ *
+ * 历史版本把所有配置放在浏览器 localStorage（拆分前是单个 `ebook-mindmap-config`，
+ * 拆分后是每个子 store 各自的键）。共享状态上线后，这些数据只在新部署「首次初始化」
+ * 时被读取一次，转成 ImportPlan 后写入服务端；之后不再使用 localStorage。
+ */
+import type { ImportPlan } from '../services/configExportService'
+import { diffPromptOverrides } from '../services/prompts/overrides'
+import { DEFAULT_PROMPT_CONFIG } from '../services/prompts/templates'
+import { migrateLegacyAI, type LegacyAIConfigManager } from './aiMigration'
+import { normalizeProcessingData } from './processing'
+import { defaultWebDAVConfig } from './webdav'
+import type { AIServiceOptions, ProcessingOptions, PromptConfig, WebDAVConfig } from './types'
+import type { PromptOverrides } from './types'
 
 export const LEGACY_CONFIG_KEY = 'ebook-mindmap-config'
+export const LEGACY_AI_KEY = 'ebook-ai-config'
+export const LEGACY_PROCESSING_KEY = 'ebook-processing-options'
+export const LEGACY_WEBDAV_KEY = 'ebook-webdav-config'
+export const LEGACY_PROMPT_KEY = 'ebook-prompt-config'
+export const LEGACY_CORE_KEY = 'ebook-core-config'
 
-interface LegacyConfigState {
-  aiConfigManager?: Partial<AIConfigManager>
-  processingOptions?: Partial<ProcessingOptions>
-  webdavConfig?: Partial<WebDAVConfig>
-  promptVersionConfig?: PromptVersionConfig
-  currentPromptVersion?: 'v1' | 'v2'
-  aiServiceOptions?: AIServiceOptions
+interface PersistedShape<T> {
+  state?: T
+  version?: number
+}
+
+function readPersisted<T>(storage: Storage | null, key: string): T | null {
+  if (!storage) return null
+  try {
+    const raw = storage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as PersistedShape<T> | T
+    if (parsed && typeof parsed === 'object' && 'state' in (parsed as PersistedShape<T>)) {
+      return ((parsed as PersistedShape<T>).state ?? null) as T | null
+    }
+    return parsed as T
+  } catch {
+    return null
+  }
 }
 
 function getStorage(): Storage | null {
@@ -28,73 +49,91 @@ function getStorage(): Storage | null {
   }
 }
 
-/**
- * 迁移规则：
- * - 子 store 键不存在 → 用旧键对应字段填充（老用户）
- * - AI 服务商例外：旧键里的 aiConfigManager 总是优先。兼容壳从旧键水合，界面一直展示的是它；
- *   而旧版 setApiKey 等只回写 aiConfig、不回写 manager，子 store 的 manager 可能是默认值或被误改。
- * 迁移完成后删除旧键（其字段全部与子 store 重复）。
- * @returns 是否执行了迁移
- */
-export function migrateLegacyConfig(storage: Storage | null = getStorage()): boolean {
-  if (!storage) return false
-  let raw: string | null
-  try {
-    raw = storage.getItem(LEGACY_CONFIG_KEY)
-  } catch {
-    return false
-  }
-  if (!raw) return false
+export interface LocalLegacySnapshot {
+  ai?: LegacyAIConfigManager
+  processingOptions?: Partial<ProcessingOptions>
+  aiServiceOptions?: AIServiceOptions
+  webdav?: Partial<WebDAVConfig> & { password?: unknown }
+  prompts?: { promptConfig?: PromptConfig; promptVersionConfig?: Record<string, PromptConfig>; currentPromptVersion?: string }
+}
 
-  let legacy: LegacyConfigState
-  try {
-    legacy = (JSON.parse(raw)?.state ?? {}) as LegacyConfigState
-  } catch (error) {
-    logger.warn('[legacyMigration] 旧配置解析失败，保留旧键不动:', error)
-    return false
-  }
+/** 读取本机旧配置（新键优先，其次拆分前的聚合键） */
+export function readLocalLegacyConfig(storage: Storage | null = getStorage()): LocalLegacySnapshot | null {
+  if (!storage) return null
 
-  const absent = (key: string) => storage.getItem(key) === null
+  const aggregate = readPersisted<LocalLegacySnapshot>(storage, LEGACY_CONFIG_KEY) ?? {}
+  const ai = readPersisted<{ aiConfigManager?: LegacyAIConfigManager }>(storage, LEGACY_AI_KEY)
+  const processing = readPersisted<{ processingOptions?: Partial<ProcessingOptions> }>(storage, LEGACY_PROCESSING_KEY)
+  const webdav = readPersisted<{ webdavConfig?: WebDAVConfig }>(storage, LEGACY_WEBDAV_KEY)
+  const prompts = readPersisted<NonNullable<LocalLegacySnapshot['prompts']>>(storage, LEGACY_PROMPT_KEY)
+  const core = readPersisted<{ aiServiceOptions?: AIServiceOptions }>(storage, LEGACY_CORE_KEY)
 
-  if (Array.isArray(legacy.aiConfigManager?.providers)) {
-    useAIConfigStore.setState((s) => mergeAIConfigManager(s, legacy.aiConfigManager))
+  const snapshot: LocalLegacySnapshot = {
+    ai: ai?.aiConfigManager ?? aggregate.ai,
+    processingOptions: processing?.processingOptions ?? aggregate.processingOptions,
+    aiServiceOptions: core?.aiServiceOptions ?? aggregate.aiServiceOptions,
+    webdav: webdav?.webdavConfig ?? aggregate.webdav,
+    prompts: prompts ?? aggregate.prompts,
   }
 
-  if (legacy.processingOptions && absent(PROCESSING_STORAGE_KEY)) {
-    useProcessingStore.getState().updateProcessingOptions(legacy.processingOptions)
+  const hasAnything = Boolean(
+    (snapshot.ai?.providers?.length ?? 0) > 0 ||
+      snapshot.processingOptions ||
+      snapshot.webdav?.serverUrl ||
+      snapshot.prompts?.promptConfig ||
+      snapshot.prompts?.promptVersionConfig
+  )
+  return hasAnything ? snapshot : null
+}
+
+/** localStorage 里是否还有旧配置（初始化向导据此显示「导入本机配置」） */
+export function hasLocalLegacyConfig(storage: Storage | null = getStorage()): boolean {
+  return readLocalLegacyConfig(storage) !== null
+}
+
+/** 把本机旧配置转成 ImportPlan（与导入 YAML 走同一条落库路径） */
+export function buildImportPlanFromLocal(snapshot: LocalLegacySnapshot): ImportPlan {
+  const migrated = migrateLegacyAI(snapshot.ai)
+
+  // 提示词：优先用旧 store 里「当前生效」的完整配置与内置默认求差集
+  const promptSource =
+    snapshot.prompts?.promptConfig ??
+    (snapshot.prompts?.currentPromptVersion && snapshot.prompts.promptVersionConfig
+      ? snapshot.prompts.promptVersionConfig[snapshot.prompts.currentPromptVersion]
+      : snapshot.prompts?.promptVersionConfig?.v2)
+
+  const prompts = diffPromptOverrides(promptSource, DEFAULT_PROMPT_CONFIG)
+
+  const normalized = normalizeProcessingData({
+    processingOptions: snapshot.processingOptions,
+    aiServiceOptions: snapshot.aiServiceOptions,
+  })
+
+  const webdavRaw = snapshot.webdav ?? {}
+  const passwordRaw = webdavRaw.password
+  const webdavPassword =
+    typeof passwordRaw === 'string'
+      ? passwordRaw
+      : passwordRaw && typeof passwordRaw === 'object' && 'hasSecret' in passwordRaw
+        ? undefined
+        : undefined
+
+  const webdav: WebDAVConfig = {
+    ...defaultWebDAVConfig,
+    ...webdavRaw,
+    password: passwordRaw && typeof passwordRaw === 'string' ? { hasSecret: true } : undefined,
+    connectionStatus: 'disconnected',
   }
 
-  if (legacy.webdavConfig && absent(WEBDAV_STORAGE_KEY)) {
-    useWebDAVStore.getState().updateWebDAVConfig(legacy.webdavConfig)
+  return {
+    version: 'legacy-local',
+    ai: migrated.ai,
+    providerSecrets: migrated.secretKeys,
+    webdav,
+    ...(webdavPassword ? { webdavPassword } : {}),
+    processing: normalized.processingOptions as ImportPlan['processing'],
+    exchangeRateUsdToCny: normalized.exchangeRateUsdToCny,
+    prompts: prompts as PromptOverrides,
+    notes: [...migrated.notes, '来源：本浏览器旧配置'],
   }
-
-  if (legacy.promptVersionConfig?.v1 && legacy.promptVersionConfig?.v2 && absent(PROMPT_STORAGE_KEY)) {
-    // 显式记录的版本原样保留；未记录时按当前默认
-    const version =
-      legacy.currentPromptVersion === 'v1' || legacy.currentPromptVersion === 'v2'
-        ? legacy.currentPromptVersion
-        : DEFAULT_PROMPT_VERSION
-    usePromptStore.setState({
-      promptVersionConfig: legacy.promptVersionConfig,
-      currentPromptVersion: version,
-      promptConfig: legacy.promptVersionConfig[version]
-    })
-  }
-
-  if (legacy.aiServiceOptions && absent(CORE_STORAGE_KEY)) {
-    useCoreStore.getState().updateAIServiceOptions(legacy.aiServiceOptions)
-  }
-
-  // AI 子 store 若未被写过（无服务商数据时）也落一次盘，保证旧键删除后数据仍在
-  if (absent(AI_CONFIG_STORAGE_KEY)) {
-    useAIConfigStore.setState({})
-  }
-
-  try {
-    storage.removeItem(LEGACY_CONFIG_KEY)
-  } catch {
-    // 删除失败不影响使用：下次启动会再迁移一次（结果相同）
-  }
-  logger.info('[legacyMigration] 已从旧键迁移配置并清理旧键')
-  return true
 }

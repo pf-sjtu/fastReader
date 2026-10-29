@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { toast } from 'sonner'
 import type { ChapterData } from '@/services/epubProcessor'
-import { AIService } from '@/services/aiService'
+import { AIService } from '@/services/ai'
 import { notificationService } from '@/services/notificationService'
 import { useConfigStore } from '@/stores/configStore'
 import type { BookMindMap, BookSummary } from '@/types/book'
@@ -140,6 +140,9 @@ export function useProcessingRun(deps: ProcessingRunDeps) {
           title: chapters[Math.min(done, total - 1)]?.title ?? '',
         })
 
+      // 章节 id → 序号：onChapterStart 每章都会查一次，预先建 Map 避免 O(n²)
+      const chapterPosition = new Map(chapters.map((c, i) => [c.id, i]))
+
       const result = await runBookPipeline({
         chapters,
         mode,
@@ -165,7 +168,7 @@ export function useProcessingRun(deps: ProcessingRunDeps) {
           if (!isCurrentRun()) return
           setCurrentProcessingChapter(chapter.id)
           // 序号取章节自身位置（并发下 done 是已按序提交数，与当前章无关）
-          const pos = chapters.findIndex((c) => c.id === chapter.id)
+          const pos = chapterPosition.get(chapter.id) ?? -1
           setCurrentStep(
             t('progress.processingChapter', { current: (pos >= 0 ? pos : done) + 1, total, title: chapter.title })
           )

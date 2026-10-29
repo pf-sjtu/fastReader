@@ -6,8 +6,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { autoSyncService } from '../src/services/autoSyncService'
 import { webdavService } from '../src/services/webdavService'
 import { cloudCacheService } from '../src/services/cloudCacheService'
-import { ConfigExportService } from '../src/services/configExportService'
+import { ConfigExportService, validateImportPlan } from '../src/services/configExportService'
 import { useConfigStore } from '../src/stores/configStore'
+import { useAIConfigStore } from '../src/stores/ai-config'
+import { usePromptStore } from '../src/stores/prompts'
 import { useWebDAVStore } from '../src/stores/webdav'
 
 const book = {
@@ -26,8 +28,10 @@ const ok = { success: true as const, data: true }
 beforeEach(() => {
   useWebDAVStore.getState().resetWebDAVConfig()
   useWebDAVStore.getState().updateWebDAVConfig({
-    enabled: true, autoSync: true, serverUrl: 'https://d/', username: 'u', password: 'p'
+    enabled: true, autoSync: true, serverUrl: 'https://d/', username: 'u'
   })
+  // 密码只暂存在内存，配置里只留 {hasSecret}
+  useWebDAVStore.getState().setWebDAVPassword('p')
   vi.spyOn(console, 'log').mockImplementation(() => {})
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -121,48 +125,122 @@ describe('autoSyncService.syncMindMap', () => {
   })
 })
 
-describe('ConfigExportService', () => {
-  const state = () => useConfigStore.getState()
-
-  it('导出只含数据字段，导入可还原并通过校验', () => {
-    const yaml = ConfigExportService.exportConfig(state())
-    expect(yaml).not.toContain('addProvider')
-    const parsed = ConfigExportService.importConfig(yaml)
-    expect(parsed.config.aiConfigManager.providers.length).toBe(state().aiConfigManager.providers.length)
-    expect(ConfigExportService.validateConfig(parsed)).toEqual({ isValid: true, errors: [] })
+describe('ConfigExportService（2.0.0 服务商化导出）', () => {
+  // 同一文件的用例共享模块状态：导出前把 AI / 提示词打回干净状态
+  beforeEach(() => {
+    useAIConfigStore.getState().resetAIConfig()
+    usePromptStore.getState().resetAllPrompts()
   })
 
-  it('校验报告缺失字段', () => {
-    const r = ConfigExportService.validateConfig({
-      version: '1.0.0',
-      exportTime: 'x',
-      config: {
-        aiConfigManager: { providers: 'bad', currentModelId: 0 },
-        processingOptions: {},
-        promptVersionConfig: { v1: {} },
-        currentPromptVersion: 'v2'
-      }
-    } as never)
-    expect(r.isValid).toBe(false)
-    expect(r.errors).toEqual(expect.arrayContaining([
-      'AI服务商配置格式无效', 'currentModelId必须是正整数', '缺少必需的处理选项: processingMode',
-      '缺少WebDAV配置', '当前提示词版本 v2 在版本配置中不存在', 'token使用量格式无效'
-    ]))
-    const empty = ConfigExportService.validateConfig({ version: '1.0.0', exportTime: 'x', config: {} } as never)
-    expect(empty.errors).toEqual(expect.arrayContaining(['缺少AI配置管理器', '缺少处理选项配置', '缺少提示词版本配置', '缺少当前提示词版本']))
+  /** 兼容壳当前聚合状态 → 导出源 */
+  const exportSource = () => {
+    const s = useConfigStore.getState()
+    return {
+      ai: s.ai,
+      processingOptions: s.processingOptions,
+      exchangeRateUsdToCny: s.exchangeRateUsdToCny,
+      webdav: s.webdavConfig,
+      prompts: s.promptOverrides,
+      tokenUsage: s.tokenUsage,
+    }
+  }
+
+  it('导出只含数据字段，默认不写明文密钥，导入回来的计划可通过校验', () => {
+    useAIConfigStore.getState().addProvider({
+      name: 'OpenAI',
+      type: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: { hasSecret: true },
+      models: [{ id: 'gpt-4o', enabled: true, source: 'manual' }],
+    })
+
+    const yaml = ConfigExportService.exportConfig(exportSource(), {
+      providerSecrets: { [useAIConfigStore.getState().ai.providers[0].id]: 'sk-live-123' },
+    })
+    expect(yaml).toContain('version: 2.0.0')
+    expect(yaml).not.toContain('addProvider')
+    // 默认走占位符，明文不出现在导出文件里
+    expect(yaml).not.toContain('sk-live-123')
+    expect(yaml).toContain('FASTREADER_PROVIDER_')
+
+    const plan = ConfigExportService.importConfig(yaml)
+    expect(plan.ai.providers).toHaveLength(useAIConfigStore.getState().ai.providers.length)
+    expect(plan.ai.providers[0].models.map((m) => m.id)).toEqual(['gpt-4o'])
+    expect(validateImportPlan(plan)).toEqual([])
+  })
+
+  it('includeSecrets 显式开启时才导出明文', () => {
+    const providerId = useAIConfigStore.getState().addProvider({
+      name: 'OpenAI',
+      type: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      models: [{ id: 'gpt-4o', enabled: true, source: 'manual' }],
+    })
+    const yaml = ConfigExportService.exportConfig(exportSource(), {
+      includeSecrets: true,
+      providerSecrets: { [providerId]: 'sk-live-123' },
+      webdavPassword: 'p',
+    })
+    expect(yaml).toContain('sk-live-123')
+    expect(yaml).toContain('p')
+  })
+
+  it('validateImportPlan 报告缺服务商与非法 baseUrl', () => {
+    const plan = ConfigExportService.importConfig('version: 2.0.0\nexportTime: x\nconfig: {}\n')
+    expect(validateImportPlan(plan)).toContain('配置中没有服务商')
+
+    const bad = ConfigExportService.importConfig(
+      [
+        'version: 2.0.0',
+        'exportTime: x',
+        'config:',
+        '  ai:',
+        '    providers:',
+        '      - id: p1',
+        '        name: Bad',
+        '        type: openai',
+        '        baseUrl: ""',
+        '        models: []',
+        '    active: { providerId: p1, modelId: "" }',
+        '',
+      ].join('\n')
+    )
+    expect(validateImportPlan(bad)).toEqual(expect.arrayContaining(['服务商 Bad 缺少 baseUrl']))
   })
 
   it('导入格式错误 / 版本不兼容 / YAML 语法错误', () => {
-    expect(() => ConfigExportService.importConfig('a: 1')).toThrow('缺少必需字段')
-    expect(() => ConfigExportService.importConfig('version: "2.0.0"\nexportTime: x\nconfig: {a: 1}')).toThrow('不兼容')
+    expect(() => ConfigExportService.importConfig('a: 1')).toThrow('配置文件格式无效')
+    expect(() =>
+      ConfigExportService.importConfig('version: "9.9.9"\nexportTime: x\nconfig: {a: 1}')
+    ).toThrow('不兼容')
     expect(() => ConfigExportService.importConfig('a: [1, 2')).toThrow('配置导入失败')
   })
 
-  it('文件名与备份', () => {
+  it('preview 汇总服务商/模型/提示词覆盖项', () => {
+    const providerId = useAIConfigStore.getState().addProvider({
+      name: 'OpenAI',
+      type: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: { hasSecret: true },
+      models: [
+        { id: 'gpt-4o', enabled: true, source: 'manual' },
+        { id: 'gpt-4o-mini', enabled: true, source: 'manual' },
+      ],
+    })
+    usePromptStore.getState().setOverallSummaryPrompt('自定义总览')
+
+    const plan = ConfigExportService.importConfig(ConfigExportService.exportConfig(exportSource()))
+    const preview = ConfigExportService.preview(plan)
+    expect(preview.version).toBe('2.0.0')
+    expect(preview.providerCount).toBe(1)
+    expect(preview.modelCount).toBe(2)
+    expect(preview.providers[0]).toMatchObject({ baseUrl: 'https://api.openai.com/v1', models: 2 })
+    expect(preview.promptOverrideKeys).toEqual(['overallSummary'])
+    expect(preview.webdav.serverUrl).toBe('https://d/')
+    expect(providerId).toBeTruthy()
+  })
+
+  it('文件名固定格式', () => {
     expect(ConfigExportService.generateFileName()).toMatch(/^ebook-to-mindmap-config-.*\.yaml$/)
-    const b = ConfigExportService.createBackup(state())
-    expect(b.version).toBe('1.0.0')
-    expect(b.config.webdavConfig).toEqual(state().webdavConfig)
-    expect(b.config.webdavConfig).not.toBe(state().webdavConfig)
   })
 })

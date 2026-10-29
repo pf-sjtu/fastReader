@@ -8,8 +8,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 tmp/
-BUG.md
-TODO.md
 
 # Dependencies
 node_modules
@@ -20,6 +18,12 @@ dist-ssr
 # Lock files：统一使用 pnpm（提交 pnpm-lock.yaml）
 package-lock.json
 yarn.lock
+
+# pi 代理运行时目录
+.pi/
+
+# Cloudflare wrangler 本地状态
+.wrangler/
 
 # Build outputs
 dist/

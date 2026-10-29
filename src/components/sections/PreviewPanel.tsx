@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Minus, Maximize2, Minimize2 } from 'lucide-react'
+import { Plus, Minus, Maximize2, Minimize2, X } from 'lucide-react'
 import { EpubReader } from '@/components/EpubReader'
 import { PdfReader } from '@/components/PdfReader'
 import { cn } from '@/lib/utils'
@@ -107,11 +107,13 @@ export function PreviewPanel({
             {!isSheet && (
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
                 onClick={onClose}
-                className="h-8 w-8 p-0"
+                className="size-8"
+                aria-label={t('common.close')}
+                title={t('common.close')}
               >
-                ×
+                <X className="h-4 w-4" />
               </Button>
             )}
           </div>

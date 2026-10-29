@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
-import { Settings, ExternalLink, Info, CheckCircle, XCircle, Loader2, FolderOpen, RefreshCw, Eye, EyeOff } from 'lucide-react'
+import { Settings, ExternalLink, Info, CheckCircle, XCircle, Loader2, FolderOpen, RefreshCw, Eye, EyeOff, Trash2 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '../../stores/configStore'
@@ -53,6 +53,8 @@ export function WebDAVConfig() {
   const [isTesting, setIsTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  // 密码只在本地输入框里存在：store 里只有 { hasSecret }，绝不回显
+  const [passwordDraft, setPasswordDraft] = useState('')
   // 只采纳最后一次测试的结果；记录已自动测试过的凭据，避免重复自动测试
   const testSeqRef = useRef(0)
   const autoTestedKeyRef = useRef('')
@@ -85,7 +87,9 @@ export function WebDAVConfig() {
 
   // 启用且凭据完整时，凭据变化后防抖自动测试一次
   const { enabled, serverUrl, username, password } = webdavConfig
-  const autoKey = enabled && serverUrl && username && password ? `${serverUrl}\n${username}\n${password}` : ''
+  const hasSecret = password?.hasSecret === true
+  // 草稿参与 key：重新输入密码后也会再自动测试一次（key 只存在内存，不外传）
+  const autoKey = enabled && serverUrl && username && hasSecret ? `${serverUrl}\n${username}\n${passwordDraft}` : ''
   useEffect(() => {
     if (!autoKey || autoKey === autoTestedKeyRef.current) return
     const timer = setTimeout(() => {
@@ -95,7 +99,19 @@ export function WebDAVConfig() {
     return () => clearTimeout(timer)
   }, [autoKey, testConnection])
 
+  const handlePasswordChange = (value: string) => {
+    setPasswordDraft(value)
+    // 留空表示保持服务端已有密码，不提交空串
+    if (value) s.setWebDAVPassword(value)
+  }
+
+  const handleClearPassword = () => {
+    setPasswordDraft('')
+    s.setWebDAVPassword(null)
+  }
+
   const handleReset = () => {
+    setPasswordDraft('')
     s.resetWebDAVConfig()
     setTestResult(null)
     webdavService.disconnect()
@@ -151,9 +167,15 @@ export function WebDAVConfig() {
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder={t('webdav.config.passwordPlaceholder')}
-                    value={webdavConfig.password}
-                    onChange={(e) => s.setWebDAVPassword(e.target.value)}
+                    autoComplete="new-password"
+                    placeholder={
+                      hasSecret && !passwordDraft
+                        ? t('webdav.config.passwordKeepPlaceholder')
+                        : t('webdav.config.passwordPlaceholder')
+                    }
+                    value={passwordDraft}
+                    onChange={(e) => handlePasswordChange(e.target.value)}
+                    className="pr-10"
                   />
                   <Button
                     type="button"
@@ -166,6 +188,21 @@ export function WebDAVConfig() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
+                {hasSecret && (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-muted-foreground">{t('webdav.config.passwordConfigured')}</p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={handleClearPassword}
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      {t('webdav.config.clearPassword')}
+                    </Button>
+                  </div>
+                )}
               </Field>
               <Field id="app-name" label={t('webdav.config.appName')}>
                 <Input

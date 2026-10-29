@@ -40,7 +40,7 @@ const cfg = {
   enabled: true,
   serverUrl: 'https://dav.example.com/dav/',
   username: 'u',
-  password: 'p',
+  password: { hasSecret: true },
   syncPath: '/fastReader',
 }
 const fetchMock = vi.fn()
@@ -239,25 +239,62 @@ describe('utils', () => {
   })
 })
 
-describe('ai-config：duplicate / template 返回新 provider 的 1-based 序号', () => {
-  it('duplicateAIProvider 返回新序号并切换为当前模型；越界 -1', () => {
-    const s = useAIConfigStore.getState()
-    const before = s.aiConfigManager.providers.length
-    const idx = s.duplicateAIProvider(1)
-    expect(idx).toBe(before + 1)
-    const st = useAIConfigStore.getState().aiConfigManager
-    expect(st.providers.length).toBe(before + 1)
-    expect(st.currentModelId).toBe(idx)
-    expect(useAIConfigStore.getState().duplicateAIProvider(999)).toBe(-1)
+describe('ai-config：按服务商 id 操作的模型清单', () => {
+  // 旧用例的 duplicateProvider / createAIProviderFromTemplate（1-based 序号）已不存在：
+  // 新设计用 providerId 定位，新增服务商由 addProvider 返回 id 并自动成为当前模型。
+  beforeEach(() => {
+    useAIConfigStore.getState().resetAIConfig()
   })
 
-  it('createAIProviderFromTemplate 返回新序号；未知模板 -1', () => {
-    const s = useAIConfigStore.getState()
-    const before = s.aiConfigManager.providers.length
-    expect(s.createAIProviderFromTemplate('openai')).toBe(before + 1)
-    expect(useAIConfigStore.getState().aiConfigManager.providers.length).toBe(before + 1)
-    expect(
-      useAIConfigStore.getState().createAIProviderFromTemplate('nope' as unknown as 'openai')
-    ).toBe(-1)
+  it('addProvider 返回稳定的 providerId，并成为当前模型', () => {
+    const id = useAIConfigStore.getState().addProvider({
+      name: 'OpenAI',
+      type: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      models: [{ id: 'gpt-4o', enabled: true, source: 'manual' }],
+    })
+    expect(id).toMatch(/^p/)
+    expect(useAIConfigStore.getState().ai.active).toEqual({ providerId: id, modelId: 'gpt-4o' })
+    expect(useAIConfigStore.getState().getProvider(id)?.name).toBe('OpenAI')
+  })
+
+  it('getEnabledModels 只返回开启的模型；removeModel 后当前模型回退', () => {
+    const id = useAIConfigStore.getState().addProvider({
+      name: 'OpenAI',
+      type: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      models: [
+        { id: 'gpt-4o', enabled: true, source: 'auto' },
+        { id: 'gpt-3.5', enabled: false, source: 'auto' },
+      ],
+    })
+    expect(useAIConfigStore.getState().getEnabledModels(id).map((m) => m.id)).toEqual(['gpt-4o'])
+
+    useAIConfigStore.getState().removeModel(id, 'gpt-4o')
+    expect(useAIConfigStore.getState().getEnabledModels(id)).toEqual([])
+    expect(useAIConfigStore.getState().ai.active.modelId).toBe('')
+
+    // 不存在的模型/服务商是空操作
+    useAIConfigStore.getState().removeModel('nope', 'x')
+    expect(useAIConfigStore.getState().ai.providers).toHaveLength(1)
+  })
+
+  it('setProviderModelsFromIds 保留已有模型的开关与温度，当前模型被删时回退', () => {
+    const id = useAIConfigStore.getState().addProvider({
+      name: 'OpenAI',
+      type: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      models: [{ id: 'gpt-4o', enabled: false, source: 'auto' }],
+    })
+    useAIConfigStore.getState().setActiveModel(id, 'gpt-4o')
+    useAIConfigStore.getState().setProviderModelsFromIds(id, ['gpt-4o', 'gpt-4o-mini'])
+
+    const models = useAIConfigStore.getState().getProvider(id)!.models
+    expect(models.map((m) => m.id)).toEqual(['gpt-4o', 'gpt-4o-mini'])
+    expect(models[0].enabled).toBe(false) // 保留用户开关
+    expect(useAIConfigStore.getState().getProvider(id)!.modelsFetchedAt).toBeTruthy()
+
+    useAIConfigStore.getState().setProviderModelsFromIds(id, ['gpt-4o-mini'])
+    expect(useAIConfigStore.getState().ai.active).toEqual({ providerId: id, modelId: 'gpt-4o-mini' })
   })
 })

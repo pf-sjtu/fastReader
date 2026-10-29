@@ -24,7 +24,16 @@ const {
       maxRetries: 1,
       baseRetryDelay: 10
     },
-    promptConfig: {},
+    // 提示词只有 v2（覆盖项模型）：给一份完整模板，pipeline 会读 chapterSummary.*
+    promptConfig: {
+      chapterSummary: {
+        fiction: '小说 {{title}} \n{{content}}',
+        nonFiction: '社科 {{title}} \n{{content}}',
+      },
+      mindmap: { chapter: '导图 {{title}}', arrow: '箭头', combined: '整书导图' },
+      connectionAnalysis: '关联 {{chapterSummaries}}',
+      overallSummary: '全书 《{{bookTitle}}》 {{chapterInfo}} {{connections}}',
+    },
     processingOptions: {
       processingMode: 'summary',
       bookType: 'non-fiction',
@@ -113,7 +122,7 @@ vi.mock('../src/services/epubProcessor', () => ({
   }
 }))
 
-vi.mock('../src/services/aiService', () => {
+vi.mock('../src/services/ai', () => {
   class MockAIService {
     private onTokenUsage?: (n: number) => void
     constructor(_cfg: unknown, _prompt: unknown, opts: { onTokenUsage?: (n: number) => void }) {

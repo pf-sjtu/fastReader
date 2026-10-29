@@ -214,7 +214,10 @@ describe('AIProviderConfig 编辑子对话框未保存确认', () => {
     click(findButton(i18n.t('common.cancel')))
     expect(document.body.textContent).not.toContain(i18n.t('aiProvider.createTitle'))
 
+    // 新建分两步：先选服务商预设（选「OpenAI 兼容」），再进凭据页
     click(findButton(i18n.t('aiProvider.add')))
+    click(findButton(new RegExp(i18n.t('aiProvider.wizard.fixed.openai'))))
+    expect(document.body.textContent).toContain(i18n.t('aiProvider.wizard.step2'))
     const keyInput = document.querySelector<HTMLInputElement>('[role="dialog"] input[type="password"]')!
     typeInto(keyInput, 'sk-test')
     click(findButton(i18n.t('common.cancel')))

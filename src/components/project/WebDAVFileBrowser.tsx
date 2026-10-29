@@ -192,7 +192,8 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
         </DialogHeader>
 
         <div className="flex-1 flex flex-col min-h-0 space-y-3 overflow-hidden">
-          <div className="flex items-center gap-2 flex-shrink-0">
+          {/* 窄屏换行：导航按钮一行，搜索框占满下一行 */}
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
             <div className="flex items-center gap-1">
               <Button variant="outline" size="sm" onClick={() => goHistory(-1)} disabled={historyIndex <= 0} aria-label={t('webdav.browser.back')}>
                 <ChevronLeft className="h-4 w-4" />
@@ -222,7 +223,7 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </Button>
 
-            <div className="flex-1 max-w-md">
+            <div className="order-last basis-full sm:order-none sm:basis-auto flex-1 min-w-0 sm:max-w-md">
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -288,7 +289,7 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <CardContent className="flex-1 p-0 overflow-hidden">
-                <ScrollArea className="h-full w-full" horizontal>
+                <ScrollArea className="h-full w-full">
                   {isLoading ? (
                     <div className="flex items-center justify-center h-32">
                       <Loader2 className="h-6 w-6 animate-spin" />
@@ -301,55 +302,58 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
                       description={searchQuery ? t('webdav.tryDifferentSearch') : t('webdav.emptyDirectoryDesc')}
                     />
                   ) : (
-                    <div className="min-w-[800px]">
-                      {entries.map((file) => (
-                        <div
-                          key={file.filename}
-                          role="button"
-                          tabIndex={0}
-                          aria-pressed={file.type === 'file' ? selectedFile?.filename === file.filename : undefined}
-                          className={`flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer border-b border-gray-100 dark:border-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                            selectedFile?.filename === file.filename ? 'bg-accent' : ''
-                          }`}
-                          onClick={() => activateEntry(file)}
-                          onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
-                            // 只响应行本身（行内下载按钮自带键盘行为）
-                            if (e.target !== e.currentTarget) return
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              activateEntry(file)
-                            }
-                          }}
-                        >
-                          <FileIcon file={file} />
-                          <div className="flex-1 min-w-0 flex-shrink-0">
-                            <div className="font-medium text-sm truncate" title={file.basename}>
-                              {file.basename}
+                    // 窄屏下行内容过宽时在此横向滚动（外层 ScrollArea 仅纵向）
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[18rem]">
+                        {entries.map((file) => (
+                          <div
+                            key={file.filename}
+                            role="button"
+                            tabIndex={0}
+                            aria-pressed={file.type === 'file' ? selectedFile?.filename === file.filename : undefined}
+                            className={`flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer border-b border-gray-100 dark:border-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                              selectedFile?.filename === file.filename ? 'bg-accent' : ''
+                            }`}
+                            onClick={() => activateEntry(file)}
+                            onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+                              // 只响应行本身（行内下载按钮自带键盘行为）
+                              if (e.target !== e.currentTarget) return
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                activateEntry(file)
+                              }
+                            }}
+                          >
+                            <FileIcon file={file} />
+                            <div className="flex-1 min-w-0 flex-shrink-0">
+                              <div className="font-medium text-sm truncate" title={file.basename}>
+                                {file.basename}
+                              </div>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {file.type === 'directory' ? t('webdav.browser.directory') : formatFileSize(file.size)}
+                                {file.type === 'file' && ` • ${formatDate(file.lastmod)}`}
+                              </div>
                             </div>
-                            <div className="text-xs text-muted-foreground truncate">
-                              {file.type === 'directory' ? t('webdav.browser.directory') : formatFileSize(file.size)}
-                              {file.type === 'file' && ` • ${formatDate(file.lastmod)}`}
-                            </div>
+                            {isSelectable(file) && <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0 ml-2" />}
+                            {file.type === 'file' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-8 h-8 p-0 flex-shrink-0 ml-1"
+                                onClick={(e: React.MouseEvent) => {
+                                  e.stopPropagation()
+                                  setSelectedFile(file)
+                                  void handleDownloadFile(file)
+                                }}
+                                title={t('webdav.browser.downloadFile')}
+                                aria-label={t('webdav.browser.downloadFileNamed', { name: file.basename })}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
-                          {isSelectable(file) && <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0 ml-2" />}
-                          {file.type === 'file' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="w-8 h-8 p-0 flex-shrink-0 ml-1"
-                              onClick={(e: React.MouseEvent) => {
-                                e.stopPropagation()
-                                setSelectedFile(file)
-                                void handleDownloadFile(file)
-                              }}
-                              title={t('webdav.browser.downloadFile')}
-                              aria-label={t('webdav.browser.downloadFileNamed', { name: file.basename })}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   )}
                 </ScrollArea>
@@ -359,8 +363,8 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
 
           {selectedFile && selectedFile.type === 'file' && (
             <div className="flex-shrink-0 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 rounded-md">
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span className="font-medium text-foreground" title={selectedFile.basename}>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground min-w-0 truncate" title={selectedFile.basename}>
                   {selectedFile.basename.length > 30 ? selectedFile.basename.substring(0, 30) + '...' : selectedFile.basename}
                 </span>
                 <span>{t('webdav.browser.size', { size: formatFileSize(selectedFile.size) })}</span>
@@ -369,11 +373,11 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
             </div>
           )}
 
-          <div className="flex justify-between items-center flex-shrink-0">
-            <div className="text-sm text-muted-foreground truncate">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between sm:items-center flex-shrink-0">
+            <div className="text-sm text-muted-foreground truncate min-w-0">
               {t('webdav.browser.supportedFormats', { formats: allowedExtensions.join(', ') })}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 justify-end shrink-0">
               <Button variant="outline" onClick={onClose}>
                 {t('common.cancel')}
               </Button>

@@ -29,8 +29,16 @@ export function useBatchQueueControls() {
       return false
     }
     if (!checkMode()) return false
+
+    // 共享队列：同一时刻只允许一个浏览器执行，其余只读查看进度
+    if (!store().acquireRunner()) {
+      toast.error(t('batch.runnerBusy'))
+      return false
+    }
+
     const status = await cloudCacheService.fetchCacheFileNamesStatus()
     if (status.status === 'unknown') {
+      store().releaseRunner()
       toast.error(t('batch.cacheUnknownNotStarted'), { description: status.error })
       return false
     }
@@ -55,12 +63,14 @@ export function useBatchQueueControls() {
   const stop = () => {
     batchProcessingEngine.stop()
     store().stopProcessing()
+    store().releaseRunner()
     toast(t('batch.toast.stopped'), { description: t('batch.toast.stoppedDesc') })
   }
 
   const clear = () => {
     batchProcessingEngine.stop()
     store().stopProcessing()
+    store().releaseRunner()
     store().clearQueue()
     toast(t('batch.toast.cleared'), { description: t('batch.toast.clearedDesc') })
   }

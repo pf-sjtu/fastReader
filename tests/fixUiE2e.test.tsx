@@ -20,7 +20,7 @@ vi.mock('../src/services/pipeline/persistence', () => ({
   syncMindMapResult: vi.fn(async () => false),
   syncSummaryResult: vi.fn(async () => ({ mdFailed: false, chartsError: null })),
 }))
-vi.mock('../src/services/aiService', () => ({ AIService: class {} }))
+vi.mock('../src/services/ai', () => ({ AIService: class {} }))
 vi.mock('../src/services/notificationService', () => ({
   notificationService: { sendTaskCompleteNotification: vi.fn(), sendErrorNotification: vi.fn() },
 }))
@@ -262,7 +262,7 @@ describe('8. 设置对话框标题跟随页签', () => {
     click(findButton(t('config.title')))
     await flush()
     const title = () => document.querySelector('[role="dialog"] h2')?.textContent?.trim()
-    expect(title()).toBe(t('config.aiServiceConfig'))
+    expect(title()).toBe(t('config.tabs.providers'))
     const tab = Array.from(document.querySelectorAll<HTMLElement>('[role="tab"]')).find(
       (e) => e.textContent?.trim() === t('config.tabs.webdav')
     )!
@@ -276,7 +276,7 @@ describe('8. 设置对话框标题跟随页签', () => {
 })
 
 describe('3. 移动端布局（jsdom 无布局引擎，断言防溢出的结构性类；实际宽度已用 375px 浏览器核对）', () => {
-  it('PromptEditor 的工具栏/版本行允许换行，页签网格在窄屏为 2 列', () => {
+  it('PromptEditor 的工具栏允许换行，页签网格在窄屏为 2 列', () => {
     m = mount(<PromptEditor />)
     const html = m.container.innerHTML
     expect(html).toContain('flex-wrap')

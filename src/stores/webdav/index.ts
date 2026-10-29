@@ -1,124 +1,135 @@
-// WebDAV配置Store
+// WebDAV 配置 Store
+//
+// 凭据（password）只存在于服务端：客户端状态里是 `{ hasSecret: true }`，
+// 用户新输入的密码放到内存 pendingSecret，随下一次写回提交。
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { WebDAVConfig } from '../types'
+import type { SecretRef } from '../../types/ai'
+import { markDirty, registerSection } from '../../services/shared/sharedState'
 
-export const WEBDAV_STORAGE_KEY = 'ebook-webdav-config'
+const SECTION = 'webdav' as const
 
 export const defaultWebDAVConfig: WebDAVConfig = {
   enabled: false,
   serverUrl: 'https://dav.jianguoyun.com/dav/',
   username: '',
-  password: '',
   appName: 'fastReader_by_PF',
   autoSync: false,
   syncPath: '/fastReader',
   browsePath: '/',
   lastSyncTime: null,
-  connectionStatus: 'disconnected'
+  connectionStatus: 'disconnected',
 }
+
+/** 待提交的明文密码（null = 清除） */
+let pendingPassword: string | null | undefined
 
 export interface WebDAVState {
   webdavConfig: WebDAVConfig
 
-  // Actions
   setWebDAVEnabled: (enabled: boolean) => void
   setWebDAVServerUrl: (serverUrl: string) => void
   setWebDAVUsername: (username: string) => void
-  setWebDAVPassword: (password: string) => void
+  /** 传入新密码时只记录待提交值；传 null 表示清除 */
+  setWebDAVPassword: (password: string | null) => void
   setWebDAVAppName: (appName: string) => void
   setWebDAVAutoSync: (autoSync: boolean) => void
   setWebDAVSyncPath: (syncPath: string) => void
   setWebDAVBrowsePath: (browsePath: string) => void
-  setWebDAVConnectionStatus: (status: 'disconnected' | 'connecting' | 'connected' | 'error') => void
+  setWebDAVConnectionStatus: (status: WebDAVConfig['connectionStatus']) => void
   updateWebDAVLastSyncTime: () => void
   resetWebDAVConfig: () => void
 
-  // 批量更新
   updateWebDAVConfig: (config: Partial<WebDAVConfig>) => void
+  replaceWebDAV: (config: WebDAVConfig) => void
 }
 
-export const useWebDAVStore = create<WebDAVState>()(
-  persist(
-    (set) => ({
-      webdavConfig: defaultWebDAVConfig,
+export const useWebDAVStore = create<WebDAVState>()((set, get) => {
+  const commit = (patch: Partial<WebDAVConfig>) => {
+    set({ webdavConfig: { ...get().webdavConfig, ...patch } })
+    markDirty(SECTION)
+  }
 
-      setWebDAVEnabled: (enabled) =>
-        set((state) => ({
-          webdavConfig: { ...state.webdavConfig, enabled }
-        })),
+  return {
+    webdavConfig: defaultWebDAVConfig,
 
-      setWebDAVServerUrl: (serverUrl) =>
-        set((state) => ({
-          webdavConfig: { ...state.webdavConfig, serverUrl }
-        })),
+    setWebDAVEnabled: (enabled) => commit({ enabled }),
+    setWebDAVServerUrl: (serverUrl) => commit({ serverUrl }),
+    setWebDAVUsername: (username) => commit({ username }),
 
-      setWebDAVUsername: (username) =>
-        set((state) => ({
-          webdavConfig: { ...state.webdavConfig, username }
-        })),
+    setWebDAVPassword: (password) => {
+      pendingPassword = password === null ? null : password
+      commit({
+        password: password === null ? undefined : ({ hasSecret: true } satisfies SecretRef),
+      })
+    },
 
-      setWebDAVPassword: (password) =>
-        set((state) => ({
-          webdavConfig: { ...state.webdavConfig, password }
-        })),
+    setWebDAVAppName: (appName) => commit({ appName }),
+    setWebDAVAutoSync: (autoSync) => commit({ autoSync }),
+    setWebDAVSyncPath: (syncPath) => commit({ syncPath }),
+    setWebDAVBrowsePath: (browsePath) => commit({ browsePath }),
+    // 连接状态是运行时状态：只改内存，不必写服务端
+    setWebDAVConnectionStatus: (connectionStatus) =>
+      set({ webdavConfig: { ...get().webdavConfig, connectionStatus } }),
 
-      setWebDAVAppName: (appName) =>
-        set((state) => ({
-          webdavConfig: { ...state.webdavConfig, appName }
-        })),
+    updateWebDAVLastSyncTime: () =>
+      set({ webdavConfig: { ...get().webdavConfig, lastSyncTime: new Date().toISOString() } }),
 
-      setWebDAVAutoSync: (autoSync) =>
-        set((state) => ({
-          webdavConfig: { ...state.webdavConfig, autoSync }
-        })),
+    resetWebDAVConfig: () => {
+      pendingPassword = null
+      set({ webdavConfig: defaultWebDAVConfig })
+      markDirty(SECTION)
+    },
 
-      setWebDAVSyncPath: (syncPath) =>
-        set((state) => ({
-          webdavConfig: { ...state.webdavConfig, syncPath }
-        })),
+    updateWebDAVConfig: (config) => commit(config),
 
-      setWebDAVBrowsePath: (browsePath) =>
-        set((state) => ({
-          webdavConfig: { ...state.webdavConfig, browsePath }
-        })),
+    replaceWebDAV: (config) => {
+      pendingPassword = undefined
+      set({ webdavConfig: { ...defaultWebDAVConfig, ...config } })
+      markDirty(SECTION)
+    },
+  }
+})
 
-      setWebDAVConnectionStatus: (connectionStatus) =>
-        set((state) => ({
-          webdavConfig: { ...state.webdavConfig, connectionStatus }
-        })),
+/** 写回服务端时叠加待提交的明文密码 */
+export function serializeWebDAV(config: WebDAVConfig): Record<string, unknown> {
+  if (pendingPassword === undefined) return { ...config }
+  if (pendingPassword === null) {
+    // 服务端把「字段缺席」当成「保留原值」，清空必须显式发 null
+    return { ...config, password: null }
+  }
+  return { ...config, password: pendingPassword }
+}
 
-      updateWebDAVLastSyncTime: () =>
-        set((state) => ({
-          webdavConfig: {
-            ...state.webdavConfig,
-            lastSyncTime: new Date().toISOString()
-          }
-        })),
-
-      resetWebDAVConfig: () =>
-        set({ webdavConfig: defaultWebDAVConfig }),
-
-      updateWebDAVConfig: (config) =>
-        set((state) => ({
-          webdavConfig: { ...state.webdavConfig, ...config }
-        }))
-    }),
-    {
-      name: WEBDAV_STORAGE_KEY,
-      version: 1,
-      partialize: (state) => ({
-        webdavConfig: state.webdavConfig
-      }),
-      migrate: (persisted) => persisted as { webdavConfig: WebDAVConfig },
-      // 旧数据缺字段时用默认值补齐
-      merge: (persisted, current) => {
-        const p = persisted as Partial<WebDAVState> | undefined
-        return { ...current, webdavConfig: { ...current.webdavConfig, ...(p?.webdavConfig || {}) } }
+registerSection<WebDAVConfig>(
+  SECTION,
+  {
+    getData: () => serializeWebDAV(useWebDAVStore.getState().webdavConfig) as unknown as WebDAVConfig,
+    setData: (data) => {
+      const config: WebDAVConfig = {
+        ...defaultWebDAVConfig,
+        ...(data ?? {}),
+        connectionStatus: 'disconnected',
       }
-    }
-  )
+      useWebDAVStore.setState({ webdavConfig: config })
+    },
+    debounceMs: 800,
+    afterFlush: () => {
+      pendingPassword = undefined
+    },
+  },
+  { autoWrite: false }
 )
+
+/** 内存里待提交的明文密码（导出「包含密钥」时使用） */
+export function getPendingWebDAVPassword(): string | undefined {
+  return typeof pendingPassword === 'string' ? pendingPassword : undefined
+}
+
+/** 是否已配置 WebDAV 凭据（客户端可见） */
+export function hasWebDAVCredentials(config: WebDAVConfig | undefined): boolean {
+  return Boolean(config?.serverUrl && config?.username && config?.password?.hasSecret)
+}
 
 // 便捷选择器
 export const useWebDAVConfig = () => useWebDAVStore((state) => state.webdavConfig)

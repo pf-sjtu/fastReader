@@ -69,3 +69,37 @@
 - 浏览器端到端发现并修复的 UI 问题：mindmap 模式整书导图页签永远「生成中」、全章节失败仍显示成功、375px 提示词编辑器溢出、输出语言默认 `en` 与「auto 跟随界面」文案不符、主题首次点击无反应、设置标题不随页签变化、toast 堆积
 - CLI 对真实 WebDAV（InfiniCLOUD）整链路联调（沙盒小书 → 处理 → 同步 → 二次运行跳过 → 前端读回，`tests/tour/cliOutputContract.test.ts`）发现三处 mock 测试发现不了的问题：（1）webdav4 的 `propfind` 默认 `follow_redirects=False` 且不带 `Depth`，服务器对不带尾斜杠的目录返回 301、缺省 Depth 返回 403，`exists()` 直接失败、CLI 连接不上——现对实例补上跟随重定向与 `Depth: 0` 默认值；（2）Windows 上 `write_text` 把产物写成 CRLF，前端 `parseUnifiedMarkdown` 依赖 `\n\n` 导致章节全部丢失——CLI 固定写 LF，前端解析也先归一化换行；（3）`batch.sourcePath` 是服务器根下的绝对路径（示例注释曾误写「相对 syncPath」）。另注意：项目 `.env` 里的 `FASTREADER_*` 优先于 YAML。CLI 对未登记模型按 gemini-1.5-pro 价格估算费用（`FALLBACK_PRICING_MODEL`），自定义模型的费用显示会偏高
 - 线上白屏（`Cannot access 'b' before initialization`，radix 块）：`manualChunks` 用 `id.includes("react-dom")` 匹配完整路径，而 pnpm 目录名带 peer 依赖后缀（`@radix-ui+react-dismissable-layer@…_@types+react-dom@…`），Cloudflare/Linux 上 radix 原语被误分进 react-vendor，形成 react-vendor ↔ radix 循环依赖；本机 Windows 的目录名被哈希缩短，复现不了。现在只按包名匹配，并用 `scripts/check-chunk-cycles.mjs` 在 `build:pages` 与 CI 中检查产物的静态循环依赖（构建失败比部署白屏好）
+
+## 2026-11 共享服务端状态重构
+
+### 架构变更
+- 配置与状态从 localStorage 迁到 Cloudflare KV（分节 + `rev` 乐观锁 + 409 三方合并），见 `docs/deploy.md`
+- 共享密码登录；`APP_PASSWORD` 缺省 `123456a`，会话签名绑定密码指纹 → 改密码全端失效
+- API Key / WebDAV 密码只在服务端，`/api/ai`、`/api/dav` 按 id 注入；客户端状态里只有 `{hasSecret}`
+- 章节缓存仍在浏览器 IndexedDB（体积大，且不属于「配置」）
+
+### 写入节流（KV 免费额度 1000 写/天）
+| 分区 | 触发 | 节流 |
+|------|------|------|
+| ai / processing / webdav / prompts | store 变更 | 800ms 防抖 + 无变化不写 |
+| batch | 队列/状态变更 | 15s 防抖 |
+| history / usage | 完成或 30s | 服务端 `append` 合并 |
+
+### 服务商化模型配置
+- `AIState = { providers: ProviderEntry[], active, defaultTemperature }`，运行时派生扁平 `aiConfig`（无 apiKey）
+- 1.0.0 → 2.0.0 迁移按 `(协议, 规范化 baseUrl, apiKey)` 折叠；服务商 id 由内容哈希得到，导入可重复执行
+- models.dev 目录由 `/api/catalog` 精简下发（5.9MB → ~960KB，gzip ~140KB），Cache API 缓存 24h，
+  上游失败回退 KV 副本；价格匹配顺序：catalogId → baseUrl 主机 → 归一化 model id（官方 provider 优先）
+
+### 提示词
+- 只保留 v2；用户自定义存「相对默认的覆盖项」，内置模板升级能触达未改动的条目
+- 导入 1.0.0 时取 `promptVersionConfig.v2` 与默认求差集；v1 丢弃并提示
+
+### 网关与代理
+- `proxyFetch` 只传 `X-Provider-Id` + 相对 baseUrl 的端点路径；客户端无法指定任意上游
+- Gemini 从 SDK 直连改为 REST 经代理，移除 `@google/generative-ai`（首屏也更瘦）
+- `vite.config.ts` 的重复开发代理已删除，本地开发用 `wrangler pages dev`
+
+### 本轮顺手修掉的缺陷
+见 `BUG.md`（PDF 翻页、导图导出格式、历史入口、i18n 缺键、移动端溢出、键盘可选、
+cacheService 索引漂移与 LRU 落盘、WebDAV 自动连接依赖等）。

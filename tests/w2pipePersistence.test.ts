@@ -272,7 +272,7 @@ describe('云同步与历史', () => {
   })
 
   it('recordHistory 写入历史；store 抛错不外抛', () => {
-    useProcessingHistoryStore.getState().clearHistory()
+    useProcessingHistoryStore.getState().clearLocalView()
     recordHistory({ bookTitle: '书', fileName: 'a.epub', processingMode: 'summary', model: 'm', chapterCount: 2 })
     expect(useProcessingHistoryStore.getState().records[0]).toMatchObject({ fileName: 'a.epub', chapterCount: 2 })
     const spy = vi.spyOn(useProcessingHistoryStore, 'getState').mockImplementation(() => {

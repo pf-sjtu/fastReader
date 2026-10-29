@@ -1,8 +1,8 @@
 """
-Prompt 模板（与前端共享 src/services/prompts/config/v{1,2}-prompts.yaml）
+Prompt 模板（与前端共享 src/services/prompts/config/v2-prompts.yaml）
 
 - 模板来源优先级：配置文件 promptVersionConfig > 仓库内 YAML
-- 默认版本与前端 configStore 一致（v1）
+- 只保留 v2：v1 已废弃，读到 v1 声明时告警并使用 v2
 - 输入组装与前端 aiService 对齐：章节摘要用「标题 + 原文」，关联/全书只喂章节摘要 JSON
 - 模板渲染语义见 src/services/prompts/config/README.md；render_prompt 与前端 renderPrompt 等价
   （跨端用例 tests/fixtures/prompts/render-cases.json）
@@ -21,7 +21,7 @@ import yaml
 
 # 前端 configStore 的 currentPromptVersion 默认值
 DEFAULT_PROMPT_VERSION = "v2"  # 与前端 DEFAULT_PROMPT_VERSION 一致
-SUPPORTED_PROMPT_VERSIONS = ("v1", "v2")
+SUPPORTED_PROMPT_VERSIONS = ("v2",)
 
 # 仓库内共享 YAML 目录（src/cli/ → src/services/prompts/config）
 DEFAULT_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "services" / "prompts" / "config"
@@ -73,7 +73,17 @@ def get_language_instruction(language: str) -> str:
 
 
 def load_yaml_prompts(version: str, prompts_dir: Optional[str] = None) -> dict:
-    """读取共享 YAML（v2 文件带 BOM，用 utf-8-sig）"""
+    """读取共享 YAML（v2 文件带 BOM，用 utf-8-sig）
+
+    v1 模板已删除：任何版本入参都读 v2，保证旧配置仍能跑。
+    """
+    if version not in SUPPORTED_PROMPT_VERSIONS:
+        logging.getLogger(__name__).warning(
+            "提示词版本 %s 已废弃（仅支持 %s），将使用 v2 模板",
+            version,
+            "/".join(SUPPORTED_PROMPT_VERSIONS),
+        )
+        version = DEFAULT_PROMPT_VERSION
     base = Path(prompts_dir) if prompts_dir else DEFAULT_PROMPTS_DIR
     path = base / f"{version}-prompts.yaml"
     if not path.exists():
@@ -166,7 +176,13 @@ class PromptTemplates:
         """
         self.prompt_config = prompt_config
         self.prompts_dir = prompts_dir
-        self.version = (getattr(prompt_config, "currentVersion", "") or DEFAULT_PROMPT_VERSION)
+        version = getattr(prompt_config, "currentVersion", "") or DEFAULT_PROMPT_VERSION
+        if version not in SUPPORTED_PROMPT_VERSIONS:
+            logging.getLogger(__name__).warning(
+                "配置声明的提示词版本 %s 已废弃，改用 %s", version, DEFAULT_PROMPT_VERSION
+            )
+            version = DEFAULT_PROMPT_VERSION
+        self.version = version
         self._yaml: Optional[dict] = None
 
     def _yaml_prompts(self) -> dict:

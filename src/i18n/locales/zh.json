@@ -223,7 +223,9 @@
     "collapse": "折叠",
     "processing": "处理中...",
     "readChapter": "阅读原文",
-    "unknownError": "未知错误"
+    "unknownError": "未知错误",
+    "retry": "重试",
+    "back": "返回"
   },
   "navigation": {
     "extractingChapters": "提取章节中",
@@ -240,7 +242,7 @@
   },
   "promptEditor": {
     "title": "提示词编辑器",
-    "description": "自定义AI处理的提示词模板，根据处理模式和书籍类型显示对应的提示词",
+    "description": "自定义各环节的提示词；只保存你改过的条目",
     "fiction": "小说类",
     "nonFiction": "社科类",
     "summary": "总结模式",
@@ -269,7 +271,38 @@
       "chapterInfo": "这里是书籍章节结构的示例信息...",
       "connections": "这里是章节关联分析的示例内容...",
       "bookTitle": "示例书籍标题"
-    }
+    },
+    "versionNote": "内置模板版本：{{version}}。没有改动过的条目会自动跟随内置模板更新；改动过的条目保持你的版本，可随时恢复默认。",
+    "customized": "已自定义",
+    "inUse": "当前使用",
+    "customizedCount_one": "已自定义 {{count}} 条",
+    "customizedCount_other": "已自定义 {{count}} 条",
+    "allDefault": "全部使用内置默认",
+    "resetEntry": "恢复默认",
+    "resetEntryFor": "将「{{name}}」恢复默认",
+    "resetAll": "全部恢复默认",
+    "resetAllTitle": "全部恢复默认？",
+    "resetAllDescription": "所有自定义的提示词都会被清除，改用内置模板。此操作无法撤销。",
+    "previewNote": "预览模式：占位符已替换为示例内容，只读。",
+    "placeholders": "可用占位符",
+    "autoSaveNote": "修改即时保存；与内置默认相同的内容不会单独保存。",
+    "entries": {
+      "fiction": "章节总结 · 小说类",
+      "nonFiction": "章节总结 · 社科类",
+      "mindmapChapter": "章节思维导图",
+      "mindmapArrow": "章节关联箭头",
+      "mindmapCombined": "整书思维导图"
+    },
+    "hints": {
+      "fiction": "书籍类型为「小说类」时用于总结每一章。",
+      "nonFiction": "书籍类型为「社科类」时用于总结每一章。",
+      "mindmapChapter": "思维导图模式下为每一章生成导图。",
+      "mindmapArrow": "为章节导图生成跨章节的关联箭头。",
+      "mindmapCombined": "整书思维导图模式下合成全书导图。",
+      "connectionAnalysis": "分析章节之间的关联。",
+      "overallSummary": "生成全书总结。"
+    },
+    "customizedCount": "已自定义 {{count}} 条"
   },
   "config": {
     "title": "配置",
@@ -282,7 +315,8 @@
       "aiFailed": "AI API 连接失败",
       "testFailed": "测试失败: {{error}}",
       "proxyTestFailed": "代理测试失败: {{error}}",
-      "unknownError": "未知错误"
+      "unknownError": "未知错误",
+      "selectModelFirst": "请先选择要测试的模型"
     },
     "aiProvider": "AI 提供商",
     "selectAiProvider": "选择 AI 提供商",
@@ -370,9 +404,10 @@
     "proxyUrl": "代理地址",
     "testConnection": "测试连接",
     "tabs": {
-      "providers": "AI服务商",
+      "providers": "AI 服务商",
       "webdav": "WebDAV配置",
-      "exportImport": "导出导入"
+      "exportImport": "导出导入",
+      "processing": "处理设置"
     },
     "proxy": {
       "test": "测试代理",
@@ -417,7 +452,8 @@
       "markdown": "下载为 Markdown",
       "html": "下载为 HTML",
       "webp": "下载为 WEBP"
-    }
+    },
+    "fileDownloaded": "已下载 {{filename}}"
   },
   "viewContent": {
     "originalText": "原文内容",
@@ -504,7 +540,10 @@
     "webdavInitFailed": "WebDAV 连接失败，请检查配置",
     "cacheNotFound": "云端缓存未找到，请重新处理",
     "cacheParseError": "缓存内容解析失败",
-    "loadError": "加载历史记录失败"
+    "loadError": "加载历史记录失败",
+    "clearLocalView": "清除本机视图",
+    "confirmClearLocalTitle": "清除历史视图？",
+    "confirmClearLocalDescription": "只清除本浏览器显示的历史列表；服务端共享的历史记录会被保留，刷新后会重新出现。"
   },
   "cloudCache": {
     "checking": "正在检查云端缓存...",
@@ -614,7 +653,10 @@
       "helpPassword": "密码：在坚果云安全选项中生成的应用密码",
       "helpAppPassword": "应用密码不是登录密码，需要在账户设置中单独生成",
       "helpLink": "查看坚果云WebDAV设置教程",
-      "proxyNote": "当前版本通过同源 /api/dav 代理访问 WebDAV，请确保服务器地址为 https。"
+      "proxyNote": "当前版本通过同源 /api/dav 代理访问 WebDAV，请确保服务器地址为 https。",
+      "passwordKeepPlaceholder": "已配置，留空保持不变",
+      "passwordConfigured": "密码已配置（仅保存在服务端）",
+      "clearPassword": "清除密码"
     }
   },
   "errorBoundary": {
@@ -632,10 +674,10 @@
     "fillAllFields": "请填写完整的配置信息",
     "duplicateToast": "已存在相同配置",
     "duplicateError": "已存在相同 API 地址和模型的配置",
-    "created": "AI服务商创建成功",
-    "updated": "AI服务商更新成功",
-    "createTitle": "创建AI服务商配置",
-    "editTitle": "编辑AI服务商配置",
+    "created": "服务商已添加",
+    "updated": "服务商已更新",
+    "createTitle": "添加 AI 服务商",
+    "editTitle": "编辑 AI 服务商",
     "createDescription": "基于模板创建新的AI服务商配置，或自定义配置",
     "editDescription": "修改现有AI服务商配置",
     "selectTemplate": "选择模板",
@@ -643,8 +685,8 @@
     "basicInfo": "基本信息",
     "providerType": "服务商类型",
     "custom": "自定义",
-    "apiKey": "API密钥",
-    "apiKeyPlaceholder": "输入API密钥",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "输入 API Key",
     "apiUrl": "API地址",
     "apiUrlPlaceholder": "输入API地址",
     "modelSettings": "模型设置",
@@ -667,12 +709,124 @@
     "inUse": "使用中",
     "use": "使用",
     "keepAtLeastOne": "至少需要保留一个AI服务商配置",
-    "confirmDelete": "确定要删除\"{{name}}\"吗？",
-    "introTitle": "AI服务商配置说明",
+    "confirmDelete": "将删除服务商「{{name}}」及其下全部模型设置，服务端保存的密钥也会一并移除。此操作无法撤销。",
+    "introTitle": "如何配置",
     "intro": "在此页面可以管理多个AI服务商配置，包括Google Gemini、OpenAI GPT、Ollama本地服务等。您可以创建多个配置，支持自定义API地址、模型参数和代理设置，随时自由切换使用。",
-    "title": "AI服务商配置",
-    "subtitle": "管理多个AI服务商配置，支持自由切换和自定义设置",
-    "add": "添加配置"
+    "title": "服务商",
+    "subtitle": "每个服务商可包含多个模型，随时切换",
+    "add": "添加服务商",
+    "deleteTitle": "删除服务商？",
+    "deleted": "已删除「{{name}}」",
+    "introOne": "一条配置 = 一个服务商（地址 + 密钥），其下可以启用多个模型。",
+    "introFetch": "填写地址与密钥后点「获取模型」，再勾选要用的模型；拉取失败时也可以手动填写模型 ID。",
+    "introSecret": "密钥只保存在服务端，浏览器只知道「已配置」；AI 请求经服务端代理转发（Ollama 除外，它由浏览器直连本机）。",
+    "activeModel": "当前模型",
+    "selectModel": "选择模型",
+    "noEnabledModels": "没有已启用的模型",
+    "defaultTemperature": "全局默认温度",
+    "temperatureHint": "模型未单独设置温度时使用全局默认值（0–2）",
+    "currentModelBadge": "当前：{{model}}",
+    "modelCount": "已启用 {{enabled}} / 共 {{total}} 个模型",
+    "keyConfigured": "已配置密钥",
+    "keyMissing": "未配置密钥",
+    "keyNotNeeded": "无需密钥",
+    "refreshModels": "刷新模型",
+    "refreshDone_one": "「{{name}}」共 {{count}} 个模型",
+    "refreshDone_other": "「{{name}}」共 {{count}} 个模型",
+    "refreshDiff": "新增 {{added}} 个（默认停用），移除 {{removed}} 个",
+    "refreshFailed": "「{{name}}」刷新模型失败",
+    "emptyTitle": "还没有服务商",
+    "emptyDescription": "添加一个服务商并启用至少一个模型，就可以开始处理电子书。",
+    "errors": {
+      "unauthorized": "服务商拒绝了请求，请检查 API Key",
+      "invalid_base_url": "地址无效：只支持公网 https 地址",
+      "missing_base_url": "请填写 API 地址",
+      "unknown_provider": "服务端找不到这个服务商，请先保存后再试",
+      "network": "网络错误，无法连接服务端"
+    },
+    "models": {
+      "toggle_one": "模型 ({{count}})",
+      "toggle_other": "模型 ({{count}})",
+      "context": "上下文 {{value}}",
+      "price": "${{input}} / ${{output}} 每百万 tokens",
+      "unpriced": "未计价",
+      "reasoning": "推理",
+      "temperature": "温度",
+      "manual": "手动",
+      "temperaturePlaceholder": "默认 {{value}}",
+      "temperatureFor": "{{model}} 的温度",
+      "enableFor": "启用 {{model}}",
+      "removeFor": "删除 {{model}}",
+      "filterPlaceholder": "筛选模型",
+      "empty": "还没有模型，点「刷新模型」获取，或在下方手动添加",
+      "noMatch": "没有匹配的模型",
+      "manualAdd": "添加模型",
+      "manualPlaceholder": "模型 ID，例如 gpt-4o-mini",
+      "exists": "已存在",
+      "toggle": "模型 ({{count}})"
+    },
+    "wizard": {
+      "step1": "选择服务商",
+      "step2": "凭据与模型",
+      "stepIndicator": "第 {{current}} / {{total}} 步：{{title}}",
+      "generic": "通用协议",
+      "fixed": {
+        "openai": "OpenAI 兼容",
+        "openaiDesc": "OpenAI 及各类兼容网关",
+        "gemini": "Gemini",
+        "geminiDesc": "Google Generative Language API",
+        "ollama": "Ollama（本地）",
+        "ollamaDesc": "浏览器直连本机，无需密钥"
+      },
+      "presets": "来自 models.dev 的服务商",
+      "presetCount_one": "{{count}} 家",
+      "presetCount_other": "{{count}} 家",
+      "presetModels_one": "{{count}} 个模型",
+      "presetModels_other": "{{count}} 个模型",
+      "morePresets_one": "还有 {{count}} 家，请输入关键字缩小范围",
+      "morePresets_other": "还有 {{count}} 家，请输入关键字缩小范围",
+      "searchPresets": "搜索服务商名称或地址",
+      "catalogLoading": "正在加载服务商目录…",
+      "catalogFailed": "服务商目录暂时不可用，可以先用上方的通用协议手动配置。",
+      "noPresetMatch": "没有匹配的服务商，可以用「OpenAI 兼容」手动配置。",
+      "baseUrl": "API 地址",
+      "baseUrlHint": "服务商的 API 根地址，通常以 /v1 结尾",
+      "baseUrlHintOllama": "本机 Ollama 地址，默认 http://localhost:11434",
+      "baseUrlIssue": {
+        "required": "请填写 API 地址",
+        "invalid": "地址格式不正确",
+        "https": "AI 请求经服务端转发，只支持 https 地址"
+      },
+      "name": "名称",
+      "namePlaceholder": "留空则使用地址的域名",
+      "keyKeep": "已配置，留空保持不变",
+      "ollamaHint": "Ollama 运行在你的电脑上，由浏览器直接访问，不经服务端，也无需 API Key。请确认 Ollama 已启动并允许跨域（OLLAMA_ORIGINS）。",
+      "ollamaUnreachable": "无法连接 {{url}}，请确认 Ollama 已启动并允许当前页面跨域访问",
+      "models": "模型",
+      "fetchModels": "获取模型",
+      "fetching": "获取中…",
+      "fetched_one": "获取到 {{count}} 个模型",
+      "fetched_other": "获取到 {{count}} 个模型",
+      "fetchFailed": "获取模型失败：{{error}}。可以在下方手动填写模型 ID。",
+      "modelsEmpty": "点「获取模型」从服务商拉取模型列表",
+      "selectAll": "全选",
+      "selectNone": "全不选",
+      "selectedCount": "已选 {{selected}} / {{total}}",
+      "moreModels_one": "还有 {{count}} 个，请输入关键字筛选",
+      "moreModels_other": "还有 {{count}} 个，请输入关键字筛选",
+      "manualToggle": "手动填写模型 ID",
+      "manualIds": "手动填写模型 ID",
+      "manualIdsPlaceholder": "多个 ID 用逗号或换行分隔，例如：\ngpt-4o-mini, deepseek-chat",
+      "savedWithoutModels": "还没有启用任何模型，可以稍后在列表里刷新或手动添加",
+      "back": "上一步",
+      "changePreset": "更换服务商",
+      "presetCount": "{{count}} 家",
+      "presetModels": "{{count}} 个模型",
+      "morePresets": "还有 {{count}} 家，请输入关键字缩小范围",
+      "fetched": "获取到 {{count}} 个模型",
+      "moreModels": "还有 {{count}} 个，请输入关键字筛选"
+    },
+    "refreshDone": "「{{name}}」共 {{count}} 个模型"
   },
   "batch": {
     "cacheUnknown": "无法确认云端缓存状态",
@@ -704,7 +858,9 @@
       "itemDone": "处理完成: {{name}}",
       "itemFailed": "处理失败: {{name}}",
       "finished": "处理完成",
-      "finishedDesc": "批量处理已完成，成功 {{completed}} 个，失败 {{failed}} 个"
+      "finishedDesc": "批量处理已完成，成功 {{completed}} 个，失败 {{failed}} 个",
+      "startedDesc": "共 {{count}} 个文件待处理",
+      "itemPartialDesc": "有 {{count}} 章因内容过滤被跳过"
     },
     "itemFailed": "处理失败",
     "selectFilesTitle": "请选择文件",
@@ -772,7 +928,13 @@
       "combined": "生成整书思维导图...",
       "saving": "保存结果...",
       "done": "处理完成"
-    }
+    },
+    "selectAll": "全选 ({{count}} 个文件)",
+    "fileCount": "{{count}} 个文件",
+    "queueTitle": "处理队列 ({{count}} 项)",
+    "chapterCount": "{{count}} 章节",
+    "runnerBusy": "正在由其他浏览器执行批量任务",
+    "runnerTakenOver": "批量任务已被其他浏览器接管，本机已停止"
   },
   "configIO": {
     "exportSuccess": "配置导出成功",
@@ -809,7 +971,11 @@
       "reset": "将所有设置恢复为初始默认值",
       "noteLabel": "注意事项",
       "note": "导入前建议先导出当前配置作为备份"
-    }
+    },
+    "includeSecrets": "导出时包含密钥",
+    "includeSecretsHint": "服务端已保存的密钥在浏览器里读不到（这是设计目标），所以这里只导出本次会话中新输入、尚未提交的密钥；其余仍写成 ${FASTREADER_...} 占位符，方便 CLI 用环境变量替代。",
+    "previewTitle": "导入预览",
+    "previewButton": "预览"
   },
   "notification": {
     "taskCompleteTitle": "任务完成",
@@ -831,5 +997,57 @@
     "system": "跟随系统",
     "switchToLight": "切换到浅色模式",
     "switchToDark": "切换到深色模式"
+  },
+  "auth": {
+    "title": "需要登录",
+    "description": "输入共享密码即可使用。配置与状态由所有用户共用。",
+    "passwordLabel": "密码",
+    "passwordPlaceholder": "请输入共享密码",
+    "showPassword": "显示密码",
+    "hidePassword": "隐藏密码",
+    "submit": "登录",
+    "hint": "登录状态会保存在本浏览器 30 天。密码由部署方通过环境变量配置。",
+    "loading": "正在加载共享配置…",
+    "loadFailed": "无法加载共享配置",
+    "invalidPassword": "密码不正确",
+    "tooManyAttempts": "尝试次数过多，请稍后再试",
+    "loginFailed": "登录失败，请稍后再试",
+    "logout": "退出登录",
+    "logoutFailed": "退出登录失败"
+  },
+  "sync": {
+    "synced": "配置已同步",
+    "syncing": "正在保存…",
+    "loading": "正在读取…",
+    "conflict": "有字段被其他人修改",
+    "offline": "离线：改动暂存本地",
+    "error": "同步失败",
+    "conflictDescription": "这些字段已被其他用户修改，已采用服务端最新值：{{fields}}"
+  },
+  "init": {
+    "title": "初始化共享配置",
+    "description": "服务端还没有任何配置。选择一种方式开始，之后所有用户共用这一份配置。",
+    "importFile": "导入配置文件",
+    "importFileHint": "支持 Web 端导出的 YAML（1.0.0 与 2.0.0）",
+    "importLocal": "导入本浏览器旧配置",
+    "importLocalHint": "从浏览器本地存储读取旧版本保存的配置",
+    "detected": "已检测到",
+    "localMissing": "本浏览器没有检测到旧配置",
+    "startEmpty": "从空白开始",
+    "startEmptyHint": "之后可以在「配置 → AI 服务商」里添加服务商",
+    "chooseFile": "选择配置文件",
+    "chooseFileHint": "文件只在本机解析，确认后才会写入服务端。",
+    "parseFailed": "配置文件解析失败",
+    "applyFailed": "导入失败",
+    "previewTitle": "导入预览",
+    "previewProviders": "将导入 {{providers}} 个服务商、{{models}} 个模型",
+    "modelsUnit": "个模型",
+    "hasKey": "含密钥",
+    "previewPrompts": "{{count}} 项提示词自定义",
+    "previewPromptsNone": "提示词使用内置默认值",
+    "previewWebdav": "WebDAV：{{server}}（{{password}}）",
+    "hasPassword": "含密码",
+    "noPassword": "无密码",
+    "apply": "确认导入"
   }
 }

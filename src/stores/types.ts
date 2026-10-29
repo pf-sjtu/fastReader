@@ -1,59 +1,36 @@
-// Store共享类型定义
+// Store 共享类型定义
 import type { SupportedLanguage } from '../services/prompts/utils'
+import type { SecretRef } from '../types/ai'
+
+export type {
+  AIProviderType,
+  AIProtocol,
+  AIProviderConfig,
+  AIServiceOptions,
+  ProviderEntry,
+  ProviderModel,
+  ProviderModelMeta,
+  SecretRef,
+  AIState,
+} from '../types/ai'
 
 // 提示词配置接口
-export interface PromptConfig {
-  chapterSummary: {
-    fiction: string
-    nonFiction: string
+export type { PromptConfig } from '../types/ai'
+
+/** 提示词覆盖项：只保存与内置默认值不同的条目 */
+export interface PromptOverrides {
+  chapterSummary?: {
+    fiction?: string
+    nonFiction?: string
   }
-  mindmap: {
-    chapter: string
-    arrow: string
-    combined: string
+  mindmap?: {
+    chapter?: string
+    arrow?: string
+    combined?: string
   }
-  connectionAnalysis: string
-  overallSummary: string
+  connectionAnalysis?: string
+  overallSummary?: string
 }
-
-// 提示词版本配置接口
-export interface PromptVersionConfig {
-  v1: PromptConfig
-  v2: PromptConfig
-}
-
-// 单个AI服务商配置接口
-export interface AIProviderConfig {
-  provider: 'gemini' | 'openai' | 'ollama' | '302.ai' | 'custom'
-  apiKey: string
-  apiUrl: string
-  model: string
-  temperature: number
-  proxyUrl?: string
-  proxyEnabled?: boolean
-  customFields?: Record<string, unknown>
-}
-
-// AI配置管理接口
-export interface AIConfigManager {
-  providers: AIProviderConfig[]
-  currentModelId: number
-
-  addProvider: (config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>) => number
-  updateProvider: (index: number, config: Partial<AIProviderConfig>) => void
-  deleteProvider: (index: number, config?: never) => void
-  duplicateProvider: (index: number) => number
-  setCurrentModelId: (index: number) => void
-
-  getActiveProvider: () => AIProviderConfig | undefined
-  getProviderByIndex: (index: number) => AIProviderConfig | undefined
-
-  createFromTemplate: (template: 'gemini' | 'openai' | 'ollama' | '302.ai') => number
-  getAvailableTemplates: () => Array<{ id: string; name: string; description: string }>
-}
-
-/** @deprecated 使用 AIProviderConfig 替代 */
-export type AIConfig = AIProviderConfig
 
 // 处理选项接口
 export interface ProcessingOptions {
@@ -79,7 +56,8 @@ export interface WebDAVConfig {
   enabled: boolean
   serverUrl: string
   username: string
-  password: string
+  /** 秘密字段：客户端只知道是否已配置，明文只存在于服务端 */
+  password?: SecretRef
   appName: string
   autoSync: boolean
   syncPath: string
@@ -88,8 +66,5 @@ export interface WebDAVConfig {
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error'
 }
 
-// AI服务选项接口
-export interface AIServiceOptions {
-  maxRetries?: number
-  baseRetryDelay?: number
-}
+/** USD → CNY 汇率（共享处理配置的一部分） */
+export const DEFAULT_EXCHANGE_RATE = 7.0

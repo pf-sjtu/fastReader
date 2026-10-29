@@ -11,9 +11,17 @@
 - **EPUB 文件**：完整支持 EPUB 格式电子书的解析和处理
 - **PDF 文件**：智能解析 PDF 文档，支持基于目录和智能检测的章节提取
 
+### 🔐 共享配置与登录
+
+- **一份配置全员共用**：AI 服务商、处理选项、WebDAV、提示词、处理历史、批量队列、Token 用量都存在服务端（Cloudflare KV），换设备不用重配
+- **密码登录**：输入共享密码即可使用，浏览器记住登录状态 30 天
+- **密钥不进浏览器**：API Key 与 WebDAV 密码只保存在服务端，由同源代理注入；前端只看到「已配置」
+- **乐观锁 + 冲突合并**：多人同时改配置不会互相覆盖；顶栏实时显示同步状态
+
 ### 🤖 AI 驱动的内容处理
 
-- **多种 AI 服务**：支持 Google Gemini 和 OpenAI GPT 模型
+- **服务商化模型配置**：一条配置 = 一个服务商（地址 + 密钥）+ 多个模型；填好地址和密钥后一键拉取模型列表，并用 [models.dev](https://models.dev) 元数据自动补全上下文长度与价格
+- **多种 AI 协议**：OpenAI 兼容、Google Gemini、本地 Ollama（浏览器直连）
 - **三种处理模式**：
   - 📝 **文字总结模式**：生成章节总结、分析章节关联、输出全书总结
   - 🧠 **章节思维导图模式**：为每个章节生成独立的思维导图
@@ -54,7 +62,7 @@
 - **多云支持**：支持坚果云、Nextcloud、ownCloud 等 WebDAV 服务
 - **覆盖保护**：智能文件存在性检查，支持覆盖确认
 - **自动同步**：处理完成后自动同步到云端存储
-- **同源代理**：通过 Cloudflare Pages Functions 代理解决浏览器 CORS（见 `docs/webdav-proxy.md`）
+- **同源代理**：AI 请求与 WebDAV 请求都走 Pages Functions 代理，凭据在服务端注入（见 `docs/webdav-proxy.md`、`docs/deploy.md`）
 
 
 ## 🚀 快速开始
@@ -75,13 +83,19 @@ cd ebook-to-mindmap
 pnpm install
 ```
 
-### 启动开发服务器
+### 部署 / 本地开发
+
+配置与状态已迁到 Cloudflare KV，`/api/*` 由 Pages Functions 提供，**只跑 `pnpm dev` 不再可用**：
 
 ```bash
-pnpm dev
+# 本地开发（本地 KV，不需要真账号）
+pnpm build:pages
+pnpm dlx wrangler pages dev dist --kv FASTREADER_KV --binding APP_PASSWORD=123456a
 ```
 
-访问 `http://localhost:5173` 开始使用。
+首次部署需要创建 KV namespace 并配置 `APP_PASSWORD` 等环境变量，详见 **[docs/deploy.md](docs/deploy.md)**。
+
+默认密码 `123456a`，正式环境务必在 Cloudflare Dashboard 修改；改密码会让所有已登录浏览器立即失效。
 
 ### 开发检查
 
@@ -152,8 +166,8 @@ uv run python -m src.cli.main batch -c ebook-to-mindmap-config-v2.yaml --dry-run
 CLI 会自动：
 - 解析嵌套的配置结构
 - 支持多 AI 提供商配置
-- 从配置获取 Prompt 模板（支持 v1/v2）
-- 正确转换 currentModelId 索引（1-based → 0-based）
+- 从配置获取 Prompt 模板（v2）
+- 同时读取 1.0.0（`aiConfigManager.providers[]`，一模型一条）与 2.0.0（`ai.providers[].models[]`，服务商化）两种结构
 
 ## 📁 项目结构
 
@@ -170,7 +184,7 @@ ebook-to-mindmap/
 │   │   ├── 📁 project/          # 项目相关组件
 │   │   └── 📄 *.tsx              # 其他功能组件
 │   ├── 📁 services/             # 服务层
-│   │   ├── 📄 aiService.ts      # AI 服务
+│   │   ├── 📄 ai/               # AI provider 实现与共享任务编排
 │   │   ├── 📄 pdfProcessor.ts   # PDF 处理
 │   │   └── 📄 *.ts              # 其他服务
 │   ├── 📁 stores/               # 状态管理
@@ -217,16 +231,16 @@ ebook-to-mindmap/
 
 ## 📖 使用指南
 
-### 1. 配置 AI 服务
+### 1. 配置 AI 服务商
 
-首次使用需要配置 AI 服务：
+首次部署后进入初始化向导，可导入配置文件、导入本浏览器旧配置或从空白开始。之后在「配置 → AI 服务商」里维护：
 
-1. 点击「配置」按钮
-2. 选择 AI 服务提供商：
-   - **Google Gemini**（推荐）：需要 Gemini API Key
-   - **OpenAI GPT**：需要 OpenAI API Key 和 API 地址
-3. 输入相应的 API Key
-4. 选择模型（可选，使用默认模型即可）
+1. 点「添加服务商」，从 models.dev 预设里选一个（自动填好地址），或选「OpenAI 兼容 / Gemini / Ollama」
+2. 填入 API Key
+3. 点「获取模型」自动拉取该服务商的模型列表，勾选要用的模型
+4. 在顶部「当前模型」里选一个作为默认模型；每个模型可单独设温度
+
+模型的价格与上下文长度会自动从 models.dev 补全；查不到的模型价格显示为「未计价」，不会拿别的模型估价。
 
 #### 获取 API Key
 
@@ -310,14 +324,13 @@ ebook-to-mindmap/
 - **前端框架**：React 19 + TypeScript
 - **构建工具**：Vite
 - **样式方案**：Tailwind CSS + shadcn/ui
-- **状态管理**：Zustand
+- **状态管理**：Zustand（数据来自服务端共享状态，本地只留 UI 偏好）
+- **服务端**：Cloudflare Pages Functions + Workers KV
 - **文件解析**：
-  - EPUB：@smoores/epub + epubjs
+  - EPUB：@ssshooter/epubjs
   - PDF：pdfjs-dist
 - **思维导图**：mind-elixir
-- **AI 服务**：
-  - Google Gemini：@google/generative-ai
-  - OpenAI：自定义实现
+- **AI 服务**：OpenAI 兼容 / Gemini REST / Ollama（均经服务端代理注入凭据）
 
 ## 🔧 高级功能
 
@@ -397,7 +410,7 @@ promptVersionConfig:
 currentPromptVersion: v2
 ```
 
-如未配置 Prompt，CLI 会使用内置的默认模板（v1/v2）。
+如未配置 Prompt，CLI 会使用内置的默认模板（只保留 v2；读到旧配置声明的 `v1` 会告警并回退 v2）。
 
 ### 环境变量支持
 

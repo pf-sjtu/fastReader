@@ -74,38 +74,41 @@ export function BatchQueueTab({ onClearQueue }: { onClearQueue: () => void }) {
             {queue.length === 0 ? (
               <div className="flex items-center justify-center h-32 text-muted-foreground">{t('batch.queueEmpty')}</div>
             ) : (
-              <div className="min-w-[600px]">
-                {queue.map((item, index) => (
-                  <div key={item.id} className={`flex items-center gap-2 px-3 py-2 border-b ${item.status === 'processing' ? 'bg-accent' : ''}`}>
-                    <span className="w-6 text-xs text-muted-foreground">{index + 1}.</span>
-                    <BatchStatusBadge status={item.status} />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">{item.fileName}</div>
-                      {item.error && <div className="text-xs text-red-500 truncate">{item.error}</div>}
-                      {item.metadata && (
-                        <div className="text-xs text-muted-foreground">
-                          {t('batch.chapterCount', { count: item.metadata.chapterCount })}
-                          {item.metadata.costRMB ? ` • ¥${item.metadata.costRMB.toFixed(2)}` : ''}
-                        </div>
+              // 窄屏下行内容过宽时在此横向滚动
+              <div className="overflow-x-auto">
+                <div className="min-w-[18rem]">
+                  {queue.map((item, index) => (
+                    <div key={item.id} className={`flex items-center gap-2 px-3 py-2 border-b ${item.status === 'processing' ? 'bg-accent' : ''}`}>
+                      <span className="w-6 text-xs text-muted-foreground">{index + 1}.</span>
+                      <BatchStatusBadge status={item.status} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{item.fileName}</div>
+                        {item.error && <div className="text-xs text-red-500 truncate">{item.error}</div>}
+                        {item.metadata && (
+                          <div className="text-xs text-muted-foreground">
+                            {t('batch.chapterCount', { count: item.metadata.chapterCount })}
+                            {item.metadata.costRMB ? ` • ¥${item.metadata.costRMB.toFixed(2)}` : ''}
+                          </div>
+                        )}
+                      </div>
+                      {item.status === 'processing' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                      {item.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                      {item.status === 'failed' && <XCircle className="h-4 w-4 text-red-500" />}
+                      {item.status !== 'processing' && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => removeFromQueue(item.id)}
+                          aria-label={t('batch.removeItemNamed', { name: item.fileName })}
+                          title={t('batch.removeItem')}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
                       )}
                     </div>
-                    {item.status === 'processing' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                    {item.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                    {item.status === 'failed' && <XCircle className="h-4 w-4 text-red-500" />}
-                    {item.status !== 'processing' && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => removeFromQueue(item.id)}
-                        aria-label={t('batch.removeItemNamed', { name: item.fileName })}
-                        title={t('batch.removeItem')}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </ScrollArea>

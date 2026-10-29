@@ -61,6 +61,7 @@ export class CacheService {
   private index: Map<string, IndexEntry> | null = null
   private indexLoading: Promise<Map<string, IndexEntry>> | null = null
   private touchTimer: ReturnType<typeof setTimeout> | null = null
+  private flushHookInstalled = false
 
   constructor(options: CacheServiceOptions = {}) {
     this.dbName = options.dbName ?? DEFAULT_DB
@@ -106,11 +107,41 @@ export class CacheService {
   }
 
   private schedulePersistIndex(): void {
+    this.installFlushOnHide()
     if (this.touchTimer) return
     this.touchTimer = setTimeout(() => {
       this.touchTimer = null
       void this.persistIndex()
     }, TOUCH_PERSIST_DELAY_MS)
+  }
+
+  /**
+   * 标签页关闭/隐藏时把挂起的索引立即落盘。
+   * 否则「最后一次读取时间」会丢，LRU 淘汰顺序失真（曾表现为缓存被误淘汰）。
+   */
+  private installFlushOnHide(): void {
+    if (this.flushHookInstalled || typeof window === 'undefined') return
+    this.flushHookInstalled = true
+
+    const flush = () => {
+      if (!this.touchTimer) return
+      clearTimeout(this.touchTimer)
+      this.touchTimer = null
+      void this.persistIndex()
+    }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flush()
+    })
+  }
+
+  /** 测试/卸载用：清掉挂起的索引写入 */
+  flushPendingIndex(): Promise<void> {
+    if (this.touchTimer) {
+      clearTimeout(this.touchTimer)
+      this.touchTimer = null
+    }
+    return this.persistIndex()
   }
 
   /** 当前索引中的总字节数 */
@@ -147,7 +178,8 @@ export class CacheService {
       logger.warn('[cache] 单条超过容量上限，不缓存:', key)
       return false
     }
-    index.delete(key)
+    // 先记下旧条目，写成功后再更新索引；失败时索引与存储保持一致
+    const previous = index.get(key)
     await this.evictUntil(this.maxBytes - size)
     try {
       await set(key, value, this.store)
@@ -163,6 +195,8 @@ export class CacheService {
         await set(key, value, this.store)
       } catch (retryErr) {
         logger.warn('[cache] 淘汰后重试仍失败:', retryErr)
+        if (previous) index.set(key, previous)
+        else index.delete(key)
         await this.persistIndex()
         return false
       }

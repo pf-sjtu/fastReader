@@ -335,9 +335,9 @@ promptVersionConfig:
             from src.cli.ai_client import PromptTemplates
             prompts = PromptTemplates(prompt_config=config.prompts)
 
-            # v1 non-fiction 应该使用自定义 prompt
+            # currentPromptVersion 声明 v1（已废弃）→ 告警并回退 v2，用 v2 的自定义 prompt
             prompt = prompts.get_prompt('chapterSummary', 'non-fiction')
-            assert "CUSTOM NON-FICTION PROMPT v1" in prompt
+            assert "CUSTOM NON-FICTION PROMPT v2" in prompt
         finally:
             cleanup_config_file(f_name)
 

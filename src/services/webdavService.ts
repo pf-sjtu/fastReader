@@ -2,6 +2,7 @@ import { createClient, type WebDAVClient } from 'webdav'
 import type { WebDAVConfig } from '../stores/configStore'
 import { buildWebdavProxyUrl, normalizeDavPath, encodeDavHeaderPath } from './webdavProxyUtils'
 import { describeConnectionError } from './webdav/errors'
+import { logger } from '../lib/logger'
 import { existsDetail } from './webdav/exists'
 import { getDirectoryContents, filterSupportedFiles, getStat } from './webdav/browse'
 import { getFileContents, putFileContents } from './webdav/transfer'
@@ -14,12 +15,7 @@ import type {
   WebDAVFileInfo,
   WebDAVOperationResult
 } from './webdav/types'
-import {
-  basicAuthHeader,
-  buildHeaderPath,
-  ensureTrailingSlash,
-  getProcessedUrl
-} from './webdav/utils'
+import { buildHeaderPath, getProcessedUrl } from './webdav/utils'
 
 // 类型与工具函数 re-export，保持原导入路径稳定（契约 S3）
 export type {
@@ -90,18 +86,15 @@ export class WebDAVService {
       throw new Error('WebDAV配置未找到')
     }
     const headerPath = buildHeaderPath(normalizeDavPath(filePath))
+    // 凭据在服务端：/api/dav 会用它保存的 Basic Auth 覆盖请求头，客户端不需要（也无法）拼 Authorization
     const headers: Record<string, string> = {
-      Authorization: basicAuthHeader(this.config.username, this.config.password),
-      'X-WebDAV-Base': ensureTrailingSlash(this.config.serverUrl),
       'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
       'X-Request-Origin': window.location.origin,
       'Cache-Control': 'no-store, no-cache',
       Pragma: 'no-cache',
       ...(options?.extraHeaders || {}),
     }
-    console.log(
-      `[WebDAV:proxy] ${method} path=${headerPath} enc=${headers['X-WebDAV-Path'].slice(0, 80)}…`
-    )
+    logger.debug(`[WebDAV:proxy] ${method} path=${headerPath}`)
     return fetch('/api/dav/', { method, headers, body: options?.body ?? null })
   }
 
@@ -146,17 +139,16 @@ export class WebDAVService {
    */
   async initialize(config: WebDAVConfig): Promise<WebDAVOperationResult<boolean>> {
     try {
-      if (!config.serverUrl || !config.username || !config.password) {
+      if (!config.serverUrl || !config.username || !config.password?.hasSecret) {
         return { success: false, error: 'WebDAV_CONFIG_INCOMPLETE' }
       }
 
-      // 已用相同凭据连上：跳过重建，避免处理中途 re-init 把 client 置空
+      // 已用相同配置连上：跳过重建，避免处理中途 re-init 把 client 置空
       if (
         this.client &&
         this.config &&
         this.config.serverUrl === config.serverUrl &&
-        this.config.username === config.username &&
-        this.config.password === config.password
+        this.config.username === config.username
       ) {
         this.config = { ...this.config, ...config }
         return { success: true, data: true }
@@ -168,19 +160,14 @@ export class WebDAVService {
         'User-Agent': 'ebook-to-mindmap/1.0',
         'Accept': 'application/xml, text/xml, */*',
         'Cache-Control': 'no-store, no-cache',
-        'Pragma': 'no-cache',
-        'Authorization': basicAuthHeader(config.username, config.password),
-        'X-WebDAV-Base': ensureTrailingSlash(config.serverUrl)
+        'Pragma': 'no-cache'
       }
       if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
         headers['X-Requested-With'] = 'XMLHttpRequest'
       }
 
-      this.client = createClient(getProcessedUrl(config.serverUrl), {
-        username: config.username,
-        password: config.password,
-        headers
-      })
+      // 凭据由 /api/dav 注入：这里不把 username/password 交给 webdav 客户端
+      this.client = createClient(getProcessedUrl(config.serverUrl), { headers })
 
       const testResult = await this.testConnection()
       if (!testResult.success) {

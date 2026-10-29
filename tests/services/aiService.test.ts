@@ -15,7 +15,7 @@ vi.mock('../../src/lib/logger', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-import { AIService, SKIPPED_SUMMARY_PREFIX } from '../../src/services/aiService'
+import { AIService, SKIPPED_SUMMARY_PREFIX } from '../../src/services/ai'
 import { RESULT_PREFIX } from '../../src/utils/resultStatus'
 
 const mockConfig = {

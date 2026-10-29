@@ -45,27 +45,30 @@ class FakeClient(AIClient):
         return reply
 
 
-# 这些用例依赖 v1 模板的措辞或只放了 v1 文件的临时目录：显式指定版本，不依赖默认值（默认为 v2）
+# v1 模板已删除：声明 v1 的旧配置会被告警并回退到 v2（模板内容取 v2）
 V1 = PromptConfig(currentVersion="v1")
 
 
 class TestYamlPrompts:
-    def test_both_versions_load_from_shared_yaml(self):
-        for version in ("v1", "v2"):
-            data = load_yaml_prompts(version)
-            assert data["chapterSummary"]["fiction"]
-            assert data["connectionAnalysis"]
-            assert data["overallSummary"]
+    def test_only_v2_is_supported(self):
+        data = load_yaml_prompts("v2")
+        assert data["chapterSummary"]["fiction"]
+        assert data["connectionAnalysis"]
+        assert data["overallSummary"]
+
+    def test_v1_request_falls_back_to_v2(self):
+        """v1 模板已删除：请 v1 时应告警并返回 v2 内容，而不是抛错"""
+        assert load_yaml_prompts("v1") == load_yaml_prompts("v2")
 
     def test_v2_bom_is_stripped(self):
         assert "chapterSummary" in load_yaml_prompts("v2")
 
     def test_missing_dir_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="promptsDir"):
-            load_yaml_prompts("v1", str(tmp_path))
+            load_yaml_prompts("v2", str(tmp_path))
 
     def test_prompts_dir_override(self, tmp_path):
-        (tmp_path / "v1-prompts.yaml").write_text(
+        (tmp_path / "v2-prompts.yaml").write_text(
             "chapterSummary:\n  fiction: F\n  nonFiction: N\nconnectionAnalysis: C\noverallSummary: O\n",
             encoding="utf-8")
         templates = PromptTemplates(prompt_config=V1, prompts_dir=str(tmp_path))
@@ -86,7 +89,8 @@ class TestYamlPrompts:
 
 
 class TestPromptAssembly:
-    def test_chapter_prompt_substitutes_placeholders_v1(self):
+    def test_chapter_prompt_v1_config_falls_back_to_v2(self):
+        """声明 v1 的旧配置仍可用：渲染走 v2 模板且占位符全部替换"""
         prompt = PromptTemplates(prompt_config=V1).build_chapter_prompt("标题甲", "正文乙", "non-fiction")
         assert "章节标题：标题甲" in prompt and "正文乙" in prompt
         assert "{{" not in prompt
@@ -98,7 +102,7 @@ class TestPromptAssembly:
 
     def test_chapter_prompt_appends_when_no_placeholder(self):
         """自定义模板无占位符时按前端 aiService 的方式追加标题与正文"""
-        cfg = PromptConfig(versions={"v1": PromptVersionConfig(chapterSummary_nonFiction="请总结")}, currentVersion="v1")
+        cfg = PromptConfig(versions={"v2": PromptVersionConfig(chapterSummary_nonFiction="请总结")}, currentVersion="v2")
         prompt = PromptTemplates(prompt_config=cfg).build_chapter_prompt("标题甲", "正文乙", "non-fiction")
         assert prompt == "请总结\n\n章节标题: 标题甲\n\n章节内容:\n正文乙"
 
@@ -109,7 +113,7 @@ class TestPromptAssembly:
         assert "{{chapterSummaries}}" not in prompt
 
     def test_connections_prompt_appends_without_placeholder(self, tmp_path):
-        (tmp_path / "v1-prompts.yaml").write_text("connectionAnalysis: 分析\n", encoding="utf-8")
+        (tmp_path / "v2-prompts.yaml").write_text("connectionAnalysis: 分析\n", encoding="utf-8")
         prompt = PromptTemplates(prompt_config=V1, prompts_dir=str(tmp_path)).build_connections_prompt([{"index": 1}])
         assert prompt.startswith("分析\n\n已处理的章节列表:\n")
 
@@ -117,7 +121,7 @@ class TestPromptAssembly:
         items = [{"index": 1, "title": "一", "summary": "s"}]
         prompt = PromptTemplates().build_overall_prompt("书名X", items, "关联Y")
         assert "《书名X》" in prompt and "关联Y" in prompt and '"summary":"s"' in prompt
-        (tmp_path / "v1-prompts.yaml").write_text("overallSummary: 总结\n", encoding="utf-8")
+        (tmp_path / "v2-prompts.yaml").write_text("overallSummary: 总结\n", encoding="utf-8")
         prompt = PromptTemplates(prompt_config=V1, prompts_dir=str(tmp_path)).build_overall_prompt("书名X", items, "关联Y")
         assert prompt.startswith("总结\n\n书名: 书名X\n\n已处理的章节列表:\n")
         assert prompt.endswith("章节关联分析:\n关联Y")

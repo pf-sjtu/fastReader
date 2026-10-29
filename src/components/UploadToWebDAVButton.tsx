@@ -17,6 +17,7 @@ import { cloudCacheService } from '../services/cloudCacheService'
 import { metadataFormatter } from '../services/metadataFormatter'
 import { toast } from 'sonner'
 import type { BookSummary } from '../hooks/useBookProcessing'
+import { logger } from '../lib/logger'
 
 interface UploadToWebDAVButtonProps {
   bookSummary: BookSummary
@@ -139,7 +140,7 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
         }
       }
 
-      console.log('🚀 开始上传到WebDAV:', remotePath, 'len=', markdownContent.length)
+      logger.debug('开始上传到 WebDAV:', remotePath, 'len=', markdownContent.length)
       const uploadResult = await webdavService.uploadFile(remotePath, markdownContent)
       if (!uploadResult.success) {
         throw new Error(uploadResult.error || t('upload.failed'))

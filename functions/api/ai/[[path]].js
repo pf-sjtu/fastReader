@@ -1,132 +1,146 @@
-// 与 DAV 代理共用同一套上游校验（https、无凭据、非私网/本机、path 不得逃出 base）。
-// AI 服务商由用户自定义，因此不做主机白名单。
-import { isValidUpstreamBase, resolveScopedUpstreamUrl } from '../../../src/services/webdavProxyUtils'
+// AI 同源代理：上游 base 与凭据一律取自服务端共享配置（按 X-Provider-Id 定位），
+// 不接受客户端指定的任意 base，也不接受客户端自带的鉴权头。
+import {
+  isValidUpstreamBase,
+  resolveScopedUpstreamUrl,
+} from '../../../src/services/webdavProxyUtils'
+import {
+  getAllowedOrigins,
+  isAllowedOrigin,
+  isSameOriginRequest,
+  corsHeaders,
+  withCors,
+} from '../../_lib/origin.js'
+import { authHeadersForProtocol, resolveProvider } from '../../_lib/upstream.js'
 
-// 从环境变量读取白名单，支持逗号分隔的字符串（追加到默认值）
-function getAllowedOrigins(env) {
-  const defaultOrigins = [
-    'https://fast-read.pages.dev',
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://127.0.0.1:5173'
-  ]
+const ALLOWED_METHODS = ['OPTIONS', 'POST', 'GET']
 
-  if (!env?.ALLOWED_ORIGINS) {
-    return defaultOrigins
-  }
-
-  const customOrigins = env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
-  return [...new Set([...defaultOrigins, ...customOrigins])]
-}
-
-// 提取域名的核心部分（去掉协议和尾部斜杠）
-function normalizeDomain(domain) {
-  return domain
-    .replace(/^https?:\/\//, '')
-    .replace(/\/$/, '')
-    .toLowerCase()
-}
-
-function corsHeaders(origin, requestOrigin, allowedOrigins) {
-  const normalizedOrigin = origin ? normalizeDomain(origin) : ''
-  const normalizedRequestOrigin = requestOrigin ? normalizeDomain(requestOrigin) : ''
-  const normalizedAllowed = allowedOrigins.map(normalizeDomain)
-
-  const allowOrigin = normalizedOrigin && normalizedAllowed.includes(normalizedOrigin)
-    ? origin
-    : (normalizedAllowed.includes(normalizedRequestOrigin) ? requestOrigin : 'null')
-
-  return {
-    'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Methods': 'OPTIONS, POST, GET',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Request-Origin, X-AI-Base',
-    'Access-Control-Max-Age': '86400'
-  }
-}
-
-function isAllowedOrigin(origin, requestOrigin, allowedOrigins) {
-  const normalizedAllowed = allowedOrigins.map(normalizeDomain)
-  const normalizedOrigin = origin ? normalizeDomain(origin) : ''
-  const normalizedRequestOrigin = requestOrigin ? normalizeDomain(requestOrigin) : ''
-
-  // 与 DAV 代理一致：Origin 存在时以它为准，X-Request-Origin 可伪造，仅在无 Origin 时回退
-  if (normalizedOrigin) {
-    return normalizedAllowed.includes(normalizedOrigin)
-  }
-  if (normalizedRequestOrigin) {
-    return normalizedAllowed.includes(normalizedRequestOrigin)
-  }
-  return false
-}
-
-function isAllowedMethod(method) {
-  return ['OPTIONS', 'POST', 'GET'].includes(method)
-}
+// 客户端自带、不允许转发的头（含鉴权头：必须由服务端注入）
+const DROP_REQUEST_HEADERS = new Set([
+  'origin',
+  'referer',
+  'host',
+  'x-request-origin',
+  'x-ai-base',
+  'x-provider-id',
+  'authorization',
+  'x-goog-api-key',
+  'cookie',
+  'content-length',
+])
 
 function filterRequestHeaders(headers) {
   const upstreamHeaders = new Headers()
   headers.forEach((value, key) => {
-    const lowerKey = key.toLowerCase()
-    if (['origin', 'referer', 'host', 'x-request-origin', 'x-ai-base'].includes(lowerKey)) {
-      return
-    }
+    if (DROP_REQUEST_HEADERS.has(key.toLowerCase())) return
     upstreamHeaders.set(key, value)
   })
   return upstreamHeaders
 }
 
+// 只回传客户端真正需要的头：上游的 set-cookie / location / 内部头一律不外泄
+const RESPONSE_HEADER_ALLOWLIST = [
+  'content-type',
+  'content-length',
+  'cache-control',
+  'retry-after',
+  'x-request-id',
+  'openai-processing-ms',
+  'openai-version',
+]
+
+function filterResponseHeaders(headers) {
+  const out = new Headers()
+  const encoding = (headers.get('content-encoding') || '').trim().toLowerCase()
+  const bodyTransformed = encoding !== '' && encoding !== 'identity'
+  headers.forEach((value, key) => {
+    const lower = key.toLowerCase()
+    if (!RESPONSE_HEADER_ALLOWLIST.includes(lower)) return
+    // fetch 已解码正文，长度头是压缩后的 → 保留会截断
+    if (lower === 'content-length' && bodyTransformed) return
+    // 限流相关头统一透传（x-ratelimit-* 不在上面列表里，单独放行）
+    out.set(key, value)
+  })
+  headers.forEach((value, key) => {
+    if (key.toLowerCase().startsWith('x-ratelimit-')) out.set(key, value)
+  })
+  return out
+}
+
+function errorResponse(message, status, cors, code) {
+  const headers = { ...cors }
+  if (code) headers['X-Proxy-Error'] = '1'
+  return new Response(code ? JSON.stringify({ error: code, message }) : message, {
+    status,
+    headers: { 'Content-Type': code ? 'application/json;charset=utf-8' : 'text/plain;charset=utf-8', ...headers },
+  })
+}
+
 export async function onRequest(context) {
   const { request, env } = context
-  const allowedOrigins = getAllowedOrigins(env)
   const origin = request.headers.get('Origin') || ''
   const requestOrigin = request.headers.get('X-Request-Origin') || ''
-  const cors = corsHeaders(origin, requestOrigin, allowedOrigins)
+  const allowedOrigins = getAllowedOrigins(env)
+  const cors = withCors({}, origin, requestOrigin, allowedOrigins)
 
   if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: cors })
+    return new Response(null, { status: 204, headers: corsHeaders('OPTIONS, POST, GET') })
   }
 
-  if (!isAllowedMethod(request.method)) {
-    return new Response('Method not allowed', { status: 405, headers: cors })
+  if (!ALLOWED_METHODS.includes(request.method)) {
+    return errorResponse('Method not allowed', 405, cors)
   }
 
-  if (!isAllowedOrigin(origin, requestOrigin, allowedOrigins)) {
-    return new Response('Origin not allowed', { status: 403, headers: cors })
+  if (origin && !isAllowedOrigin(origin, requestOrigin, allowedOrigins) && !isSameOriginRequest(request, origin)) {
+    return errorResponse('Origin not allowed', 403, cors)
   }
 
   const url = new URL(request.url)
-  const headerBase = request.headers.get('X-AI-Base') || ''
-  const base = headerBase || url.searchParams.get('base') || ''
+  const providerId = request.headers.get('X-Provider-Id') || ''
   const path = url.searchParams.get('path') || ''
 
-  if (!isValidUpstreamBase(base)) {
-    return new Response('Invalid upstream base URL', { status: 400, headers: cors })
+  let provider
+  try {
+    provider = await resolveProvider(env, providerId)
+  } catch (error) {
+    if (error?.code === 'kv_missing') return errorResponse('KV not configured', 500, cors, 'kv_not_configured')
+    throw error
   }
 
-  const upstreamUrl = resolveScopedUpstreamUrl(base, path)
-  if (!upstreamUrl) {
-    return new Response('Invalid upstream path', { status: 400, headers: cors })
+  if (!provider) {
+    return errorResponse('Unknown provider', 400, cors, 'unknown_provider')
   }
+  if (!isValidUpstreamBase(provider.baseUrl)) {
+    return errorResponse('Invalid upstream base URL', 400, cors, 'invalid_upstream_base')
+  }
+
+  const upstreamUrl = resolveScopedUpstreamUrl(provider.baseUrl, path)
+  if (!upstreamUrl) {
+    return errorResponse('Invalid upstream path', 400, cors, 'invalid_upstream_path')
+  }
+
   const upstreamHeaders = filterRequestHeaders(request.headers)
+  for (const [key, value] of Object.entries(authHeadersForProtocol(provider.type, provider.apiKey))) {
+    upstreamHeaders.set(key, value)
+  }
 
   const bodyBuffer = request.body ? await request.arrayBuffer() : null
   const upstreamRequest = new Request(upstreamUrl, {
     method: request.method,
     headers: upstreamHeaders,
     body: bodyBuffer,
-    redirect: 'manual'
+    redirect: 'manual',
   })
 
-  const response = await fetch(upstreamRequest)
-  const responseHeaders = new Headers(response.headers)
-  // 上游 Cookie 不应落到本站源下
-  responseHeaders.delete('set-cookie')
-  Object.entries(cors).forEach(([key, value]) => {
-    responseHeaders.set(key, value)
-  })
+  let response
+  try {
+    response = await fetch(upstreamRequest)
+  } catch {
+    return errorResponse('Upstream unreachable', 502, cors, 'upstream_unreachable')
+  }
 
-  return new Response(response.body, {
-    status: response.status,
-    headers: responseHeaders
-  })
+  const responseHeaders = filterResponseHeaders(response.headers)
+  Object.entries(cors).forEach(([key, value]) => responseHeaders.set(key, value))
+
+  return new Response(response.body, { status: response.status, headers: responseHeaders })
 }

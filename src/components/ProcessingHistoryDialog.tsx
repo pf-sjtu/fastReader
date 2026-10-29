@@ -7,6 +7,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { BookOpen, Clock, Trash2, Loader2 } from 'lucide-react'
@@ -25,13 +35,14 @@ export function ProcessingHistoryDialog({
   onSelectRecord
 }: ProcessingHistoryDialogProps) {
   const { t, i18n } = useTranslation()
-  const { records, clearHistory } = useProcessingHistoryStore(
+  const { records, clearLocalView } = useProcessingHistoryStore(
     useShallow((s) => ({
       records: s.records,
-      clearHistory: s.clearHistory,
+      clearLocalView: s.clearLocalView,
     }))
   )
   const [loadingFileName, setLoadingFileName] = useState<string | null>(null)
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false)
 
   const handleSelect = async (record: ProcessingHistoryRecord) => {
     setLoadingFileName(record.fileName)
@@ -42,8 +53,10 @@ export function ProcessingHistoryDialog({
     }
   }
 
-  const handleClearHistory = () => {
-    clearHistory()
+  // 只清空本浏览器的视图；共享历史在服务端，不受影响
+  const handleConfirmClear = () => {
+    clearLocalView()
+    setConfirmClearOpen(false)
   }
 
   const formatDate = (isoString: string) => {
@@ -80,11 +93,11 @@ export function ProcessingHistoryDialog({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleClearHistory}
+                onClick={() => setConfirmClearOpen(true)}
                 className="text-muted-foreground hover:text-destructive"
               >
-                <Trash2 className="h-4 w-4 mr-1" />
-                {t('history.clearAll')}
+                <Trash2 className="h-4 w-4 mr-1" aria-hidden="true" />
+                {t('history.clearLocalView')}
               </Button>
             )}
           </DialogTitle>
@@ -130,6 +143,19 @@ export function ProcessingHistoryDialog({
           )}
         </ScrollArea>
       </DialogContent>
+
+      <AlertDialog open={confirmClearOpen} onOpenChange={setConfirmClearOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('history.confirmClearLocalTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('history.confirmClearLocalDescription')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmClear}>{t('history.clearLocalView')}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

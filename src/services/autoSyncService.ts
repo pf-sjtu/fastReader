@@ -2,6 +2,7 @@ import { webdavService } from './webdavService'
 import { useConfigStore } from '../stores/configStore'
 import { metadataFormatter, type ProcessResultInfo } from './metadataFormatter'
 import { cloudCacheService } from './cloudCacheService'
+import { logger } from '../lib/logger'
 
 // 定义本地类型（避免循环依赖）
 interface BookSummary {
@@ -98,7 +99,7 @@ export class AutoSyncService {
         return false
       }
 
-      console.log(`✅ 摘要 MD 同步成功: ${mdPath}`)
+      logger.debug(`✅ 摘要 MD 同步成功: ${mdPath}`)
 
       // 有图表则写同名 JSON；无图表不删旧文件（避免误清）
       if (bookSummary.charts) {
@@ -107,7 +108,7 @@ export class AutoSyncService {
           bookSummary.charts
         )
         if (chartsUp.success) {
-          console.log(`✅ 关键图表 JSON 同步成功: ${chartsUp.path}`)
+          logger.debug(`✅ 关键图表 JSON 同步成功: ${chartsUp.path}`)
         } else {
           console.warn('关键图表 JSON 同步失败:', chartsUp.error)
           // MD 已成功；图表失败单独告警，整体仍返回 true 但由调用方可查
@@ -130,7 +131,7 @@ export class AutoSyncService {
     fileName: string,
     charts: unknown
   ): Promise<{ success: boolean; path?: string; error?: string }> {
-    console.log('[syncChartsJson] enter', {
+    logger.debug('[syncChartsJson] enter', {
       fileName,
       hasCharts: charts != null,
       chartsType: charts == null ? 'null' : typeof charts,
@@ -152,15 +153,15 @@ export class AutoSyncService {
 
       // 与 cloudCacheService / 读缓存共用同一单例；已连接则跳过重建与二次 test
       const initResult = await webdavService.initialize(webdavConfig)
-      console.log('[syncChartsJson] initialize', initResult)
+      logger.debug('[syncChartsJson] initialize', initResult)
       if (!initResult.success) {
         return { success: false, error: initResult.error || 'WebDAV 初始化失败' }
       }
 
       const up = await cloudCacheService.uploadChartsJson(fileName, charts)
-      console.log('[syncChartsJson] uploadChartsJson', up)
+      logger.debug('[syncChartsJson] uploadChartsJson', up)
       if (up.success) {
-        console.log(`✅ 关键图表 JSON 已保存: ${up.path}`)
+        logger.debug(`✅ 关键图表 JSON 已保存: ${up.path}`)
         useConfigStore.getState().updateWebDAVLastSyncTime()
       } else {
         console.warn('❌ 关键图表 JSON 保存失败:', up.error, 'file=', fileName)
@@ -183,7 +184,7 @@ export class AutoSyncService {
       // 检查是否启用自动同步
       const config = useConfigStore.getState().webdavConfig
       if (!config.enabled || !config.autoSync) {
-        console.log('自动同步未启用，跳过同步')
+        logger.debug('自动同步未启用，跳过同步')
         return true
       }
 
@@ -225,7 +226,7 @@ export class AutoSyncService {
       const syncResult = await webdavService.syncFiles(syncFiles)
       
       if (syncResult.success) {
-        console.log(`✅ 思维导图文件同步成功: ${syncFiles.length} 个文件`)
+        logger.debug(`✅ 思维导图文件同步成功: ${syncFiles.length} 个文件`)
         // 更新最后同步时间
         useConfigStore.getState().updateWebDAVLastSyncTime()
         return true

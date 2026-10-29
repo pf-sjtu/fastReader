@@ -86,12 +86,14 @@ describe('占位符替换后的结构', () => {
     providerMock.generateContent.mockResolvedValue({ content: 'ok' })
   })
 
-  it('v1 章节总结：正文落在模板占位处，指令在正文之后，不再追加「章节内容:」段', async () => {
+  it('声明 v1 时回退 v2：标题/正文仍落在模板占位处，不追加「章节内容:」段', async () => {
+    // v1 模板已删除，loadPromptConfig 对任何入参都返回 v2
     await new AIService(cfg, () => loadPromptConfig('v1')).summarizeChapter(TITLE, BODY, 'non-fiction', 'zh')
     const { prompt } = lastRequest()
     expect(prompt).toContain(`章节标题：${TITLE}`)
     expect(prompt).not.toContain('章节内容:\n')
-    expect(prompt.indexOf(BODY)).toBeLessThan(prompt.indexOf('关键概念'))
+    expect(prompt).not.toContain('{{')
+    expect(prompt.split(BODY).length - 1).toBe(1)
   })
 
   it('v1 全书总结：书名进《》，不再追加「书名:」段', async () => {

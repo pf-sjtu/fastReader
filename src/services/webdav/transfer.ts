@@ -3,6 +3,7 @@ import { classifyExistsStatus, describeProxyError, isProxyErrorResponse } from '
 import { probeStatus } from './exists'
 import type { DavContext, WebDAVOperationResult } from './types'
 import { buildHeaderPath, normalizeToArrayBuffer, toUploadBody } from './utils'
+import { logger } from '../../lib/logger'
 
 const NO_CACHE_HEADERS = { 'Cache-Control': 'no-store, no-cache', Pragma: 'no-cache' }
 
@@ -151,7 +152,7 @@ export function putFileContents(
         const res = await ctx.proxyFetch('PUT', normalizedPath, { body, extraHeaders })
         // 201 Created / 204 No Content / 200 OK 均视为成功
         if (res.ok) {
-          console.log(`[WebDAV:proxy] PUT ok status=${res.status} path=${normalizedPath}`)
+          logger.debug(`[WebDAV:proxy] PUT ok status=${res.status} path=${normalizedPath}`)
           return { success: true, data: true }
         }
         // 403/404/409 可能意味着目录已被外部删除：下次重新探测（412 等是正常的业务拒绝，不清）

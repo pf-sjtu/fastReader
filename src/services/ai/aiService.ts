@@ -177,7 +177,7 @@ export class AIService {
 
     // 检查是否有进行中的相同请求
     if (this.pendingRequests.has(key)) {
-      console.log('[AIService] 复用进行中的请求:', key)
+      logger.debug('[AIService] 复用进行中的请求:', key)
       return this.pendingRequests.get(key)!
     }
 

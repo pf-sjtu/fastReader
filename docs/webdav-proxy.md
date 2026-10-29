@@ -1,36 +1,31 @@
 # WebDAV 同源代理（Cloudflare Pages Functions）
 
+> **2026-11 起行为变更**：上游 `serverUrl` 与 WebDAV 凭据**只从服务端共享状态（KV `state:webdav`）读取**，
+> 客户端只提供路径（`X-WebDAV-Path`）。客户端自带的 `Authorization` 与 `X-WebDAV-Base` 会被丢弃。
+> 同时 `/api/*` 需要登录会话（见 `docs/deploy.md`）。以下文档保留原有设计与校验规则说明。
+
 ## 目的
 
 浏览器直接访问 WebDAV（例如 PROPFIND）会触发 CORS 预检，部分 WebDAV 服务未允许 PROPFIND，导致请求被拦截。本方案通过同源代理绕过浏览器跨域限制。
 
 ## 总体架构
 
-- 浏览器仅请求同源 `/api/dav`
-- Pages Functions 代理转发到用户配置的 WebDAV base
-- 代理透传请求方法、主要 headers 与 body，并返回上游响应
-- WebDAV URL/用户名/密码/文件夹均由浏览器端用户配置
+- 浏览器仅请求同源 `/api/dav`（需登录会话）
+- Pages Functions 从共享状态取 WebDAV base 与凭据，转发请求并返回上游响应
+- WebDAV URL/用户名/密码 由全员共享的配置提供，明文只在服务端
 
 ## 与需求的对应关系
 
-- 用户配置 WebDAV URL / 用户名 / 密码 / 文件夹：已由设置页配置与 `webdavService` 统一读取
+- 用户配置 WebDAV URL / 用户名 / 密码 / 文件夹：写入共享状态；其中密码只有服务端可见
 - 代理泛化：代理端不硬编码任何 WebDAV 信息，仅转发并校验
 - 流程清晰：本手册包含代码路径、配置步骤、部署与本地开发说明
 
-## 当前实现说明（与建议方案的差异）
+## 当前实现说明
 
-当前实现支持两种传参方式：
-
-1) **Header 方式（默认）**
-- 前端通过 `X-WebDAV-Base` 传上游 base
-- 通过 `X-WebDAV-Path` 传目标路径（包含 folder + path）
-- 优点：避免 `webdav` 客户端对 query/path 拼接的限制
-
-2) **Query 方式（兼容）**
-- 代理也支持 `?base=...&path=...`
-- 当 header 未提供时使用 query 参数
-
-如果你希望严格保持 `/api/dav/<path>?base=...` 形式，请明确告知，可另做改造。
+- 浏览器只传 `X-WebDAV-Path`（相对 serverUrl 的绝对路径）与 `X-Request-Origin`
+- 上游 base（`state:webdav.serverUrl`）与 Basic 凭据由代理从 KV 读取并注入
+- 客户端自带的 `Authorization` / `X-WebDAV-Base` 一律丢弃（防止被当作任意上游的开放中继）
+- query 形式 `?path=` 仍被接受（curl/调试用）；`?base=` 已失效，base 只认服务端配置
 
 ## 代码位置（必读）
 

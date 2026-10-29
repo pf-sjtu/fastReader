@@ -6,8 +6,9 @@ export * from './ai-config'
 export * from './processing'
 export * from './webdav'
 export * from './prompts'
-export * from './core'
+export * from './usage'
 export * from './processingHistory'
+export * from './aiMigration'
 
 // 兼容壳store（保持向后兼容）
 export {
@@ -15,10 +16,11 @@ export {
   // 原有便捷选择器
   useAIConfig,
   useTokenUsage,
+  useTotalCostUSD,
   useProcessingOptions,
   useWebDAVConfig,
   useAIServiceOptions,
   usePromptConfig,
-  usePromptVersionConfig,
-  useCurrentPromptVersion
+  usePromptOverrides,
+  useExchangeRate,
 } from './configStore'

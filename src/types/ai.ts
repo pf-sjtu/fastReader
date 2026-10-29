@@ -7,21 +7,94 @@ import type { SupportedLanguage } from '../services/prompts/utils'
 // ==================== Provider 类型 ====================
 
 /**
- * AI 提供商类型
+ * AI 提供商协议类型
+ *
+ * - openai：OpenAI 兼容 `/chat/completions` 与 `/models`
+ * - gemini：Google Generative Language REST
+ * - ollama：本地 Ollama（浏览器直连，不经代理）
+ * - 302.ai / custom：历史值，等价于 openai 兼容
  */
 export type AIProviderType = 'gemini' | 'openai' | 'ollama' | '302.ai' | 'custom'
 
+/** 新的协议枚举（服务商配置使用；302.ai/custom 归一化为 openai） */
+export type AIProtocol = 'openai' | 'gemini' | 'ollama'
+
 /**
- * AI 提供商配置
+ * 模型元数据（来自 models.dev，可缺失）
+ *
+ * 价格单位为 USD / 100 万 tokens。
+ */
+export interface ProviderModelMeta {
+  context?: number
+  output?: number
+  inputCost?: number
+  outputCost?: number
+  reasoning?: boolean
+  temperature?: boolean
+}
+
+/**
+ * 服务商下的单个模型
+ */
+export interface ProviderModel {
+  id: string
+  label?: string
+  enabled: boolean
+  /** auto = 从服务商 /models 拉取；manual = 用户手填 */
+  source: 'auto' | 'manual'
+  /** 覆盖全局默认温度 */
+  temperature?: number
+  meta?: ProviderModelMeta
+}
+
+/**
+ * 秘密字段的服务端视图：客户端只知道「是否已配置」，永远拿不到明文
+ */
+export interface SecretRef {
+  hasSecret: boolean
+}
+
+/**
+ * 服务商条目：一条配置 = 一个 baseUrl + 凭据 + 多个模型
+ */
+export interface ProviderEntry {
+  id: string
+  name: string
+  type: AIProtocol
+  baseUrl: string
+  apiKey?: SecretRef
+  /** models.dev 中的 provider id（用于元数据匹配与预设来源） */
+  catalogId?: string
+  models: ProviderModel[]
+  /** 上次从服务商拉取模型列表的时间 */
+  modelsFetchedAt?: string
+}
+
+/** AI 共享状态：服务商列表 + 当前模型 */
+export interface AIState {
+  providers: ProviderEntry[]
+  active: { providerId: string; modelId: string }
+  defaultTemperature: number
+}
+
+/**
+ * AI 运行时配置视图（由 AIState 派生，不含明文凭据）
+ *
+ * 供 provider 实现与处理链路使用；`providerId` 用于让同源代理在服务端取凭据。
  */
 export interface AIProviderConfig {
   provider: AIProviderType
-  apiKey: string
-  apiUrl?: string
-  model?: string
-  temperature?: number
+  /** 服务商 id：请求代理时用于在服务端定位 baseUrl 与凭据 */
+  providerId?: string
+  /** 仅在直连模式（Ollama）或测试中使用 */
+  apiKey?: string
+  apiUrl: string
+  model: string
+  temperature: number
   proxyUrl?: string
   proxyEnabled?: boolean
+  /** 历史字段：旧配置的附加项，导入时忽略 */
+  customFields?: Record<string, unknown>
 }
 
 /**
@@ -78,9 +151,6 @@ export interface GenerateContentResponse {
 
 // ==================== 错误类型 ====================
 
-/**
- * 速率限制错误
- */
 export interface RateLimitError extends Error {
   isRateLimit: boolean
   retryAfter?: number
@@ -88,43 +158,27 @@ export interface RateLimitError extends Error {
   code?: string
 }
 
-// ==================== Provider 接口 ====================
-
-/**
- * AI Provider 接口（策略模式）
- */
+/** AI 提供商接口 */
 export interface AIProvider {
   readonly type: AIProviderType
   readonly name: string
-
-  /**
-   * 生成内容
-   */
-  generateContent(request: GenerateContentRequest): Promise<GenerateContentResponse>
-
-  /**
-   * 测试连接
-   */
-  testConnection(): Promise<{ success: boolean; error?: string }>
-
-  /**
-   * 是否支持系统提示词
-   */
   readonly supportsSystemPrompt: boolean
-
-  /**
-   * 是否支持流式输出
-   */
   readonly supportsStreaming: boolean
+  generateContent(request: GenerateContentRequest): Promise<GenerateContentResponse>
+  testConnection(): Promise<{ success: boolean; error?: string }>
 }
 
-/**
- * Provider 构造函数类型
- */
 export type AIProviderConstructor = new (
   config: AIProviderConfig,
   options?: AIServiceOptions
 ) => AIProvider
+
+// ==================== 语言 ====================
+
+/**
+ * 语言指令提供者
+ */
+export type LanguageInstructionProvider = (language: SupportedLanguage) => string
 
 // ==================== 思维导图 ====================
 
@@ -137,10 +191,3 @@ export interface MindMapNode {
   children?: MindMapNode[]
   direction?: 'left' | 'right'
 }
-
-// ==================== 语言 ====================
-
-/**
- * 语言指令提供者
- */
-export type LanguageInstructionProvider = (language: SupportedLanguage) => string

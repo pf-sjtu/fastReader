@@ -45,7 +45,7 @@ const baseConfig: WebDAVConfig = {
   enabled: true,
   serverUrl: 'https://dav.example.com/dav/',
   username: 'u',
-  password: 'p',
+  password: { hasSecret: true },
   syncPath: '/fastReader',
   browsePath: '/Books'
 }
@@ -287,9 +287,35 @@ describe('路径：只用绝对路径，不叠加 browsePath', () => {
   })
 })
 
+describe('浏览器代理请求头：客户端不带凭据与上游地址', () => {
+  it('走 /api/dav/，只带路径与来源；不带 Authorization / X-WebDAV-Base', async () => {
+    const svc = await ready()
+    fetchMock.mockResolvedValueOnce(res(207))
+    await svc.existsStatus('/fastReader/a.md')
+    const call = fetchMock.mock.calls.at(-1)!
+    expect(call[0]).toBe('/api/dav/')
+    const headers = (call[1] as RequestInit).headers as Record<string, string>
+    expect(headers['X-WebDAV-Path']).toBe('/fastReader/a.md')
+    expect(headers['X-Request-Origin']).toBe(window.location.origin)
+    expect(headers.Authorization).toBeUndefined()
+    expect(headers['X-WebDAV-Base']).toBeUndefined()
+  })
+
+  it('webdav 库 client 也不再带 Basic Auth（凭据由服务端注入）', async () => {
+    await ready()
+    const [, options] = h.createClient.mock.calls.at(-1) as [
+      string,
+      { headers: Record<string, string>; username?: string; password?: string },
+    ]
+    expect(options.headers.Authorization).toBeUndefined()
+    expect(options.username).toBeUndefined()
+    expect(options.password).toBeUndefined()
+  })
+})
+
 describe('initialize / testConnection', () => {
   it('配置不完整 → 失败', async () => {
-    const r = await new WebDAVService().initialize({ ...baseConfig, password: '' })
+    const r = await new WebDAVService().initialize({ ...baseConfig, password: undefined })
     expect(r).toEqual({ success: false, error: 'WebDAV_CONFIG_INCOMPLETE' })
   })
 
@@ -307,13 +333,18 @@ describe('initialize / testConnection', () => {
     expect(h.client.createDirectory).toHaveBeenCalledTimes(1)
   })
 
-  it('相同凭据重复 initialize 不重建 client，但合并新 syncPath', async () => {
+  it('相同 serverUrl + username 重复 initialize 不重建 client，但合并新 syncPath', async () => {
     const svc = await ready()
     await svc.initialize({ ...baseConfig, syncPath: '/other' })
     expect(h.createClient).toHaveBeenCalledTimes(1)
     expect(svc.getConfig()?.syncPath).toBe('/other')
-    await svc.initialize({ ...baseConfig, password: 'p2' })
-    expect(h.createClient).toHaveBeenCalledTimes(2)
+    // 凭据由服务端注入（客户端只持有 {hasSecret}）：换密码不需要重建 client
+    await svc.initialize({
+      ...baseConfig,
+      syncPath: '/other',
+      password: { hasSecret: true },
+    })
+    expect(h.createClient).toHaveBeenCalledTimes(1)
   })
 
   it('未初始化时各操作返回错误', async () => {

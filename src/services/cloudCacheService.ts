@@ -1,6 +1,7 @@
 import { webdavService } from './webdavService'
 import { useConfigStore } from '../stores/configStore'
 import { metadataFormatter } from './metadataFormatter'
+import { logger } from '../lib/logger'
 
 /** 云端缓存存在性三态（与 webdavService.existsStatus 一致） */
 export type CacheExistsStatus = 'exists' | 'missing' | 'unknown'
@@ -47,8 +48,11 @@ export interface ProcessingMetadata {
   processedCharCount: number
   inputTokens: number
   outputTokens: number
-  costUSD: number
-  costRMB: number
+  /** 模型价格未知时省略（不再按其它模型估价） */
+  costUSD?: number
+  costRMB?: number
+  /** 价格未知：UI 展示「未计价」而不是 0 */
+  pricingKnown?: boolean
   skippedChapters?: number
   selectedChapterCount?: number
   isPartial?: boolean
@@ -128,7 +132,7 @@ export class CloudCacheService {
     try {
       const cachePath = this.getCacheFilePath(fileName)
       const exists = await this.webdavService.fileExists(cachePath)
-      console.log(`[CloudCache] 检查缓存是否存在: ${cachePath} -> ${exists}`)
+      logger.debug(`[CloudCache] 检查缓存是否存在: ${cachePath} -> ${exists}`)
       return exists
     } catch (error) {
       console.error('[CloudCache] 检查缓存失败:', error)
@@ -220,20 +224,20 @@ export class CloudCacheService {
   }> {
     try {
       const path = this.getChartsCacheFilePath(fileName)
-      console.log(`[CloudCache] 读取图表 JSON: ${path}`)
+      logger.debug(`[CloudCache] 读取图表 JSON: ${path}`)
       const result = await this.webdavService.getFileContents(path, 'text')
       if (!result.success || result.data == null) {
         const err = result.error || ''
         // 404 是正常「尚未生成」，不抬到 error
         if (err.includes('404') || err.includes('Not Found')) {
-          console.log(`[CloudCache] 图表 JSON 不存在 (404): ${path}`)
+          logger.debug(`[CloudCache] 图表 JSON 不存在 (404): ${path}`)
         } else if (err) {
           console.warn(`[CloudCache] 读取图表 JSON 失败: ${path}`, err)
         }
         return { found: false, content: null, error: result.error }
       }
       const text = String(result.data)
-      console.log(`[CloudCache] 图表 JSON 已读取: ${path}, ${text.length} chars`)
+      logger.debug(`[CloudCache] 图表 JSON 已读取: ${path}, ${text.length} chars`)
       return { found: true, content: text }
     } catch (error) {
       console.warn('[CloudCache] 读取图表 JSON 失败:', error)
@@ -268,7 +272,7 @@ export class CloudCacheService {
       }
       const path = this.getChartsCacheFilePath(fileName)
       const body = JSON.stringify(charts, null, 2)
-      console.log(`[CloudCache] 上传图表 JSON: ${path} (${body.length} chars)`)
+      logger.debug(`[CloudCache] 上传图表 JSON: ${path} (${body.length} chars)`)
       const upload = await this.webdavService.uploadFile(path, body)
       if (!upload.success) {
         console.warn(`[CloudCache] 图表 JSON 上传失败: ${path}`, upload.error)
@@ -277,14 +281,14 @@ export class CloudCacheService {
       // 回读校验：优先 GET；失败则用 exists 兜底（部分网盘写后瞬间 GET 不稳）
       const verify = await this.webdavService.getFileContents(path, 'text')
       if (verify.success && verify.data != null) {
-        console.log(
+        logger.debug(
           `[CloudCache] 图表 JSON 已上传并校验: ${path}, ${String(verify.data).length} chars`
         )
         return { success: true, path }
       }
       const exists = await this.webdavService.fileExists(path)
       if (exists) {
-        console.log(`[CloudCache] 图表 JSON 已上传 (exists 校验): ${path}`)
+        logger.debug(`[CloudCache] 图表 JSON 已上传 (exists 校验): ${path}`)
         return { success: true, path }
       }
       console.warn(
@@ -311,13 +315,13 @@ export class CloudCacheService {
   async readCache(fileName: string): Promise<CacheReadResult> {
     try {
       const cachePath = this.getCacheFilePath(fileName)
-      console.log(`[CloudCache] 读取缓存: ${cachePath}`)
+      logger.debug(`[CloudCache] 读取缓存: ${cachePath}`)
 
       // 串行：先 MD 后 JSON（WebDAV 代理用共享 header 传路径，并发会竞态）
       const downloadResult = await this.webdavService.getFileContents(cachePath, 'text')
       const chartsResult = await this.readChartsJson(fileName)
 
-      console.log(
+      logger.debug(
         `[CloudCache] 图表 JSON: found=${chartsResult.found}, len=${chartsResult.content?.length ?? 0}` +
           (chartsResult.error ? `, err=${chartsResult.error}` : '')
       )

@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
@@ -125,10 +125,10 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
     onToggleView?.()
   }
 
-  // 等待确认期间处理已自然结束：撤销确认框（渲染期调整 state，避免下次处理时残留弹出）
-  if (!processing && pendingAction !== null) {
-    setPendingAction(null)
-  }
+  // 等待确认期间处理已自然结束：撤销确认框，避免下次处理时残留弹出
+  useEffect(() => {
+    if (!processing) setPendingAction(null)
+  }, [processing])
 
   const handleConfirmPending = () => {
     if (pendingAction === 'abort') onCancelProcessing?.()
@@ -136,13 +136,16 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
     setPendingAction(null)
   }
 
-  // 显示最近历史的条件：配置视图 + 无处理中 + 有历史记录 + 有回调
+  // 进度条：处理中始终显示；结束后仅在处理视图保留（完成 / 中断后的进度与「重新处理」）。
+  // 配置视图不看残留的 progress，否则跑完一次后历史入口与「就绪」提示永远被进度条挡住
+  const showProgress = processing || (currentView === 'processing' && progress > 0)
+
+  // 显示最近历史的条件：配置视图 + 当前没有在跑 + 有历史记录 + 有回调
   const showRecentHistory =
     currentView === 'config' &&
     !processing &&
-    progress === 0 &&
     recentRecords.length > 0 &&
-    onLoadFromHistory
+    !!onLoadFromHistory
 
   // 窄屏只展示最近 1 条历史，避免挤爆
   const mobileRecentRecords = recentRecords.slice(0, 1)
@@ -198,7 +201,7 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
 
             {/* 中间：进度条 / 最近历史 / 状态信息 */}
             <div className="flex-1 min-w-0 mx-0 sm:mx-6">
-              {processing || progress > 0 ? (
+              {showProgress ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="text-muted-foreground truncate min-w-0">
@@ -229,19 +232,10 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                           {t('progress.abortAndEditSettingsShort')}
                         </Button>
                       )}
-                      {!processing && progress > 0 && progress < 100 && onRestartProcessing && (
+                      {!processing && onRestartProcessing && (
                         <Button
-                          variant="default"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={onRestartProcessing}
-                        >
-                          {t('progress.restart')}
-                        </Button>
-                      )}
-                      {!processing && progress >= 100 && onRestartProcessing && (
-                        <Button
-                          variant="outline"
+                          // 未完成（中断）时强调为主操作；已完成时降为次要
+                          variant={progress < 100 ? 'default' : 'outline'}
                           size="sm"
                           className="h-7 px-2 text-xs"
                           onClick={onRestartProcessing}

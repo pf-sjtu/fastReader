@@ -27,8 +27,21 @@ function stopQueueOnFatal(reason: string) {
  */
 export async function processNextPendingItem(cachedNames: CachedNamesRef): Promise<boolean> {
   const store = useBatchQueueStore.getState()
+
+  // 共享队列的执行租约：租约已被他人接管时本机必须停手，避免两边同时写结果
+  if (store.runner && store.runner.clientId !== store.clientId) {
+    batchProcessingEngine.stop()
+    store.stopProcessing()
+    toast.error(i18n.t('batch.runnerTakenOver'))
+    return false
+  }
+  store.heartbeatRunner()
+
   const nextPending = store.queue.find((i) => i.status === 'pending')
-  if (!nextPending) return false
+  if (!nextPending) {
+    store.releaseRunner()
+    return false
+  }
 
   if (!cachedNames.current) {
     const status = await cloudCacheService.fetchCacheFileNamesStatus()

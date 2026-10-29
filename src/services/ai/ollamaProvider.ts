@@ -21,6 +21,14 @@ export class OllamaProvider extends BaseAIProvider {
     return this.config.apiUrl || 'http://localhost:11434'
   }
 
+  /**
+   * Ollama 跑在用户本机（http://localhost:11434），服务端访问不到 → 一律浏览器直连。
+   * 也因此不经过 /api/ai，不需要服务端保存的凭据。
+   */
+  protected async fetchWithProxy(url: string, options: RequestInit): Promise<Response> {
+    return fetch(url, options)
+  }
+
   protected async doGenerateContent(
     request: GenerateContentRequest,
     opts?: AICallOptions

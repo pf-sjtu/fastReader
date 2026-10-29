@@ -1,8 +1,8 @@
-// Prompt配置加载器 - 浏览器兼容版本
+// Prompt 配置加载器 - 浏览器兼容版本（只保留 v2）
 import { parse as parseYaml } from 'yaml'
 
-// Prompt配置类型定义
-export interface PromptConfig {
+// Prompt 配置类型定义（含内置 system 段）
+export interface PromptConfigWithSystem {
   chapterSummary: {
     fiction: string
     nonFiction: string
@@ -19,105 +19,80 @@ export interface PromptConfig {
   }
 }
 
-// 缓存已加载的配置
-const configCache = new Map<string, PromptConfig>()
+/** 支持的提示词版本：v1 已废弃，仅保留 v2 */
+export const SUPPORTED_PROMPT_VERSIONS = ['v2'] as const
+export type PromptVersionId = (typeof SUPPORTED_PROMPT_VERSIONS)[number]
 
-// 导入YAML配置文件
-import v1PromptsYaml from './v1-prompts.yaml?raw'
+/** 默认 prompt 版本；CLI 的 DEFAULT_PROMPT_VERSION 与之保持一致 */
+export const DEFAULT_PROMPT_VERSION: PromptVersionId = 'v2'
+
+const configCache = new Map<string, PromptConfigWithSystem>()
+
 import v2PromptsYaml from './v2-prompts.yaml?raw'
 
 /**
- * 加载指定版本的prompt配置
- * @param version prompt版本 ('v1' | 'v2')
- * @returns PromptConfig
+ * 加载 prompt 配置。
+ *
+ * `v1` 只作为历史入参被接受（旧调用方/旧测试），实际一律返回 v2 —— v1 模板已删除。
  */
-export const loadPromptConfig = (version: 'v1' | 'v2'): PromptConfig => {
-  const cacheKey = version
-  
-  // 如果已缓存，直接返回
+export const loadPromptConfig = (version: string = DEFAULT_PROMPT_VERSION): PromptConfigWithSystem => {
+  const cacheKey = 'v2'
+  void version
+
   if (configCache.has(cacheKey)) {
     return configCache.get(cacheKey)!
   }
 
   try {
-    // 根据版本选择对应的YAML内容
-    const yamlContent = version === 'v1' ? v1PromptsYaml : v2PromptsYaml
-    
-    // 解析YAML内容
-    const config = parseYaml(yamlContent) as PromptConfig
-    
-    // 缓存配置
+    const config = parseYaml(v2PromptsYaml) as PromptConfigWithSystem
     configCache.set(cacheKey, config)
-    
     return config
   } catch (error) {
-    console.error(`加载${version}版本prompt配置失败:`, error)
-    throw new Error(`无法加载${version}版本的prompt配置`)
+    console.error('加载 v2 版本 prompt 配置失败:', error)
+    throw new Error('无法加载 v2 版本的 prompt 配置')
   }
 }
 
-/**
- * 获取指定版本的章节总结prompt
- * @param version prompt版本
- * @param bookType 书籍类型 ('fiction' | 'nonFiction')
- * @returns prompt字符串
- */
+/** 获取章节总结 prompt */
 export const getChapterSummaryPrompt = (
-  version: 'v1' | 'v2',
+  version: string,
   bookType: 'fiction' | 'nonFiction'
 ): string => {
   const config = loadPromptConfig(version)
   return config.chapterSummary[bookType]
 }
 
-/**
- * 获取指定版本的思维导图prompt
- * @param version prompt版本
- * @param mindmapType 思维导图类型 ('chapter' | 'arrow' | 'combined')
- * @returns prompt字符串
- */
+/** 获取思维导图 prompt */
 export const getMindmapPrompt = (
-  version: 'v1' | 'v2',
+  version: string,
   mindmapType: 'chapter' | 'arrow' | 'combined'
 ): string => {
   const config = loadPromptConfig(version)
   return config.mindmap[mindmapType]
 }
 
-/**
- * 获取指定版本的章节关联分析prompt
- * @param version prompt版本
- * @returns prompt字符串
- */
-export const getConnectionAnalysisPrompt = (version: 'v1' | 'v2'): string => {
+/** 获取章节关联分析 prompt */
+export const getConnectionAnalysisPrompt = (version: string): string => {
   const config = loadPromptConfig(version)
   return config.connectionAnalysis
 }
 
-/**
- * 获取指定版本的全书总结prompt
- * @param version prompt版本
- * @returns prompt字符串
- */
-export const getOverallSummaryPrompt = (version: 'v1' | 'v2'): string => {
+/** 获取全书总结 prompt */
+export const getOverallSummaryPromptTemplate = (version: string): string => {
   const config = loadPromptConfig(version)
   return config.overallSummary
 }
 
-/**
- * 获取系统prompt
- * @param promptType prompt类型 ('testConnection')
- * @returns prompt字符串
- */
+/** 兼容旧调用名：获取全书总结 prompt */
+export const getOverallSummaryPrompt = getOverallSummaryPromptTemplate
+
+/** 获取系统 prompt */
 export const getSystemPrompt = (promptType: 'testConnection'): string => {
-  // 默认使用v1配置，系统prompt在两个版本中是相同的
-  const config = loadPromptConfig('v1')
+  const config = loadPromptConfig(DEFAULT_PROMPT_VERSION)
   return config.system[promptType]
 }
 
-/**
- * 清除配置缓存（用于开发时热重载）
- */
+/** 清除配置缓存（用于开发时热重载） */
 export const clearConfigCache = (): void => {
   configCache.clear()
 }

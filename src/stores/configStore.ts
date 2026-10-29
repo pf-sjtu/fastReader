@@ -1,437 +1,313 @@
 // ConfigStore - 兼容壳
-// 所有状态和方法都转发到子store，保持向后兼容。
-// 单一事实来源：数据只由子store持久化；本壳不持久化，数据字段通过订阅子store派生。
+//
+// 所有状态与方法都转发到子 store；本壳不持有数据（数据由各子 store 从服务端共享状态 hydrate）。
+// 新代码请直接用子 store 的 selector。
 import { create } from 'zustand'
 import type {
-  PromptConfig,
-  PromptVersionConfig,
+  AIServiceOptions,
   AIProviderConfig,
-  AIConfigManager,
-  AIConfig,
+  PromptConfig,
   ProcessingOptions,
   WebDAVConfig,
-  AIServiceOptions
 } from './types'
-import { migrateLegacyConfig } from './legacyMigration'
-import type { SupportedLanguage } from '../services/prompts/utils'
-import { ConfigExportService } from '../services/configExportService'
+import type { PromptOverrides } from './types'
+import type { AIState } from '../types/ai'
+import {
+  ConfigExportService,
+  validateImportPlan,
+  type ExportOptions,
+  type ImportPlan,
+  type ImportPreview,
+} from '../services/configExportService'
 import { logger } from '../lib/logger'
 
-// 从子store导入内部函数
-import { mergeAIConfigManager } from './ai-config'
-import { useAIConfigStore } from './ai-config'
+import { useAIConfigStore, getPendingSecrets } from './ai-config'
 import { useProcessingStore } from './processing'
-import { useWebDAVStore } from './webdav'
+import { useWebDAVStore, getPendingWebDAVPassword } from './webdav'
 import { usePromptStore } from './prompts'
-import { DEFAULT_PROMPT_VERSION } from '../services/prompts/templates'
-import { useCoreStore } from './core'
+import { useUsageStore } from './usage'
+import { useProcessingHistoryStore } from './processingHistory'
+import { flushAllSections, flushSection, loadAll } from '../services/shared/sharedState'
 
-// 重新导出类型
 export type { PromptConfig, WebDAVConfig }
 /** @deprecated 使用 AIProviderConfig 替代 */
 export type { AIProviderConfig as AIConfig }
 
-// 配置store状态接口（保持与原接口完全一致）
 export interface ConfigState {
-  // AI配置管理
-  aiConfigManager: AIConfigManager
-  aiConfig: AIConfig
-  setAiProvider: (provider: 'gemini' | 'openai' | 'ollama' | '302.ai') => void
-  setApiKey: (apiKey: string) => void
-  setApiUrl: (apiUrl: string) => void
-  setModel: (model: string) => void
-  setTemperature: (temperature: number) => void
-  setProxyUrl: (proxyUrl: string) => void
-  setProxyEnabled: (enabled: boolean) => void
-
-  // AI服务商管理方法
-  addAIProvider: (config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>) => number
-  updateAIProvider: (index: number, config: Partial<AIProviderConfig>) => void
-  deleteAIProvider: (index: number) => void
-  duplicateAIProvider: (index: number) => number
-  setCurrentModelId: (index: number) => void
+  // AI 配置
+  ai: AIState
+  aiConfig: AIProviderConfig
   getActiveAIProvider: () => AIProviderConfig | undefined
-  getAIProviderByIndex: (index: number) => AIProviderConfig | undefined
-  createAIProviderFromTemplate: (template: 'gemini' | 'openai' | 'ollama' | '302.ai') => number
-  getAvailableAITemplates: () => Array<{ id: string; name: string; description: string }>
 
-  // AI配置管理器方法（直接访问）
-  addProvider: (config: Omit<AIProviderConfig, 'id' | 'createdAt' | 'updatedAt'>) => number
-  updateProvider: (index: number, config: Partial<AIProviderConfig>) => void
-  deleteProvider: (index: number) => void
-  duplicateProvider: (index: number) => number
-  getProviderByIndex: (index: number) => AIProviderConfig | undefined
-
-  // Token使用量追踪
+  // Token 使用量
   tokenUsage: number
-  addTokenUsage: (tokens: number) => void
+  totalCostUSD: number
+  addTokenUsage: (tokens: number, costUSD?: number, model?: string) => void
   resetTokenUsage: () => void
 
   // 处理选项
   processingOptions: ProcessingOptions
-  setProcessingMode: (mode: 'summary' | 'mindmap' | 'combined-mindmap') => void
-  setBookType: (type: 'fiction' | 'non-fiction') => void
+  exchangeRateUsdToCny: number
+  setProcessingMode: (mode: ProcessingOptions['processingMode']) => void
+  setBookType: (type: ProcessingOptions['bookType']) => void
   setUseSmartDetection: (enabled: boolean) => void
   setSkipNonEssentialChapters: (enabled: boolean) => void
   setMaxSubChapterDepth: (depth: number) => void
-  setOutputLanguage: (language: SupportedLanguage) => void
-  setChapterNamingMode: (mode: 'auto' | 'numbered') => void
+  setOutputLanguage: (language: ProcessingOptions['outputLanguage']) => void
+  setChapterNamingMode: (mode: ProcessingOptions['chapterNamingMode']) => void
   setEnableNotification: (enabled: boolean) => void
-  setChapterDetectionMode: (mode: 'normal' | 'smart' | 'epub-toc') => void
+  setChapterDetectionMode: (mode: ProcessingOptions['chapterDetectionMode']) => void
   setEpubTocDepth: (depth: number) => void
   setChapterConcurrency: (concurrency: number) => void
+  setExchangeRateUsdToCny: (rate: number) => void
+  updateProcessingOptions: (options: Partial<ProcessingOptions>) => void
 
-  // WebDAV配置
+  // WebDAV 配置
   webdavConfig: WebDAVConfig
   setWebDAVEnabled: (enabled: boolean) => void
   setWebDAVServerUrl: (serverUrl: string) => void
   setWebDAVUsername: (username: string) => void
-  setWebDAVPassword: (password: string) => void
+  setWebDAVPassword: (password: string | null) => void
   setWebDAVAppName: (appName: string) => void
   setWebDAVAutoSync: (autoSync: boolean) => void
   setWebDAVSyncPath: (syncPath: string) => void
   setWebDAVBrowsePath: (browsePath: string) => void
-  setWebDAVConnectionStatus: (status: 'disconnected' | 'connecting' | 'connected' | 'error') => void
+  setWebDAVConnectionStatus: (status: WebDAVConfig['connectionStatus']) => void
   updateWebDAVLastSyncTime: () => void
   resetWebDAVConfig: () => void
+  updateWebDAVConfig: (config: Partial<WebDAVConfig>) => void
 
-  // 提示词配置
+  // 提示词
   promptConfig: PromptConfig
-  promptVersionConfig: PromptVersionConfig
-  currentPromptVersion: 'v1' | 'v2'
-  setCurrentPromptVersion: (version: 'v1' | 'v2') => void
+  promptOverrides: PromptOverrides
   setChapterSummaryPrompt: (bookType: 'fiction' | 'non-fiction', prompt: string) => void
   setMindmapPrompt: (mindmapType: 'chapter' | 'arrow' | 'combined', prompt: string) => void
   setConnectionAnalysisPrompt: (prompt: string) => void
   setOverallSummaryPrompt: (prompt: string) => void
   resetPromptsToDefault: () => void
-  resetPromptsToDefaultForVersion: (version: 'v1' | 'v2') => void
+  resetPrompt: (path: Parameters<ReturnType<typeof usePromptStore.getState>['resetPrompt']>[0]) => void
 
-  // AI服务选项
+  // AI 服务选项
   aiServiceOptions: AIServiceOptions
   setMaxRetries: (maxRetries: number) => void
   setBaseRetryDelay: (baseRetryDelay: number) => void
 
-  // 配置导出导入功能
-  exportConfig: () => string
+  // 配置导出导入
+  exportConfig: (options?: ExportOptions) => string
+  previewImport: (yamlContent: string) => { preview?: ImportPreview; plan?: ImportPlan; error?: string }
+  applyImportPlan: (plan: ImportPlan) => { success: boolean; error?: string }
   importConfig: (yamlContent: string) => { success: boolean; error?: string }
   resetAllConfig: () => void
+
+  /** 重新从服务端拉全量（初始化向导完成后使用） */
+  reloadSharedState: () => Promise<void>
+  /**
+   * 把当前（默认或刚导入的）配置强制写入服务端，作为「已初始化」基线。
+   *
+   * 初始化向导必须用 force：本地值此时恰好等于默认值，普通 flush 会短路，服务端仍是空的，
+   * 向导会一直循环。
+   */
+  initializeSharedState: () => Promise<void>
 }
 
-// 拆分前的老用户数据迁移到子store（须在壳读取子store初始值之前执行）
-migrateLegacyConfig()
-
-// 辅助函数：从各子store聚合状态
 const getAggregatedState = () => {
-  // 使用getState()获取当前状态（非hooks方式）
   const aiState = useAIConfigStore.getState()
   const processingState = useProcessingStore.getState()
   const webdavState = useWebDAVStore.getState()
   const promptState = usePromptStore.getState()
-  const coreState = useCoreStore.getState()
+  const usageState = useUsageStore.getState()
 
   return {
-    aiConfigManager: aiState.aiConfigManager,
+    ai: aiState.ai,
     aiConfig: aiState.aiConfig,
-    tokenUsage: coreState.tokenUsage,
+    tokenUsage: usageState.tokenUsage,
+    totalCostUSD: usageState.totalCostUSD,
     processingOptions: processingState.processingOptions,
+    exchangeRateUsdToCny: processingState.exchangeRateUsdToCny,
     webdavConfig: webdavState.webdavConfig,
     promptConfig: promptState.promptConfig,
-    promptVersionConfig: promptState.promptVersionConfig,
-    currentPromptVersion: promptState.currentPromptVersion,
-    aiServiceOptions: coreState.aiServiceOptions
+    promptOverrides: promptState.overrides,
+    aiServiceOptions: processingState.aiServiceOptions,
   }
 }
 
-// 兼容壳store
-// 不持久化：数据字段是子store的镜像，由文件末尾的订阅保持同步
-export const useConfigStore = create<ConfigState>()(
-  (_set, get) => ({
-    // 聚合状态（初始值取自已水合的子store）
-    ...getAggregatedState(),
+export const useConfigStore = create<ConfigState>()((_set, get) => ({
+  ...getAggregatedState(),
 
-    // AI配置 - 向后兼容设置方法
-    setAiProvider: (provider) => {
-      useAIConfigStore.getState().setAiProvider(provider)
-    },
-    setApiKey: (apiKey) => {
-      useAIConfigStore.getState().setApiKey(apiKey)
-    },
-    setApiUrl: (apiUrl) => {
-      useAIConfigStore.getState().setApiUrl(apiUrl)
-    },
-    setModel: (model) => {
-      useAIConfigStore.getState().setModel(model)
-    },
-    setTemperature: (temperature) => {
-      useAIConfigStore.getState().setTemperature(temperature)
-    },
-    setProxyUrl: (proxyUrl) => {
-      useAIConfigStore.getState().setProxyUrl(proxyUrl)
-    },
-    setProxyEnabled: (enabled) => {
-      useAIConfigStore.getState().setProxyEnabled(enabled)
-    },
+  getActiveAIProvider: () => {
+    const { ai } = useAIConfigStore.getState()
+    const provider =
+      ai.providers.find((p) => p.id === ai.active.providerId) ??
+      ai.providers.find((p) => p.models.some((m) => m.enabled))
+    if (!provider) return undefined
+    return useAIConfigStore.getState().aiConfig
+  },
 
-    // AI服务商管理方法
-    addAIProvider: (config) => {
-      const result = useAIConfigStore.getState().addAIProvider(config)
-      return result
-    },
-    updateAIProvider: (index, config) => {
-      useAIConfigStore.getState().updateAIProvider(index, config)
-    },
-    deleteAIProvider: (index) => {
-      useAIConfigStore.getState().deleteAIProvider(index)
-    },
-    duplicateAIProvider: (index) => {
-      const result = useAIConfigStore.getState().duplicateAIProvider(index)
-      return result
-    },
-    setCurrentModelId: (index) => {
-      useAIConfigStore.getState().setCurrentModelId(index)
-    },
-    getActiveAIProvider: () => {
-      return useAIConfigStore.getState().getActiveAIProvider()
-    },
-    getAIProviderByIndex: (index) => {
-      return useAIConfigStore.getState().getAIProviderByIndex(index)
-    },
-    createAIProviderFromTemplate: (template) => {
-      const result = useAIConfigStore.getState().createAIProviderFromTemplate(template)
-      return result
-    },
-    getAvailableAITemplates: () => {
-      return useAIConfigStore.getState().getAvailableAITemplates()
-    },
+  // ===== Token / 费用 =====
+  addTokenUsage: (tokens, costUSD, model) => {
+    useUsageStore.getState().addTokenUsage(tokens, costUSD, model)
+  },
+  resetTokenUsage: () => {
+    useUsageStore.getState().resetTokenUsage()
+  },
 
-    // AI配置管理器方法（直接访问）
-    addProvider: (config) => {
-      return get().addAIProvider(config)
-    },
-    updateProvider: (index, config) => {
-      get().updateAIProvider(index, config)
-    },
-    deleteProvider: (index) => {
-      get().deleteAIProvider(index)
-    },
-    duplicateProvider: (index) => {
-      return get().duplicateAIProvider(index)
-    },
-    getProviderByIndex: (index) => {
-      return get().getAIProviderByIndex(index)
-    },
+  // ===== 处理选项 =====
+  setProcessingMode: (v) => useProcessingStore.getState().setProcessingMode(v),
+  setBookType: (v) => useProcessingStore.getState().setBookType(v),
+  setUseSmartDetection: (v) => useProcessingStore.getState().setUseSmartDetection(v),
+  setSkipNonEssentialChapters: (v) => useProcessingStore.getState().setSkipNonEssentialChapters(v),
+  setMaxSubChapterDepth: (v) => useProcessingStore.getState().setMaxSubChapterDepth(v),
+  setOutputLanguage: (v) => useProcessingStore.getState().setOutputLanguage(v),
+  setChapterNamingMode: (v) => useProcessingStore.getState().setChapterNamingMode(v),
+  setEnableNotification: (v) => useProcessingStore.getState().setEnableNotification(v),
+  setChapterDetectionMode: (v) => useProcessingStore.getState().setChapterDetectionMode(v),
+  setEpubTocDepth: (v) => useProcessingStore.getState().setEpubTocDepth(v),
+  setChapterConcurrency: (v) => useProcessingStore.getState().setChapterConcurrency(v),
+  setExchangeRateUsdToCny: (rate) => useProcessingStore.getState().setExchangeRateUsdToCny(rate),
+  updateProcessingOptions: (options) => useProcessingStore.getState().updateProcessingOptions(options),
 
-    // Token使用量追踪
-    addTokenUsage: (tokens) => {
-      useCoreStore.getState().addTokenUsage(tokens)
-    },
-    resetTokenUsage: () => {
-      useCoreStore.getState().resetTokenUsage()
-    },
+  // ===== WebDAV =====
+  setWebDAVEnabled: (v) => useWebDAVStore.getState().setWebDAVEnabled(v),
+  setWebDAVServerUrl: (v) => useWebDAVStore.getState().setWebDAVServerUrl(v),
+  setWebDAVUsername: (v) => useWebDAVStore.getState().setWebDAVUsername(v),
+  setWebDAVPassword: (v) => useWebDAVStore.getState().setWebDAVPassword(v),
+  setWebDAVAppName: (v) => useWebDAVStore.getState().setWebDAVAppName(v),
+  setWebDAVAutoSync: (v) => useWebDAVStore.getState().setWebDAVAutoSync(v),
+  setWebDAVSyncPath: (v) => useWebDAVStore.getState().setWebDAVSyncPath(v),
+  setWebDAVBrowsePath: (v) => useWebDAVStore.getState().setWebDAVBrowsePath(v),
+  setWebDAVConnectionStatus: (v) => useWebDAVStore.getState().setWebDAVConnectionStatus(v),
+  updateWebDAVLastSyncTime: () => useWebDAVStore.getState().updateWebDAVLastSyncTime(),
+  resetWebDAVConfig: () => useWebDAVStore.getState().resetWebDAVConfig(),
+  updateWebDAVConfig: (config) => useWebDAVStore.getState().updateWebDAVConfig(config),
 
-    // 处理选项
-    setProcessingMode: (processingMode) => {
-      useProcessingStore.getState().setProcessingMode(processingMode)
-    },
-    setBookType: (bookType) => {
-      useProcessingStore.getState().setBookType(bookType)
-    },
-    setUseSmartDetection: (useSmartDetection) => {
-      useProcessingStore.getState().setUseSmartDetection(useSmartDetection)
-    },
-    setSkipNonEssentialChapters: (skipNonEssentialChapters) => {
-      useProcessingStore.getState().setSkipNonEssentialChapters(skipNonEssentialChapters)
-    },
-    setMaxSubChapterDepth: (maxSubChapterDepth) => {
-      useProcessingStore.getState().setMaxSubChapterDepth(maxSubChapterDepth)
-    },
-    setOutputLanguage: (outputLanguage) => {
-      useProcessingStore.getState().setOutputLanguage(outputLanguage)
-    },
-    setChapterNamingMode: (chapterNamingMode) => {
-      useProcessingStore.getState().setChapterNamingMode(chapterNamingMode)
-    },
-    setEnableNotification: (enableNotification) => {
-      useProcessingStore.getState().setEnableNotification(enableNotification)
-    },
-    setChapterDetectionMode: (chapterDetectionMode) => {
-      useProcessingStore.getState().setChapterDetectionMode(chapterDetectionMode)
-    },
-    setEpubTocDepth: (epubTocDepth) => {
-      useProcessingStore.getState().setEpubTocDepth(epubTocDepth)
-    },
-    setChapterConcurrency: (chapterConcurrency) => {
-      useProcessingStore.getState().setChapterConcurrency(chapterConcurrency)
-    },
+  // ===== 提示词 =====
+  setChapterSummaryPrompt: (bookType, prompt) =>
+    usePromptStore.getState().setChapterSummaryPrompt(bookType, prompt),
+  setMindmapPrompt: (type, prompt) => usePromptStore.getState().setMindmapPrompt(type, prompt),
+  setConnectionAnalysisPrompt: (prompt) =>
+    usePromptStore.getState().setConnectionAnalysisPrompt(prompt),
+  setOverallSummaryPrompt: (prompt) => usePromptStore.getState().setOverallSummaryPrompt(prompt),
+  resetPromptsToDefault: () => usePromptStore.getState().resetAllPrompts(),
+  resetPrompt: (path) => usePromptStore.getState().resetPrompt(path),
 
-    // WebDAV配置
-    setWebDAVEnabled: (enabled) => {
-      useWebDAVStore.getState().setWebDAVEnabled(enabled)
-    },
-    setWebDAVServerUrl: (serverUrl) => {
-      useWebDAVStore.getState().setWebDAVServerUrl(serverUrl)
-    },
-    setWebDAVUsername: (username) => {
-      useWebDAVStore.getState().setWebDAVUsername(username)
-    },
-    setWebDAVPassword: (password) => {
-      useWebDAVStore.getState().setWebDAVPassword(password)
-    },
-    setWebDAVAppName: (appName) => {
-      useWebDAVStore.getState().setWebDAVAppName(appName)
-    },
-    setWebDAVAutoSync: (autoSync) => {
-      useWebDAVStore.getState().setWebDAVAutoSync(autoSync)
-    },
-    setWebDAVSyncPath: (syncPath) => {
-      useWebDAVStore.getState().setWebDAVSyncPath(syncPath)
-    },
-    setWebDAVBrowsePath: (browsePath) => {
-      useWebDAVStore.getState().setWebDAVBrowsePath(browsePath)
-    },
-    setWebDAVConnectionStatus: (connectionStatus) => {
-      useWebDAVStore.getState().setWebDAVConnectionStatus(connectionStatus)
-    },
-    updateWebDAVLastSyncTime: () => {
-      useWebDAVStore.getState().updateWebDAVLastSyncTime()
-    },
-    resetWebDAVConfig: () => {
-      useWebDAVStore.getState().resetWebDAVConfig()
-    },
+  // ===== AI 服务选项 =====
+  setMaxRetries: (v) => useProcessingStore.getState().setMaxRetries(v),
+  setBaseRetryDelay: (v) => useProcessingStore.getState().setBaseRetryDelay(v),
 
-    // 提示词配置
-    setCurrentPromptVersion: (version) => {
-      usePromptStore.getState().setCurrentPromptVersion(version)
-    },
-    setChapterSummaryPrompt: (bookType, prompt) => {
-      usePromptStore.getState().setChapterSummaryPrompt(bookType, prompt)
-    },
-    setMindmapPrompt: (mindmapType, prompt) => {
-      usePromptStore.getState().setMindmapPrompt(mindmapType, prompt)
-    },
-    setConnectionAnalysisPrompt: (prompt) => {
-      usePromptStore.getState().setConnectionAnalysisPrompt(prompt)
-    },
-    setOverallSummaryPrompt: (prompt) => {
-      usePromptStore.getState().setOverallSummaryPrompt(prompt)
-    },
-    resetPromptsToDefault: () => {
-      usePromptStore.getState().resetPromptsToDefault()
-    },
-    resetPromptsToDefaultForVersion: (version) => {
-      usePromptStore.getState().resetPromptsToDefaultForVersion(version)
-    },
-
-    // AI服务选项
-    setMaxRetries: (maxRetries) => {
-      useCoreStore.getState().setMaxRetries(maxRetries)
-    },
-    setBaseRetryDelay: (baseRetryDelay) => {
-      useCoreStore.getState().setBaseRetryDelay(baseRetryDelay)
-    },
-
-    // 配置导出导入功能
-    exportConfig: () => {
-      const state = getAggregatedState()
-      return ConfigExportService.exportConfig(state)
-    },
-
-    importConfig: (yamlContent) => {
-      try {
-        const importedConfig = ConfigExportService.importConfig(yamlContent)
-
-        const validation = ConfigExportService.validateConfig(importedConfig)
-        if (!validation.isValid) {
-          return {
-            success: false,
-            error: `配置验证失败: ${validation.errors.join(', ')}`
-          }
-        }
-
-        // 应用导入的配置到各子store
-        const config = importedConfig.config
-
-        // AI配置
-        if (config.aiConfigManager) {
-          useAIConfigStore.setState((s) => mergeAIConfigManager(s, config.aiConfigManager))
-        }
-
-        // 处理选项
-        if (config.processingOptions) {
-          useProcessingStore.getState().updateProcessingOptions(config.processingOptions)
-        }
-
-        // WebDAV配置
-        if (config.webdavConfig) {
-          // 连接状态是运行时状态：备份里记录的是导出设备上的结果，导入后必须重新探测
-          useWebDAVStore
-            .getState()
-            .updateWebDAVConfig({ ...config.webdavConfig, connectionStatus: 'disconnected' })
-        }
-
-        // 提示词配置
-        if (config.promptVersionConfig && config.currentPromptVersion) {
-          const promptConfig = config.promptVersionConfig[config.currentPromptVersion]
-          usePromptStore.setState({
-            promptConfig,
-            promptVersionConfig: config.promptVersionConfig,
-            currentPromptVersion: config.currentPromptVersion
-          })
-        }
-
-        // Token使用量
-        if (typeof config.tokenUsage === 'number') {
-          useCoreStore.setState({ tokenUsage: config.tokenUsage })
-        }
-
-        return { success: true }
-      } catch (error) {
-        logger.error('[ConfigStore] 导入配置失败:', error)
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : '导入配置时发生未知错误'
-        }
+  // ===== 导出 / 导入 =====
+  exportConfig: (options) => {
+    const state = getAggregatedState()
+    return ConfigExportService.exportConfig(
+      {
+        ai: state.ai,
+        processingOptions: state.processingOptions,
+        exchangeRateUsdToCny: state.exchangeRateUsdToCny,
+        webdav: state.webdavConfig,
+        prompts: state.promptOverrides,
+        tokenUsage: state.tokenUsage,
+      },
+      {
+        ...options,
+        // 服务端已保存的密钥浏览器读不到（这正是设计目标），所以「包含密钥」只能导出
+        // 本次会话里用户新输入、尚未提交的那部分。
+        ...(options?.includeSecrets
+          ? { providerSecrets: getPendingSecrets(), webdavPassword: getPendingWebDAVPassword() }
+          : {}),
       }
-    },
+    )
+  },
 
-    resetAllConfig: () => {
-      useAIConfigStore.getState().resetAIConfig()
-      useProcessingStore.getState().resetProcessingOptions()
-      useWebDAVStore.getState().resetWebDAVConfig()
-      usePromptStore.setState({
-        currentPromptVersion: DEFAULT_PROMPT_VERSION,
-        promptConfig: usePromptStore.getState().promptVersionConfig[DEFAULT_PROMPT_VERSION]
-      })
-      useCoreStore.getState().resetCoreState()
+  previewImport: (yamlContent) => {
+    try {
+      const plan = ConfigExportService.importConfig(yamlContent)
+      return { plan, preview: ConfigExportService.preview(plan) }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : '配置解析失败' }
     }
-  })
-)
+  },
+
+  applyImportPlan: (plan) => {
+    const errors = validateImportPlan(plan)
+    if (errors.length > 0) return { success: false, error: errors.join('; ') }
+
+    try {
+      // AI 服务商 + 待提交密钥
+      useAIConfigStore.getState().replaceAI(plan.ai)
+      for (const [providerId, apiKey] of Object.entries(plan.providerSecrets)) {
+        useAIConfigStore.getState().setProviderSecret(providerId, apiKey)
+      }
+
+      if (plan.processing) {
+        useProcessingStore.getState().updateProcessingOptions(plan.processing)
+      }
+      if (typeof plan.exchangeRateUsdToCny === 'number') {
+        useProcessingStore.getState().setExchangeRateUsdToCny(plan.exchangeRateUsdToCny)
+      }
+
+      useWebDAVStore.getState().replaceWebDAV(plan.webdav)
+      if (plan.webdavPassword) {
+        useWebDAVStore.getState().setWebDAVPassword(plan.webdavPassword)
+      }
+
+      usePromptStore.getState().replacePrompts(plan.prompts)
+
+      // 导入后立刻落盘，避免用户直接关页面丢失
+      void Promise.all([
+        flushSection('ai'),
+        flushSection('processing'),
+        flushSection('webdav'),
+        flushSection('prompts'),
+      ]).catch((error) => logger.error('[ConfigStore] 导入后写回失败:', error))
+
+      return { success: true }
+    } catch (error) {
+      logger.error('[ConfigStore] 导入配置失败:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '导入配置时发生未知错误',
+      }
+    }
+  },
+
+  importConfig: (yamlContent) => {
+    const { plan, error } = get().previewImport(yamlContent)
+    if (!plan) return { success: false, error }
+    return get().applyImportPlan(plan)
+  },
+
+  resetAllConfig: () => {
+    useAIConfigStore.getState().resetAIConfig()
+    useProcessingStore.getState().resetProcessingOptions()
+    useWebDAVStore.getState().resetWebDAVConfig()
+    usePromptStore.getState().resetAllPrompts()
+    useUsageStore.getState().resetTokenUsage()
+    useProcessingHistoryStore.getState().clearLocalView()
+  },
+
+  reloadSharedState: async () => {
+    await loadAll()
+  },
+
+  initializeSharedState: async () => {
+    await flushAllSections({ force: true })
+  },
+}))
 
 // 子store → 兼容壳 单向同步（任何途径改子store，壳都跟着变）
-useAIConfigStore.subscribe((s) =>
-  useConfigStore.setState({ aiConfigManager: s.aiConfigManager, aiConfig: s.aiConfig })
-)
-useProcessingStore.subscribe((s) => useConfigStore.setState({ processingOptions: s.processingOptions }))
-useWebDAVStore.subscribe((s) => useConfigStore.setState({ webdavConfig: s.webdavConfig }))
-usePromptStore.subscribe((s) =>
-  useConfigStore.setState({
-    promptConfig: s.promptConfig,
-    promptVersionConfig: s.promptVersionConfig,
-    currentPromptVersion: s.currentPromptVersion
-  })
-)
-useCoreStore.subscribe((s) =>
-  useConfigStore.setState({ tokenUsage: s.tokenUsage, aiServiceOptions: s.aiServiceOptions })
-)
+const sync = () => useConfigStore.setState(getAggregatedState())
+useAIConfigStore.subscribe(sync)
+useProcessingStore.subscribe(sync)
+useWebDAVStore.subscribe(sync)
+usePromptStore.subscribe(sync)
+useUsageStore.subscribe(sync)
 
-// 导出便捷的选择器（保持与原有API完全一致）
-export const useAIConfig = () => useConfigStore((state) => state.aiConfig)
-// 细粒度订阅：只在 tokenUsage 变化时重渲染（直接订阅 core 子store）
-export const useTokenUsage = () => useCoreStore((state) => state.tokenUsage)
-export const useProcessingOptions = () => useConfigStore((state) => state.processingOptions)
-export const useWebDAVConfig = () => useConfigStore((state) => state.webdavConfig)
-export const useAIServiceOptions = () => useConfigStore((state) => state.aiServiceOptions)
-export const usePromptConfig = () => useConfigStore((state) => state.promptConfig)
-export const usePromptVersionConfig = () => useConfigStore((state) => state.promptVersionConfig)
-export const useCurrentPromptVersion = () => useConfigStore((state) => state.currentPromptVersion)
+// 便捷选择器
+export const useAIConfig = () => useAIConfigStore((state) => state.aiConfig)
+export const useTokenUsage = () => useUsageStore((state) => state.tokenUsage)
+export const useTotalCostUSD = () => useUsageStore((state) => state.totalCostUSD)
+export const useProcessingOptions = () => useProcessingStore((state) => state.processingOptions)
+export const useWebDAVConfig = () => useWebDAVStore((state) => state.webdavConfig)
+export const useAIServiceOptions = () => useProcessingStore((state) => state.aiServiceOptions)
+export const usePromptConfig = () => usePromptStore((state) => state.promptConfig)
+export const usePromptOverrides = () => usePromptStore((state) => state.overrides)
+export const useExchangeRate = () => useProcessingStore((state) => state.exchangeRateUsdToCny)

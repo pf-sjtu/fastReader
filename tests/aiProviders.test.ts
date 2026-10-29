@@ -45,6 +45,8 @@ afterEach(() => {
 
 const baseConfig = {
   provider: 'openai' as const,
+  // 服务端据此定位 baseUrl 与凭据（客户端不再掌握上游地址与明文 key）
+  providerId: 'p-openai',
   apiKey: 'sk-test',
   apiUrl: 'https://api.example.com/v1',
   model: 'gpt-x',
@@ -70,7 +72,11 @@ describe('OpenAIProvider', () => {
 
     const [url, init] = fetchMock.mock.calls[0] as FetchArgs
     expect(url).toContain('/api/ai?path=chat%2Fcompletions')
-    expect(new Headers(init.headers).get('X-AI-Base')).toBe('https://api.example.com/v1')
+    const headers = new Headers(init.headers)
+    // 上游 base 只能由服务端决定：客户端不再传 X-AI-Base
+    expect(headers.get('X-AI-Base')).toBeNull()
+    expect(headers.get('X-Provider-Id')).toBe('p-openai')
+    expect(headers.get('X-Request-Origin')).toBe(window.location.origin)
     expect(init.signal).toBe(ctrl.signal)
     const body = JSON.parse(init.body as string)
     expect(body.messages).toEqual([
@@ -173,12 +179,14 @@ describe('OpenAIProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('testConnection 请求 /models（代理路径不重复）', async () => {
+  it('testConnection 请求 /models（端点路径相对服务商 baseUrl）', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ data: [] }))
     await expect(openai().testConnection()).resolves.toEqual({ success: true })
     const [url, init] = fetchMock.mock.calls[0] as FetchArgs
-    expect(url).toContain('path=v1%2Fmodels')
-    expect(new Headers(init.headers).get('X-AI-Base')).toBe('https://api.example.com')
+    expect(url).toContain('path=models')
+    const headers = new Headers(init.headers)
+    expect(headers.get('X-Provider-Id')).toBe('p-openai')
+    expect(headers.get('X-AI-Base')).toBeNull()
 
     fetchMock.mockResolvedValueOnce(textResponse('nope', 401))
     const failed = await openai().testConnection()
@@ -191,12 +199,15 @@ describe('OpenAIProvider', () => {
 
   it('302.ai 默认地址与类型', async () => {
     fetchMock.mockResolvedValue(okChat())
-    const p = new Provider302({ ...baseConfig, apiUrl: undefined }, { maxRetries: 1 })
+    const p = new Provider302({ ...baseConfig, provider: '302.ai', apiUrl: undefined }, { maxRetries: 1 })
     expect(p.type).toBe('302.ai')
     expect(p.name).toBe('302.AI')
     await p.generateContent({ prompt: 'p' })
-    const [, init] = fetchMock.mock.calls[0] as FetchArgs
-    expect(new Headers(init.headers).get('X-AI-Base')).toBe('https://api.302.ai/v1')
+    const [url, init] = fetchMock.mock.calls[0] as FetchArgs
+    // 默认 base https://api.302.ai/v1 只在本机拼出端点，实际地址由服务端决定
+    expect(url).toContain('/api/ai?path=chat%2Fcompletions')
+    expect(new Headers(init.headers).get('X-Provider-Id')).toBe('p-openai')
+    expect(new Headers(init.headers).get('X-AI-Base')).toBeNull()
   })
 })
 
@@ -207,16 +218,30 @@ describe('OllamaProvider', () => {
       { maxRetries: 2, baseRetryDelay: 1 }
     )
 
-  it('请求 /api/chat，带 Authorization 与 signal；done_reason=length 标记截断', async () => {
+  it('浏览器直连 /api/chat（不经代理），带 Authorization 与 signal；done_reason=length 标记截断', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ message: { content: 'x' }, done: true, done_reason: 'length' }))
     const ctrl = new AbortController()
     const res = await ollama().generateContent({ prompt: 'p', systemPrompt: 's' }, { signal: ctrl.signal })
     expect(res).toMatchObject({ content: 'x', truncated: true })
     const [url, init] = fetchMock.mock.calls[0] as FetchArgs
-    expect(url).toContain('path=api%2Fchat')
+    // Ollama 跑在用户本机：直连真实地址，不能绕到服务端代理
+    expect(url).toBe('http://localhost:11434/api/chat')
+    expect(url).not.toContain('/api/ai')
     expect(init.signal).toBe(ctrl.signal)
+    expect(new Headers(init.headers).get('X-Provider-Id')).toBeNull()
     expect(new Headers(init.headers).get('Authorization')).toBe('Bearer k')
     expect(JSON.parse(init.body as string).messages[0]).toEqual({ role: 'system', content: 's' })
+  })
+
+  it('没有 apiKey 时不发 Authorization（本机服务无需凭据）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: { content: 'x' }, done: true }))
+    const p = new OllamaProvider(
+      { provider: 'ollama', apiUrl: 'http://localhost:11434', model: 'qwen' },
+      { maxRetries: 1 }
+    )
+    await p.generateContent({ prompt: 'p' })
+    const [, init] = fetchMock.mock.calls[0] as FetchArgs
+    expect(new Headers(init.headers).get('Authorization')).toBeNull()
   })
 
   it('done 无 done_reason 视为 stop', async () => {
@@ -232,10 +257,10 @@ describe('OllamaProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('testConnection 读 /api/tags', async () => {
+  it('testConnection 直连 /api/tags', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ models: [{ name: 'qwen:latest' }] }))
     await expect(ollama().testConnection()).resolves.toEqual({ success: true })
-    expect((fetchMock.mock.calls[0] as FetchArgs)[0]).toContain('path=api%2Ftags')
+    expect((fetchMock.mock.calls[0] as FetchArgs)[0]).toBe('http://localhost:11434/api/tags')
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ models: [] }))
     expect((await ollama().testConnection()).success).toBe(false)

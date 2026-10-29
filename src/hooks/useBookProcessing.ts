@@ -284,13 +284,24 @@ export function useBookProcessing() {
     [getBookId, t]
   )
 
+  // 章节勾选状态由 useBookFile 的 useState 提供，setter 稳定，可安全作为依赖
+  const setSelectedChapters = book.setSelectedChapters
+
   // 清除特定缓存（不依赖本地 File：历史/云端加载后也能清内存与本地副本）
   const clearSpecificCache = useCallback(
     (cacheType: string) => {
       const type = cacheType as SpecificCacheType
-      const kind: CacheKind | null =
-        type === 'merged_mindmap' ? 'combined_mindmap' : type === 'selected_chapters' ? null : type
-      if (kind) runClear(getBookId().then((id) => clearKindEntries(id, kind, cacheFileNames())))
+
+      // 「章节选择」不是磁盘缓存：它只存在于内存里，清它等于重置勾选。
+      // 旧实现把 kind 置 null 后什么都没清，却仍弹「已清除」——假成功。
+      if (type === 'selected_chapters') {
+        setSelectedChapters(new Set())
+        toast.success(t('cache.specificCleared'))
+        return
+      }
+
+      const kind: CacheKind = type === 'merged_mindmap' ? 'combined_mindmap' : type
+      runClear(getBookId().then((id) => clearKindEntries(id, kind, cacheFileNames())))
 
       if (type === 'connections') setBookSummary((p) => (p ? { ...p, connections: '' } : p))
       else if (type === 'overall_summary') setBookSummary((p) => (p ? { ...p, overallSummary: '' } : p))
@@ -304,7 +315,7 @@ export function useBookProcessing() {
       }
       toast.success(t('cache.specificCleared'))
     },
-    [getBookId, cacheFileNames, setCloud, setPendingAutoCharts, t]
+    [getBookId, cacheFileNames, setCloud, setPendingAutoCharts, setSelectedChapters, t]
   )
 
   // 清除整书缓存

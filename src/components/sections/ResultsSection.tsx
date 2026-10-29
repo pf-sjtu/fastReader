@@ -12,7 +12,7 @@ import { UploadToWebDAVButton } from '@/components/UploadToWebDAVButton'
 import { ChartsPanel } from '@/charts'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { isUsableText } from '@/utils/resultStatus'
-import type { MindElixirData, Options } from 'mind-elixir'
+import type { MindElixirInstance, Options } from 'mind-elixir'
 import type { BookSummary, BookMindMap, ProcessingMode } from '@/hooks/useBookProcessing'
 
 const mindElixirOptions = { direction: 1, alignment: 'nodes' } as Options
@@ -28,7 +28,7 @@ interface ResultsSectionProps {
   onChapterExpandChange: (chapterId: string, isExpanded: boolean) => void
   onReadChapter: (chapterId: string) => void
   onDownloadAllMarkdown: () => void
-  onDownloadMindMap?: (mindMapData: MindElixirData, title?: string) => void
+  onDownloadMindMap?: (instance: MindElixirInstance, title: string, format: string) => void
   onRegenerateKeyCharts?: () => void | Promise<void>
   chartsGenerating?: boolean
   /** 处理中尚无结果章节时，头部显示的预期总章数 */
@@ -54,6 +54,7 @@ export const ResultsSection = memo(function ResultsSection({
   const { t } = useTranslation()
   // 受控 Tab，避免切换时整树 default 重置
   const [summaryTab, setSummaryTab] = useState('chapters')
+  const [mindMapTab, setMindMapTab] = useState('chapters')
 
   // 稳定回调：MarkdownCard 为 memo 组件，内联箭头会让每张卡在任何父级更新时重渲染
   const handleExpandChange = useCallback(
@@ -204,7 +205,12 @@ export const ResultsSection = memo(function ResultsSection({
             </TabsContent>
           </Tabs>
         ) : processingMode === 'mindmap' && bookMindMap ? (
-          <Tabs defaultValue="chapters" className="w-full min-w-0">
+          <Tabs
+            // 整书导图页签可能消失（无 combinedMindMap）：此时回落到章节页签
+            value={mindMapTab === 'combined' && !bookMindMap.combinedMindMap ? 'chapters' : mindMapTab}
+            onValueChange={setMindMapTab}
+            className="w-full min-w-0"
+          >
             {/* mindmap 模式不产出整书导图（仅 combined-mindmap 模式产出）：有数据才显示该页签 */}
             <TabsList className={cn('grid w-full h-auto', bookMindMap.combinedMindMap ? 'grid-cols-2' : 'grid-cols-1')}>
               <TabsTrigger value="chapters" className="text-xs sm:text-sm px-1 sm:px-3 py-2">

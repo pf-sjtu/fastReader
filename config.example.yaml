@@ -10,6 +10,16 @@ webdav:
 
 # AI 服务配置
 ai:
+  # 也可以直接用 Web 端 2.0.0 导出的结构：
+  # providers:
+  #   - name: "navira.blog"
+  #     type: openai                    # openai / gemini / ollama
+  #     baseUrl: "https://your-gateway/v1"
+  #     apiKey: "${FASTREADER_PROVIDER_NAVIRA_BLOG_KEY}"
+  #     models:
+  #       - id: "glm-5.2"
+  #         enabled: true
+  # active: { providerId: "<id>", modelId: "glm-5.2" }
   provider: "gemini"                           # AI 提供商（CLI 支持）: gemini, openai, 302.ai
   apiKey: "${GEMINI_API_KEY}"                  # API 密钥（建议使用环境变量）
   model: "gemini-1.5-pro"                      # AI 模型
@@ -48,8 +58,8 @@ advanced:
   requestTimeout: 120                          # 单次 AI 请求超时（秒）
   promptsDir: ""                               # Prompt YAML 目录（默认使用仓库 src/services/prompts/config）
 
-# Prompt 版本（可选，默认 v2，与 Web 端一致）；也可粘贴 Web 端导出的 promptVersionConfig 覆盖模板
-# currentPromptVersion: v1
+# Prompt 模板（可选）：直接粘贴 Web 端 2.0.0 导出的 prompts.overrides，或写完整模板覆盖内置默认值。
+# 只支持 v2 —— 若写了 currentPromptVersion: v1，CLI 会告警并回退 v2。
 
 # 环境变量说明：
 # GEMINI_API_KEY - Gemini API 密钥

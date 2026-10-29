@@ -199,6 +199,15 @@ describe('ConfigDialog 章节预览', () => {
     expect(previewChapters).not.toHaveBeenCalled()
 
     click(findButton(i18n.t('config.title')))
+    await flush()
+    // 章节预览挂在「处理设置」页签下：切过去才会挂载并解析文件
+    const processingTab = Array.from(document.querySelectorAll<HTMLElement>('[role="tab"]')).find(
+      (e) => e.textContent?.trim() === i18n.t('config.tabs.processing')
+    )
+    expect(processingTab).toBeTruthy()
+    act(() => {
+      processingTab!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, ctrlKey: false }))
+    })
     await waitFor(() => expect(previewChapters).toHaveBeenCalledTimes(1))
     const firstSignal = previewChapters.mock.calls[0][5] as AbortSignal
     expect(firstSignal).toBeInstanceOf(AbortSignal)

@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { AIService } from '@/services/aiService'
+import { AIService } from '@/services/ai'
 import { autoSyncService } from '@/services/autoSyncService'
 import { useConfigStore } from '@/stores/configStore'
 import type { BookSummary } from '@/types/book'

@@ -1,7 +1,7 @@
 """
 render_prompt 与真实 YAML 渲染
 - 与前端 tests/w2prompt.render.test.ts 共用 tests/fixtures/prompts/render-cases.json
-- 真实 v1/v2 YAML：渲染后不含 {{，标题与正文各恰好一次
+- 真实 v2 YAML：渲染后不含 {{，标题与正文各恰好一次
 """
 
 import json
@@ -46,7 +46,7 @@ def _names(template: str) -> list[str]:
     return sorted(set(re.findall(r"\{\{\s*(\w+)\s*\}\}", template)))
 
 
-@pytest.mark.parametrize("version", ["v1", "v2"])
+@pytest.mark.parametrize("version", ["v2"])
 class TestRealYaml:
     @pytest.mark.parametrize("book_type", ["fiction", "non-fiction"])
     def test_chapter(self, version, book_type):
@@ -78,7 +78,16 @@ class TestRealYaml:
         assert _names(data["overallSummary"]) == ["bookTitle", "chapterInfo", "connections"]
 
 
-def test_v1_chapter_body_sits_in_template_slot():
-    """正文落在模板占位处，指令在正文之后（与前端 w2prompt.yamlPrompts 断言一致）"""
-    prompt = _templates("v1").build_chapter_prompt("T", "C", "non-fiction")
-    assert "章节标题：T\n\n章节内容：\nC\n\n请用自然流畅的语言" in prompt
+def test_chapter_body_sits_in_template_slot():
+    """v2 模板：标题与正文各恰好一次且不含字面占位符（v1 已删除，声明 v1 的旧配置回退 v2）"""
+    prompt = _templates("v2").build_chapter_prompt("标题ZXQ", "正文ZXQ", "non-fiction")
+    assert "章节标题：标题ZXQ" in prompt
+    assert prompt.count("正文ZXQ") == 1
+    assert "{{" not in prompt
+
+
+def test_v1_declaration_falls_back_to_v2():
+    """声明 v1 的旧配置仍可渲染：实际用 v2 模板"""
+    prompt = _templates("v1").build_chapter_prompt("标题ZXQ", "正文ZXQ", "non-fiction")
+    assert prompt.count("标题ZXQ") == 1 and prompt.count("正文ZXQ") == 1
+    assert "{{" not in prompt

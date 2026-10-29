@@ -202,10 +202,22 @@ export abstract class BaseAIProvider implements CancellableAIProvider {
   }
 
   /**
-   * 代理请求包装器
+   * 上游接口地址（服务商 baseUrl）。子类可覆盖默认值。
+   */
+  protected get apiUrl(): string {
+    return this.config.apiUrl || ''
+  }
+
+  /**
+   * 代理请求包装器：把服务商 id 与端点路径交给服务端，由服务端注入 base 与凭据。
+   *
+   * 直连模式（Ollama）覆盖此方法。
    */
   protected async fetchWithProxy(url: string, options: RequestInit): Promise<Response> {
-    return proxyFetch(url, options)
+    return proxyFetch(url, options, {
+      providerId: this.config.providerId,
+      apiBase: this.apiUrl,
+    })
   }
 
   /**

@@ -247,7 +247,9 @@
     "selectFile": "Select File",
     "warning": "Warning",
     "readChapter": "Read original",
-    "unknownError": "Unknown error"
+    "unknownError": "Unknown error",
+    "retry": "Retry",
+    "back": "Back"
   },
   "tabs": {
     "setup": "Setup",
@@ -255,7 +257,7 @@
   },
   "promptEditor": {
     "title": "Prompt Editor",
-    "description": "Customize AI processing prompt templates, displaying corresponding prompts based on processing mode and book type",
+    "description": "Customize the prompt for each step; only the entries you change are saved",
     "fiction": "Fiction",
     "nonFiction": "Non-Fiction",
     "summary": "Summary Mode",
@@ -284,7 +286,38 @@
       "chapterInfo": "This is sample book chapter structure information...",
       "connections": "This is sample chapter connection analysis content...",
       "bookTitle": "Sample Book Title"
-    }
+    },
+    "versionNote": "Built-in templates: {{version}}. Entries you have not edited follow future template updates; edited entries keep your version and can be reset any time.",
+    "customized": "Customized",
+    "inUse": "In use",
+    "customizedCount_one": "{{count}} customized",
+    "customizedCount_other": "{{count}} customized",
+    "allDefault": "All entries use the built-in defaults",
+    "resetEntry": "Reset",
+    "resetEntryFor": "Reset \"{{name}}\" to default",
+    "resetAll": "Reset all",
+    "resetAllTitle": "Reset all prompts?",
+    "resetAllDescription": "All customized prompts will be cleared and the built-in templates used instead. This cannot be undone.",
+    "previewNote": "Preview: placeholders are filled with sample content. Read-only.",
+    "placeholders": "Placeholders",
+    "autoSaveNote": "Changes save immediately. Text identical to the built-in default is not stored separately.",
+    "entries": {
+      "fiction": "Chapter summary · Fiction",
+      "nonFiction": "Chapter summary · Non-fiction",
+      "mindmapChapter": "Chapter mind map",
+      "mindmapArrow": "Chapter link arrows",
+      "mindmapCombined": "Whole-book mind map"
+    },
+    "hints": {
+      "fiction": "Summarizes each chapter when the book type is Fiction.",
+      "nonFiction": "Summarizes each chapter when the book type is Non-fiction.",
+      "mindmapChapter": "Builds a mind map per chapter in mind map mode.",
+      "mindmapArrow": "Builds cross-chapter link arrows for chapter mind maps.",
+      "mindmapCombined": "Builds the whole-book mind map in combined mode.",
+      "connectionAnalysis": "Analyzes how chapters relate.",
+      "overallSummary": "Writes the whole-book summary."
+    },
+    "customizedCount": "{{count}} customized"
   },
   "config": {
     "title": "Configuration",
@@ -297,7 +330,8 @@
       "aiFailed": "AI API connection failed",
       "testFailed": "Test failed: {{error}}",
       "proxyTestFailed": "Proxy test failed: {{error}}",
-      "unknownError": "Unknown error"
+      "unknownError": "Unknown error",
+      "selectModelFirst": "Select a model to test first"
     },
     "aiProvider": "AI Provider",
     "selectAiProvider": "Select AI Provider",
@@ -385,9 +419,10 @@
     "proxyUrl": "Proxy URL",
     "testConnection": "Test connection",
     "tabs": {
-      "providers": "AI providers",
+      "providers": "AI Providers",
       "webdav": "WebDAV",
-      "exportImport": "Export / Import"
+      "exportImport": "Export / Import",
+      "processing": "Processing"
     },
     "proxy": {
       "test": "Test proxy",
@@ -432,7 +467,8 @@
       "markdown": "Download as Markdown",
       "html": "Download as HTML",
       "webp": "Download as WEBP"
-    }
+    },
+    "fileDownloaded": "Downloaded {{filename}}"
   },
   "viewContent": {
     "originalText": "Original Content",
@@ -495,7 +531,10 @@
     "webdavInitFailed": "WebDAV connection failed, please check config",
     "cacheNotFound": "Cloud cache not found, please reprocess",
     "cacheParseError": "Failed to parse cache content",
-    "loadError": "Failed to load history record"
+    "loadError": "Failed to load history record",
+    "clearLocalView": "Clear local view",
+    "confirmClearLocalTitle": "Clear history view?",
+    "confirmClearLocalDescription": "Only clears the list shown in this browser. History stored on the server is kept and will reappear after a refresh."
   },
   "cloudCache": {
     "checking": "Checking cloud cache...",
@@ -605,7 +644,10 @@
       "helpPassword": "Password: an app password generated in Nutstore's security settings",
       "helpAppPassword": "The app password is not your login password; generate it separately in account settings",
       "helpLink": "Nutstore WebDAV setup guide",
-      "proxyNote": "WebDAV is accessed through the same-origin /api/dav proxy, so the server URL must use https."
+      "proxyNote": "WebDAV is accessed through the same-origin /api/dav proxy, so the server URL must use https.",
+      "passwordKeepPlaceholder": "Configured — leave blank to keep",
+      "passwordConfigured": "Password configured (stored on the server only)",
+      "clearPassword": "Clear password"
     }
   },
   "navigation": {
@@ -632,9 +674,9 @@
     "fillAllFields": "Please fill in API key, API URL and model",
     "duplicateToast": "This configuration already exists",
     "duplicateError": "A configuration with the same API URL and model already exists",
-    "created": "AI provider created",
-    "updated": "AI provider updated",
-    "createTitle": "New AI provider",
+    "created": "Provider added",
+    "updated": "Provider updated",
+    "createTitle": "Add AI provider",
     "editTitle": "Edit AI provider",
     "createDescription": "Start from a template or set up a custom provider",
     "editDescription": "Update this AI provider's settings",
@@ -644,7 +686,7 @@
     "providerType": "Provider type",
     "custom": "Custom",
     "apiKey": "API key",
-    "apiKeyPlaceholder": "Enter your API key",
+    "apiKeyPlaceholder": "Enter API key",
     "apiUrl": "API URL",
     "apiUrlPlaceholder": "Enter the API URL",
     "modelSettings": "Model",
@@ -667,12 +709,124 @@
     "inUse": "In use",
     "use": "Use",
     "keepAtLeastOne": "You need to keep at least one AI provider",
-    "confirmDelete": "Delete \"{{name}}\"?",
-    "introTitle": "About AI providers",
+    "confirmDelete": "This removes \"{{name}}\" and all of its model settings, including the key stored on the server. This cannot be undone.",
+    "introTitle": "How it works",
     "intro": "Manage several AI provider configurations here, such as Google Gemini, OpenAI GPT or a local Ollama server. Each one can have its own API URL, model settings and proxy, and you can switch between them at any time.",
-    "title": "AI providers",
-    "subtitle": "Add, customize and switch between providers",
-    "add": "Add provider"
+    "title": "Providers",
+    "subtitle": "Each provider can hold several models; switch any time",
+    "add": "Add provider",
+    "deleteTitle": "Delete provider?",
+    "deleted": "Deleted \"{{name}}\"",
+    "introOne": "One entry = one provider (base URL + key) that can enable many models.",
+    "introFetch": "Enter the URL and key, click \"Fetch models\", then tick the models you want. If fetching fails you can type model IDs by hand.",
+    "introSecret": "Keys are stored on the server only; the browser just knows a key is set. AI requests go through the server proxy (except Ollama, which the browser calls directly on your machine).",
+    "activeModel": "Current model",
+    "selectModel": "Select a model",
+    "noEnabledModels": "No enabled models",
+    "defaultTemperature": "Default temperature",
+    "temperatureHint": "Used when a model has no temperature of its own (0–2)",
+    "currentModelBadge": "Current: {{model}}",
+    "modelCount": "{{enabled}} of {{total}} models enabled",
+    "keyConfigured": "Key configured",
+    "keyMissing": "No key",
+    "keyNotNeeded": "No key needed",
+    "refreshModels": "Refresh models",
+    "refreshDone_one": "\"{{name}}\": {{count}} model",
+    "refreshDone_other": "\"{{name}}\": {{count}} models",
+    "refreshDiff": "{{added}} added (disabled by default), {{removed}} removed",
+    "refreshFailed": "Failed to refresh models for \"{{name}}\"",
+    "emptyTitle": "No providers yet",
+    "emptyDescription": "Add a provider and enable at least one model to start processing books.",
+    "errors": {
+      "unauthorized": "The provider rejected the request. Check the API key.",
+      "invalid_base_url": "Invalid URL: only public https URLs are supported",
+      "missing_base_url": "Enter the API URL",
+      "unknown_provider": "The server does not know this provider yet. Save it first and retry.",
+      "network": "Network error: cannot reach the server"
+    },
+    "models": {
+      "toggle_one": "Model ({{count}})",
+      "toggle_other": "Models ({{count}})",
+      "context": "{{value}} context",
+      "price": "${{input}} / ${{output}} per 1M tokens",
+      "unpriced": "No pricing",
+      "reasoning": "Reasoning",
+      "temperature": "Temperature",
+      "manual": "Manual",
+      "temperaturePlaceholder": "Default {{value}}",
+      "temperatureFor": "Temperature for {{model}}",
+      "enableFor": "Enable {{model}}",
+      "removeFor": "Remove {{model}}",
+      "filterPlaceholder": "Filter models",
+      "empty": "No models yet. Click \"Refresh models\" or add one below.",
+      "noMatch": "No matching models",
+      "manualAdd": "Add model",
+      "manualPlaceholder": "Model ID, e.g. gpt-4o-mini",
+      "exists": "Already added",
+      "toggle": "Models ({{count}})"
+    },
+    "wizard": {
+      "step1": "Choose a provider",
+      "step2": "Credentials & models",
+      "stepIndicator": "Step {{current}} of {{total}}: {{title}}",
+      "generic": "Generic protocols",
+      "fixed": {
+        "openai": "OpenAI compatible",
+        "openaiDesc": "OpenAI and compatible gateways",
+        "gemini": "Gemini",
+        "geminiDesc": "Google Generative Language API",
+        "ollama": "Ollama (local)",
+        "ollamaDesc": "Browser calls your machine, no key"
+      },
+      "presets": "Providers from models.dev",
+      "presetCount_one": "{{count}} provider",
+      "presetCount_other": "{{count}} providers",
+      "presetModels_one": "{{count}} model",
+      "presetModels_other": "{{count}} models",
+      "morePresets_one": "{{count}} more, type to narrow down",
+      "morePresets_other": "{{count}} more, type to narrow down",
+      "searchPresets": "Search by provider name or URL",
+      "catalogLoading": "Loading provider catalog…",
+      "catalogFailed": "The provider catalog is unavailable right now. Use a generic protocol above instead.",
+      "noPresetMatch": "No matching provider. Use \"OpenAI compatible\" to configure it by hand.",
+      "baseUrl": "API URL",
+      "baseUrlHint": "The provider API root, usually ending in /v1",
+      "baseUrlHintOllama": "Your local Ollama URL, default http://localhost:11434",
+      "baseUrlIssue": {
+        "required": "Enter the API URL",
+        "invalid": "This URL is not valid",
+        "https": "AI requests go through the server, so only https URLs are supported"
+      },
+      "name": "Name",
+      "namePlaceholder": "Defaults to the URL host",
+      "keyKeep": "Configured, leave empty to keep",
+      "ollamaHint": "Ollama runs on your computer and is called directly by the browser, not the server, so no API key is needed. Make sure Ollama is running and allows this origin (OLLAMA_ORIGINS).",
+      "ollamaUnreachable": "Cannot reach {{url}}. Make sure Ollama is running and allows cross-origin requests from this page.",
+      "models": "Models",
+      "fetchModels": "Fetch models",
+      "fetching": "Fetching…",
+      "fetched_one": "Fetched {{count}} model",
+      "fetched_other": "Fetched {{count}} models",
+      "fetchFailed": "Failed to fetch models: {{error}}. You can type model IDs below.",
+      "modelsEmpty": "Click \"Fetch models\" to load the list from the provider",
+      "selectAll": "Select all",
+      "selectNone": "Select none",
+      "selectedCount": "{{selected}} of {{total}} selected",
+      "moreModels_one": "{{count}} more, type to filter",
+      "moreModels_other": "{{count}} more, type to filter",
+      "manualToggle": "Enter model IDs by hand",
+      "manualIds": "Model IDs",
+      "manualIdsPlaceholder": "Separate IDs with commas or new lines, e.g.\ngpt-4o-mini, deepseek-chat",
+      "savedWithoutModels": "No models enabled yet. Refresh or add them later from the list.",
+      "back": "Back",
+      "changePreset": "Change provider",
+      "presetCount": "{{count}} providers",
+      "presetModels": "{{count}} models",
+      "morePresets": "{{count}} more, type to narrow down",
+      "fetched": "Fetched {{count}} models",
+      "moreModels": "{{count}} more, type to filter"
+    },
+    "refreshDone": "\"{{name}}\": {{count}} models"
   },
   "batch": {
     "cacheUnknown": "Couldn't check the cloud cache",
@@ -704,7 +858,9 @@
       "itemDone": "Finished: {{name}}",
       "itemFailed": "Failed: {{name}}",
       "finished": "Batch complete",
-      "finishedDesc": "{{completed}} succeeded, {{failed}} failed"
+      "finishedDesc": "{{completed}} succeeded, {{failed}} failed",
+      "startedDesc": "{{count}} files queued",
+      "itemPartialDesc": "{{count}} chapters skipped by content filtering"
     },
     "itemFailed": "Processing failed",
     "selectFilesTitle": "No files selected",
@@ -772,7 +928,13 @@
       "combined": "Generating book mind map...",
       "saving": "Saving results...",
       "done": "Done"
-    }
+    },
+    "selectAll": "Select all ({{count}} files)",
+    "fileCount": "{{count}} files",
+    "queueTitle": "Queue ({{count}} items)",
+    "chapterCount": "{{count}} chapters",
+    "runnerBusy": "A batch run is already in progress in another browser",
+    "runnerTakenOver": "Another browser took over the batch run; stopped locally"
   },
   "configIO": {
     "exportSuccess": "Settings exported",
@@ -809,7 +971,11 @@
       "reset": "restores all settings to their defaults",
       "noteLabel": "Tip",
       "note": "export your current settings as a backup before importing"
-    }
+    },
+    "includeSecrets": "Include secrets in the export",
+    "includeSecretsHint": "Secrets stored on the server cannot be read by the browser (by design), so this only exports keys typed in this session and not yet saved. Everything else stays as ${FASTREADER_...} placeholders so the CLI can substitute environment variables.",
+    "previewTitle": "Import preview",
+    "previewButton": "Preview"
   },
   "notification": {
     "taskCompleteTitle": "Task complete",
@@ -831,5 +997,57 @@
     "system": "System",
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode"
+  },
+  "auth": {
+    "title": "Sign in required",
+    "description": "Enter the shared password. Configuration and state are shared by everyone.",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Enter the shared password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "submit": "Sign in",
+    "hint": "You stay signed in on this browser for 30 days. The password is configured by whoever deployed this instance.",
+    "loading": "Loading shared configuration…",
+    "loadFailed": "Failed to load shared configuration",
+    "invalidPassword": "Incorrect password",
+    "tooManyAttempts": "Too many attempts. Please try again later.",
+    "loginFailed": "Sign-in failed. Please try again.",
+    "logout": "Sign out",
+    "logoutFailed": "Sign-out failed"
+  },
+  "sync": {
+    "synced": "Configuration synced",
+    "syncing": "Saving…",
+    "loading": "Loading…",
+    "conflict": "Some fields were changed by someone else",
+    "offline": "Offline: changes kept locally",
+    "error": "Sync failed",
+    "conflictDescription": "These fields were changed by someone else; the latest server value was kept: {{fields}}"
+  },
+  "init": {
+    "title": "Set up shared configuration",
+    "description": "The server has no configuration yet. Pick how to start; everyone will share it afterwards.",
+    "importFile": "Import a config file",
+    "importFileHint": "Supports YAML exported from the web UI (1.0.0 and 2.0.0)",
+    "importLocal": "Import this browser's old config",
+    "importLocalHint": "Read configuration saved by an older version in this browser",
+    "detected": "Detected",
+    "localMissing": "No legacy configuration found in this browser",
+    "startEmpty": "Start from scratch",
+    "startEmptyHint": "You can add providers later under Config → AI providers",
+    "chooseFile": "Choose a config file",
+    "chooseFileHint": "The file is parsed locally; nothing is written until you confirm.",
+    "parseFailed": "Failed to parse the config file",
+    "applyFailed": "Import failed",
+    "previewTitle": "Import preview",
+    "previewProviders": "{{providers}} provider(s) and {{models}} model(s) will be imported",
+    "modelsUnit": "model(s)",
+    "hasKey": "with key",
+    "previewPrompts": "{{count}} customized prompt entr(y/ies)",
+    "previewPromptsNone": "Prompts use built-in defaults",
+    "previewWebdav": "WebDAV: {{server}} ({{password}})",
+    "hasPassword": "with password",
+    "noPassword": "no password",
+    "apply": "Import"
   }
 }

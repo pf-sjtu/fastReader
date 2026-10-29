@@ -1,47 +1,65 @@
+/**
+ * 配置相关 UI：纯函数、处理/章节/限流分区、章节预览、服务商面板、ConfigDialog 组合。
+ *
+ * 注意：AI 服务商配置已从「一模型一条目」改为「一服务商多模型」，服务商面板与新建向导
+ * 分别见 AIProviderConfig / config/ProviderWizard。
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../src/i18n'
 import { mount, click, findButton, flush, typeInto, waitFor, stubDomForRadix, selectOption, type Mounted } from './uiTestUtils'
 
 // 边界 mock：AI 网络调用、章节解析
-const { testConnection, aiCtor, previewChapters, toastFn } = vi.hoisted(() => ({
+const { testConnection, previewChapters, toastFn } = vi.hoisted(() => ({
   testConnection: vi.fn(),
-  aiCtor: vi.fn(),
   previewChapters: vi.fn(),
   toastFn: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
 }))
-vi.mock('../src/services/aiService', () => ({
-  AIService: class {
-    constructor(...args: unknown[]) {
-      aiCtor(...args)
-    }
-    testConnection = testConnection
-  },
-}))
+vi.mock('../src/services/ai', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../src/services/ai')>()
+  return {
+    ...real,
+    AIService: class {
+      testConnection = testConnection
+    },
+  }
+})
 vi.mock('../src/services/chapterPreviewService', () => ({ chapterPreviewService: { previewChapters } }))
 vi.mock('sonner', () => ({ toast: toastFn }))
 
 import { ConfigDialog } from '../src/components/project/ConfigDialog'
-import { AIServiceSection } from '../src/components/project/config/AIServiceSection'
-import { ProxySection } from '../src/components/project/config/ProxySection'
 import { RateLimitSection } from '../src/components/project/config/RateLimitSection'
 import { ProcessingSection } from '../src/components/project/config/ProcessingSection'
 import { ChapterSection } from '../src/components/project/config/ChapterSection'
 import { ChapterPreview } from '../src/components/project/config/ChapterPreview'
+import { ActiveModelSelect } from '../src/components/project/config/ActiveModelSelect'
 import { AIProviderConfig } from '../src/components/project/AIProviderConfig'
 import { ProviderIcon } from '../src/components/project/config/ProviderIcon'
 import { parseTemperature, parseNonNegativeInt } from '../src/components/project/config/numberInputs'
 import {
-  getDisplayName,
-  getUniqueKey,
-  isDuplicateProvider,
-  toProviderConfig,
-} from '../src/components/project/config/providerUtils'
+  checkBaseUrl,
+  formatContext,
+  formatCost,
+  mergeFetchedModels,
+  modelLabelOf,
+  nameFromBaseUrl,
+  parseModelIds,
+  parseTemperatureInput,
+  priceOf,
+} from '../src/components/project/config/provider-utils'
 import { useConfigStore } from '../src/stores/configStore'
-import type { AIProviderConfig as ProviderConfig } from '../src/stores/types'
+import { useAIConfigStore } from '../src/stores/ai-config'
 
 const t = (k: string, o?: Record<string, unknown>) => i18n.t(k, o)
 const store = () => useConfigStore.getState()
+const ai = () => useAIConfigStore.getState()
 const byId = <T extends Element = HTMLInputElement>(id: string) => document.getElementById(id) as T | null
+
+/** Textarea 的受控赋值（typeInto 只支持 input） */
+function typeIntoTextarea(el: HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  setter?.call(el, value)
+  el.dispatchEvent(new Event('input', { bubbles: true }))
+}
 
 // Radix 弹层 + 多次异步交互，全量并行跑时单测可能超过默认 5s
 vi.setConfig({ testTimeout: 30000 })
@@ -68,87 +86,58 @@ describe('config 纯函数', () => {
     expect(parseNonNegativeInt('abc', 3)).toBe(3)
   })
 
-  it('服务商显示名 / 去重键 / 去重判断 / 补默认值', () => {
-    expect(getDisplayName('https://api.x.com:8080/v1', 'm1')).toBe('api.x.com/m1')
-    expect(getDisplayName('not a url', 'm1')).toBe('m1')
-    expect(getUniqueKey('https://api.x.com/v1', 'm1')).toBe('api.x.com/v1/m1')
-    expect(getUniqueKey('bad', 'm1')).toBe('bad/m1')
-    const a = toProviderConfig({ provider: 'openai', apiKey: 'k', apiUrl: 'https://api.x.com/v1', model: 'm1' })
-    expect(a).toMatchObject({ temperature: 0.7, proxyUrl: '', proxyEnabled: false, customFields: {} })
-    expect(isDuplicateProvider([a], 'https://api.x.com/v1', 'm1')).toBe(true)
-    expect(isDuplicateProvider([a], 'https://api.x.com/v1', 'm1', a)).toBe(false)
-    expect(isDuplicateProvider([a], 'https://api.x.com/v1', 'm2')).toBe(false)
+  it('服务商工具：名称/模型 id/上下文/价格', () => {
+    expect(nameFromBaseUrl('https://api.x.com:8080/v1')).toBe('api.x.com:8080')
+    expect(nameFromBaseUrl('not a url')).toBe('not a url')
+    expect(modelLabelOf({ id: 'm1' })).toBe('m1')
+    expect(modelLabelOf({ id: 'm1', label: '模型一' })).toBe('模型一')
+    expect(formatContext(128000)).toBe('128K')
+    expect(formatContext(1048576)).toBe('1M')
+    expect(formatContext(undefined)).toBeNull()
+    expect(formatCost(0.3)).toBe('0.3')
+    expect(formatCost(0.001)).toBe('0.0010')
+    expect(priceOf(undefined)).toBeNull()
+    expect(priceOf({ inputCost: 1, outputCost: 2 })).toEqual(['1', '2'])
   })
 
-  it('ProviderIcon 各服务商都有图标', () => {
-    for (const p of ['gemini', 'openai', 'ollama', '302.ai', 'custom', undefined]) {
+  it('手填模型 id 去重保序；温度解析边界', () => {
+    expect(parseModelIds('a, b\n c  ,a')).toEqual(['a', 'b', 'c'])
+    expect(parseTemperatureInput('')).toBeUndefined()
+    expect(parseTemperatureInput('abc')).toBeNull()
+    expect(parseTemperatureInput('0')).toBe(0)
+    expect(parseTemperatureInput('99')).toBe(2)
+  })
+
+  it('baseUrl 校验：非 Ollama 只接受 https', () => {
+    expect(checkBaseUrl('openai', '')).toBe('required')
+    expect(checkBaseUrl('openai', 'not-a-url')).toBe('invalid')
+    expect(checkBaseUrl('openai', 'http://x.com/v1')).toBe('https')
+    expect(checkBaseUrl('openai', 'https://x.com/v1')).toBeNull()
+    expect(checkBaseUrl('ollama', 'http://localhost:11434')).toBeNull()
+  })
+
+  it('刷新模型：保留手动与已有设置，新模型在已有列表时默认停用', () => {
+    const existing = [
+      { id: 'a', enabled: true, source: 'manual' as const },
+      { id: 'b', enabled: false, source: 'auto' as const },
+    ]
+    const merged = mergeFetchedModels(existing, ['b', 'c'])
+    expect(merged.models.map((x) => x.id)).toEqual(['a', 'b', 'c'])
+    expect(merged.models.find((x) => x.id === 'c')?.enabled).toBe(false)
+    expect(merged.added).toBe(1)
+    expect(merged.removed).toBe(0)
+
+    // 首次获取（没有已有模型）时全部启用
+    expect(mergeFetchedModels([], ['a', 'b']).models.every((x) => x.enabled)).toBe(true)
+  })
+
+  it('ProviderIcon 各协议都有图标', () => {
+    for (const p of ['openai', 'gemini', 'ollama', undefined] as const) {
       m = mount(<ProviderIcon provider={p} />)
       expect(m.container.querySelector('svg')).toBeTruthy()
       m.unmount()
       m = null
     }
-  })
-})
-
-describe('AIServiceSection', () => {
-  it('输入即时写入 store；温度 0 不被吞掉', () => {
-    m = mount(<AIServiceSection processing={false} />)
-    typeInto(byId('apikey')!, 'sk-1')
-    typeInto(byId('api-url')!, 'https://g.example/v1')
-    typeInto(byId('model')!, 'gemini-x')
-    typeInto(byId('ai-temperature')!, '0')
-    expect(store().aiConfig).toMatchObject({ apiKey: 'sk-1', apiUrl: 'https://g.example/v1', model: 'gemini-x', temperature: 0 })
-  })
-
-  it('切到 302.ai 自动填地址并禁用地址输入', async () => {
-    m = mount(<AIServiceSection processing={false} />)
-    await selectOption(byId('ai-provider'), '302.AI')
-    expect(store().aiConfig.provider).toBe('302.ai')
-    expect(store().aiConfig.apiUrl).toBe('https://api.302.ai/v1')
-    expect(byId('api-url')!.disabled).toBe(true)
-  })
-
-  it('测试连接：成功 / 失败带错误 / 抛异常', async () => {
-    store().setApiKey('sk-1')
-    m = mount(<AIServiceSection processing={false} />)
-    const btn = () => findButton(t('config.testConnection'))!
-
-    testConnection.mockResolvedValueOnce({ success: true })
-    click(btn())
-    await waitFor(() => expect(document.body.textContent).toContain(t('config.connection.aiSuccess')))
-    expect(aiCtor.mock.calls[0][0]).toMatchObject({ apiKey: 'sk-1' })
-
-    testConnection.mockResolvedValueOnce({ success: false, error: '401' })
-    click(btn())
-    await waitFor(() => expect(document.body.textContent).toContain(`${t('config.connection.aiFailed')}: 401`))
-
-    testConnection.mockResolvedValueOnce({ success: false })
-    click(btn())
-    await waitFor(() => expect(m!.container.querySelector('[role="status"]')?.textContent).toBe(t('config.connection.aiFailed')))
-
-    testConnection.mockRejectedValueOnce(new Error('boom'))
-    click(btn())
-    await waitFor(() => expect(document.body.textContent).toContain(t('config.connection.testFailed', { error: 'boom' })))
-  })
-
-  it('无 API Key 时测试按钮禁用', () => {
-    m = mount(<AIServiceSection processing={false} />)
-    expect(findButton(t('config.testConnection'))!.disabled).toBe(true)
-  })
-})
-
-describe('ProxySection', () => {
-  it('启用代理后可填地址；测试代理给出浏览器限制说明', () => {
-    m = mount(<ProxySection processing={false} />)
-    expect(findButton(t('config.proxy.test'))).toBeUndefined()
-    click(byId('proxy-enabled'))
-    expect(store().aiConfig.proxyEnabled).toBe(true)
-    expect(findButton(t('config.proxy.test'))!.disabled).toBe(true)
-    typeInto(byId('proxy-url')!, 'http://127.0.0.1:1080')
-    expect(store().aiConfig.proxyUrl).toBe('http://127.0.0.1:1080')
-    click(findButton(t('config.proxy.test')))
-    expect(document.body.textContent).toContain(t('config.proxy.browserUnsupported'))
-    expect(document.body.textContent).toContain(t('config.proxy.solutionExtension'))
   })
 })
 
@@ -230,112 +219,129 @@ describe('ChapterPreview', () => {
   })
 })
 
+describe('服务商面板（服务商维度 + 多模型）', () => {
+  const seed = () => {
+    const storeRef = ai()
+    // 清空后建一个服务商，两个模型
+    for (const provider of [...storeRef.ai.providers]) storeRef.deleteProvider(provider.id)
+    const id = useAIConfigStore.getState().addProvider({
+      name: 'demo-gateway',
+      type: 'openai',
+      baseUrl: 'https://api.demo.com/v1',
+      models: [
+        { id: 'm-a', enabled: true, source: 'manual' },
+        { id: 'm-b', enabled: true, source: 'manual' },
+      ],
+    })
+    useAIConfigStore.getState().setActiveModel(id, 'm-a')
+    return id
+  }
+
+  it('列出服务商与模型数量，并标出当前模型', () => {
+    seed()
+    m = mount(<AIProviderConfig />)
+    const text = m.container.textContent ?? ''
+    expect(text).toContain('demo-gateway')
+    expect(text).toContain(t('aiProvider.modelCount', { enabled: 2, total: 2 }))
+    expect(text).toContain(t('aiProvider.currentModelBadge', { model: 'm-a' }))
+  })
+
+  it('切到另一个模型：当前模型随之变化', () => {
+    const id = seed()
+    ai().setActiveModel(id, 'm-b')
+    m = mount(<AIProviderConfig />)
+    expect(ai().ai.active.modelId).toBe('m-b')
+    expect(m.container.textContent).toContain(t('aiProvider.currentModelBadge', { model: 'm-b' }))
+  })
+
+  it('删除服务商需确认，确认后从列表移除', async () => {
+    seed()
+    m = mount(<AIProviderConfig />)
+    click(m.container.querySelector(`[aria-label="${t('common.delete')} demo-gateway"]`))
+    await flush()
+    expect(document.body.textContent).toContain(t('aiProvider.deleteTitle'))
+    // 确认按钮在 AlertDialog 里，与卡片上的删除按钮同名，必须限定作用域
+    const confirm = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')
+    ).find((b) => b.textContent?.trim() === t('common.delete'))
+    click(confirm)
+    await flush()
+    expect(ai().ai.providers).toHaveLength(0)
+    expect(toastFn.success).toHaveBeenCalledWith(t('aiProvider.deleted', { name: 'demo-gateway' }))
+  })
+
+  it('新建向导：先选服务商，再填凭据与模型', async () => {
+    m = mount(<AIProviderConfig />)
+    click(findButton(t('aiProvider.add')))
+    // 第一步：预设列表
+    expect(document.body.textContent).toContain(t('aiProvider.wizard.step1'))
+    click(findButton(new RegExp(t('aiProvider.wizard.fixed.openai'))))
+    // 第二步：凭据
+    expect(document.body.textContent).toContain(t('aiProvider.wizard.step2'))
+    typeInto(byId('wizard-base-url')!, 'https://new.example/v1')
+    typeInto(byId('wizard-name')!, 'new-gateway')
+    typeInto(byId('wizard-api-key')!, 'sk-new')
+
+    // 手填模型 id（多行 Textarea）
+    click(findButton(new RegExp(t('aiProvider.wizard.manualToggle'))))
+    typeIntoTextarea(byId<HTMLTextAreaElement>('wizard-manual-ids')!, 'x-1, x-2')
+    await flush()
+
+    click(findButton(t('aiProvider.create')))
+    await flush()
+
+    const provider = ai().ai.providers.find((p) => p.name === 'new-gateway')
+    expect(provider).toBeTruthy()
+    expect(provider!.baseUrl).toBe('https://new.example/v1')
+    expect(provider!.models.map((x) => x.id).sort()).toEqual(['x-1', 'x-2'])
+    expect(provider!.apiKey).toEqual({ hasSecret: true })
+    expect(toastFn.success).toHaveBeenCalledWith(t('aiProvider.created'))
+  })
+
+  it('新建向导：非 https 地址被拦下，不发请求', async () => {
+    m = mount(<AIProviderConfig />)
+    click(findButton(t('aiProvider.add')))
+    click(findButton(new RegExp(t('aiProvider.wizard.fixed.openai'))))
+    typeInto(byId('wizard-base-url')!, 'http://insecure.example/v1')
+    click(findButton(t('aiProvider.wizard.fetchModels')))
+    await flush()
+    expect(document.body.textContent).toContain(t('aiProvider.wizard.baseUrlIssue.https'))
+    expect(ai().ai.providers).toHaveLength(0)
+  })
+})
+
+describe('ActiveModelSelect', () => {
+  it('按服务商分组列出已启用模型；无模型时给出提示', () => {
+    m = mount(<ActiveModelSelect />)
+    expect(m.container.textContent).toContain(t('aiProvider.noEnabledModels'))
+    m.unmount()
+
+    const id = ai().addProvider({
+      name: 'demo',
+      type: 'openai',
+      baseUrl: 'https://api.demo.com/v1',
+      models: [
+        { id: 'm-a', enabled: true, source: 'manual' },
+        { id: 'm-c', enabled: false, source: 'manual' },
+      ],
+    })
+    ai().setActiveModel(id, 'm-a')
+    m = mount(<ActiveModelSelect />)
+    const trigger = m.container.querySelector('[role="combobox"]')
+    expect(trigger?.textContent).toContain('m-a')
+  })
+})
+
 describe('ConfigDialog 组合', () => {
-  it('打开后各分区与标签页可见', async () => {
+  it('打开后各页签可见', async () => {
     previewChapters.mockResolvedValue([])
     m = mount(<ConfigDialog processing={false} file={null} />)
     click(findButton(t('config.title')))
     await flush()
     const text = document.body.textContent ?? ''
-    expect(text).toContain(t('config.rateLimit.title'))
-    expect(text).toContain(t('config.proxySettings'))
     expect(text).toContain(t('config.tabs.providers'))
+    expect(text).toContain(t('config.tabs.processing'))
+    expect(text).toContain(t('config.tabs.webdav'))
     expect(text).toContain(t('config.tabs.exportImport'))
-  })
-})
-
-describe('AIProviderConfig / AIProviderDialog', () => {
-  const provider = (over: Partial<ProviderConfig> = {}) =>
-    toProviderConfig({ provider: 'openai', apiKey: 'k', apiUrl: 'https://api.a.com/v1', model: 'm-a', ...over })
-
-  beforeEach(() => {
-    const s = store()
-    // 只保留一个已知服务商，便于断言
-    while (s.aiConfigManager.providers.length > 0) {
-      const before = useConfigStore.getState().aiConfigManager.providers.length
-      useConfigStore.getState().deleteAIProvider(1)
-      if (useConfigStore.getState().aiConfigManager.providers.length === before) break
-    }
-    if (useConfigStore.getState().aiConfigManager.providers.length === 0) useConfigStore.getState().addAIProvider(provider())
-    else useConfigStore.getState().updateAIProvider(1, provider())
-    useConfigStore.getState().setCurrentModelId(1)
-  })
-
-  it('列表显示当前服务商；只剩一个时不能删除', () => {
-    m = mount(<AIProviderConfig />)
-    expect(m.container.textContent).toContain('api.a.com/m-a')
-    expect(m.container.textContent).toContain(t('aiProvider.current'))
-    click(m.container.querySelector(`[aria-label="${t('common.delete')} api.a.com/m-a"]`))
-    expect(toastFn.error).toHaveBeenCalledWith(t('aiProvider.keepAtLeastOne'))
-  })
-
-  it('复制、切换使用、确认删除', () => {
-    m = mount(<AIProviderConfig />)
-    click(m.container.querySelector(`[aria-label="${t('common.copy')} api.a.com/m-a"]`))
-    expect(store().aiConfigManager.providers).toHaveLength(2)
-    const before = store().aiConfigManager.currentModelId
-    click(findButton(t('aiProvider.use')))
-    expect(store().aiConfigManager.currentModelId).toBe(before === 1 ? 2 : 1)
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    click(m.container.querySelectorAll(`[aria-label="${t('common.delete')} api.a.com/m-a"]`)[1])
-    expect(confirmSpy).toHaveBeenCalledWith(t('aiProvider.confirmDelete', { name: 'api.a.com/m-a' }))
-    expect(store().aiConfigManager.providers).toHaveLength(1)
-    confirmSpy.mockRestore()
-  })
-
-  it('当前激活序号越界时重置为 1', () => {
-    useConfigStore.getState().setCurrentModelId(9)
-    m = mount(<AIProviderConfig />)
-    expect(store().aiConfigManager.currentModelId).toBe(1)
-  })
-
-  it('新建：未填完整提示；重复配置拦截；填写后创建并测试连接', async () => {
-    m = mount(<AIProviderConfig />)
-    click(findButton(t('aiProvider.add')))
-    click(findButton(t('aiProvider.create')))
-    expect(toastFn.error).toHaveBeenCalledWith(t('aiProvider.fillAllFields'))
-
-    typeInto(byId('provider-api-key')!, 'k2')
-    typeInto(byId('provider-api-url')!, 'https://api.a.com/v1')
-    typeInto(byId('provider-model')!, 'm-a')
-    click(findButton(t('aiProvider.create')))
-    expect(document.body.textContent).toContain(t('aiProvider.duplicateError'))
-
-    typeInto(byId('provider-model')!, 'm-b')
-    expect(document.body.textContent).not.toContain(t('aiProvider.duplicateError'))
-    click(byId('proxyEnabled'))
-    typeInto(byId('provider-proxy-url')!, 'http://p:1')
-    typeInto(byId('provider-temperature')!, '0.3')
-
-    testConnection.mockResolvedValueOnce({ success: true })
-    click(findButton(t('config.testConnection')))
-    await waitFor(() => expect(toastFn.success).toHaveBeenCalledWith(t('config.connection.aiSuccess')))
-    testConnection.mockResolvedValueOnce({ success: false, error: 'x' })
-    click(findButton(t('config.testConnection')))
-    await waitFor(() => expect(toastFn.error).toHaveBeenCalledWith(`${t('config.connection.aiFailed')}: x`))
-
-    click(findButton(t('aiProvider.create')))
-    expect(toastFn.success).toHaveBeenCalledWith(t('aiProvider.created'))
-    const added = store().aiConfigManager.providers[1]
-    expect(added).toMatchObject({ apiKey: 'k2', model: 'm-b', proxyEnabled: true, proxyUrl: 'http://p:1', temperature: 0.3 })
-  })
-
-  it('选模板：匹配到已有配置时预填地址与模型', () => {
-    m = mount(<AIProviderConfig />)
-    click(findButton(t('aiProvider.add')))
-    const templates = store().getAvailableAITemplates()
-    const first = templates[0]
-    click(findButton(new RegExp(first.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))))
-    expect(findButton(new RegExp(first.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeTruthy()
-  })
-
-  it('编辑：保存后更新 store', async () => {
-    m = mount(<AIProviderConfig />)
-    click(m.container.querySelector(`[aria-label="${t('common.edit')} api.a.com/m-a"]`))
-    expect(document.body.textContent).toContain(t('aiProvider.editTitle'))
-    typeInto(byId('provider-model')!, 'm-edited')
-    click(findButton(t('common.save')))
-    expect(toastFn.success).toHaveBeenCalledWith(t('aiProvider.updated'))
-    expect(store().aiConfigManager.providers[0].model).toBe('m-edited')
   })
 })

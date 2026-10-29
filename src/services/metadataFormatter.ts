@@ -57,23 +57,46 @@ export interface ProcessResultInfo {
 }
 
 
+// 汇率与价格来自共享配置（由 App 启动时注入，避免 services ←→ stores 循环依赖）
+let exchangeRateProvider: () => number = () => DEFAULT_EXCHANGE_RATE
+let pricingProvider: (model: string) => { input: number; output: number } | null = () => null
+
+/** 注入汇率来源（共享处理配置里的 exchangeRateUsdToCny） */
+export function setExchangeRateProvider(provider: () => number): void {
+  exchangeRateProvider = provider
+}
+
+/** 注入模型价格来源（models.dev 元数据优先） */
+export function setPricingProvider(provider: (model: string) => { input: number; output: number } | null): void {
+  pricingProvider = provider
+}
+
 /**
- * 获取汇率
- * 从环境变量读取，默认 7.0
+ * 获取汇率：共享配置 > 默认 7.0
  */
 function getExchangeRate(): number {
-  if (typeof window !== 'undefined') {
-    // 浏览器环境
-    return DEFAULT_EXCHANGE_RATE
+  try {
+    const rate = exchangeRateProvider()
+    if (typeof rate === 'number' && Number.isFinite(rate) && rate > 0) return rate
+  } catch {
+    // ignore：取不到就用默认值
   }
-
-  // Node.js 环境
-  const envRate = process.env.EXCHANGE_RATE_USD_TO_CNY
-  if (envRate) {
-    return parseFloat(envRate) || DEFAULT_EXCHANGE_RATE
-  }
-
   return DEFAULT_EXCHANGE_RATE
+}
+
+/**
+ * 查模型价格：models.dev 元数据 → 内置表 → 未知
+ *
+ * 未知时返回 null（不再拿别的模型顶替，否则费用显示会系统性失真）。
+ */
+function resolvePricing(model: string): { input: number; output: number } | null {
+  try {
+    const fromCatalog = pricingProvider(model)
+    if (fromCatalog) return fromCatalog
+  } catch {
+    // ignore
+  }
+  return MODEL_PRICING[model] ?? null
 }
 
 /**
@@ -87,8 +110,12 @@ function calculateCost(
   model: string,
   inputTokens: number,
   outputTokens: number
-): { costUSD: number; costRMB: number } {
-  const pricing = MODEL_PRICING[model] || MODEL_PRICING['gemini-1.5-pro']
+): { costUSD: number; costRMB: number; pricingKnown: boolean } {
+  const pricing = resolvePricing(model)
+  if (!pricing) {
+    return { costUSD: 0, costRMB: 0, pricingKnown: false }
+  }
+
   const exchangeRate = getExchangeRate()
 
   // 计算美元费用（每百万 Token 定价 / 1,000,000 * Token 数）
@@ -101,7 +128,8 @@ function calculateCost(
 
   return {
     costUSD: Math.round(costUSD * 100000) / 100000, // 保留 5 位小数
-    costRMB: Math.round(costRMB * 100000) / 100000
+    costRMB: Math.round(costRMB * 100000) / 100000,
+    pricingKnown: true
   }
 }
 
@@ -132,7 +160,7 @@ export function generateMetadata(result: ProcessResultInfo): ProcessingMetadata 
   const outputTokens = aiResponseInfo?.outputTokens || 0
 
   // 计算费用
-  const { costUSD, costRMB } = calculateCost(model, inputTokens, outputTokens)
+  const { costUSD, costRMB, pricingKnown } = calculateCost(model, inputTokens, outputTokens)
 
   const metadata: ProcessingMetadata = {
     source: 'WebDAV',
@@ -148,8 +176,9 @@ export function generateMetadata(result: ProcessResultInfo): ProcessingMetadata 
     processedCharCount: processedCharCount,
     inputTokens: inputTokens,
     outputTokens: outputTokens,
-    costUSD: costUSD,
-    costRMB: costRMB
+    costUSD: pricingKnown ? costUSD : undefined,
+    costRMB: pricingKnown ? costRMB : undefined,
+    pricingKnown
   }
 
 
@@ -193,8 +222,8 @@ export function formatAsHTMLComment(metadata: ProcessingMetadata): string {
     `processedCharCount: ${metadata.processedCharCount}`,
     `inputTokens: ${metadata.inputTokens}`,
     `outputTokens: ${metadata.outputTokens}`,
-    `costUSD: ${metadata.costUSD}`,
-    `costRMB: ${metadata.costRMB} (USD/CNY: ${getExchangeRate()})`
+    `costUSD: ${metadata.costUSD ?? 'N/A'}`,
+    `costRMB: ${metadata.costRMB ?? 'N/A'} (USD/CNY: ${getExchangeRate()})`
   ]
 
   if (typeof (metadata as ProcessingMetadata & { skippedChapters?: number }).skippedChapters === 'number') {
@@ -203,6 +232,11 @@ export function formatAsHTMLComment(metadata: ProcessingMetadata): string {
 
   if (typeof (metadata as ProcessingMetadata & { isPartial?: boolean }).isPartial === 'boolean') {
     lines.push(`isPartial: ${(metadata as ProcessingMetadata & { isPartial: boolean }).isPartial}`)
+  }
+
+  // 只在价格未知时才写这一行：已知价格的文件保持与 CLI 的历史契约逐字一致
+  if (metadata.pricingKnown === false) {
+    lines.push('pricingKnown: false')
   }
 
 

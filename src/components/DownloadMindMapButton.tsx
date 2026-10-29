@@ -30,6 +30,7 @@ export const DownloadMindMapButton: React.FC<DownloadMindMapButtonProps> = ({
     { key: 'PNG', label: t('download.formats.png') },
     { key: 'JPEG', label: t('download.formats.jpeg') },
     { key: 'WEBP', label: t('download.formats.webp') },
+    { key: 'SVG', label: t('download.formats.svg') },
     { key: 'HTML', label: t('download.formats.html') },
     { key: 'JSON', label: t('download.formats.json') },
     { key: 'Markdown', label: t('download.formats.markdown') },
@@ -54,9 +55,10 @@ export const DownloadMindMapButton: React.FC<DownloadMindMapButtonProps> = ({
           variant="outline"
           size="sm"
           title={t('download.title')}
+          aria-label={t('download.title')}
         >
-          <Download className="h-4 w-4 mr-1" />
-          <ChevronDown className="h-3 w-3" />
+          <Download className="h-4 w-4 mr-1" aria-hidden="true" />
+          <ChevronDown className="h-3 w-3" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>

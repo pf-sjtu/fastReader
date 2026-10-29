@@ -124,7 +124,7 @@ describe('cloudLoad', () => {
   })
 
   it('persistLoadedBook：保存图表副本并写历史；无文件名时跳过', async () => {
-    useProcessingHistoryStore.getState().clearHistory()
+    useProcessingHistoryStore.getState().clearLocalView()
     const loaded = (await buildCloudBook(
       { content: md({ withCharts: true }) },
       { fileName: 'p.epub', fallbackTitle: '', idPrefix: 'c' }

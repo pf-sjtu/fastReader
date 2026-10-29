@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
-  buildAiProxyTarget,
   calculateRetryDelay,
   identifyRateLimitError,
   proxyFetch,
+  toEndpointPath,
 } from '../src/services/ai/utils'
 
 afterEach(() => {
@@ -11,55 +11,57 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('buildAiProxyTarget', () => {
-  it('chat/completions：base 保留前缀路径', () => {
-    expect(buildAiProxyTarget('https://api.openai.com/v1/chat/completions')).toEqual({
-      base: 'https://api.openai.com/v1',
-      path: 'chat/completions',
-    })
+describe('toEndpointPath（相对服务商 baseUrl 的端点路径）', () => {
+  it('chat/completions：去掉 base 前缀，保留部署子路径', () => {
+    expect(toEndpointPath('https://x/v1/chat/completions', 'https://x/v1')).toBe('chat/completions')
   })
 
-  it('api/chat（Ollama）', () => {
-    expect(buildAiProxyTarget('http://localhost:11434/api/chat')).toEqual({
-      base: 'http://localhost:11434',
-      path: 'api/chat',
-    })
+  it('Gemini 的 models/{model}:generateContent', () => {
+    expect(
+      toEndpointPath('https://y/v1beta/models/gemini-2.5-flash:generateContent', 'https://y/v1beta')
+    ).toBe('models/gemini-2.5-flash:generateContent')
   })
 
-  it('/v1/models 不再拼成 /v1/models/v1/models', () => {
-    expect(buildAiProxyTarget('https://api.openai.com/v1/models')).toEqual({
-      base: 'https://api.openai.com',
-      path: 'v1/models',
-    })
+  it('base 带尾斜杠时不会多出斜杠', () => {
+    expect(toEndpointPath('https://x/v1/models', 'https://x/v1/')).toBe('models')
   })
 
-  it('/api/tags', () => {
-    expect(buildAiProxyTarget('http://localhost:11434/api/tags')).toEqual({
-      base: 'http://localhost:11434',
-      path: 'api/tags',
-    })
+  it('URL 不在 base 作用域内：回落到 origin 的 pathname（服务端仍会校验）', () => {
+    expect(toEndpointPath('https://api.openai.com/v1/models', 'https://x/v1')).toBe('v1/models')
+    expect(toEndpointPath('https://api.openai.com/v1/models', undefined)).toBe('v1/models')
   })
 
-  it('带尾斜杠', () => {
-    expect(buildAiProxyTarget('https://x.com/v1/models/')).toEqual({ base: 'https://x.com', path: 'v1/models' })
-    expect(buildAiProxyTarget('https://x.com/v1/chat/completions/')).toEqual({
-      base: 'https://x.com/v1',
-      path: 'chat/completions',
-    })
+  it('非法 URL 时直接去掉前导斜杠', () => {
+    expect(toEndpointPath('/v1/models', undefined)).toBe('v1/models')
   })
 })
 
 describe('proxyFetch（浏览器）', () => {
-  it('转发到同源 /api/ai 并设置 X-AI-Base 与原请求头', async () => {
+  it('转发到同源 /api/ai?path=…，设置服务商 id 与来源，不再传上游 base 与凭据', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('ok'))
     vi.stubGlobal('fetch', fetchMock)
-    await proxyFetch('https://api.x.com/v1/models', { method: 'GET', headers: { Authorization: 'Bearer a' } })
+    await proxyFetch(
+      'https://api.x.com/v1/models',
+      { method: 'GET', headers: { Authorization: 'Bearer a' } },
+      { providerId: 'p-openai', apiBase: 'https://api.x.com/v1' }
+    )
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe(`${window.location.origin}/api/ai?path=v1%2Fmodels`)
+    expect(url).toBe(`${window.location.origin}/api/ai?path=models`)
     const headers = new Headers(init.headers)
-    expect(headers.get('X-AI-Base')).toBe('https://api.x.com')
+    // 上游地址与凭据只能由服务端决定
+    expect(headers.get('X-AI-Base')).toBeNull()
+    expect(headers.get('X-Provider-Id')).toBe('p-openai')
     expect(headers.get('X-Request-Origin')).toBe(window.location.origin)
-    expect(headers.get('Authorization')).toBe('Bearer a')
+  })
+
+  it('没有 providerId 时不写该头（服务端会拒绝无归属的请求）', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('ok'))
+    vi.stubGlobal('fetch', fetchMock)
+    await proxyFetch('https://api.x.com/v1/models', { method: 'GET' }, { apiBase: 'https://api.x.com/v1' })
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const headers = new Headers(init.headers)
+    expect(headers.get('X-Provider-Id')).toBeNull()
+    expect(headers.get('X-Request-Origin')).toBe(window.location.origin)
   })
 })
 

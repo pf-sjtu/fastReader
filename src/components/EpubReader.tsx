@@ -392,27 +392,6 @@ export function EpubReader({
     }
   }, [chapter, bookData])
 
-  // 确保内容变化时重新渲染Shadow DOM
-  useEffect(() => {
-    if (!isLoadingHtml && shadowRef.current && chapterHtmlContent) {
-      // 强制触发Shadow DOM更新
-      const event = new Event('content-updated')
-      shadowRef.current.dispatchEvent(event)
-      
-      // 确保内容完全渲染后滚动到顶部
-      const scrollTimer = setTimeout(() => {
-        if (scrollAreaRef.current) {
-          const scrollViewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
-          if (scrollViewport) {
-            scrollViewport.scrollTop = 0
-          }
-        }
-      }, 100)
-      
-      return () => clearTimeout(scrollTimer)
-    }
-  }, [chapterHtmlContent, isLoadingHtml])
-
   // 动态调整全屏模式下的高度
   useEffect(() => {
     if (!isFullscreen || !scrollAreaRef.current) return

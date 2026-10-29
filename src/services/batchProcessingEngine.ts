@@ -2,7 +2,7 @@
  * 批量处理引擎：队列调度、下载、解析；单本处理委托 runBookPipeline（与单书同一流程）
  */
 
-import { AIService } from './aiService'
+import { AIService } from './ai'
 import { cloudCacheService } from './cloudCacheService'
 import type { ChapterData } from './epubProcessor'
 import { matchesDefaultUnselectTitle } from './constants'
@@ -335,8 +335,8 @@ export class BatchProcessingEngine {
           skippedChapters: stats.skipped,
           failedChapters: stats.failed,
           cachedChapters: stats.cached,
-          costUSD: metadata.costUSD,
-          costRMB: metadata.costRMB,
+          costUSD: metadata.costUSD ?? 0,
+          costRMB: metadata.costRMB ?? 0,
           startTime,
           endTime: new Date().toISOString(),
           isPartial: result.isPartial,
@@ -371,8 +371,8 @@ export class BatchProcessingEngine {
     let totalCostRMB = 0
     for (const result of successResults) {
       if (result.metadata) {
-        totalCostUSD += result.metadata.costUSD
-        totalCostRMB += result.metadata.costRMB
+        totalCostUSD += result.metadata.costUSD ?? 0
+        totalCostRMB += result.metadata.costRMB ?? 0
       }
     }
     return {

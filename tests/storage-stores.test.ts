@@ -1,366 +1,372 @@
 /**
- * storage：store 单一事实来源、老用户迁移、version/migrate、tokenUsage 不持久化
- * 每个用例 resetModules 后动态导入，模拟「带着某种 localStorage 启动页面」
+ * storage：旧配置只读、不写。
+ *
+ * 共享状态上线后，配置的单一事实来源是服务端（Cloudflare KV），浏览器 localStorage 只剩
+ * 「历史版本留下的旧键」用于首次初始化时的一次性导入。本文件验证：
+ * 1) legacyMigration 能读懂拆分后的子 store 旧键（`{state, version}` 信封与裸数据两种形态）；
+ * 2) 旧快照能转成 ImportPlan（明文密钥单独走 secretKeys，不进客户端可见状态）；
+ * 3) 新 store 不再往这些旧键写任何东西。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
+import {
+  LEGACY_AI_KEY,
+  LEGACY_CONFIG_KEY,
+  LEGACY_CORE_KEY,
+  LEGACY_PROCESSING_KEY,
+  LEGACY_PROMPT_KEY,
+  LEGACY_WEBDAV_KEY,
+  buildImportPlanFromLocal,
+  hasLocalLegacyConfig,
+  readLocalLegacyConfig,
+} from '../src/stores/legacyMigration'
+
 type StoresModule = typeof import('../src/stores')
-
-async function boot(seed: Record<string, unknown> = {}): Promise<StoresModule> {
-  localStorage.clear()
-  for (const [k, v] of Object.entries(seed)) {
-    localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v))
-  }
-  vi.resetModules()
-  return import('../src/stores')
-}
-
-const read = (key: string) => {
-  const raw = localStorage.getItem(key)
-  return raw ? JSON.parse(raw) : null
-}
 
 const legacyProviders = [
   { provider: 'openai', apiKey: 'sk-legacy-1', apiUrl: 'https://api.openai.com/v1', model: 'gpt-4o', temperature: 0.3 },
-  { provider: 'custom', apiKey: 'sk-legacy-2', apiUrl: 'https://x.example/v1', model: 'm2', temperature: 0.5 }
+  { provider: 'custom', apiKey: 'sk-legacy-2', apiUrl: 'https://x.example/v1', model: 'm2', temperature: 0.5 },
 ]
 
-function legacyState(overrides: Record<string, unknown> = {}) {
+/** 拆分后各子 store 的旧键内容（zustand persist 的 {state, version} 信封） */
+function splitKeys(): Record<string, unknown> {
   return {
-    state: {
-      aiConfigManager: { providers: legacyProviders, currentModelId: 2 },
-      aiConfig: { provider: 'custom', apiKey: 'sk-legacy-2' },
-      tokenUsage: 999,
-      processingOptions: { processingMode: 'summary', bookType: 'fiction', outputLanguage: 'zh' },
-      webdavConfig: { enabled: true, serverUrl: 'https://dav.example/dav/', username: 'u', password: 'pw-legacy', syncPath: '/fr' },
-      promptVersionConfig: {
-        v1: { chapterSummary: { fiction: 'L1', nonFiction: 'L1n' }, mindmap: { chapter: '', arrow: '', combined: '' }, connectionAnalysis: '', overallSummary: '' },
-        v2: { chapterSummary: { fiction: 'L2', nonFiction: 'L2n' }, mindmap: { chapter: '', arrow: '', combined: '' }, connectionAnalysis: '', overallSummary: '' }
-      },
-      currentPromptVersion: 'v2',
-      aiServiceOptions: { maxRetries: 7, baseRetryDelay: 1000 },
-      ...overrides
+    [LEGACY_AI_KEY]: {
+      state: { aiConfigManager: { providers: legacyProviders, currentModelId: 2 }, aiConfig: { apiKey: 'sk-legacy-2' } },
+      version: 1,
     },
-    version: 0
+    [LEGACY_PROCESSING_KEY]: {
+      state: {
+        processingOptions: { processingMode: 'summary', bookType: 'fiction', outputLanguage: 'zh' },
+      },
+      version: 1,
+    },
+    [LEGACY_WEBDAV_KEY]: {
+      state: {
+        webdavConfig: {
+          enabled: true,
+          serverUrl: 'https://dav.example/dav/',
+          username: 'u',
+          password: 'pw-legacy',
+          syncPath: '/fr',
+          connectionStatus: 'error',
+        },
+      },
+      version: 1,
+    },
+    [LEGACY_CORE_KEY]: { state: { aiServiceOptions: { maxRetries: 7, baseRetryDelay: 1000 } }, version: 1 },
+    [LEGACY_PROMPT_KEY]: {
+      state: {
+        promptVersionConfig: {
+          v1: {
+            chapterSummary: { fiction: 'L1', nonFiction: 'L1n' },
+            mindmap: { chapter: '', arrow: '', combined: '' },
+            connectionAnalysis: '',
+            overallSummary: '',
+          },
+          v2: {
+            chapterSummary: { fiction: 'L2', nonFiction: 'L2n' },
+            mindmap: { chapter: '', arrow: '', combined: '' },
+            connectionAnalysis: '',
+            overallSummary: '',
+          },
+        },
+        currentPromptVersion: 'v2',
+      },
+      version: 1,
+    },
   }
 }
 
-describe('老用户迁移（只有 ebook-mindmap-config）', () => {
-  it('子 store 获得旧数据，首次 setter 不会用默认值覆盖服务商', async () => {
-    const m = await boot({ 'ebook-mindmap-config': legacyState() })
+function seed(entries: Record<string, unknown>) {
+  localStorage.clear()
+  for (const [key, value] of Object.entries(entries)) {
+    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value))
+  }
+}
 
-    const ai = m.useAIConfigStore.getState()
-    expect(ai.aiConfigManager.providers.map((p) => p.apiKey)).toEqual(['sk-legacy-1', 'sk-legacy-2'])
-    expect(ai.aiConfig.apiKey).toBe('sk-legacy-2')
-    expect(m.useProcessingStore.getState().processingOptions.bookType).toBe('fiction')
-    // 旧数据缺失字段用默认值补齐
-    expect(m.useProcessingStore.getState().processingOptions.chapterConcurrency).toBe(3)
-    expect(m.useWebDAVStore.getState().webdavConfig.password).toBe('pw-legacy')
-    expect(m.useWebDAVStore.getState().webdavConfig.browsePath).toBe('/')
-    expect(m.usePromptStore.getState().currentPromptVersion).toBe('v2')
-    expect(m.usePromptStore.getState().promptConfig.chapterSummary.fiction).toBe('L2')
-    expect(m.useCoreStore.getState().aiServiceOptions.maxRetries).toBe(7)
-    // tokenUsage 不迁移
-    expect(m.useCoreStore.getState().tokenUsage).toBe(0)
+/** 写入类调用会把数据发往服务端：这里用内存假 fetch，避免真实网络请求 */
+function stubSharedStateApi() {
+  const fetchMock = vi.fn(async () =>
+    new Response(JSON.stringify({ rev: 1, updatedAt: new Date().toISOString() }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  )
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
 
-    // 首次 setter
-    m.useConfigStore.getState().setApiKey('sk-new')
-    const after = m.useConfigStore.getState().aiConfigManager.providers
-    expect(after).toHaveLength(2)
-    expect(after[0].apiKey).toBe('sk-legacy-1')
-    expect(after[1].apiKey).toBe('sk-new')
+beforeEach(() => {
+  localStorage.clear()
+  stubSharedStateApi()
+})
 
-    // 旧键被清理
-    expect(localStorage.getItem('ebook-mindmap-config')).toBeNull()
+describe('readLocalLegacyConfig / hasLocalLegacyConfig', () => {
+  it('没有旧数据 ⇒ null（无 storage 也一样）', () => {
+    expect(readLocalLegacyConfig(null)).toBeNull()
+    expect(readLocalLegacyConfig(localStorage)).toBeNull()
+    expect(hasLocalLegacyConfig(null)).toBe(false)
+    expect(hasLocalLegacyConfig(localStorage)).toBe(false)
   })
 
-  it('再次启动不会重复迁移，数据来自子 store 键', async () => {
-    await boot({ 'ebook-mindmap-config': legacyState() })
-    const snapshot: Record<string, string> = {}
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i)!
-      snapshot[k] = localStorage.getItem(k)!
-    }
-    const m = await boot(snapshot)
-    expect(m.useConfigStore.getState().aiConfigManager.providers[0].apiKey).toBe('sk-legacy-1')
-    expect(m.useConfigStore.getState().webdavConfig.password).toBe('pw-legacy')
+  it('读取拆分后的子 store 键（{state, version} 信封）', () => {
+    seed(splitKeys())
+    const snapshot = readLocalLegacyConfig(localStorage)!
+    expect(snapshot.ai?.providers).toHaveLength(2)
+    expect(snapshot.ai?.currentModelId).toBe(2)
+    expect(snapshot.processingOptions?.bookType).toBe('fiction')
+    expect(snapshot.aiServiceOptions).toEqual({ maxRetries: 7, baseRetryDelay: 1000 })
+    expect(snapshot.webdav?.serverUrl).toBe('https://dav.example/dav/')
+    expect(snapshot.prompts?.currentPromptVersion).toBe('v2')
+    expect(hasLocalLegacyConfig(localStorage)).toBe(true)
   })
 
-  it('子 store 键已存在：提示词以子 store 为准，AI 服务商以旧键为准', async () => {
-    const subPrompt = legacyState().state.promptVersionConfig
-    const m = await boot({
-      'ebook-mindmap-config': legacyState(),
-      'ebook-prompt-config': {
+  it('裸数据（无 {state} 信封）同样能读', () => {
+    seed({
+      [LEGACY_AI_KEY]: { aiConfigManager: { providers: legacyProviders, currentModelId: 1 } },
+      [LEGACY_PROCESSING_KEY]: { processingOptions: { processingMode: 'mindmap' } },
+    })
+    const snapshot = readLocalLegacyConfig(localStorage)!
+    expect(snapshot.ai?.providers).toHaveLength(2)
+    expect(snapshot.processingOptions?.processingMode).toBe('mindmap')
+  })
+
+  it('聚合键：读取其支持的快照字段（processingOptions / aiServiceOptions / ai / webdav / prompts）', () => {
+    seed({
+      [LEGACY_CONFIG_KEY]: {
         state: {
-          promptVersionConfig: { ...subPrompt, v1: { ...subPrompt.v1, overallSummary: 'SUB' } },
-          promptConfig: { ...subPrompt.v1, overallSummary: 'SUB' },
-          currentPromptVersion: 'v1'
+          processingOptions: { processingMode: 'summary', bookType: 'fiction' },
+          aiServiceOptions: { maxRetries: 2 },
+          ai: { providers: legacyProviders, currentModelId: 1 },
+          webdav: { serverUrl: 'https://agg.example/dav/', username: 'u', password: 'pw-agg' },
+          prompts: { promptConfig: null },
         },
-        version: 0
+        version: 0,
       },
-      // 旧 bug 留下的状态：子 store 只有默认服务商
-      'ebook-ai-config': {
-        state: { aiConfigManager: { providers: [{ provider: 'gemini', apiKey: '', apiUrl: '', model: 'g', temperature: 0.7 }], currentModelId: 1 } },
-        version: 0
-      }
     })
-    expect(m.usePromptStore.getState().currentPromptVersion).toBe('v1')
-    expect(m.usePromptStore.getState().promptConfig.overallSummary).toBe('SUB')
-    expect(m.useAIConfigStore.getState().aiConfigManager.providers).toHaveLength(2)
-    expect(read('ebook-ai-config').state.aiConfigManager.providers).toHaveLength(2)
+    const snapshot = readLocalLegacyConfig(localStorage)!
+    expect(snapshot.processingOptions?.bookType).toBe('fiction')
+    expect(snapshot.aiServiceOptions?.maxRetries).toBe(2)
+    expect(snapshot.ai?.providers).toHaveLength(2)
+    expect(snapshot.webdav?.serverUrl).toBe('https://agg.example/dav/')
   })
 
-  it('旧键损坏时保持原样不抛错', async () => {
-    const m = await boot({ 'ebook-mindmap-config': '{not json' })
-    expect(localStorage.getItem('ebook-mindmap-config')).toBe('{not json')
-    expect(m.useConfigStore.getState().aiConfigManager.providers.length).toBeGreaterThan(0)
+  it('键值损坏时容错返回 null，不抛错也不清理原值', () => {
+    seed({ [LEGACY_CONFIG_KEY]: '{not json' })
+    expect(readLocalLegacyConfig(localStorage)).toBeNull()
+    expect(localStorage.getItem(LEGACY_CONFIG_KEY)).toBe('{not json')
+
+    // 单个键坏掉不影响其他键
+    seed({ [LEGACY_AI_KEY]: '{not json', [LEGACY_PROCESSING_KEY]: { state: { processingOptions: { bookType: 'fiction' } }, version: 1 } })
+    const snapshot = readLocalLegacyConfig(localStorage)!
+    expect(snapshot.processingOptions?.bookType).toBe('fiction')
+    expect(snapshot.ai).toBeUndefined()
   })
 
-  it('migrateLegacyConfig：无 storage / 无旧键返回 false', async () => {
-    const { migrateLegacyConfig } = await import('../src/stores/legacyMigration')
-    expect(migrateLegacyConfig(null)).toBe(false)
+  it('只有提示词版本的旧数据也算「有旧配置」', () => {
+    seed({
+      [LEGACY_PROMPT_KEY]: {
+        state: { promptVersionConfig: { v2: { chapterSummary: { fiction: 'F', nonFiction: 'N' } } } },
+        version: 0,
+      },
+    })
+    expect(hasLocalLegacyConfig(localStorage)).toBe(true)
+    expect(readLocalLegacyConfig(localStorage)?.prompts?.promptVersionConfig?.v2).toBeDefined()
+  })
+})
+
+describe('buildImportPlanFromLocal', () => {
+  it('明文 apiKey 只出现在 providerSecrets，客户端状态只有 {hasSecret}', () => {
+    seed(splitKeys())
+    const plan = buildImportPlanFromLocal(readLocalLegacyConfig(localStorage)!)
+
+    expect(plan.ai.providers).toHaveLength(2)
+    expect(plan.ai.providers.map((p) => p.baseUrl)).toEqual([
+      'https://api.openai.com/v1',
+      'https://x.example/v1',
+    ])
+    expect(plan.ai.providers.map((p) => p.apiKey)).toEqual([{ hasSecret: true }, { hasSecret: true }])
+    expect(Object.values(plan.providerSecrets).sort()).toEqual(['sk-legacy-1', 'sk-legacy-2'])
+    expect(JSON.stringify(plan.ai)).not.toContain('sk-legacy-')
+    // currentModelId 是 1-based：第 2 条 → 第二个服务商的 m2
+    expect(plan.ai.active).toEqual({ providerId: plan.ai.providers[1].id, modelId: 'm2' })
+  })
+
+  it('WebDAV 明文密码单独走 webdavPassword，配置里只标记 hasSecret 且连接状态重置', () => {
+    seed(splitKeys())
+    const plan = buildImportPlanFromLocal(readLocalLegacyConfig(localStorage)!)
+
+    expect(plan.webdav.password).toEqual({ hasSecret: true })
+    expect(plan.webdav.connectionStatus).toBe('disconnected')
+    expect(plan.webdavPassword).toBe('pw-legacy')
+    expect(JSON.stringify(plan.webdav)).not.toContain('pw-legacy')
+  })
+
+  it('处理选项补齐默认值并夹紧，汇率缺省为 7', () => {
+    seed({
+      [LEGACY_PROCESSING_KEY]: {
+        state: {
+          processingOptions: { bookType: 'fiction', outputLanguage: 'zh', chapterConcurrency: 99 },
+        },
+        version: 1,
+      },
+    })
+    const plan = buildImportPlanFromLocal(readLocalLegacyConfig(localStorage)!)
+
+    expect(plan.processing).toMatchObject({
+      bookType: 'fiction',
+      outputLanguage: 'zh',
+      chapterConcurrency: 10, // 99 夹紧到上限
+      chapterDetectionMode: 'normal', // 旧文件没有
+    })
+    expect(plan.exchangeRateUsdToCny).toBe(7)
+  })
+
+  it('提示词与内置默认求差：只保留被改过的条目', () => {
+    seed(splitKeys())
+    const plan = buildImportPlanFromLocal(readLocalLegacyConfig(localStorage)!)
+
+    expect(plan.prompts.chapterSummary).toEqual({ fiction: 'L2', nonFiction: 'L2n' })
+    // 空字符串与内置默认不同 ⇒ 视为显式清空，需要保留
+    expect(plan.prompts.mindmap).toEqual({ chapter: '', arrow: '', combined: '' })
+  })
+
+  it('旧 store 里「当前生效」的完整 promptConfig 优先于版本表', () => {
+    seed({
+      [LEGACY_PROMPT_KEY]: {
+        state: {
+          promptConfig: {
+            chapterSummary: { fiction: 'CURRENT', nonFiction: 'CURRENT-N' },
+            mindmap: { chapter: 'M', arrow: 'A', combined: 'X' },
+            connectionAnalysis: 'CA',
+            overallSummary: 'OS',
+          },
+          currentPromptVersion: 'v1',
+          promptVersionConfig: { v1: {}, v2: {} },
+        },
+        version: 1,
+      },
+    })
+    const plan = buildImportPlanFromLocal(readLocalLegacyConfig(localStorage)!)
+    expect(plan.prompts.chapterSummary?.fiction).toBe('CURRENT')
+    expect(plan.prompts.overallSummary).toBe('OS')
+  })
+
+  it('空快照也能生成计划（不抛错），并标注来源', () => {
+    const plan = buildImportPlanFromLocal({})
+    expect(plan.version).toBe('legacy-local')
+    expect(plan.ai.providers).toEqual([])
+    expect(plan.webdav.connectionStatus).toBe('disconnected')
+    expect(plan.notes).toContain('来源：本浏览器旧配置')
+  })
+})
+
+describe('新 store 不再写旧 localStorage 键', () => {
+  async function boot(): Promise<StoresModule> {
     localStorage.clear()
-    expect(migrateLegacyConfig(localStorage)).toBe(false)
-  })
-})
+    vi.resetModules()
+    return import('../src/stores')
+  }
 
-describe('单一事实来源', () => {
-  let m: StoresModule
-  beforeEach(async () => {
-    m = await boot()
-  })
-
-  it('壳不再写 ebook-mindmap-config；密钥只出现在一个键里', () => {
-    m.useConfigStore.getState().setApiKey('sk-unique-123')
-    m.useConfigStore.getState().setWebDAVPassword('pw-unique-456')
-    m.useConfigStore.getState().setBookType('fiction')
-
-    expect(localStorage.getItem('ebook-mindmap-config')).toBeNull()
-    const all = Object.keys(localStorage).map((k) => localStorage.getItem(k) || '')
-    expect(all.filter((v) => v.includes('sk-unique-123'))).toHaveLength(1)
-    expect(all.filter((v) => v.includes('pw-unique-456'))).toHaveLength(1)
-    // aiConfig 是派生字段，不再持久化
-    expect(read('ebook-ai-config').state.aiConfig).toBeUndefined()
-    expect(read('ebook-ai-config').version).toBe(1)
-  })
-
-  it('setApiKey 同步更新 aiConfigManager（列表显示新值）', () => {
-    m.useConfigStore.getState().setApiKey('k1')
-    m.useConfigStore.getState().setModel('gpt-x')
-    const s = m.useConfigStore.getState()
-    expect(s.aiConfigManager.providers[0].apiKey).toBe('k1')
-    expect(s.aiConfig.apiKey).toBe('k1')
-    expect(s.aiConfig.model).toBe('gpt-x')
-  })
-
-  it('兼容 setter 作用于当前服务商（currentModelId 为 1-based）', () => {
-    const st = m.useConfigStore.getState()
-    st.addAIProvider({ provider: 'openai', apiKey: 'a', apiUrl: 'u', model: 'm', temperature: 0.1 })
-    st.setCurrentModelId(2)
-    st.setApiKey('second')
-    st.setApiUrl('https://u2')
-    st.setTemperature(0.9)
-    st.setProxyUrl('http://p')
-    st.setProxyEnabled(true)
-    st.setAiProvider('302.ai')
-    const providers = m.useConfigStore.getState().aiConfigManager.providers
-    expect(providers[0].apiKey).toBe('')
-    expect(providers[1]).toMatchObject({
-      apiKey: 'second', apiUrl: 'https://u2', temperature: 0.9, proxyUrl: 'http://p', proxyEnabled: true, provider: '302.ai'
-    })
-  })
-
-  it('直接改子 store，壳同步', () => {
-    m.useWebDAVStore.getState().setWebDAVSyncPath('/x')
-    m.usePromptStore.getState().setCurrentPromptVersion('v2')
-    m.useCoreStore.getState().setMaxRetries(9)
-    m.useProcessingStore.getState().setEpubTocDepth(3)
-    const s = m.useConfigStore.getState()
-    expect(s.webdavConfig.syncPath).toBe('/x')
-    expect(s.currentPromptVersion).toBe('v2')
-    expect(s.aiServiceOptions.maxRetries).toBe(9)
-    expect(s.processingOptions.epubTocDepth).toBe(3)
-  })
-
-  it('壳 setter 全部转发到子 store', () => {
-    const st = m.useConfigStore.getState()
-    st.setProcessingMode('summary')
-    st.setUseSmartDetection(true)
-    st.setSkipNonEssentialChapters(false)
-    st.setMaxSubChapterDepth(2)
-    st.setOutputLanguage('zh')
-    st.setChapterNamingMode('numbered')
-    st.setEnableNotification(false)
-    st.setChapterDetectionMode('epub-toc')
-    st.setEpubTocDepth(2)
-    st.setChapterConcurrency(5)
-    st.setWebDAVEnabled(true)
-    st.setWebDAVServerUrl('https://s/')
-    st.setWebDAVUsername('u')
-    st.setWebDAVAppName('a')
-    st.setWebDAVAutoSync(true)
-    st.setWebDAVSyncPath('/s')
-    st.setWebDAVBrowsePath('/b')
-    st.setWebDAVConnectionStatus('connected')
-    st.updateWebDAVLastSyncTime()
-    st.setChapterSummaryPrompt('fiction', 'F')
-    st.setMindmapPrompt('chapter', 'C')
-    st.setConnectionAnalysisPrompt('CA')
-    st.setOverallSummaryPrompt('O')
-    st.setMaxRetries(4)
-    st.setBaseRetryDelay(10)
-    const s = m.useConfigStore.getState()
-    expect(s.processingOptions).toMatchObject({
-      processingMode: 'summary', useSmartDetection: true, skipNonEssentialChapters: false, maxSubChapterDepth: 2,
-      outputLanguage: 'zh', chapterNamingMode: 'numbered', enableNotification: false,
-      chapterDetectionMode: 'epub-toc', epubTocDepth: 2, chapterConcurrency: 5
-    })
-    expect(s.webdavConfig).toMatchObject({
-      enabled: true, serverUrl: 'https://s/', username: 'u', appName: 'a', autoSync: true,
-      syncPath: '/s', browsePath: '/b', connectionStatus: 'connected'
-    })
-    expect(s.webdavConfig.lastSyncTime).not.toBeNull()
-    expect(s.promptConfig.chapterSummary.fiction).toBe('F')
-    expect(s.promptConfig.mindmap.chapter).toBe('C')
-    expect(s.promptConfig.connectionAnalysis).toBe('CA')
-    expect(s.promptConfig.overallSummary).toBe('O')
-    expect(s.aiServiceOptions).toEqual({ maxRetries: 4, baseRetryDelay: 10 })
-
-    st.resetPromptsToDefaultForVersion('v1')
-    st.resetPromptsToDefault()
-    st.resetWebDAVConfig()
-    expect(m.useConfigStore.getState().webdavConfig.syncPath).toBe('/fastReader')
-  })
-
-  it('服务商管理方法转发', () => {
-    const st = m.useConfigStore.getState()
-    st.addProvider({ provider: 'openai', apiKey: 'a', apiUrl: 'u', model: 'm', temperature: 0.1 })
-    st.duplicateProvider(2)
-    st.createAIProviderFromTemplate('ollama')
-    expect(m.useConfigStore.getState().aiConfigManager.providers).toHaveLength(4)
-    st.updateProvider(4, { model: 'llama3' })
-    expect(st.getProviderByIndex(4)?.model).toBe('llama3')
-    expect(st.getActiveAIProvider()?.model).toBe('llama3')
-    st.deleteProvider(4)
-    expect(m.useConfigStore.getState().aiConfigManager.providers).toHaveLength(3)
-    expect(st.getAvailableAITemplates().length).toBeGreaterThan(0)
-  })
-
-  it('导出 → 重置 → 导入 往返', () => {
-    const st = m.useConfigStore.getState()
-    st.setApiKey('exp-key')
-    st.setBookType('fiction')
-    const yaml = st.exportConfig()
-    st.resetAllConfig()
-    expect(m.useConfigStore.getState().aiConfig.apiKey).toBe('')
-    const r = st.importConfig(yaml)
-    expect(r).toEqual({ success: true })
-    expect(m.useConfigStore.getState().aiConfig.apiKey).toBe('exp-key')
-    expect(m.useConfigStore.getState().processingOptions.bookType).toBe('fiction')
-    expect(st.importConfig('version: 9.9.9\nexportTime: x\nconfig: {}').success).toBe(false)
-    expect(st.importConfig('version: "1.0.0"\nexportTime: x\nconfig: {}').success).toBe(false)
-  })
-})
-
-describe('tokenUsage 不持久化', () => {
-  it('计数在内存里，不写 localStorage；v0 遗留 tokenUsage 被丢弃', async () => {
-    const m = await boot({
-      'ebook-core-config': { state: { tokenUsage: 12345, aiServiceOptions: { maxRetries: 2 } }, version: 0 }
-    })
-    expect(m.useCoreStore.getState().tokenUsage).toBe(0)
-    expect(m.useCoreStore.getState().aiServiceOptions).toEqual({ maxRetries: 2, baseRetryDelay: 60000 })
-    const before = localStorage.getItem('ebook-core-config')
-    m.useConfigStore.getState().addTokenUsage(100)
-    m.useConfigStore.getState().addTokenUsage(20)
-    expect(m.useConfigStore.getState().tokenUsage).toBe(120)
-    expect(read('ebook-core-config').state.tokenUsage).toBeUndefined()
-    expect(localStorage.getItem('ebook-core-config')).toBe(before)
-    m.useConfigStore.getState().resetTokenUsage()
-    expect(m.useConfigStore.getState().tokenUsage).toBe(0)
-  })
-
-  it('useTokenUsage 只在 tokenUsage 变化时重渲染', async () => {
+  it('改各子 store 后旧键仍然不存在（共享状态只写服务端）', async () => {
     const m = await boot()
-    const React = await import('react')
-    const { createRoot } = await import('react-dom/client')
-    const { act } = React
-    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-    let renders = 0
-    let seen = -1
-    function Probe() {
-      renders++
-      seen = m.useTokenUsage()
-      return null
-    }
-    const root = createRoot(document.createElement('div'))
-    await act(async () => root.render(React.createElement(Probe)))
-    const base = renders
-    await act(async () => m.useConfigStore.getState().setBookType('fiction'))
-    expect(renders).toBe(base)
-    await act(async () => m.useConfigStore.getState().addTokenUsage(5))
-    expect(seen).toBe(5)
-    expect(renders).toBe(base + 1)
-    await act(async () => root.unmount())
-  })
-})
-
-describe('其他 persist store 的 version/migrate', () => {
-  it('v0 数据可读，写回为 version 1', async () => {
-    const m = await boot({
-      'ebook-webdav-config': { state: { webdavConfig: { serverUrl: 'https://old/' } }, version: 0 },
-      'ebook-processing-options': { state: { processingOptions: { bookType: 'fiction', chapterConcurrency: 99 } }, version: 0 },
-      'ebook-processing-history': { state: { records: 'bad' }, version: 0 }
+    m.useProcessingStore.getState().setBookType('fiction')
+    m.useProcessingStore.getState().setExchangeRateUsdToCny(7.2)
+    m.useWebDAVStore.getState().setWebDAVPassword('pw-new')
+    m.usePromptStore.getState().setOverallSummaryPrompt('O')
+    m.useAIConfigStore.getState().addProvider({
+      name: 'OpenAI',
+      type: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      models: [{ id: 'gpt-4o', enabled: true, source: 'manual' }],
     })
-    expect(m.useWebDAVStore.getState().webdavConfig).toMatchObject({ serverUrl: 'https://old/', syncPath: '/fastReader' })
-    expect(m.useProcessingStore.getState().processingOptions).toMatchObject({ bookType: 'fiction', chapterConcurrency: 10 })
-    expect(m.useProcessingHistoryStore.getState().records).toEqual([])
-    expect(read('ebook-webdav-config').version).toBe(1)
-    expect(read('ebook-processing-history').version).toBe(1)
+    m.useUsageStore.getState().addTokenUsage(10, 0.01)
+    m.useProcessingHistoryStore.getState().addRecord({
+      bookTitle: 'b',
+      fileName: 'b.epub',
+      processingMode: 'summary',
+      model: 'm',
+      chapterCount: 1,
+    })
+
+    for (const key of [LEGACY_CONFIG_KEY, LEGACY_AI_KEY, LEGACY_PROCESSING_KEY, LEGACY_WEBDAV_KEY, LEGACY_PROMPT_KEY, LEGACY_CORE_KEY]) {
+      expect(localStorage.getItem(key)).toBeNull()
+    }
+    // 也没有别的键把明文密码写进 localStorage
+    const stored = Object.keys(localStorage).map((k) => localStorage.getItem(k) || '')
+    expect(stored.filter((v) => v.includes('pw-new'))).toHaveLength(0)
   })
 })
 
 describe('子 store 边界行为', () => {
-  it('AI：删除/切换/越界索引', async () => {
-    const m = await boot()
-    const ai = m.useAIConfigStore.getState()
-    ai.addAIProvider({ provider: 'openai', apiKey: '2', apiUrl: 'u', model: 'm2', temperature: 0 })
-    ai.addAIProvider({ provider: 'openai', apiKey: '3', apiUrl: 'u', model: 'm3', temperature: 0 })
-    // 当前为 3，删除 1 → 当前前移为 2
-    ai.deleteAIProvider(1)
-    expect(m.useAIConfigStore.getState().aiConfigManager.currentModelId).toBe(2)
-    // 删除当前项
-    ai.deleteAIProvider(2)
-    expect(m.useAIConfigStore.getState().aiConfigManager.currentModelId).toBe(1)
-    ai.deleteAIProvider(9)
-    ai.updateAIProvider(9, { model: 'x' })
-    ai.setCurrentModelId(9)
-    expect(ai.duplicateAIProvider(9)).toBe(-1)
-    expect(ai.getAIProviderByIndex(9)).toBeUndefined()
-    expect(ai.createAIProviderFromTemplate('nope' as never)).toBe(-1)
-    ai.deleteAIProvider(1)
-    expect(m.useAIConfigStore.getState().getActiveAIProvider()).toBeUndefined()
-    expect(m.useAIConfigStore.getState().aiConfig.provider).toBe('gemini')
-    ai.resetAIConfig()
-    expect(m.useAIConfigStore.getState().aiConfigManager.providers).toHaveLength(1)
-    expect(m.useAIConfigStore.getState().aiConfigManager.getAvailableTemplates().length).toBe(4)
+  let m: StoresModule
+
+  beforeEach(async () => {
+    localStorage.clear()
+    vi.resetModules()
+    m = await import('../src/stores')
   })
 
-  it('AI：持久化数据无效时保持默认', async () => {
-    const m = await boot({ 'ebook-ai-config': { state: { aiConfigManager: { providers: 'bad' } }, version: 1 } })
-    expect(m.useAIConfigStore.getState().aiConfigManager.providers).toHaveLength(1)
+  it('AI：删除当前服务商回落到剩下的第一个可用模型', () => {
+    m.useAIConfigStore.getState().replaceAI({
+      providers: [
+        { id: 'p1', name: 'A', type: 'openai', baseUrl: 'https://a/v1', models: [{ id: 'm1', enabled: true, source: 'auto' }] },
+        { id: 'p2', name: 'B', type: 'openai', baseUrl: 'https://b/v1', models: [{ id: 'm2', enabled: true, source: 'auto' }] },
+      ],
+      active: { providerId: 'p2', modelId: 'm2' },
+      defaultTemperature: 0.7,
+    })
+
+    m.useAIConfigStore.getState().deleteProvider('p2')
+    expect(m.useAIConfigStore.getState().ai.active).toEqual({ providerId: 'p1', modelId: 'm1' })
+
+    // 删除/更新不存在的 id 是空操作
+    m.useAIConfigStore.getState().deleteProvider('nope')
+    m.useAIConfigStore.getState().updateProvider('nope', { name: 'x' })
+    expect(m.useAIConfigStore.getState().ai.providers.map((p) => p.name)).toEqual(['A'])
   })
 
-  it('处理历史：去重、上限、清空', async () => {
-    const m = await boot()
+  it('AI：无服务商时当前配置为空视图', () => {
+    m.useAIConfigStore.getState().resetAIConfig()
+    expect(m.useAIConfigStore.getState().ai.providers).toEqual([])
+    expect(m.useAIConfigStore.getState().getActiveProvider()).toBeUndefined()
+    expect(m.useAIConfigStore.getState().aiConfig).toMatchObject({ apiUrl: '', model: '' })
+  })
+
+  it('处理历史：按文件名去重、最新在前、可本地清空', () => {
     const hist = m.useProcessingHistoryStore.getState()
     for (let i = 0; i < 12; i++) {
-      hist.addRecord({ bookTitle: `b${i}`, fileName: `f${i % 11}`, processingMode: 'summary', model: 'm', chapterCount: 1 })
+      hist.addRecord({
+        bookTitle: `b${i}`,
+        fileName: `f${i % 11}`,
+        processingMode: 'summary',
+        model: 'm',
+        chapterCount: 1,
+      })
     }
     const records = m.useProcessingHistoryStore.getState().records
-    expect(records).toHaveLength(10)
+    expect(records).toHaveLength(11)
     expect(records[0].bookTitle).toBe('b11')
     expect(records.filter((r) => r.fileName === 'f0')).toHaveLength(1)
-    hist.clearHistory()
+
+    m.useProcessingHistoryStore.getState().clearLocalView()
+    expect(m.useProcessingHistoryStore.getState().records).toEqual([])
+  })
+
+  it('处理历史：服务端历史最多保留 200 条', () => {
+    const many = Array.from({ length: 260 }, (_, i) => ({
+      bookTitle: `b${i}`,
+      fileName: `f${i}.epub`,
+      completedAt: new Date().toISOString(),
+      processingMode: 'summary' as const,
+      model: 'm',
+      chapterCount: 1,
+    }))
+    m.useProcessingHistoryStore.getState().replaceHistory({ records: many })
+    expect(m.useProcessingHistoryStore.getState().records).toHaveLength(200)
+
+    m.useProcessingHistoryStore.getState().replaceHistory({ records: 'bad' as never })
     expect(m.useProcessingHistoryStore.getState().records).toEqual([])
   })
 })

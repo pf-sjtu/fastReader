@@ -13,13 +13,13 @@ import {
 import { BookOpen, Brain, ChevronUp, List, Eye } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
-import type { MindElixirData } from 'mind-elixir'
+import type { MindElixirInstance } from 'mind-elixir'
 import { useShallow } from 'zustand/react/shallow'
 
 import { webdavService } from '@/services/webdavService'
 import { scrollToTop } from '@/utils/index'
 import { downloadSummaryMarkdown } from '@/utils/exportSummary'
-import { triggerTextDownload } from '@/utils/download'
+import { exportMindMap } from '@/utils/mindmapExport'
 import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
 import { useChapterScrollSpy } from '@/hooks/useChapterScrollSpy'
@@ -31,6 +31,8 @@ import { BUILD_VERSION } from '@/buildInfo'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { UnifiedStatusBar } from '@/components/UnifiedStatusBar'
+import { SyncStatusIndicator } from '@/components/SyncStatusIndicator'
+import { ActiveModelSelect } from '@/components/project/config/ActiveModelSelect'
 import { ChapterSummaryNavigation } from '@/components/ChapterSummaryNavigation'
 import { TimelineNavigation } from '@/components/TimelineNavigation'
 
@@ -48,6 +50,17 @@ const WebDAVFileBrowser = lazy(() =>
 const BatchQueuePanel = lazy(() =>
   import('@/components/project/BatchQueuePanel').then((m) => ({ default: m.BatchQueuePanel }))
 )
+
+/** 懒加载面板的占位骨架（避免出现「点了没反应」的空白期） */
+function PanelSkeleton() {
+  return (
+    <div className="space-y-2 py-2" aria-hidden="true">
+      <div className="h-8 w-1/3 animate-pulse rounded bg-muted" />
+      <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
+      <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
+    </div>
+  )
+}
 
 function App() {
   const { t } = useTranslation()
@@ -143,29 +156,34 @@ function App() {
     return () => scrollContainer.removeEventListener('scroll', handleScroll)
   }, [])
 
-  // WebDAV 自动连接
+  // WebDAV 自动连接：配置一变就（重新）连接，而不是只在挂载后 3 秒试一次
   useEffect(() => {
-    const initializeWebDAVIfNeeded = async () => {
-      if (webdavConfig.enabled &&
-          webdavConfig.serverUrl &&
-          webdavConfig.username &&
-          webdavConfig.password &&
-          !webdavService.isInitialized()) {
-        try {
-          const initResult = await webdavService.initialize(webdavConfig)
-          if (initResult.success) {
-            toast.success(t('webdav.autoConnected'))
-          }
-        } catch (error) {
-          console.error('App: WebDAV自动连接异常:', error)
-        }
-      }
+    if (
+      !webdavConfig.enabled ||
+      !webdavConfig.serverUrl ||
+      !webdavConfig.username ||
+      !webdavConfig.password?.hasSecret ||
+      webdavService.isInitialized()
+    ) {
+      return
     }
 
-    const timer = setTimeout(initializeWebDAVIfNeeded, 3000)
-    return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    let cancelled = false
+    void (async () => {
+      try {
+        const initResult = await webdavService.initialize(webdavConfig)
+        if (!cancelled && initResult.success) {
+          toast.success(t('webdav.autoConnected'))
+        }
+      } catch (error) {
+        console.error('App: WebDAV 自动连接异常:', error)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [webdavConfig, t])
 
   // 下载完整 Markdown（不依赖本地 File：历史/云缓存加载后也可导出）
   const downloadAllMarkdown = useCallback(() => {
@@ -197,20 +215,17 @@ function App() {
     t,
   ])
 
-  // 导出思维导图 JSON（MindElixir Desktop 入口已下线）
-  const downloadMindMap = useCallback((mindMapData: MindElixirData, title?: string) => {
-    try {
-      triggerTextDownload(
-        JSON.stringify(mindMapData, null, 2),
-        `${title || 'mindmap'}.json`,
-        'application/json;charset=utf-8',
-        false
-      )
-      toast.success(t('download.markdownDownloaded'))
-    } catch (error) {
-      console.error('思维导图 JSON 导出失败:', error)
-      toast.error(t('download.downloadFailed'))
-    }
+  // 导出思维导图：按用户选择的格式导出（PNG/JPEG/WEBP/SVG/HTML/JSON/Markdown）
+  const downloadMindMap = useCallback((instance: MindElixirInstance, title: string, format: string) => {
+    void (async () => {
+      try {
+        const { filename } = await exportMindMap(instance, title, format)
+        toast.success(t('download.fileDownloaded', { filename }))
+      } catch (error) {
+        console.error('思维导图导出失败:', error)
+        toast.error(t('download.downloadFailed'))
+      }
+    })()
   }, [t])
 
   // 开始处理并切换到结果页
@@ -372,7 +387,7 @@ function App() {
     <div className="min-h-screen bg-background px-1.5 py-2.5 sm:p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
       <Toaster />
       <ErrorBoundary section={t('errorBoundary.webdavBrowser')}>
-        <Suspense fallback={null}>
+        <Suspense fallback={<PanelSkeleton />}>
           <WebDAVFileBrowser
             isOpen={isWebDAVBrowserOpen}
             onClose={handleCloseWebDAVBrowser}
@@ -392,6 +407,7 @@ function App() {
               </h1>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
+              <SyncStatusIndicator />
               <LanguageSwitcher />
               <DarkModeToggle />
             </div>
@@ -426,9 +442,14 @@ function App() {
           onAbortToConfig={handleAbortToConfig}
         />
 
+        {/* 当前模型快捷切换：处理页也能直接换模型，不必进设置 */}
+        <div className="flex items-center justify-end">
+          <ActiveModelSelect className="max-w-full sm:max-w-xs" disabled={processing} />
+        </div>
+
         {/* 批量处理队列面板 */}
         <ErrorBoundary section={t('errorBoundary.batchQueue')}>
-          <Suspense fallback={null}>
+          <Suspense fallback={<PanelSkeleton />}>
             <BatchQueuePanel />
           </Suspense>
         </ErrorBoundary>
@@ -628,7 +649,10 @@ function App() {
         </Sheet>
 
         {/* 移动端：原文预览 Sheet */}
-        <Sheet open={previewSheetOpen && !!rightPanelContent} onOpenChange={handlePreviewSheetOpenChange}>
+        <Sheet
+          open={isMobile && previewSheetOpen && !!rightPanelContent}
+          onOpenChange={handlePreviewSheetOpenChange}
+        >
           <SheetContent
             side="right"
             className="w-full sm:max-w-md p-0 gap-0 flex flex-col"

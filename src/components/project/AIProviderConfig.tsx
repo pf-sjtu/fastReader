@@ -1,189 +1,259 @@
-// AI 服务商列表：激活 / 编辑 / 复制 / 删除；编辑表单见 config/AIProviderDialog
-import { useEffect, useState } from 'react'
-import { useShallow } from 'zustand/react/shallow'
+// AI 服务商面板：当前模型 + 全局温度 + 服务商列表（使用 / 编辑 / 刷新模型 / 删除）；新建与编辑见 config/ProviderWizard
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Plus, Copy, Trash2, Edit, Info } from 'lucide-react'
+import { CheckCircle, Info, Loader2, Play, Plus, Server, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { useConfigStore } from '../../stores/configStore'
-import type { AIProviderConfig as ProviderConfig } from '../../stores/types'
-import { AIProviderDialog } from './config/AIProviderDialog'
-import { ProviderIcon } from './config/ProviderIcon'
-import { getDisplayName } from './config/providerUtils'
+import { Label } from '@/components/ui/label'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import type { ProviderEntry } from '../../types/ai'
+import { useAIConfigStore } from '../../stores/ai-config'
+import { ActiveModelSelect } from './config/ActiveModelSelect'
+import { ProviderCard } from './config/ProviderCard'
+import { ProviderWizard } from './config/ProviderWizard'
+import { TemperatureInput } from './config/TemperatureInput'
+import { useAIConnectionTest } from './config/useAIConnectionTest'
+import { useCatalog } from './config/useCatalog'
+import { describeFetchError, fetchProviderModelIds, mergeFetchedModels, reconcileActiveModel } from './config/provider-utils'
 
-const PROVIDER_COLORS: Record<string, string> = {
-  gemini: 'bg-secondary text-secondary-foreground',
-  openai: 'bg-green-100 text-green-800',
-  ollama: 'bg-purple-100 text-purple-800',
-  '302.ai': 'bg-orange-100 text-orange-800',
+/** 向导状态：每次打开换 key，让草稿从头初始化 */
+interface WizardState {
+  key: number
+  providerId?: string
 }
 
-interface AIProviderListItemProps {
-  index: number // 1-based
-  provider: ProviderConfig
-  isActive: boolean
-  onActivate: () => void
-  onEdit: () => void
-  onDuplicate: () => void
-  onDelete: () => void
-}
-
-function AIProviderListItem({ index, provider, isActive, onActivate, onEdit, onDuplicate, onDelete }: AIProviderListItemProps) {
+function ActiveModelBar() {
   const { t } = useTranslation()
-  const name = getDisplayName(provider.apiUrl, provider.model)
-  const iconButtons = [
-    { label: t('common.edit'), onClick: onEdit, Icon: Edit },
-    { label: t('common.copy'), onClick: onDuplicate, Icon: Copy },
-    { label: t('common.delete'), onClick: onDelete, Icon: Trash2 },
-  ]
+  const defaultTemperature = useAIConfigStore((s) => s.ai.defaultTemperature)
+  const setDefaultTemperature = useAIConfigStore((s) => s.setDefaultTemperature)
+  const hasActive = useAIConfigStore((s) => !!s.ai.active.modelId)
+  const { isTesting, result, test } = useAIConnectionTest()
 
   return (
-    <div
-      className={`grid w-full items-start gap-3 p-3 border rounded-lg transition-colors sm:grid-cols-[minmax(0,1fr)_auto] ${
-        isActive ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-      }`}
-    >
-      <div className="flex items-start gap-3 min-w-0">
-        <ProviderIcon provider={provider.provider} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium truncate">
-              #{index} {name}
-            </span>
-            <Badge className={`${PROVIDER_COLORS[provider.provider] ?? 'bg-gray-100 text-gray-800'} text-xs px-1.5 py-0.5 flex-shrink-0`}>
-              {provider.provider}
-            </Badge>
-            {isActive && (
-              <Badge variant="default" className="text-xs px-1.5 py-0.5 flex-shrink-0 bg-primary">
-                {t('aiProvider.current')}
-              </Badge>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-1">
-            <span className="truncate">{t('aiProvider.modelValue', { model: provider.model })}</span>
-            <span className="flex-shrink-0">{t('aiProvider.temperatureValue', { value: provider.temperature })}</span>
-            {provider.proxyEnabled && <span className="flex-shrink-0 text-primary">{t('aiProvider.proxyBadge')}</span>}
-          </div>
+    <div className="space-y-3 rounded-lg border bg-muted p-3">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+        <div className="min-w-0 space-y-1.5">
+          <Label htmlFor="active-model-select" className="text-xs font-medium">
+            {t('aiProvider.activeModel')}
+          </Label>
+          <ActiveModelSelect id="active-model-select" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="default-temperature" className="text-xs font-medium">
+            {t('aiProvider.defaultTemperature')}
+          </Label>
+          <TemperatureInput
+            id="default-temperature"
+            value={defaultTemperature}
+            onCommit={(v) => v !== undefined && setDefaultTemperature(v)}
+          />
         </div>
       </div>
-
-      <div className="flex items-center gap-2 justify-end w-full sm:w-auto">
-        <Button size="sm" variant={isActive ? 'default' : 'outline'} onClick={onActivate} className="h-8 px-3 text-xs">
-          {isActive ? t('aiProvider.inUse') : t('aiProvider.use')}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8"
+          onClick={() => void test()}
+          disabled={isTesting || !hasActive}
+        >
+          {isTesting ? (
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+          ) : (
+            <Play className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          {isTesting ? t('aiProvider.testing') : t('config.testConnection')}
         </Button>
-        {iconButtons.map(({ label, onClick, Icon }) => (
-          <Button
-            key={label}
-            size="sm"
-            variant="ghost"
-            onClick={onClick}
-            className="h-8 w-8 p-0"
-            aria-label={`${label} ${name}`}
-            title={label}
-          >
-            <Icon className="h-3 w-3" />
-          </Button>
-        ))}
+        <span className="text-xs text-muted-foreground">{t('aiProvider.temperatureHint')}</span>
       </div>
+      {result && (
+        <p
+          role="status"
+          className={`flex items-start gap-1.5 text-xs ${result.success ? 'text-green-700 dark:text-green-400' : 'text-destructive'}`}
+        >
+          {result.success ? (
+            <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          )}
+          <span className="min-w-0 break-words">{result.message}</span>
+        </p>
+      )}
     </div>
+  )
+}
+
+function IntroCard() {
+  const { t } = useTranslation()
+  return (
+    <Card className="border bg-muted/50">
+      <CardContent className="p-3">
+        <div className="flex items-start gap-2.5">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+          <div className="space-y-1 text-xs text-foreground">
+            <p className="text-sm font-medium">{t('aiProvider.introTitle')}</p>
+            <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
+              <li>{t('aiProvider.introOne')}</li>
+              <li>{t('aiProvider.introFetch')}</li>
+              <li>{t('aiProvider.introSecret')}</li>
+            </ul>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
 export function AIProviderConfig() {
   const { t } = useTranslation()
-  const { aiConfigManager, setCurrentModelId, addAIProvider, updateAIProvider, deleteAIProvider, duplicateAIProvider } =
-    useConfigStore(
-      useShallow((s) => ({
-        aiConfigManager: s.aiConfigManager,
-        setCurrentModelId: s.setCurrentModelId,
-        addAIProvider: s.addAIProvider,
-        updateAIProvider: s.updateAIProvider,
-        deleteAIProvider: s.deleteAIProvider,
-        duplicateAIProvider: s.duplicateAIProvider,
-      }))
-    )
+  const providers = useAIConfigStore((s) => s.ai.providers)
+  const active = useAIConfigStore((s) => s.ai.active)
+  const defaultTemperature = useAIConfigStore((s) => s.ai.defaultTemperature)
+  // 面板挂载（即页签被打开）时才拉取目录
+  const catalog = useCatalog()
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [editing, setEditing] = useState<{ provider: ProviderConfig; index: number } | null>(null)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [wizard, setWizard] = useState<WizardState | null>(null)
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<ProviderEntry | null>(null)
+  const [refreshing, setRefreshing] = useState<ReadonlySet<string>>(new Set())
 
-  // 当前激活的配置不存在时重置为第一个
-  useEffect(() => {
-    const count = aiConfigManager.providers.length
-    const currentIndex = aiConfigManager.currentModelId - 1
-    if (count > 0 && (currentIndex < 0 || currentIndex >= count)) setCurrentModelId(1)
-  }, [aiConfigManager.providers, aiConfigManager.currentModelId, setCurrentModelId])
+  const openWizard = (providerId?: string) => {
+    setWizard((w) => ({ key: (w?.key ?? 0) + 1, providerId }))
+    setWizardOpen(true)
+  }
 
-  const handleDelete = (index: number, provider: ProviderConfig) => {
-    if (aiConfigManager.providers.length <= 1) {
-      toast.error(t('aiProvider.keepAtLeastOne'))
+  const handleUse = (provider: ProviderEntry) => {
+    const model = provider.models.find((m) => m.enabled)
+    if (!model) {
+      toast.error(t('aiProvider.noEnabledModels'))
       return
     }
-    if (confirm(t('aiProvider.confirmDelete', { name: getDisplayName(provider.apiUrl, provider.model) }))) {
-      deleteAIProvider(index)
+    useAIConfigStore.getState().setActiveModel(provider.id, model.id)
+  }
+
+  const handleRefresh = async (provider: ProviderEntry) => {
+    setRefreshing((s) => new Set(s).add(provider.id))
+    try {
+      const ids = await fetchProviderModelIds({ providerId: provider.id, type: provider.type, baseUrl: provider.baseUrl })
+      const store = useAIConfigStore.getState()
+      const current = store.getProvider(provider.id)
+      if (!current) return
+      const { models, added, removed } = mergeFetchedModels(current.models, ids)
+      const enriched =
+        catalog.lib && catalog.catalog
+          ? catalog.lib.enrichProviderMeta(catalog.catalog, { ...current, models }).models
+          : models
+      store.updateProvider(provider.id, { models: enriched, modelsFetchedAt: new Date().toISOString() })
+      reconcileActiveModel()
+      toast.success(t('aiProvider.refreshDone', { name: provider.name, count: ids.length }), {
+        description: t('aiProvider.refreshDiff', { added, removed }),
+      })
+    } catch (error) {
+      toast.error(t('aiProvider.refreshFailed', { name: provider.name }), { description: describeFetchError(error, t) })
+    } finally {
+      setRefreshing((s) => {
+        const next = new Set(s)
+        next.delete(provider.id)
+        return next
+      })
     }
   }
 
+  const confirmDelete = () => {
+    if (!pendingDelete) return
+    useAIConfigStore.getState().deleteProvider(pendingDelete.id)
+    reconcileActiveModel()
+    toast.success(t('aiProvider.deleted', { name: pendingDelete.name }))
+    setPendingDelete(null)
+  }
+
+  const editing = wizard?.providerId ? providers.find((p) => p.id === wizard.providerId) : undefined
+
   return (
     <div className="space-y-4">
-      <Card className="bg-muted border">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-            <div className="text-sm text-foreground">
-              <p className="font-medium mb-1">{t('aiProvider.introTitle')}</p>
-              <p className="text-xs">{t('aiProvider.intro')}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <ActiveModelBar />
 
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-lg font-medium">{t('aiProvider.title')}</h3>
-          <p className="text-sm text-muted-foreground">{t('aiProvider.subtitle')}</p>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-base font-medium">{t('aiProvider.title')}</h3>
+          <p className="text-xs text-muted-foreground">{t('aiProvider.subtitle')}</p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
+        <Button size="sm" onClick={() => openWizard()}>
+          <Plus className="mr-1.5 h-4 w-4" />
           {t('aiProvider.add')}
         </Button>
       </div>
 
-      <div className="space-y-2">
-        {aiConfigManager.providers.map((provider, i) => {
-          const index = i + 1
-          return (
-            <AIProviderListItem
-              key={index}
-              index={index}
+      {providers.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center">
+          <Server className="h-6 w-6 text-muted-foreground" aria-hidden />
+          <p className="text-sm font-medium">{t('aiProvider.emptyTitle')}</p>
+          <p className="max-w-sm text-xs text-muted-foreground">{t('aiProvider.emptyDescription')}</p>
+          <Button size="sm" variant="outline" className="mt-1" onClick={() => openWizard()}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            {t('aiProvider.add')}
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {providers.map((provider) => (
+            <ProviderCard
+              key={provider.id}
               provider={provider}
-              isActive={index === aiConfigManager.currentModelId}
-              onActivate={() => setCurrentModelId(index)}
-              onEdit={() => {
-                setEditing({ provider, index })
-                setIsEditDialogOpen(true)
-              }}
-              onDuplicate={() => duplicateAIProvider(index)}
-              onDelete={() => handleDelete(index, provider)}
+              activeModelId={active.providerId === provider.id ? active.modelId : null}
+              defaultTemperature={defaultTemperature}
+              refreshing={refreshing.has(provider.id)}
+              onUse={() => handleUse(provider)}
+              onEdit={() => openWizard(provider.id)}
+              onRefresh={() => void handleRefresh(provider)}
+              onDelete={() => setPendingDelete(provider)}
             />
-          )
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <AIProviderDialog mode="create" open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} onSave={(p) => void addAIProvider(p)} />
+      <IntroCard />
 
-      {editing && (
-        <AIProviderDialog
-          mode="edit"
-          provider={editing.provider}
-          index={editing.index}
-          open={isEditDialogOpen}
-          onOpenChange={setIsEditDialogOpen}
-          onSave={(p, index) => updateAIProvider(index ?? editing.index, p)}
+      {wizard && (
+        <ProviderWizard
+          key={wizard.key}
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          provider={editing}
+          catalog={catalog}
         />
       )}
+
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('aiProvider.deleteTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('aiProvider.confirmDelete', { name: pendingDelete?.name ?? '' })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

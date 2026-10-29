@@ -1,8 +1,18 @@
+// WebDAV 同源代理：上游 base 与凭据一律取自服务端共享配置（state:webdav），
+// 客户端只提供路径；自带的 Authorization / X-WebDAV-Base 一律丢弃。
 import {
   isValidUpstreamBase,
   isWithinUpstreamScope,
-  resolveScopedUpstreamUrl
+  resolveScopedUpstreamUrl,
 } from '../../../src/services/webdavProxyUtils'
+import {
+  getAllowedOrigins,
+  isAllowedOrigin,
+  isSameOriginRequest,
+  corsHeaders,
+  withCors,
+} from '../../_lib/origin.js'
+import { resolveWebdav } from '../../_lib/upstream.js'
 
 // 请求体上限（字节），超限返回 413，防止 Worker 内存被打满
 const MAX_BODY_BYTES = 50 * 1024 * 1024
@@ -15,84 +25,67 @@ const RESPONSE_HEADER_ALLOWLIST = [
   'last-modified',
   'dav',
   'content-range',
-  'accept-ranges'
+  'accept-ranges',
 ]
 
-// 从环境变量读取白名单，支持逗号分隔的字符串（追加到默认值）
-function getAllowedOrigins(env) {
-  const defaultOrigins = [
-    'https://fast-read.pages.dev',
-    'https://read-app.navira.blog',
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://127.0.0.1:5173'
-  ]
+const ALLOWED_METHODS = ['OPTIONS', 'PROPFIND', 'GET', 'PUT', 'POST', 'DELETE', 'MKCOL', 'MOVE', 'COPY', 'HEAD']
 
-  if (!env?.ALLOWED_ORIGINS) {
-    return defaultOrigins
+// 客户端自带、不允许转发的头（鉴权与上游地址必须由服务端决定）
+const DROP_REQUEST_HEADERS = new Set([
+  'origin',
+  'referer',
+  'host',
+  'x-request-origin',
+  'x-webdav-base',
+  'x-webdav-path',
+  'authorization',
+  'cookie',
+  'content-length',
+])
+
+function filterRequestHeaders(headers) {
+  const upstreamHeaders = new Headers()
+  headers.forEach((value, key) => {
+    if (DROP_REQUEST_HEADERS.has(key.toLowerCase())) return
+    upstreamHeaders.set(key, value)
+  })
+  return upstreamHeaders
+}
+
+function filterResponseHeaders(headers, base, usedUrl) {
+  // 上游做了内容编码（gzip 等）时，fetch 已把正文解码，content-length 仍是压缩后的长度；
+  // 透传会让客户端按错误长度截断正文（PROPFIND 列表解析为空），此时必须丢弃该头
+  const encoding = (headers.get('content-encoding') || '').trim().toLowerCase()
+  const bodyTransformed = encoding !== '' && encoding !== 'identity'
+
+  const out = new Headers()
+  headers.forEach((value, key) => {
+    const lower = key.toLowerCase()
+    if (!RESPONSE_HEADER_ALLOWLIST.includes(lower)) return
+    if (lower === 'content-length' && bodyTransformed) return
+    out.set(key, value)
+  })
+
+  const location = headers.get('location')
+  if (location && base) {
+    try {
+      const target = new URL(location, usedUrl).toString()
+      if (isWithinUpstreamScope(base, target)) out.set('location', target)
+      else out.delete('location')
+    } catch {
+      out.delete('location')
+    }
   }
-
-  const customOrigins = env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
-  return [...new Set([...defaultOrigins, ...customOrigins])]
+  return out
 }
 
-// 提取域名的核心部分（去掉协议和尾部斜杠）
-function normalizeDomain(domain) {
-  return domain
-    .replace(/^https?:\/\//, '')
-    .replace(/\/$/, '')
-    .toLowerCase()
-}
-
-function corsHeaders(origin, requestOrigin, allowedOrigins) {
-  const normalizedOrigin = origin ? normalizeDomain(origin) : ''
-  const normalizedRequestOrigin = requestOrigin ? normalizeDomain(requestOrigin) : ''
-  const normalizedAllowed = allowedOrigins.map(normalizeDomain)
-
-  const allowOrigin = normalizedOrigin && normalizedAllowed.includes(normalizedOrigin)
-    ? origin
-    : (normalizedAllowed.includes(normalizedRequestOrigin) ? requestOrigin : 'null')
-
-  return {
-    'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Methods': 'OPTIONS, PROPFIND, GET, PUT, POST, DELETE, MKCOL, MOVE, COPY, HEAD',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type, Depth, If-Match, If-None-Match, Range, X-Requested-With, X-WebDAV-Base, X-WebDAV-Path, X-Request-Origin',
-    'Access-Control-Expose-Headers': 'X-Proxy-Error',
-    'Access-Control-Max-Age': '86400',
-    'Cache-Control': 'no-store, no-cache, must-revalidate',
-    'Pragma': 'no-cache'
-  }
-}
-
-// 代理自身产生的错误：带 X-Proxy-Error，客户端据此与上游同状态码区分
 function proxyError(message, status, cors) {
   return new Response(message, {
     status,
-    headers: { ...cors, 'Content-Type': 'text/plain; charset=utf-8', 'X-Proxy-Error': '1' }
+    headers: { 'Content-Type': 'text/plain;charset=utf-8', 'X-Proxy-Error': '1', ...cors },
   })
 }
 
-function isAllowedOrigin(origin, requestOrigin, allowedOrigins) {
-  const normalizedAllowed = allowedOrigins.map(normalizeDomain)
-  const normalizedOrigin = origin ? normalizeDomain(origin) : ''
-  const normalizedRequestOrigin = requestOrigin ? normalizeDomain(requestOrigin) : ''
-
-  // 优先信任浏览器 Origin；两者同时存在时以 Origin 为准，忽略可伪造的 X-Request-Origin
-  if (normalizedOrigin) {
-    return normalizedAllowed.includes(normalizedOrigin)
-  }
-  // 无 Origin（部分同源/非浏览器场景）时才回退 X-Request-Origin 白名单
-  if (normalizedRequestOrigin) {
-    return normalizedAllowed.includes(normalizedRequestOrigin)
-  }
-  return false
-}
-
-function isAllowedMethod(method) {
-  return ['OPTIONS', 'PROPFIND', 'GET', 'PUT', 'POST', 'DELETE', 'MKCOL', 'MOVE', 'COPY', 'HEAD'].includes(method)
-}
-
-// 解析重定向目标；不在 base 作用域内（跨源/越界/私网）返回 null
 function resolveRedirectTarget(base, location, currentUrl) {
   try {
     const target = new URL(location, currentUrl).toString()
@@ -102,88 +95,79 @@ function resolveRedirectTarget(base, location, currentUrl) {
   }
 }
 
-function filterResponseHeaders(headers, base, currentUrl) {
-  const out = new Headers()
-  // 上游做了内容编码（gzip 等）时，fetch 已把正文解码，content-length 仍是压缩后的长度；
-  // 透传会让客户端按错误长度截断正文（PROPFIND 列表解析为空），此时必须丢弃该头
-  const encoding = (headers.get('content-encoding') || '').trim().toLowerCase()
-  const bodyTransformed = encoding !== '' && encoding !== 'identity'
-  RESPONSE_HEADER_ALLOWLIST.forEach((key) => {
-    if (key === 'content-length' && bodyTransformed) return
-    const value = headers.get(key)
-    if (value !== null) out.set(key, value)
-  })
-  const location = headers.get('location')
-  if (location && resolveRedirectTarget(base, location, currentUrl)) {
-    out.set('location', location)
-  }
-  return out
-}
-
-function filterRequestHeaders(headers) {
-  const upstreamHeaders = new Headers()
-  headers.forEach((value, key) => {
-    const lowerKey = key.toLowerCase()
-    if (['origin', 'referer', 'host', 'x-webdav-base', 'x-webdav-path'].includes(lowerKey)) {
-      return
-    }
-    upstreamHeaders.set(key, value)
-  })
-  return upstreamHeaders
-}
-
 export async function onRequest(context) {
   const { request, env } = context
-  const allowedOrigins = getAllowedOrigins(env)
   const origin = request.headers.get('Origin') || ''
   const requestOrigin = request.headers.get('X-Request-Origin') || ''
-  const cors = corsHeaders(origin, requestOrigin, allowedOrigins)
+  const allowedOrigins = getAllowedOrigins(env)
+  const cors = withCors({}, origin, requestOrigin, allowedOrigins)
 
   if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: cors })
+    return new Response(null, { status: 204, headers: corsHeaders('OPTIONS, PROPFIND, GET, PUT, POST, DELETE, MKCOL, MOVE, COPY, HEAD') })
   }
 
-  if (!isAllowedMethod(request.method)) {
+  if (!ALLOWED_METHODS.includes(request.method)) {
     return proxyError('Method not allowed', 405, cors)
   }
 
-  if (!isAllowedOrigin(origin, requestOrigin, allowedOrigins)) {
+  if (origin && !isAllowedOrigin(origin, requestOrigin, allowedOrigins) && !isSameOriginRequest(request, origin)) {
     return proxyError('Origin not allowed', 403, cors)
   }
 
   const url = new URL(request.url)
-  const headerBase = request.headers.get('X-WebDAV-Base') || ''
   const headerPath = request.headers.get('X-WebDAV-Path') || ''
-  const base = headerBase || url.searchParams.get('base') || ''
   const path = headerPath || url.searchParams.get('path') || '/'
 
-  if (!isValidUpstreamBase(base)) {
+  let dav
+  try {
+    dav = await resolveWebdav(env)
+  } catch (error) {
+    if (error?.code === 'kv_missing') return proxyError('KV not configured', 500, cors)
+    throw error
+  }
+
+  if (!dav.serverUrl) {
+    return proxyError('WebDAV is not configured', 400, cors)
+  }
+  if (!dav.basicAuth) {
+    return proxyError('WebDAV credentials are incomplete', 400, cors)
+  }
+  if (!isValidUpstreamBase(dav.serverUrl)) {
     return proxyError('Invalid upstream base URL', 400, cors)
   }
 
-  const upstreamUrl = resolveScopedUpstreamUrl(base, path)
+  const upstreamUrl = resolveScopedUpstreamUrl(dav.serverUrl, path)
   if (!upstreamUrl) {
     return proxyError('Invalid upstream path', 400, cors)
   }
+
   const upstreamHeaders = filterRequestHeaders(request.headers)
-  upstreamHeaders.delete('X-WebDAV-Base')
-  upstreamHeaders.delete('X-WebDAV-Path')
+  upstreamHeaders.set('Authorization', dav.basicAuth)
 
   const declaredLength = Number(request.headers.get('Content-Length') || 0)
   if (declaredLength > MAX_BODY_BYTES) {
     return proxyError('Payload too large', 413, cors)
   }
-  const bodyBuffer = request.body ? await request.arrayBuffer() : null
-  // 无 Content-Length（chunked）时读完再校验实际大小
-  if (bodyBuffer && bodyBuffer.byteLength > MAX_BODY_BYTES) {
-    return proxyError('Payload too large', 413, cors)
+
+  // 长度已知且在限额内 → 直接流式转发（大文件不必整体读进 128MB 的 Worker 内存）
+  // 长度未知（chunked）时才缓冲一次来量实际大小。
+  let body = request.body
+  let buffered = null
+  if (request.body && !declaredLength) {
+    const buffer = await request.arrayBuffer()
+    if (buffer.byteLength > MAX_BODY_BYTES) return proxyError('Payload too large', 413, cors)
+    body = buffer
+    buffered = buffer
   }
-  const buildRequest = (url) => new Request(url, {
-    method: request.method,
-    headers: upstreamHeaders,
-    body: bodyBuffer,
-    redirect: 'manual'
-  })
+  void buffered
+
+  const buildRequest = (target) =>
+    new Request(target, {
+      method: request.method,
+      headers: upstreamHeaders,
+      body,
+      redirect: 'manual',
+    })
 
   let currentUrl = upstreamUrl
   let response
@@ -196,7 +180,7 @@ export async function onRequest(context) {
   // 只在重定向目标仍处于 base 作用域（同源 + 路径前缀）时跟随一次；跨源不跟随，凭据不外泄
   if (response.status >= 300 && response.status < 400) {
     const location = response.headers.get('location')
-    const redirectUrl = location ? resolveRedirectTarget(base, location, currentUrl) : null
+    const redirectUrl = location ? resolveRedirectTarget(dav.serverUrl, location, currentUrl) : null
     if (redirectUrl) {
       currentUrl = redirectUrl
       try {
@@ -207,17 +191,9 @@ export async function onRequest(context) {
     }
   }
 
-  const responseHeaders = filterResponseHeaders(response.headers, base, currentUrl)
-  Object.entries(cors).forEach(([key, value]) => {
-    responseHeaders.set(key, value)
-  })
+  const responseHeaders = filterResponseHeaders(response.headers, dav.serverUrl, currentUrl)
+  Object.entries(cors).forEach(([key, value]) => responseHeaders.set(key, value))
+  if (response.status >= 300 && response.status < 400) responseHeaders.delete('location')
 
-  if (response.status >= 300 && response.status < 400) {
-    responseHeaders.delete('location')
-  }
-
-  return new Response(response.body, {
-    status: response.status,
-    headers: responseHeaders
-  })
+  return new Response(response.body, { status: response.status, headers: responseHeaders })
 }

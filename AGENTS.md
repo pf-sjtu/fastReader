@@ -80,31 +80,48 @@ git push -u origin HEAD
 
 ## Architecture
 - **SPA**: React 19 + TypeScript + Vite
-- **State**: Zustand with persistence
+- **Server**: Cloudflare Pages Functions（`functions/`）+ Workers KV（绑定名 `FASTREADER_KV`）
+- **State**: Zustand，数据来自服务端共享状态；本地只留 UI 偏好与 IndexedDB 章节缓存
+- **Auth**: 共享密码登录（`APP_PASSWORD`，缺省 `123456a`），HttpOnly 签名 Cookie
 - **UI**: shadcn/ui + Tailwind CSS
 - **Files**: epubjs (EPUB) + pdfjs-dist (PDF)
-- **AI**: Gemini/OpenAI/Ollama/302.ai via config-driven service layer
+- **AI**: 服务商化配置（OpenAI 兼容 / Gemini REST / Ollama 直连）+ models.dev 元数据
 - **Cloud**: WebDAV (nutz, Nextcloud, ownCloud)
 - **MindMap**: mind-elixir
 
 ## Key Patterns
 - Service layer (`services/`) handles business logic；单书与批量共用 `services/pipeline/bookPipeline.ts`
 - `useBookProcessing` 只做组合，逻辑在 `useBookFile` / `useProcessingRun` / `useKeyCharts` / `useReaderPanel`
-- Store：每类持久化数据只在一个子 store（`stores/*/index.ts`，带 version/migrate）；`configStore` 是不持久化的兼容壳；订阅一律用 selector
-- Prompts versioned (v1/v2) YAML in `services/prompts/config/`，前端 `renderPrompt` 与 CLI `render_prompt` 同语义（见该目录 README）
+- **共享状态**：每类数据对应一个分区（`ai|processing|webdav|prompts|history|batch|usage`），子 store 用 `registerSection()` 绑定；
+  写入经 `markDirty()` 防抖、`POST /api/state/:section/append` 处理追加型数据（历史/用量）。子 store **不再使用** zustand `persist`。
+- **秘密字段**（`apiKey`/`password`）只存在于服务端：客户端状态是 `{ hasSecret: true }`，新输入经 `setProviderSecret` /
+  `setWebDAVPassword` 暂存于内存 pending，随写回提交后被清掉。服务端 `functions/_lib/secrets.js` 负责脱敏与合并。
+- **AI 请求**一律走 `/api/ai`（`services/ai/utils.ts#proxyFetch`）：客户端只传 `X-Provider-Id` 与相对 baseUrl 的端点路径，
+  base 与凭据由服务端注入。Ollama 例外（本机地址，浏览器直连）。
+- Prompts 只有 v2（`services/prompts/config/v2-prompts.yaml`）；用户自定义以「相对默认的覆盖项」存于 `prompts` 分区，
+  前端 `renderPrompt` 与 CLI `render_prompt` 同语义（见该目录 README）
 - 章节缓存：IndexedDB，键含文件指纹/内容/模型/prompt/语言（`services/pipeline/cacheKeys.ts`）
 - 结果状态统一用 `utils/resultStatus.ts`（失败/跳过前缀），书籍 HTML 入 DOM 前必经 `utils/sanitizeHtml.ts`
-- 前端与 CLI 的共享契约以 `tests/fixtures/` 下的样例为准（两端测试都读）
+- 价格：`services/ai/catalog.ts` 用 models.dev 元数据匹配，`services/metadataFormatter.ts` 通过 `setPricingProvider` /
+  `setExchangeRateProvider` 注入（`services/pricingBridge.ts` 在启动时接好）；查不到价格时标 `pricingKnown:false`，不估价
+- 前端与 CLI 的共享契约以 `tests/fixtures/` 下的样例为准（两端测试都读）。1.0.0 与 2.0.0 配置都能读：
+  `tests/fixtures/config/legacy-export-2026-08.yaml`（1.0.0）与 `export-v2.sample.yaml`（2.0.0）
 
 ## Cloud Cache Reading
 - 检查 WebDAV 上 `{syncPath}/{sanitizedName}-完整摘要.md` 是否存在
 - 发现缓存后提示用户可直接查看或重新处理
 - 缓存元数据以 HTML 注释格式存储在文件头部
 
+## Deployment
+- `wrangler.toml` 声明 `pages_build_output_dir = "dist"` 与 KV 绑定 `FASTREADER_KV`
+- 环境变量：`APP_PASSWORD`（缺省 `123456a`）、`SESSION_SECRET`（可选，缺省由密码派生）、`ALLOWED_ORIGINS`（可选）
+- 本地开发只能用 `wrangler pages dev`（见 `docs/deploy.md`）；`vite.config.ts` 不再有 dev proxy
+- 改密码会让所有已签发的会话立即失效（Cookie 签名里带密码指纹）
+
 ## Processing Metadata
 - 保存处理结果时在文件头部添加 HTML 注释格式的元数据
 - 包含：来源、文件名、处理时间、模型、章节信息、Token 使用情况、费用等
-- 支持汇率配置（USD -> CNY，默认 7.0）
+- 汇率来自共享处理配置（`exchangeRateUsdToCny`，默认 7.0），不再读 `process.env`
 
 ## CLI Tool (src/cli/)
 - 命令：`uv run python -m src.cli.main batch -c config.yaml`（依赖见 `pyproject.toml`，测试 `uv run pytest -q`）
@@ -120,7 +137,8 @@ git push -u origin HEAD
 - Tests: `tests/` directory
 
 ## WebDAV CORS 代理
-- 前端 WebDAV 请求走同源 `/api/dav`
-- Cloudflare Pages Functions 代理读取 `X-WebDAV-Base` 与 `X-WebDAV-Path`
+- 前端 WebDAV 请求走同源 `/api/dav`，只传路径（`X-WebDAV-Path`）
+- **上游 base（serverUrl）与凭据从共享状态 `state:webdav` 取**，客户端自带的 `Authorization` / `X-WebDAV-Base` 一律丢弃
 - 代理必须校验 Origin 白名单与 https base URL，最终上游 URL 必须与 base 同源且在其路径下；代理自身错误带 `X-Proxy-Error: 1`
+- 客户端侧 `webdavService` 因此不再拼 Basic Auth，也不再需要明文密码
 - CSP 在 `public/_headers`；connect-src 不收窄到具体主机（用户自定义 AI 服务商）

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { markDirty, registerSection } from '../services/shared/sharedState'
 
 /**
  * 队列项状态
@@ -91,6 +91,44 @@ export interface BatchProcessingState {
   getNextPendingItem: () => BatchQueueItem | null
   getCurrentItem: () => BatchQueueItem | null
   resetStats: () => void
+
+  // 执行租约：共享队列同一时刻只允许一个浏览器执行
+  runner: BatchRunnerLease | null
+  /** 本客户端的标识（每次加载页面生成一次） */
+  clientId: string
+  acquireRunner: () => boolean
+  /** 执行期间每 30s 续租（单本书常常超过 RUNNER_TIMEOUT_MS，只在每本书开始时续是不够的） */
+  startHeartbeat: () => void
+  stopHeartbeat: () => void
+  heartbeatRunner: () => void
+  releaseRunner: () => void
+  isRunnerStale: () => boolean
+}
+
+/** 批量队列的执行租约 */
+export interface BatchRunnerLease {
+  clientId: string
+  startedAt: string
+  heartbeatAt: string
+}
+
+/** 心跳超过该时长视为执行者已失效，允许他人接管 */
+export const RUNNER_TIMEOUT_MS = 2 * 60 * 1000
+
+/** 续租间隔：必须远小于 RUNNER_TIMEOUT_MS（后台标签页的定时器会被节流到约 1 分钟） */
+export const RUNNER_HEARTBEAT_MS = 30 * 1000
+
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+
+/** 批量队列写回服务端的防抖（队列项进度更新很频繁，必须节流） */
+const BATCH_DEBOUNCE_MS = 15_000
+
+function newClientId(): string {
+  const random =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+      : Math.random().toString(36).slice(2, 10)
+  return `c${random}`
 }
 
 /**
@@ -99,12 +137,17 @@ export interface BatchProcessingState {
  */
 export function restoreBatchQueue(
   persisted: unknown,
-  current: BatchProcessingState
+  current: BatchProcessingState,
+  options: { keepProcessing?: boolean } = {}
 ): BatchProcessingState {
   if (!persisted) return current
   const p = persisted as Partial<BatchProcessingState>
+  // 有活跃执行者时不能把 processing 降级成 pending：否则只读观察者每 60s 轮询一次，
+  // 执行者的进度就会被他自己也归零（两边都看不到真实进度）。
   const queue = (Array.isArray(p.queue) ? p.queue : []).map((item) =>
-    item.status === 'processing' ? { ...item, status: 'pending' as QueueItemStatus, progress: 0 } : item
+    !options.keepProcessing && item.status === 'processing'
+      ? { ...item, status: 'pending' as QueueItemStatus, progress: 0 }
+      : item
   )
   const count = (s: QueueItemStatus) => queue.filter((i) => i.status === s).length
   return {
@@ -112,8 +155,8 @@ export function restoreBatchQueue(
     queue,
     config: p.config ?? current.config,
     isPaused: typeof p.isPaused === 'boolean' ? p.isPaused : current.isPaused,
-    isProcessing: false,
-    currentItemIndex: -1,
+    isProcessing: options.keepProcessing ? current.isProcessing : false,
+    currentItemIndex: options.keepProcessing ? current.currentItemIndex : -1,
     stats: {
       ...current.stats,
       total: queue.length,
@@ -128,14 +171,15 @@ export function restoreBatchQueue(
  * 批量队列状态管理 Store
  */
 export const useBatchQueueStore = create<BatchProcessingState>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       // 初始状态
       queue: [],
       config: null,
       isProcessing: false,
       isPaused: false,
       currentItemIndex: -1,
+      runner: null,
+      clientId: newClientId(),
       stats: {
         total: 0,
         completed: 0,
@@ -212,6 +256,11 @@ export const useBatchQueueStore = create<BatchProcessingState>()(
       startProcessing: () => {
         const state = get()
         if (state.queue.length === 0) return
+        // 未显式申请租约时补一个（持有者仍是本客户端）
+        if (!state.runner || state.runner.clientId !== state.clientId) {
+          const now = new Date().toISOString()
+          set({ runner: { clientId: state.clientId, startedAt: now, heartbeatAt: now } })
+        }
 
         // 找到第一个待处理的项
         const nextIndex = state.queue.findIndex((i) => i.status === 'pending')
@@ -369,6 +418,61 @@ export const useBatchQueueStore = create<BatchProcessingState>()(
         return state.queue[state.currentItemIndex]
       },
 
+      // ===== 执行租约 =====
+      isRunnerStale: () => {
+        const runner = get().runner
+        if (!runner) return true
+        const heartbeat = Date.parse(runner.heartbeatAt)
+        if (!Number.isFinite(heartbeat)) return true
+        return Date.now() - heartbeat > RUNNER_TIMEOUT_MS
+      },
+
+      acquireRunner: () => {
+        const state = get()
+        const runner = state.runner
+        const free = !runner || state.isRunnerStale() || runner.clientId === state.clientId
+        if (!free) return false
+        const now = new Date().toISOString()
+        set({
+          runner: { clientId: state.clientId, startedAt: runner?.clientId === state.clientId ? runner.startedAt : now, heartbeatAt: now },
+        })
+        markDirty(BATCH_SECTION, 0)
+        get().startHeartbeat()
+        return true
+      },
+
+      startHeartbeat: () => {
+        if (heartbeatTimer !== null) return
+        heartbeatTimer = setInterval(() => {
+          const state = get()
+          if (!state.runner || state.runner.clientId !== state.clientId) {
+            get().stopHeartbeat()
+            return
+          }
+          state.heartbeatRunner()
+        }, RUNNER_HEARTBEAT_MS)
+      },
+
+      stopHeartbeat: () => {
+        if (heartbeatTimer === null) return
+        clearInterval(heartbeatTimer)
+        heartbeatTimer = null
+      },
+
+      heartbeatRunner: () => {
+        const state = get()
+        if (!state.runner || state.runner.clientId !== state.clientId) return
+        set({ runner: { ...state.runner, heartbeatAt: new Date().toISOString() } })
+        markDirty(BATCH_SECTION, 0)
+      },
+
+      releaseRunner: () => {
+        get().stopHeartbeat()
+        if (!get().runner) return
+        set({ runner: null })
+        markDirty(BATCH_SECTION, 0)
+      },
+
       // 重置统计
       resetStats: () =>
         set({
@@ -381,23 +485,61 @@ export const useBatchQueueStore = create<BatchProcessingState>()(
             totalCostRMB: 0
           }
         })
-    }),
-    {
-      name: 'fastReader-batch-queue',
-      storage: createJSONStorage(() => localStorage),
-      version: 1,
-      partialize: (state) => ({
-        queue: state.queue.filter(
-          (item) => item.status === 'pending' || item.status === 'processing'
-        ),
-        config: state.config,
-        isPaused: state.isPaused
-      }),
-      migrate: (persisted) => persisted as Partial<BatchProcessingState>,
-      merge: (persisted, current) => restoreBatchQueue(persisted, current)
-    }
-  )
+  })
 )
+
+/** 共享分区 `batch` 的数据形态 */
+export interface BatchSectionData {
+  queue: BatchQueueItem[]
+  config: BatchProcessingConfig | null
+  isPaused: boolean
+  runner: BatchRunnerLease | null
+}
+
+const BATCH_SECTION = 'batch' as const
+
+registerSection<BatchSectionData>(
+  BATCH_SECTION,
+  {
+    getData: () => {
+      const { queue, config, isPaused, runner } = useBatchQueueStore.getState()
+      return { queue, config, isPaused, runner }
+    },
+    setData: (data) => {
+      const current = useBatchQueueStore.getState()
+      const incomingRunner = data?.runner ?? null
+      const runnerAlive =
+        !!incomingRunner &&
+        Number.isFinite(Date.parse(incomingRunner.heartbeatAt)) &&
+        Date.now() - Date.parse(incomingRunner.heartbeatAt) <= RUNNER_TIMEOUT_MS
+
+      const restored = restoreBatchQueue(data, current, { keepProcessing: runnerAlive })
+      useBatchQueueStore.setState({
+        ...restored,
+        runner: incomingRunner,
+        // 别人的租约有效时不覆盖本地的 clientId
+        clientId: current.clientId,
+        // 只读观察者不要因为收到别人的 runner 就以为自己在跑
+        isProcessing: current.runner?.clientId === current.clientId ? current.isProcessing : false,
+        currentItemIndex: current.runner?.clientId === current.clientId ? current.currentItemIndex : -1,
+      })
+    },
+    debounceMs: BATCH_DEBOUNCE_MS,
+  },
+  { autoWrite: false }
+)
+
+// 队列变化（进度更新很频繁）→ 15s 防抖写回服务端
+useBatchQueueStore.subscribe((state, prev) => {
+  if (
+    state.queue !== prev.queue ||
+    state.config !== prev.config ||
+    state.isPaused !== prev.isPaused ||
+    state.runner !== prev.runner
+  ) {
+    markDirty(BATCH_SECTION)
+  }
+})
 
 // 选择器hooks
 export const useBatchQueue = () => useBatchQueueStore((state) => state.queue)

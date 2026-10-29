@@ -147,8 +147,12 @@ class ConfigLoader:
             # 处理嵌套 config 结构（如ebook-to-mindmap-config-v2.yaml）
             # 如果存在 'config' 键且不包含预期的顶级键，则使用嵌套结构
             if 'config' in raw_config and isinstance(raw_config['config'], dict):
-                if 'webdav' not in raw_config and 'aiConfigManager' in raw_config['config']:
-                    raw_config = raw_config['config']
+                nested = raw_config['config']
+                # 1.0.0 用 aiConfigManager，2.0.0 用 ai.providers
+                if 'webdav' not in raw_config and (
+                    'aiConfigManager' in nested or isinstance(nested.get('ai'), dict)
+                ):
+                    raw_config = nested
 
             # 解析各部分配置
             # 对于嵌套结构，解析方法内部会处理相应的子键
@@ -222,8 +226,55 @@ class ConfigLoader:
             missingEnvVars=missing,
         )
 
+    def _parse_ai_v2(self, ai: dict) -> AIConfig:
+        """解析 2.0.0 结构：ai.providers[].models[] + ai.active
+
+        每一「服务商」展开成多个 AIProviderConfig（CLI 的既有多提供商模型不变），
+        并把 ai.active 指向的那个模型设为当前项。
+        """
+        providers: list = [AIProviderConfig]
+        providers = []
+        active_ids = ai.get('active') or {}
+        active_provider = str(active_ids.get('providerId') or '')
+        active_model = str(active_ids.get('modelId') or '')
+        current_index = 0
+
+        for provider in ai.get('providers') or []:
+            if not isinstance(provider, dict):
+                continue
+            missing: list = []
+            base_url = self._replace_env_vars(str(provider.get('baseUrl') or ''), missing)
+            api_key = self._replace_env_vars(str(provider.get('apiKey') or ''), missing)
+            protocol = str(provider.get('type') or 'openai')
+            enabled_models = [
+                m for m in (provider.get('models') or [])
+                if isinstance(m, dict) and m.get('id') and m.get('enabled', True) is not False
+            ]
+            for model in enabled_models:
+                model_id = str(model.get('id'))
+                if (str(provider.get('id') or '') == active_provider
+                        and model_id == active_model):
+                    current_index = len(providers)
+                providers.append(AIProviderConfig(
+                    provider=protocol,
+                    apiKey=api_key,
+                    apiUrl=base_url,
+                    model=model_id,
+                    temperature=float(model.get('temperature', ai.get('defaultTemperature', 0.7)) or 0.7),
+                    missingEnvVars=list(missing),
+                ))
+
+        if not providers:
+            return AIConfig(providers=[], currentProviderIndex=0)
+
+        return AIConfig(providers=providers, currentProviderIndex=min(current_index, len(providers) - 1))
+
     def _parse_ai(self, data: dict) -> AIConfig:
-        """解析 AI 配置（支持多提供商）"""
+        """解析 AI 配置（支持 1.0.0 的扁平列表与 2.0.0 的服务商结构）"""
+        ai_section = data.get('ai')
+        if isinstance(ai_section, dict) and isinstance(ai_section.get('providers'), list):
+            return self._parse_ai_v2(ai_section)
+
         # 处理嵌套或不同命名的结构
         if 'aiConfigManager' in data:
             data = data['aiConfigManager']
