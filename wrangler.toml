@@ -1,7 +1,8 @@
 # Cloudflare Pages 配置（wrangler pages deploy / pages dev 使用）
 #
 # 首次部署步骤见 docs/deploy.md：
-#   1. `wrangler kv namespace create FASTREADER_KV` 拿到 id，填到下面的 id 字段
+#   1. KV namespace 已创建（fastreader-shared-state）；fork 部署需换成自己的 id
+#      注意：wrangler.toml 里的绑定会覆盖 Dashboard 里的设置
 #   2. 在 Cloudflare Dashboard → Pages → 项目 → Settings → Environment variables 设置
 #        APP_PASSWORD   共享登录密码（缺省 123456a）
 #        SESSION_SECRET 可选，缺省由 APP_PASSWORD 派生；改密码会使所有会话失效
@@ -13,7 +14,7 @@ pages_build_output_dir = "dist"
 compatibility_date = "2025-01-01"
 
 kv_namespaces = [
-  { binding = "FASTREADER_KV", id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" }
+  { binding = "FASTREADER_KV", id = "a4169b1ae0684d559ce632cfca325c91" }
 ]
 
 # 本地开发（wrangler pages dev）用的预览 KV，id 指向同一 namespace 也可

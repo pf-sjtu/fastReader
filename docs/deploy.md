@@ -17,7 +17,8 @@ fastReader 从「纯浏览器 SPA」改成了「Pages Functions + 共享状态�
 pnpm dlx wrangler kv namespace create FASTREADER_KV
 ```
 
-把输出里的 `id` 填进 `wrangler.toml` 的 `kv_namespaces`：
+把输出里的 `id` 填进 `wrangler.toml` 的 `kv_namespaces`（**必须填**：`wrangler.toml` 存在时，Pages 部署以它的绑定为准，
+会覆盖 Dashboard 里的设置；占位符会导致部署报 `Invalid KV namespace ID`）。KV namespace id 不是密钥，可以提交：
 
 ```toml
 kv_namespaces = [
