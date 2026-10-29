@@ -12,6 +12,7 @@ const PROTOCOL_LABEL: Record<ProviderEntry['type'], string> = {
   openai: 'OpenAI',
   gemini: 'Gemini',
   ollama: 'Ollama',
+  anthropic: 'Anthropic',
 }
 
 interface ProviderCardProps {

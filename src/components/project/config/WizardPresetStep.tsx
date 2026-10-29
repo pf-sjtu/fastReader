@@ -80,11 +80,13 @@ export function WizardPresetStep({ catalog, onPick }: WizardPresetStepProps) {
     openai: t('aiProvider.wizard.fixed.openaiDesc'),
     gemini: t('aiProvider.wizard.fixed.geminiDesc'),
     ollama: t('aiProvider.wizard.fixed.ollamaDesc'),
+    anthropic: t('aiProvider.wizard.fixed.anthropicDesc'),
   }
   const fixedTitle: Record<AIProtocol, string> = {
     openai: t('aiProvider.wizard.fixed.openai'),
     gemini: t('aiProvider.wizard.fixed.gemini'),
     ollama: t('aiProvider.wizard.fixed.ollama'),
+    anthropic: t('aiProvider.wizard.fixed.anthropic'),
   }
 
   return (

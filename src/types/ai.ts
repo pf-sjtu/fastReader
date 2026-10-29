@@ -12,12 +12,13 @@ import type { SupportedLanguage } from '../services/prompts/utils'
  * - openai：OpenAI 兼容 `/chat/completions` 与 `/models`
  * - gemini：Google Generative Language REST
  * - ollama：本地 Ollama（浏览器直连，不经代理）
+ * - anthropic：Anthropic Messages（`/messages`；Kiro 等只提供该协议的网关）
  * - 302.ai / custom：历史值，等价于 openai 兼容
  */
-export type AIProviderType = 'gemini' | 'openai' | 'ollama' | '302.ai' | 'custom'
+export type AIProviderType = 'gemini' | 'openai' | 'ollama' | 'anthropic' | '302.ai' | 'custom'
 
 /** 新的协议枚举（服务商配置使用；302.ai/custom 归一化为 openai） */
-export type AIProtocol = 'openai' | 'gemini' | 'ollama'
+export type AIProtocol = 'openai' | 'gemini' | 'ollama' | 'anthropic'
 
 /**
  * 模型元数据（来自 models.dev，可缺失）

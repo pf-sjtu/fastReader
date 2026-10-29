@@ -103,7 +103,8 @@ describe('AI provider 工厂', () => {
 
   it('不支持的 provider 抛错；支持列表与判定', () => {
     expect(() => createAIProvider({ ...base, provider: 'x' as never })).toThrow('不支持的 AI Provider')
-    expect(getSupportedProviders().map((p) => p.type)).toEqual(['gemini', 'openai', '302.ai', 'ollama'])
+    expect(getSupportedProviders().map((p) => p.type)).toEqual(['gemini', 'openai', '302.ai', 'ollama', 'anthropic'])
+    expect(isProviderSupported('anthropic')).toBe(true)
     expect(isProviderSupported('ollama')).toBe(true)
     expect(isProviderSupported('nope')).toBe(false)
   })

@@ -25,6 +25,8 @@ const DROP_REQUEST_HEADERS = new Set([
   'x-provider-id',
   'authorization',
   'x-goog-api-key',
+  'x-api-key',
+  'anthropic-version',
   'cookie',
   'content-length',
 ])

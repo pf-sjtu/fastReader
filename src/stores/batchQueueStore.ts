@@ -16,6 +16,8 @@ export interface BatchQueueItem {
   status: QueueItemStatus
   progress: number // 0-100
   error?: string
+  /** 已自动重试的次数（无人值守时，瞬时失败——网络/限流/上游 5xx——自动再排一次） */
+  attempts?: number
   metadata?: {
     chapterCount?: number
     processedChapters?: number
@@ -86,6 +88,8 @@ export interface BatchProcessingState {
   updateItem: (id: string, updates: Partial<BatchQueueItem>) => void
   markItemCompleted: (id: string, metadata?: BatchQueueItem['metadata']) => void
   markItemFailed: (id: string, error: string) => void
+  /** 失败但还有重试额度时调用：放回队尾等待重跑，不计入失败数 */
+  requeueItem: (id: string, error: string) => void
   markItemSkipped: (id: string) => void
   nextItem: () => void
   getNextPendingItem: () => BatchQueueItem | null
@@ -348,6 +352,22 @@ export const useBatchQueueStore = create<BatchProcessingState>()(
               failed: state.stats.failed + 1
             }
           }
+        })
+      },
+
+      requeueItem: (id, error) => {
+        set((state) => {
+          const item = state.queue.find((i) => i.id === id)
+          if (!item) return state
+          const retried: BatchQueueItem = {
+            ...item,
+            status: 'pending',
+            progress: 0,
+            error,
+            attempts: (item.attempts ?? 0) + 1,
+          }
+          // 放到队尾：别让一本持续出错的书卡住后面所有书
+          return { queue: [...state.queue.filter((i) => i.id !== id), retried] }
         })
       },
 

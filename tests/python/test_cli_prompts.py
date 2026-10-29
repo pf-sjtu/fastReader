@@ -202,9 +202,12 @@ class TestCost:
         usd, cny = client.calculate_cost(1_000_000, 1_000_000)
         assert usd == 0.75 and cny == round(0.75 * 7.3, 5)
 
-    def test_unknown_model_falls_back(self):
-        assert calculate_cost("unknown", 1_000_000, 0) == (1.25, 8.75)
-        assert FakeClient(model="unknown").get_pricing() == MODEL_PRICING["gemini-1.5-pro"]
+    def test_unknown_model_is_unpriced(self):
+        """未登记模型不再按 gemini-1.5-pro 估价（曾导致费用系统性失真）"""
+        from src.cli.ai_client import is_priced
+        assert calculate_cost("unknown", 1_000_000, 0) == (0.0, 0.0)
+        assert FakeClient(model="unknown").get_pricing() is None
+        assert not is_priced("unknown") and is_priced("gpt-4o-mini")
 
     def test_local_model_free(self):
         assert calculate_cost("llama3", 10**6, 10**6) == (0, 0)
@@ -248,3 +251,23 @@ class TestProviderClients:
     def test_ollama_not_supported(self):
         cfg = MagicMock(provider="ollama", model="llama3", providers=None)
         assert create_ai_client(cfg, Logger()) is None
+
+
+class TestStripThinking:
+    """与前端 tests/aiStripThinking.test.ts 同语义（实测 MiniMax-M3 会把 <think> 写进 content）"""
+
+    def test_leading_block_removed(self):
+        from src.cli.ai_client import strip_thinking
+        assert strip_thinking("<think>先想想</think>\n\n## 本章总结\n正文") == "## 本章总结\n正文"
+        assert strip_thinking("<think>a</think><think>b</think>OK") == "OK"
+        assert strip_thinking("<Thinking>x</Thinking>OK") == "OK"
+
+    def test_inline_mention_untouched(self):
+        from src.cli.ai_client import strip_thinking
+        text = "本章介绍了 <think> 标签。<think>示例</think>"
+        assert strip_thinking(text) == text
+
+    def test_unclosed_becomes_empty(self):
+        from src.cli.ai_client import strip_thinking
+        assert strip_thinking("<think>还没想完") == ""
+        assert strip_thinking("") == ""

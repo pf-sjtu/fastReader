@@ -531,3 +531,32 @@ describe('BatchQueueItem types', () => {
     expect(statuses.length).toBe(5)
   })
 })
+
+describe('无人值守：失败自动重试', () => {
+  it('requeueItem 放回队尾、计数 attempts、不计入失败数', async () => {
+    const { useBatchQueueStore } = await import('../src/stores/batchQueueStore')
+    const store = useBatchQueueStore.getState()
+    store.clearQueue()
+    store.addToQueue([
+      { fileName: 'a.epub', filePath: '/a.epub' },
+      { fileName: 'b.epub', filePath: '/b.epub' },
+    ])
+    const [a] = useBatchQueueStore.getState().queue
+    useBatchQueueStore.getState().requeueItem(a.id, '429 rate limited')
+
+    const q = useBatchQueueStore.getState().queue
+    expect(q.map((i) => i.fileName)).toEqual(['b.epub', 'a.epub'])
+    expect(q[1]).toMatchObject({ status: 'pending', attempts: 1, error: '429 rate limited' })
+    expect(useBatchQueueStore.getState().stats.failed).toBe(0)
+  })
+
+  it('isRetryableFailure：瞬时错误可重试，格式/内容问题不重试', async () => {
+    const { isRetryableFailure } = await import('../src/components/project/batchQueueRunner')
+    expect(isRetryableFailure('Request timeout after 120s')).toBe(true)
+    expect(isRetryableFailure('API流量限制: 429')).toBe(true)
+    expect(isRetryableFailure('upstream 503')).toBe(true)
+    expect(isRetryableFailure('AI 返回空内容')).toBe(true)
+    expect(isRetryableFailure('批量处理不支持该处理模式: weird')).toBe(false)
+    expect(isRetryableFailure('没有可用的章节摘要（失败 2 章）')).toBe(false)
+  })
+})

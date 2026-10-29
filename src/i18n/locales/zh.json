@@ -776,7 +776,9 @@
         "gemini": "Gemini",
         "geminiDesc": "Google Generative Language API",
         "ollama": "Ollama（本地）",
-        "ollamaDesc": "浏览器直连本机，无需密钥"
+        "ollamaDesc": "浏览器直连本机，无需密钥",
+        "anthropic": "Anthropic 协议",
+        "anthropicDesc": "Claude 或只提供 /v1/messages 的网关（如 Kiro）"
       },
       "presets": "来自 models.dev 的服务商",
       "presetCount_one": "{{count}} 家",
@@ -860,7 +862,9 @@
       "finished": "处理完成",
       "finishedDesc": "批量处理已完成，成功 {{completed}} 个，失败 {{failed}} 个",
       "startedDesc": "共 {{count}} 个文件待处理",
-      "itemPartialDesc": "有 {{count}} 章因内容过滤被跳过"
+      "itemPartialDesc": "有 {{count}} 章因内容过滤被跳过",
+      "itemRetrying": "「{{name}}」失败，已放回队尾重试（{{attempt}}/{{max}}）",
+      "takenOver": "上一个执行者已离线，本页已接管并继续批量处理"
     },
     "itemFailed": "处理失败",
     "selectFilesTitle": "请选择文件",

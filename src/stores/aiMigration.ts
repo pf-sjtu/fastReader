@@ -50,6 +50,8 @@ export function toProtocol(provider: string | undefined): AIProtocol {
       return 'gemini'
     case 'ollama':
       return 'ollama'
+    case 'anthropic':
+      return 'anthropic'
     case 'openai':
     case '302.ai':
     case 'custom':

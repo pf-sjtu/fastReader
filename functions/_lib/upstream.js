@@ -5,8 +5,14 @@ import { readSection } from './kv.js'
 export function authHeadersForProtocol(type, apiKey) {
   const headers = {}
   if (!apiKey) return headers
-  if (type === 'gemini') headers['x-goog-api-key'] = apiKey
-  else headers['Authorization'] = `Bearer ${apiKey}`
+  if (type === 'gemini') {
+    headers['x-goog-api-key'] = apiKey
+  } else if (type === 'anthropic') {
+    headers['x-api-key'] = apiKey
+    headers['anthropic-version'] = '2023-06-01'
+  } else {
+    headers['Authorization'] = `Bearer ${apiKey}`
+  }
   return headers
 }
 
@@ -20,7 +26,7 @@ export async function resolveProvider(env, providerId) {
   return {
     id: provider.id,
     name: provider.name,
-    type: provider.type === 'gemini' || provider.type === 'ollama' ? provider.type : 'openai',
+    type: ['gemini', 'ollama', 'anthropic'].includes(provider.type) ? provider.type : 'openai',
     baseUrl: typeof provider.baseUrl === 'string' ? provider.baseUrl : '',
     apiKey: typeof provider.apiKey === 'string' ? provider.apiKey : '',
   }

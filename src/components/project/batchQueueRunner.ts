@@ -6,6 +6,38 @@ import { useConfigStore } from '../../stores/configStore'
 import { batchProcessingEngine, type BatchProcessingResult } from '../../services/batchProcessingEngine'
 import { cloudCacheService } from '../../services/cloudCacheService'
 
+/** 每本书最多自动重试的次数（无人值守批量：瞬时错误自动再排一次队） */
+export const MAX_ITEM_RETRIES = 2
+
+/**
+ * 是否值得自动重试：网络 / 超时 / 限流 / 上游 5xx / 空内容属于瞬时问题；
+ * 解析失败、格式不支持、没有可用章节这类重跑也不会好，直接判失败。
+ */
+export function isRetryableFailure(message: string | undefined): boolean {
+  if (!message) return true
+  const text = message.toLowerCase()
+  const permanent = ['不支持', '没有可用', '未找到', '无章节', 'not supported', 'unsupported', 'invalid epub', '解析失败']
+  if (permanent.some((p) => text.includes(p.toLowerCase()))) return false
+  const transient = ['timeout', '超时', 'network', 'fetch', '429', 'rate', '限流', '502', '503', '504', '500', 'econn', '空内容', 'aborted']
+  return transient.some((p) => text.includes(p))
+}
+
+/** 失败时：有重试额度且属于瞬时错误 → 放回队尾；否则记为失败 */
+function failOrRetry(id: string, reason: string, name: string) {
+  const store = useBatchQueueStore.getState()
+  const item = store.queue.find((i) => i.id === id)
+  const attempts = item?.attempts ?? 0
+  if (attempts < MAX_ITEM_RETRIES && isRetryableFailure(reason)) {
+    store.requeueItem(id, reason)
+    toast.warning(i18n.t('batch.toast.itemRetrying', { name, attempt: attempts + 1, max: MAX_ITEM_RETRIES }), {
+      description: reason,
+    })
+    return
+  }
+  store.markItemFailed(id, reason)
+  toast.error(i18n.t('batch.toast.itemFailed', { name }), { description: reason })
+}
+
 /** 云端缓存文件名集合；null 表示尚未获取（需先确认云端状态） */
 export type CachedNamesRef = { current: Set<string> | null }
 
@@ -99,15 +131,11 @@ export async function processNextPendingItem(cachedNames: CachedNamesRef): Promi
         toast.success(i18n.t('batch.toast.itemDone', { name: nextPending.fileName }))
       }
     } else {
-      markItemFailed(nextPending.id, failReason)
-      toast.error(i18n.t('batch.toast.itemFailed', { name: nextPending.fileName }), {
-        description: result.error
-      })
+      failOrRetry(nextPending.id, failReason, nextPending.fileName)
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : i18n.t('common.unknownError')
-    useBatchQueueStore.getState().markItemFailed(nextPending.id, message)
-    toast.error(i18n.t('batch.toast.itemFailed', { name: nextPending.fileName }), { description: message })
+    failOrRetry(nextPending.id, message, nextPending.fileName)
   }
 
   // 处理期间被用户停止：不再继续（也不报「完成」）

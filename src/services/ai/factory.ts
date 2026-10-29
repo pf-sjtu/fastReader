@@ -7,6 +7,7 @@ import type { AIProviderConfig, AIProviderType, AIServiceOptions, CancellableAIP
 import { GeminiProvider } from './geminiProvider'
 import { OpenAIProvider, Provider302 } from './openaiProvider'
 import { OllamaProvider } from './ollamaProvider'
+import { AnthropicProvider } from './anthropicProvider'
 
 // Provider 注册表
 const providerRegistry: Record<AIProviderType, new (config: AIProviderConfig, options?: AIServiceOptions) => CancellableAIProvider> = {
@@ -14,6 +15,7 @@ const providerRegistry: Record<AIProviderType, new (config: AIProviderConfig, op
   openai: OpenAIProvider,
   '302.ai': Provider302,
   ollama: OllamaProvider,
+  anthropic: AnthropicProvider,
   custom: OpenAIProvider // 自定义 provider 使用 OpenAI 兼容格式
 }
 
@@ -41,7 +43,8 @@ export function getSupportedProviders(): Array<{ type: AIProviderType; name: str
     { type: 'gemini', name: 'Gemini' },
     { type: 'openai', name: 'OpenAI' },
     { type: '302.ai', name: '302.AI' },
-    { type: 'ollama', name: 'Ollama' }
+    { type: 'ollama', name: 'Ollama' },
+    { type: 'anthropic', name: 'Anthropic' }
   ]
 }
 

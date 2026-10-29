@@ -1,4 +1,4 @@
-import { Bot, Globe, Settings, Shield, Zap } from 'lucide-react'
+import { Bot, Globe, Settings, Shield, Sparkles, Zap } from 'lucide-react'
 
 export function ProviderIcon({ provider }: { provider?: string }) {
   switch (provider) {
@@ -8,6 +8,8 @@ export function ProviderIcon({ provider }: { provider?: string }) {
       return <Zap className="h-4 w-4" />
     case 'ollama':
       return <Globe className="h-4 w-4" />
+    case 'anthropic':
+      return <Sparkles className="h-4 w-4" />
     case '302.ai':
       return <Shield className="h-4 w-4" />
     default:

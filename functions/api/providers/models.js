@@ -74,7 +74,7 @@ export async function onRequest(context) {
     return jsonResponse({ error: 'invalid_json' }, 400)
   }
 
-  const type = body?.type === 'gemini' ? 'gemini' : body?.type === 'ollama' ? 'ollama' : 'openai'
+  const type = ['gemini', 'ollama', 'anthropic'].includes(body?.type) ? body.type : 'openai'
 
   if (type === 'ollama') {
     // 服务端无法访问用户本机的 Ollama

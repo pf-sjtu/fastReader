@@ -12,6 +12,7 @@ import type {
 } from './types'
 import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
+import { stripThinking } from './stripThinking'
 
 export class OpenAIProvider extends BaseAIProvider {
   readonly type: AIProviderConfig['provider']
@@ -87,7 +88,8 @@ export class OpenAIProvider extends BaseAIProvider {
     }
 
     return {
-      content: data.choices?.[0]?.message?.content || '',
+      // 部分网关把 <think>…</think> 写进 content：不剥掉会进入摘要与导图解析
+      content: stripThinking(data.choices?.[0]?.message?.content || ''),
       tokenCount: data.usage?.total_tokens,
       finishReason: data.choices?.[0]?.finish_reason
     }

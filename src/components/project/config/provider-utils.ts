@@ -22,6 +22,7 @@ export const FIXED_PRESETS: FixedPreset[] = [
   { key: 'openai', name: 'OpenAI', type: 'openai', baseUrl: 'https://api.openai.com/v1', catalogId: 'openai' },
   { key: 'gemini', name: 'Gemini', type: 'gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', catalogId: 'google' },
   { key: 'ollama', name: 'Ollama', type: 'ollama', baseUrl: 'http://localhost:11434' },
+  { key: 'anthropic', name: 'Anthropic', type: 'anthropic', baseUrl: 'https://api.anthropic.com/v1', catalogId: 'anthropic' },
 ]
 
 /** 协议默认地址（与 services/ai/catalog 的 defaultBaseUrlFor 一致；不引目录模块以保持懒加载） */

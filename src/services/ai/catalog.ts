@@ -67,7 +67,8 @@ export function guessCatalogProviderId(catalog: Catalog, baseUrl: string): strin
 const OFFICIAL_PROVIDERS: Record<string, string[]> = {
   openai: ['openai'],
   gemini: ['google', 'google-vertex'],
-  ollama: []
+  ollama: [],
+  anthropic: ['anthropic']
 }
 
 function providerCandidates(
@@ -176,6 +177,8 @@ export function defaultBaseUrlFor(type: AIProtocol): string {
       return 'https://generativelanguage.googleapis.com/v1beta'
     case 'ollama':
       return 'http://localhost:11434'
+    case 'anthropic':
+      return 'https://api.anthropic.com/v1'
     default:
       return 'https://api.openai.com/v1'
   }

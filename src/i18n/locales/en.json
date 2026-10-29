@@ -776,7 +776,9 @@
         "gemini": "Gemini",
         "geminiDesc": "Google Generative Language API",
         "ollama": "Ollama (local)",
-        "ollamaDesc": "Browser calls your machine, no key"
+        "ollamaDesc": "Browser calls your machine, no key",
+        "anthropic": "Anthropic protocol",
+        "anthropicDesc": "Claude, or gateways that only expose /v1/messages (e.g. Kiro)"
       },
       "presets": "Providers from models.dev",
       "presetCount_one": "{{count}} provider",
@@ -860,7 +862,9 @@
       "finished": "Batch complete",
       "finishedDesc": "{{completed}} succeeded, {{failed}} failed",
       "startedDesc": "{{count}} files queued",
-      "itemPartialDesc": "{{count}} chapters skipped by content filtering"
+      "itemPartialDesc": "{{count}} chapters skipped by content filtering",
+      "itemRetrying": "\"{{name}}\" failed and was re-queued ({{attempt}}/{{max}})",
+      "takenOver": "The previous runner went offline; this page took over the batch"
     },
     "itemFailed": "Processing failed",
     "selectFilesTitle": "No files selected",

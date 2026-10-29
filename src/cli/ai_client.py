@@ -6,6 +6,7 @@ Prompt 组装统一走 prompts.PromptTemplates（与前端共享 YAML），
 各 provider 只实现一次底层调用 _call；重试/超时/错误归一在基类完成。
 """
 
+import re
 from typing import Optional
 from dataclasses import dataclass
 
@@ -45,8 +46,9 @@ MODEL_PRICING = {
     'openai/gpt-4o': {'input': 5.0, 'output': 15.0},
     'openai/gpt-4o-mini': {'input': 0.15, 'output': 0.6},
 }
-# 未知模型的兜底定价（与前端一致）
-FALLBACK_PRICING_MODEL = 'gemini-1.5-pro'
+# 未登记模型不再拿别的模型估价（曾按 gemini-1.5-pro，系统性失真）：费用记 0，由 is_priced() 区分。
+# 需要准确费用时在配置里用 ai.pricing 显式给单价。
+FALLBACK_PRICING_MODEL = None
 
 DEFAULT_TIMEOUT = 120.0
 DEFAULT_EXCHANGE_RATE = 7.0
@@ -55,10 +57,38 @@ MIN_CHAPTER_CHARS = 100
 SKIPPED_SHORT_TEXT = f"{RESULT_PREFIX['chapterSkipped']}内容太短，可能是非实质性章节"
 
 
+_LEADING_THINK = re.compile(r"^\s*<(think|thinking|reasoning)>[\s\S]*?</\1>\s*", re.I)
+_UNCLOSED_THINK = re.compile(r"^\s*<(think|thinking|reasoning)>", re.I)
+
+
+def strip_thinking(content: str) -> str:
+    """剥掉开头混进正文的 <think>…</think>（语义与前端 services/ai/stripThinking.ts 一致）。
+
+    未闭合的开头思考块视为整段都是思考，返回空串，由上层按「AI 返回空内容」失败重试。
+    """
+    if not content:
+        return content
+    out = content
+    for _ in range(5):
+        if not _LEADING_THINK.match(out):
+            break
+        out = _LEADING_THINK.sub("", out, count=1)
+    if _UNCLOSED_THINK.match(out):
+        return ""
+    return out
+
+
+def is_priced(model: str) -> bool:
+    """模型是否有登记单价（无单价时费用记 0，报告里应标「未计价」）"""
+    return model in MODEL_PRICING
+
+
 def calculate_cost(model: str, input_tokens: int, output_tokens: int,
                    exchange_rate: float = DEFAULT_EXCHANGE_RATE) -> tuple[float, float]:
-    """计算费用 (USD, CNY)，保留 5 位小数（与前端一致）"""
-    pricing = MODEL_PRICING.get(model) or MODEL_PRICING[FALLBACK_PRICING_MODEL]
+    """计算费用 (USD, CNY)，保留 5 位小数（与前端一致）；未登记单价的模型返回 (0, 0)"""
+    pricing = MODEL_PRICING.get(model)
+    if not pricing:
+        return 0.0, 0.0
     cost_usd = (pricing['input'] / 1_000_000) * input_tokens + \
                (pricing['output'] / 1_000_000) * output_tokens
     cost_cny = cost_usd * exchange_rate
@@ -94,9 +124,9 @@ class AIClient:
         self.timeout = timeout
         self.exchange_rate = exchange_rate
 
-    def get_pricing(self) -> dict:
-        """获取模型定价"""
-        return MODEL_PRICING.get(self.model) or MODEL_PRICING[FALLBACK_PRICING_MODEL]
+    def get_pricing(self) -> Optional[dict]:
+        """获取模型定价；未登记返回 None（不再拿别的模型顶替）"""
+        return MODEL_PRICING.get(self.model)
 
     def calculate_cost(self, input_tokens: int, output_tokens: int) -> tuple:
         """计算处理费用（使用配置的汇率）"""
@@ -223,7 +253,7 @@ class OpenAIClient(AIClient):
             temperature=self.temperature,
             max_tokens=max_tokens,
         )
-        content = response.choices[0].message.content or ""
+        content = strip_thinking(response.choices[0].message.content or "")
         usage = getattr(response, 'usage', None)
         in_tok = getattr(usage, 'prompt_tokens', 0) or 0
         out_tok = getattr(usage, 'completion_tokens', 0) or 0

@@ -11,6 +11,7 @@ import { useBatchQueueStore, useBatchProcessingStatus, useBatchStats } from '../
 import { runBatchQueue } from './batchQueueRunner'
 import { BatchStatusBadge } from './batch/BatchStatusBadge'
 import { useBatchQueueControls } from './batch/useBatchQueueControls'
+import { toast } from 'sonner'
 
 export function BatchQueuePanel() {
   const { t } = useTranslation()
@@ -36,6 +37,26 @@ export function BatchQueuePanel() {
       loopRunningRef.current = false
     })
   }, [isStoreProcessing, isStorePaused])
+
+  // 无人值守：队列里还有待处理项、上一个执行者的租约已过期（关页/崩溃/断网 > 2 分钟）时，
+  // 当前页面自动接管并继续跑。用户主动「暂停」的队列不会被接管。
+  const hasPending = queue.some((i) => i.status === 'pending' || i.status === 'processing')
+  useEffect(() => {
+    if (!hasPending || isStoreProcessing || isStorePaused) return
+    const check = () => {
+      const s = useBatchQueueStore.getState()
+      if (!s.runner || s.isPaused || s.isProcessing) return
+      if (s.runner.clientId === s.clientId || !s.isRunnerStale()) return
+      void controls.start().then((started) => {
+        if (started) toast.info(t('batch.toast.takenOver'))
+      })
+    }
+    check()
+    const timer = window.setInterval(check, 30_000)
+    return () => window.clearInterval(timer)
+    // controls 每次渲染都是新对象，只在队列/状态变化时重新挂
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPending, isStoreProcessing, isStorePaused, t])
 
   // Progress percentage
   const progressPercent = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0

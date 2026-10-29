@@ -29,6 +29,8 @@ export { BaseAIProvider } from './baseProvider'
 export { GeminiProvider } from './geminiProvider'
 export { OpenAIProvider, Provider302 } from './openaiProvider'
 export { OllamaProvider } from './ollamaProvider'
+export { AnthropicProvider } from './anthropicProvider'
+export { stripThinking } from './stripThinking'
 
 // 错误与取消
 export { AIRequestError, isAbortError, createAbortError } from './retry'
