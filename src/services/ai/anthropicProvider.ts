@@ -9,8 +9,9 @@ import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
 import { anthropicReasoningParams, isUnsupportedParamError } from './reasoning'
+import { estimatePromptTokens, parseMaxTokensCap, resolveMaxOutputTokens } from './outputBudget'
 
-/** Anthropic 要求显式 max_tokens；章节摘要/导图 JSON 在 8K 内足够 */
+/** Anthropic 要求显式 max_tokens：模型元数据缺失时的保底值 */
 const DEFAULT_MAX_TOKENS = 8192
 
 interface AnthropicContentBlock {
@@ -40,7 +41,10 @@ export class AnthropicProvider extends BaseAIProvider {
     const { prompt, systemPrompt, temperature } = request
     const url = `${this.apiUrl}/messages`
 
-    const reasoning = anthropicReasoningParams(this.config.reasoningEffort, DEFAULT_MAX_TOKENS)
+    let maxTokens =
+      resolveMaxOutputTokens(this.config.maxOutputTokens, this.config.contextWindow, estimatePromptTokens(prompt, systemPrompt)) ??
+      DEFAULT_MAX_TOKENS
+    const reasoning = anthropicReasoningParams(this.config.reasoningEffort, maxTokens)
     const thinkingOn = Object.keys(reasoning.params).length > 0
     const send = (withThinking: boolean) =>
       this.fetchWithProxy(url, {
@@ -48,7 +52,7 @@ export class AnthropicProvider extends BaseAIProvider {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: this.model,
-          max_tokens: withThinking ? reasoning.maxTokens : DEFAULT_MAX_TOKENS,
+          max_tokens: withThinking ? reasoning.maxTokens : maxTokens,
           ...(systemPrompt ? { system: systemPrompt } : {}),
           messages: [{ role: 'user', content: prompt }],
           // 开启 thinking 时 Anthropic 只接受 temperature=1
@@ -59,6 +63,14 @@ export class AnthropicProvider extends BaseAIProvider {
       })
 
     let response = await send(thinkingOn)
+    if (!response.ok && (response.status === 400 || response.status === 422)) {
+      const cap = parseMaxTokensCap(await response.clone().text().catch(() => ''), maxTokens)
+      if (cap) {
+        logger.warn(`[${this.name}] ${this.model} 输出上限 ${maxTokens} 超出服务商范围，按 ${cap} 重试`)
+        maxTokens = cap
+        response = await send(thinkingOn)
+      }
+    }
     if (thinkingOn && !response.ok) {
       const body = await response.clone().text().catch(() => '')
       if (isUnsupportedParamError(response.status, body)) {

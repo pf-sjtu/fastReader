@@ -120,6 +120,10 @@ export interface AIProviderConfig {
   temperature: number
   /** 本次运行生效的思考强度（模型级覆盖 > 全局默认 > auto） */
   reasoningEffort?: ReasoningEffort
+  /** 模型最大输出 token（来自 meta.output）：请求时自动给满，避免推理耗尽预算返回空内容 */
+  maxOutputTokens?: number
+  /** 模型上下文窗口（来自 meta.context）：输出预算不超过「窗口 − 输入」 */
+  contextWindow?: number
   proxyUrl?: string
   proxyEnabled?: boolean
   /** 历史字段：旧配置的附加项，导入时忽略 */

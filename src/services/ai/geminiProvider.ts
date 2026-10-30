@@ -8,6 +8,7 @@ import type { AICallOptions, AIGenerateResult, GenerateContentRequest } from './
 import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { geminiReasoningParams, isUnsupportedParamError } from './reasoning'
+import { estimatePromptTokens, resolveMaxOutputTokens } from './outputBudget'
 
 const DEFAULT_MODEL = 'gemini-2.5-flash'
 
@@ -36,6 +37,11 @@ export class GeminiProvider extends BaseAIProvider {
 
     const url = `${this.apiUrl.replace(/\/+$/, '')}/models/${encodeURIComponent(this.model)}:generateContent`
     const thinking = geminiReasoningParams(this.config.reasoningEffort)
+    const maxTokens = resolveMaxOutputTokens(
+      this.config.maxOutputTokens,
+      this.config.contextWindow,
+      estimatePromptTokens(finalPrompt)
+    )
     const thinkingOn = Object.keys(thinking).length > 0
     const send = (withThinking: boolean) =>
       this.fetchWithProxy(url, {
@@ -43,7 +49,11 @@ export class GeminiProvider extends BaseAIProvider {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
-          generationConfig: { temperature: temperature ?? this.temperature, ...(withThinking ? thinking : {}) },
+          generationConfig: {
+            temperature: temperature ?? this.temperature,
+            ...(maxTokens ? { maxOutputTokens: maxTokens } : {}),
+            ...(withThinking ? thinking : {}),
+          },
         }),
         signal: opts?.signal,
       })

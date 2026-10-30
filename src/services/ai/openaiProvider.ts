@@ -14,6 +14,9 @@ import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
 import { isUnsupportedParamError, openAIReasoningParams } from './reasoning'
+import { estimatePromptTokens, isMaxTokensParamError, parseMaxTokensCap, resolveMaxOutputTokens } from './outputBudget'
+
+type TokenParam = 'max_tokens' | 'max_completion_tokens' | null
 
 export class OpenAIProvider extends BaseAIProvider {
   readonly type: AIProviderConfig['provider']
@@ -55,7 +58,13 @@ export class OpenAIProvider extends BaseAIProvider {
     messages.push({ role: 'user', content: prompt })
 
     const url = `${this.apiUrl}/chat/completions`
-    const send = (withReasoning: boolean) =>
+    // 输出上限自动取模型最大值（meta.output），并保证「输入 + 输出」不超过上下文窗口
+    let maxTokens = resolveMaxOutputTokens(
+      this.config.maxOutputTokens,
+      this.config.contextWindow,
+      estimatePromptTokens(prompt, systemPrompt)
+    )
+    const send = (withReasoning: boolean, tokenParam: TokenParam) =>
       this.fetchWithProxy(url, {
         method: 'POST',
         headers: {
@@ -66,20 +75,34 @@ export class OpenAIProvider extends BaseAIProvider {
           model: this.model,
           messages,
           temperature: temperature ?? this.temperature,
+          ...(tokenParam && maxTokens ? { [tokenParam]: maxTokens } : {}),
           ...(withReasoning ? openAIReasoningParams(this.config.reasoningEffort) : {})
         }),
         signal: opts?.signal
       })
 
-    const wantsReasoning = Object.keys(openAIReasoningParams(this.config.reasoningEffort)).length > 0
-    let response = await send(wantsReasoning)
-    // 服务商不认识 reasoning_effort：去掉参数重试一次，而不是让整章失败
-    if (wantsReasoning && !response.ok) {
+    let withReasoning = Object.keys(openAIReasoningParams(this.config.reasoningEffort)).length > 0
+    let tokenParam: TokenParam = maxTokens ? 'max_tokens' : null
+    let response = await send(withReasoning, tokenParam)
+    // 参数不被接受时逐个降级重试，而不是让整章失败：
+    // max_tokens → max_completion_tokens（OpenAI 推理模型）→ 省略；reasoning_effort → 省略
+    for (let attempt = 0; attempt < 3 && !response.ok; attempt++) {
       const body = await response.clone().text().catch(() => '')
-      if (isUnsupportedParamError(response.status, body)) {
+      const cap = tokenParam && maxTokens ? parseMaxTokensCap(body, maxTokens) : undefined
+      if (cap && (response.status === 400 || response.status === 422)) {
+        // 元数据高于服务商真实上限：按报错里的上限重试（参数名不变）
+        logger.warn(`[${this.name}] ${this.model} 输出上限 ${maxTokens} 超出服务商范围，按 ${cap} 重试`)
+        maxTokens = cap
+      } else if (tokenParam && isMaxTokensParamError(response.status, body)) {
+        tokenParam = tokenParam === 'max_tokens' ? 'max_completion_tokens' : null
+        logger.warn(`[${this.name}] ${this.model} 不接受当前输出上限参数，改用 ${tokenParam ?? '服务商默认'} 重试`)
+      } else if (withReasoning && isUnsupportedParamError(response.status, body)) {
+        withReasoning = false
         logger.warn(`[${this.name}] ${this.model} 不支持思考强度参数，已按默认重试`)
-        response = await send(false)
+      } else {
+        break
       }
+      response = await send(withReasoning, tokenParam)
     }
 
     if (!response.ok) {

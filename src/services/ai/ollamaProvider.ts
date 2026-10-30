@@ -6,6 +6,7 @@
 import type { AICallOptions, AIGenerateResult, GenerateContentRequest } from './types'
 import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
+import { estimatePromptTokens, resolveMaxOutputTokens } from './outputBudget'
 
 export class OllamaProvider extends BaseAIProvider {
   readonly type = 'ollama' as const
@@ -59,6 +60,11 @@ export class OllamaProvider extends BaseAIProvider {
     }
 
     const url = `${this.apiUrl}/api/chat`
+    const maxTokens = resolveMaxOutputTokens(
+      this.config.maxOutputTokens,
+      this.config.contextWindow,
+      estimatePromptTokens(...messages.map((m) => m.content))
+    )
     const response = await this.fetchWithProxy(url, {
       method: 'POST',
       headers: requestHeaders,
@@ -67,7 +73,8 @@ export class OllamaProvider extends BaseAIProvider {
         messages,
         stream: false,
         options: {
-          temperature: temperature ?? this.temperature
+          temperature: temperature ?? this.temperature,
+          ...(maxTokens ? { num_predict: maxTokens } : {})
         }
       }),
       signal: opts?.signal

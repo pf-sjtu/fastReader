@@ -200,3 +200,80 @@ class TestReasoningBudgetExhausted:
         c = self._Scripted([("", 100, 8192), ("", 100, 16384)])
         r = c._generate("p", "zh")
         assert not r.success and r.output_tokens == 8192 + 16384
+
+
+class TestModelMaxOutput:
+    """输出上限自动取模型最大值（与前端 outputBudget.ts 同语义）"""
+
+    def test_resolve(self):
+        from src.cli.ai_client import resolve_max_output_tokens as r
+        assert r(None, 1_000_000, 10) is None
+        assert r(524288, 1_000_000, 50_000) == 524288
+        assert r(98304, 131072, 60_000) == 131072 - 60_000 - 1024
+        assert r(64000, 200_000, 199_900) == 1024
+
+    def test_meta_output_parsed_and_used(self, tmp_path):
+        cfg = tmp_path / "c.yaml"
+        cfg.write_text(
+            """
+version: 2.0.0
+config:
+  ai:
+    providers:
+      - id: minimax
+        type: openai
+        baseUrl: https://api.minimaxi.com/v1
+        apiKey: k
+        models:
+          - { id: MiniMax-M3.1-Flash, enabled: true, meta: { output: 524288, context: 1000000 } }
+    active: { providerId: minimax, modelId: MiniMax-M3.1-Flash }
+  webdav: { serverUrl: "https://dav.example.com/dav/", username: u, password: p }
+""",
+            encoding="utf-8",
+        )
+        p = ConfigLoader(str(cfg)).load().ai.providers[0]
+        assert (p.maxOutputTokens, p.contextWindow) == (524288, 1000000)
+
+        c = TestReasoningBudgetExhausted._Scripted([("总结", 10, 100)])
+        c.config.maxOutputTokens, c.config.contextWindow = p.maxOutputTokens, p.contextWindow
+        assert c._generate("p" * 1000, "zh").success
+        assert c.calls[0][0] == 524288
+
+    def test_at_model_max_retry_does_not_exceed_limit(self):
+        """已是模型最大输出时，补救重试只降推理强度，不翻倍（翻倍会被服务商以超限拒绝）"""
+        c = TestReasoningBudgetExhausted._Scripted([("", 10, 64000), ("总结", 10, 3000)])
+        c.config.maxOutputTokens = 64000
+        r = c._generate("p", "zh")
+        assert r.success and c.calls == [(64000, False), (64000, True)]
+
+    def test_unknown_meta_falls_back_to_default(self):
+        from src.cli.ai_client import DEFAULT_MAX_OUTPUT_TOKENS
+        c = TestReasoningBudgetExhausted._Scripted([("总结", 10, 100)])
+        c._generate("p", "zh")
+        assert c.calls[0][0] == DEFAULT_MAX_OUTPUT_TOKENS
+
+
+class TestMaxTokensCapRetry:
+    def test_parse(self):
+        from src.cli.ai_client import parse_max_tokens_cap as p
+        assert p("field MaxTokens invalid, should be in [1, 384000]", 393216) == 384000
+        assert p("does not support max tokens > 524288 (2013)", 600000) == 524288
+        assert p("invalid api key 12345", 16384) is None
+
+    def test_call_retries_with_provider_cap(self):
+        class E(Exception):
+            status_code = 400
+
+        c = TestReasoningBudgetExhausted._Scripted([])
+        seen = []
+
+        def call(prompt, system, max_tokens, low_reasoning=False):
+            seen.append(max_tokens)
+            if max_tokens > 384000:
+                raise E("Error code: 400 - field MaxTokens invalid, should be in [1, 384000]")
+            return ("总结", 10, 100)
+
+        c._call = call
+        c.config.maxOutputTokens = 393216
+        assert c._generate("p", "zh").success
+        assert seen == [393216, 384000]

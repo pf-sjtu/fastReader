@@ -29,6 +29,13 @@ class WebDAVConfig:
     missingEnvVars: list = field(default_factory=list)  # 引用了但未定义的环境变量
 
 
+def _positive_int(value) -> Optional[int]:
+    """元数据里的 token 数：正数才算有效（bool 不算）"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        return None
+    return int(value)
+
+
 @dataclass
 class AIProviderConfig:
     """单个 AI 提供商配置"""
@@ -44,6 +51,9 @@ class AIProviderConfig:
     # 单价（USD / 1M tokens）：2.0.0 配置里来自 models[].meta（models.dev），缺省则查内置表
     inputCost: Optional[float] = None
     outputCost: Optional[float] = None
+    # 模型最大输出 / 上下文窗口（models[].meta.output / meta.context）：请求时输出上限自动给满
+    maxOutputTokens: Optional[int] = None
+    contextWindow: Optional[int] = None
 
 
 @dataclass
@@ -271,6 +281,8 @@ class ConfigLoader:
                     missingEnvVars=list(missing),
                     inputCost=meta.get('inputCost') if isinstance(meta.get('inputCost'), (int, float)) else None,
                     outputCost=meta.get('outputCost') if isinstance(meta.get('outputCost'), (int, float)) else None,
+                    maxOutputTokens=_positive_int(meta.get('output')),
+                    contextWindow=_positive_int(meta.get('context')),
                 ))
 
         if not providers:

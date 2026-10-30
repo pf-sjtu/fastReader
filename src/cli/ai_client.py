@@ -52,9 +52,35 @@ FALLBACK_PRICING_MODEL = None
 
 DEFAULT_TIMEOUT = 120.0
 DEFAULT_EXCHANGE_RATE = 7.0
-# 单次输出上限。推理模型的「思考」也算输出 token：4096 对长章节偏紧，
-# 用 8192 起步；预算被推理耗尽时 _generate 会再翻倍重试一次
+# 模型元数据缺失时的单次输出上限。推理模型的「思考」也算输出 token：4096 对长章节偏紧
 DEFAULT_MAX_OUTPUT_TOKENS = 8192
+# 与前端 services/ai/outputBudget.ts 同语义
+CONTEXT_SAFETY_MARGIN = 1024
+MIN_OUTPUT_TOKENS = 1024
+
+
+def parse_max_tokens_cap(message: str, current: int) -> Optional[int]:
+    """从「输出上限超出范围」的报错里读出真实上限（与前端 parseMaxTokensCap 同语义）"""
+    if not message or not re.search(r'max.?tokens|max_completion_tokens|max_output_tokens', message, re.I):
+        return None
+    nums = [int(n) for n in re.findall(r'\d{3,}', message) if MIN_OUTPUT_TOKENS <= int(n) < current]
+    return max(nums) if nums else None
+
+
+def resolve_max_output_tokens(output_limit: Optional[int], context_window: Optional[int],
+                              prompt_tokens: int) -> Optional[int]:
+    """输出上限取模型最大输出（meta.output），并保证「输入 + 输出」不超过上下文窗口。
+
+    未知上限返回 None（调用方用 DEFAULT_MAX_OUTPUT_TOKENS）。prompt_tokens 按字符数粗估，宁可高估。
+    """
+    if not output_limit or output_limit <= 0:
+        return None
+    budget = int(output_limit)
+    if context_window and context_window > 0:
+        room = int(context_window - prompt_tokens - CONTEXT_SAFETY_MARGIN)
+        if room < budget:
+            budget = max(room, MIN_OUTPUT_TOKENS)
+    return budget
 # 前端 aiService.summarizeChapter：内容不足 100 字视为非实质章节，直接跳过不调用 AI
 MIN_CHAPTER_CHARS = 100
 SKIPPED_SHORT_TEXT = f"{RESULT_PREFIX['chapterSkipped']}内容太短，可能是非实质性章节"
@@ -154,25 +180,48 @@ class AIClient:
         raise NotImplementedError
 
     def _call_once(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool) -> tuple[str, int, int]:
+        def attempt():
+            try:
+                return self._call(prompt, system, max_tokens, low_reasoning)
+            except Exception as e:
+                # 元数据高于服务商真实上限（如目录 393216、实际 384000）：按报错里的上限重发一次
+                cap = parse_max_tokens_cap(str(e), max_tokens) if getattr(e, 'status_code', None) in (400, 422) else None
+                if not cap:
+                    raise
+                self.logger.warning(f"{type(self).__name__}: 输出上限 {max_tokens} 超出服务商范围，按 {cap} 重试")
+                return self._call(prompt, system, cap, low_reasoning)
         return call_with_retry(
-            lambda: self._call(prompt, system, max_tokens, low_reasoning),
+            attempt,
             self.retry_policy,
             operation=f"{type(self).__name__} 调用",
             on_retry=self.logger.warning,
         )
 
-    def _generate(self, prompt: str, language: str, max_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS) -> AIResponse:
+    def max_output_tokens(self, prompt: str, system: str = '') -> tuple[int, bool]:
+        """本次请求的输出上限，以及它是否已是模型最大值（是则补救重试不再翻倍）"""
+        resolved = resolve_max_output_tokens(
+            getattr(self.config, 'maxOutputTokens', None),
+            getattr(self.config, 'contextWindow', None),
+            len(prompt) + len(system),
+        )
+        return (resolved, True) if resolved else (DEFAULT_MAX_OUTPUT_TOKENS, False)
+
+    def _generate(self, prompt: str, language: str, max_tokens: Optional[int] = None) -> AIResponse:
         system = get_language_instruction(language)
+        at_model_max = False
+        if max_tokens is None:
+            max_tokens, at_model_max = self.max_output_tokens(prompt, system)
         try:
             content, in_tok, out_tok = self._call_once(prompt, system, max_tokens, False)
-            # 推理模型在长章节上可能把整个输出预算都花在思考上：内容为空、输出 token 顶满上限。
+            # 推理模型可能把整个输出预算都花在思考上：内容为空、输出 token 顶满上限。
             # 实测 MiniMax-M3.1-Flash 对 4.8 万字单章：reasoning=4095/4096、content 为空。
-            # 补救一次：翻倍预算 + 降低推理强度。token 两次都计入（都已计费）。
+            # 补救一次：降低推理强度；预算未到模型上限时再翻倍。token 两次都计入（都已计费）。
             if not (content or '').strip() and out_tok >= max_tokens * 0.95:
+                retry_tokens = max_tokens if at_model_max else max_tokens * 2
                 self.logger.warning(
-                    f"{type(self).__name__}: 输出预算 {max_tokens} 被推理耗尽，提高到 {max_tokens * 2} 并降低推理强度重试"
+                    f"{type(self).__name__}: 输出预算 {max_tokens} 被推理耗尽，以 {retry_tokens} 并降低推理强度重试"
                 )
-                content, in2, out2 = self._call_once(prompt, system, max_tokens * 2, True)
+                content, in2, out2 = self._call_once(prompt, system, retry_tokens, True)
                 in_tok, out_tok = in_tok + in2, out_tok + out2
         except Exception as e:
             self.logger.error(f"{type(self).__name__} API 调用失败: {e}")
