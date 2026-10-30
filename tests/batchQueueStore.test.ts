@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
+import { isRetryableFailure } from '../src/components/project/batchQueueRunner'
 import {
   useBatchQueueStore,
   restoreBatchQueue,
@@ -550,8 +551,8 @@ describe('无人值守：失败自动重试', () => {
     expect(useBatchQueueStore.getState().stats.failed).toBe(0)
   })
 
-  it('isRetryableFailure：瞬时错误可重试，格式/内容问题不重试', async () => {
-    const { isRetryableFailure } = await import('../src/components/project/batchQueueRunner')
+  // 纯函数：静态导入。动态 import 会在测试内现场加载整张 AI/流水线依赖图，全量并行跑时超过 5s 超时
+  it('isRetryableFailure：瞬时错误可重试，格式/内容问题不重试', () => {
     expect(isRetryableFailure('Request timeout after 120s')).toBe(true)
     expect(isRetryableFailure('API流量限制: 429')).toBe(true)
     expect(isRetryableFailure('upstream 503')).toBe(true)
