@@ -69,6 +69,8 @@ describe('实测结果分类', () => {
     expect(classifyProbe(400, '{"code":"model_not_found"}').status).toBe('not_found')
     expect(classifyProbe(429, 'inference exceeds tpm/rpm limit').status).toBe('rate_limited')
     expect(classifyProbe(500, '').status).toBe('error')
+    expect(classifyProbe(404, 'This model is only supported in v1/responses and not in v1/chat/completions.').reason).toBe('仅支持 Responses 接口')
+    expect(classifyProbe(404, 'The model `o4-mini` has been deprecated').reason).toBe('已弃用')
   })
 
   it('限流是暂时的：仍启用；无权限/下线/空结果：停用', () => {
@@ -129,15 +131,19 @@ describe('syncProviderModels', () => {
     expect(result.removed).toBe(1)
   })
 
-  it('上次因失败停用的模型恢复后，去掉原因后缀', async () => {
+  it('上次被同步自动停用的模型恢复后：重新启用并去掉原因后缀；用户手动停用的保持停用', async () => {
     const existing = provider({
-      models: [{ id: 'm', enabled: false, source: 'auto', label: 'm（当前限流，已停用）' }],
+      models: [
+        { id: 'auto-off', enabled: false, source: 'auto', label: 'auto-off（HTTP 400，已停用）' },
+        { id: 'user-off', enabled: false, source: 'auto' },
+      ],
     })
     const result = await syncProviderModels(existing, {
-      listModels: async () => ['m'],
+      listModels: async () => ['auto-off', 'user-off'],
       probe: async () => ({ status: 'ok' }),
     })
-    expect(result.models[0].label).toBe('m')
+    expect(result.models[0]).toMatchObject({ id: 'auto-off', enabled: true, label: 'auto-off' })
+    expect(result.models[1]).toMatchObject({ id: 'user-off', enabled: false })
   })
 
   it('不提供 probe 时跳过实测（全部按过滤结果启用）', async () => {
@@ -176,11 +182,12 @@ describe('过期判定与实测请求', () => {
     expect(isModelListStale({ modelsFetchedAt: new Date(now - MODEL_SYNC_TTL_MS - 1).toISOString() }, now)).toBe(true)
   })
 
-  it('按协议构造实测请求；OpenAI 兼容给足 max_tokens 防推理模型被截成空', () => {
+  it('按协议构造实测请求；OpenAI 兼容不带输出上限（gpt-5/o 系列拒绝 max_tokens，与正式请求一致）', () => {
     expect(probeRequest('anthropic', 'claude').path).toBe('messages')
     expect(probeRequest('gemini', 'gemini-2.5-flash').path).toBe('models/gemini-2.5-flash:generateContent')
-    const openai = probeRequest('openai', 'm') as { path: string; body: { max_tokens: number } }
+    const openai = probeRequest('openai', 'm') as { path: string; body: Record<string, unknown> }
     expect(openai.path).toBe('chat/completions')
-    expect(openai.body.max_tokens).toBeGreaterThanOrEqual(128)
+    expect(openai.body).not.toHaveProperty('max_tokens')
+    expect(openai.body).not.toHaveProperty('max_completion_tokens')
   })
 })

@@ -80,6 +80,11 @@ export function classifyProbe(status: number, body: string): ProbeResult {
     return text.includes('"choices":[]') ? { status: 'empty', reason: '返回空结果' } : { status: 'ok' }
   }
   if (status === 401 || status === 403) return { status: 'denied', reason: '当前套餐无权限' }
+  // OpenAI：gpt-5-pro / codex 等只在 /v1/responses 提供，/chat/completions 用不了（并非下线）
+  if (/only supported in v1\/responses|not supported in v1\/chat\/completions/i.test(text)) {
+    return { status: 'not_found', reason: '仅支持 Responses 接口' }
+  }
+  if (/deprecat/i.test(text)) return { status: 'not_found', reason: '已弃用' }
   if (status === 404 || /model_not_found|not found|unknown provider/i.test(text)) {
     return { status: 'not_found', reason: '服务商已下线该模型' }
   }
@@ -128,9 +133,16 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return out
 }
 
+const AUTO_DISABLED_SUFFIX = /（[^（）]*，已停用）$/
+
 /** 去掉同步时附加的状态后缀，拿回用户自己的 label */
 function baseLabel(model: ProviderModel): string | undefined {
-  return model.label?.replace(/（[^（）]*，已停用）$/, '') || undefined
+  return model.label?.replace(AUTO_DISABLED_SUFFIX, '') || undefined
+}
+
+/** 这个「停用」是不是上一次同步自动加的（而非用户手动关掉的） */
+function wasAutoDisabled(model: ProviderModel | undefined): boolean {
+  return !!model && !model.enabled && AUTO_DISABLED_SUFFIX.test(model.label ?? '')
 }
 
 /**
@@ -180,8 +192,8 @@ export async function syncProviderModels(provider: ProviderEntry, deps: SyncDeps
     const reasonSuffix = !usable && probe?.reason ? `（${probe.reason}，已停用）` : ''
     return {
       id,
-      // 上游还在的已有模型：尊重用户的启用开关；实测不可用则强制停用
-      enabled: usable ? (prev ? prev.enabled : true) : false,
+      // 上游还在的已有模型：尊重用户手动的启用开关；上次同步自动停用的恢复后重新启用；实测不可用则停用
+      enabled: usable ? (prev && !wasAutoDisabled(prev) ? prev.enabled : true) : false,
       source: 'auto',
       ...(label || reasonSuffix ? { label: `${label ?? id}${reasonSuffix}` } : {}),
       ...(prev?.temperature !== undefined ? { temperature: prev.temperature } : {}),
@@ -220,8 +232,10 @@ export function probeRequest(type: ProviderEntry['type'], modelId: string): { pa
       body: { contents: [{ role: 'user', parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 16 } },
     }
   }
+  // 不带输出上限：OpenAI 新模型（gpt-5 / o 系列）拒绝 max_tokens，只认 max_completion_tokens，
+  // 而不少兼容网关又不认后者。正式处理请求本来就不传上限，实测也保持一致，避免误判为不可用。
   return {
     path: 'chat/completions',
-    body: { model: modelId, max_tokens: 256, messages: [{ role: 'user', content: 'ping' }] },
+    body: { model: modelId, messages: [{ role: 'user', content: 'ping' }] },
   }
 }
