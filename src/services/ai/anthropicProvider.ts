@@ -9,15 +9,11 @@ import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
 import { anthropicReasoningParams, isUnsupportedParamError } from './reasoning'
+import { isEventStream, parseAnthropicStream } from './streamParse'
 import { MAX_CAP_BACKOFFS, estimatePromptTokens, isTemperatureParamError, nextOutputCap, type LearnedParams } from './outputBudget'
 
 /** Anthropic 要求显式 max_tokens：模型元数据缺失时的保底值 */
 const DEFAULT_MAX_TOKENS = 8192
-
-interface AnthropicContentBlock {
-  type: string
-  text?: string
-}
 
 export class AnthropicProvider extends BaseAIProvider {
   readonly type = 'anthropic' as const
@@ -58,6 +54,7 @@ export class AnthropicProvider extends BaseAIProvider {
         body: JSON.stringify({
           model: this.model,
           max_tokens: withThinking ? thinkingMax : maxTokens,
+          stream: true,
           ...(systemPrompt ? { system: systemPrompt } : {}),
           messages: [{ role: 'user', content: prompt }],
           // 开启 thinking 时 Anthropic 只接受 temperature=1；目录标注不支持温度则不发
@@ -72,6 +69,7 @@ export class AnthropicProvider extends BaseAIProvider {
       })
     }
 
+    // 默认流式：Cloudflare 同源代理 100 秒无响应即 524，thinking 长输出的非流式请求必然踩线
     let withThinking = thinkingOn
     let capBackoffs = 0
     let response = await send(withThinking)
@@ -112,23 +110,30 @@ export class AnthropicProvider extends BaseAIProvider {
       throw error
     }
 
-    const data = await response.json()
-    // 只取 text 块；thinking / tool_use 等块不进入正文
-    const content = ((data.content ?? []) as AnthropicContentBlock[])
-      .filter((block) => block.type === 'text' && typeof block.text === 'string')
-      .map((block) => block.text)
-      .join('')
+    if (!isEventStream(response)) {
+      // 网关忽略 stream:true、直接回一次性 JSON：按原样解析
+      const data = await response.json()
+      const content = ((data.content ?? []) as Array<{ type: string; text?: string }>)
+        .filter((block) => block.type === 'text' && typeof block.text === 'string')
+        .map((block) => block.text)
+        .join('')
+      const total = (Number(data.usage?.input_tokens) || 0) + (Number(data.usage?.output_tokens) || 0)
+      if (total > 0) this.recordTokenUsage(total)
+      return {
+        content: stripThinking(content),
+        tokenCount: total || undefined,
+        finishReason: data.stop_reason === 'max_tokens' ? 'length' : data.stop_reason,
+      }
+    }
 
-    const input = Number(data.usage?.input_tokens) || 0
-    const output = Number(data.usage?.output_tokens) || 0
-    const total = input + output
-    if (total > 0) this.recordTokenUsage(total)
-
+    // 流式：逐块累加 text delta；thinking 块不进正文（解析器只取 content_block_delta 的 text）
+    const stream = await parseAnthropicStream(response)
+    const total = stream.usage?.total
+    if (total && total > 0) this.recordTokenUsage(total)
     return {
-      content: stripThinking(content),
+      content: stripThinking(stream.content),
       tokenCount: total || undefined,
-      // Anthropic 用 max_tokens 表示截断；统一映射成 length，交给通用截断判定
-      finishReason: data.stop_reason === 'max_tokens' ? 'length' : data.stop_reason,
+      finishReason: stream.finishReason,
     }
   }
 

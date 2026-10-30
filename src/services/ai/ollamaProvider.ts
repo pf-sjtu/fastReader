@@ -7,6 +7,7 @@ import type { AICallOptions, AIGenerateResult, GenerateContentRequest } from './
 import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { estimatePromptTokens } from './outputBudget'
+import { isEventStream, parseOllamaStream } from './streamParse'
 
 export class OllamaProvider extends BaseAIProvider {
   readonly type = 'ollama' as const
@@ -72,7 +73,7 @@ export class OllamaProvider extends BaseAIProvider {
       body: JSON.stringify({
         model: this.model,
         messages,
-        stream: false,
+        stream: true,
         options: {
           ...(this.wantsTemperature ? { temperature: temperature ?? this.temperature } : {}),
           ...(maxTokens ? { num_predict: maxTokens } : {}),
@@ -93,12 +94,22 @@ export class OllamaProvider extends BaseAIProvider {
       throw error
     }
 
-    const data = await response.json()
-
+    if (!isEventStream(response)) {
+      // 忽略 stream:true 的网关 / 老版本 Ollama：一次性 JSON
+      const data = await response.json()
+      return {
+        content: data.message?.content || '',
+        finishReason: data.done_reason ?? (data.done ? 'stop' : undefined),
+      }
+    }
+    const stream = await parseOllamaStream(response)
+    const tokens = stream.usage?.total
+    if (typeof tokens === 'number') this.recordTokenUsage(tokens)
     return {
-      content: data.message?.content || '',
+      content: stream.content,
+      tokenCount: tokens,
       // 新版 Ollama 返回 done_reason（length 表示达到 num_predict 上限）
-      finishReason: data.done_reason ?? (data.done ? 'stop' : undefined)
+      finishReason: stream.finishReason,
     }
   }
 

@@ -11,6 +11,8 @@ import type {
   GenerateContentRequest
 } from './types'
 import { BaseAIProvider } from './baseProvider'
+import { AIRequestError } from './retry'
+import { isEventStream, isStreamUnsupportedError, parseOpenAIStream } from './streamParse'
 import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
 import { isUnsupportedParamError, openAIReasoningParams } from './reasoning'
@@ -67,6 +69,11 @@ export class OpenAIProvider extends BaseAIProvider {
     const url = `${this.apiUrl}/chat/completions`
     // 输出上限自动取模型最大值（meta.output），并保证「输入 + 输出」不超过上下文窗口
     let maxTokens = this.resolveOutputCap(estimatePromptTokens(prompt, systemPrompt))
+    // 默认流式：Cloudflare 同源代理对「上游 100 秒内没有响应」直接返回 524，
+    // 长章节（推理模型 2–5 分钟）非流式必然踩线。stream_options.include_usage 让末尾块带 token 用量，
+    // 不认识它的网关会在下面的降级循环里去掉重试。
+    let streaming = true
+    let includeUsage = true
     const send = (withReasoning: boolean, tokenParam: TokenParam, noTemperature: boolean) =>
       this.fetchWithProxy(url, {
         method: 'POST',
@@ -79,7 +86,9 @@ export class OpenAIProvider extends BaseAIProvider {
           messages,
           ...(this.wantsTemperature && !noTemperature ? { temperature: temperature ?? this.temperature } : {}),
           ...(tokenParam && maxTokens ? { [tokenParam]: maxTokens } : {}),
-          ...(withReasoning ? openAIReasoningParams(this.effectiveReasoningEffort) : {})
+          ...(withReasoning ? openAIReasoningParams(this.effectiveReasoningEffort) : {}),
+          ...(streaming ? { stream: true } : {}),
+          ...(streaming && includeUsage ? { stream_options: { include_usage: true } } : {})
         }),
         signal: opts?.signal
       })
@@ -116,6 +125,13 @@ export class OpenAIProvider extends BaseAIProvider {
         noTemperature = true
         tentative.noTemperature = true
         logger.warn(`[${this.name}] ${this.model} 不支持自定义温度，已按服务商默认重试`)
+      } else if (streaming && includeUsage && /stream_options/i.test(body) && isStreamUnsupportedError(response.status, body)) {
+        // 只拒 stream_options：去掉它继续流式（仍能拿到正文，只是没有用量）
+        includeUsage = false
+        logger.warn(`[${this.name}] ${this.model} 不支持 stream_options，去掉后重试`)
+      } else if (streaming && isStreamUnsupportedError(response.status, body)) {
+        streaming = false
+        logger.warn(`[${this.name}] ${this.model} 不支持流式，退回一次性响应`)
       } else if (withReasoning && isUnsupportedParamError(response.status, body)) {
         withReasoning = false
         tentative.noReasoning = true
@@ -138,6 +154,21 @@ export class OpenAIProvider extends BaseAIProvider {
         provider: this.config.provider
       })
       throw error
+    }
+
+    if (streaming && isEventStream(response)) {
+      const stream = await parseOpenAIStream(response)
+      if (stream.unsupported) {
+        // 标成 SSE 却没有任何数据帧：正文已读掉，交给上层重试
+        throw new AIRequestError(`${this.name} 流式响应无数据`, { status: 502 })
+      }
+      if (stream.usage?.total) this.recordTokenUsage(stream.usage.total)
+      return {
+        // 部分网关把 <think>…</think> 写进 content：不剥掉会进入摘要与导图解析
+        content: stripThinking(stream.content),
+        tokenCount: stream.usage?.total,
+        finishReason: stream.finishReason
+      }
     }
 
     const data = await response.json()

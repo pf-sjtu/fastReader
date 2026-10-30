@@ -9,6 +9,7 @@ import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { geminiReasoningParams, isUnsupportedParamError } from './reasoning'
 import { estimatePromptTokens } from './outputBudget'
+import { isEventStream, isStreamUnsupportedError, parseGeminiStream } from './streamParse'
 
 const DEFAULT_MODEL = 'gemini-2.5-flash'
 
@@ -35,12 +36,16 @@ export class GeminiProvider extends BaseAIProvider {
     // Gemini 没有 system 角色（0.24 SDK 时代的兼容行为：合并到用户提示尾部）
     const finalPrompt = systemPrompt ? `${prompt}\n\n**${systemPrompt}**` : prompt
 
-    const url = `${this.apiUrl.replace(/\/+$/, '')}/models/${encodeURIComponent(this.model)}:generateContent`
+    const base = this.apiUrl.replace(/\/+$/, '')
     const thinking = geminiReasoningParams(this.effectiveReasoningEffort)
     const maxTokens = this.resolveOutputCap(estimatePromptTokens(finalPrompt))
     const thinkingOn = Object.keys(thinking).length > 0
+    // 默认流式（SSE）：Cloudflare 同源代理 100 秒无响应即 524，长章节非流式必然踩线
+    let streaming = true
+    const url = () =>
+      `${base}/models/${encodeURIComponent(this.model)}:${streaming ? 'streamGenerateContent?alt=sse' : 'generateContent'}`
     const send = (withThinking: boolean) =>
-      this.fetchWithProxy(url, {
+      this.fetchWithProxy(url(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -55,9 +60,15 @@ export class GeminiProvider extends BaseAIProvider {
       })
 
     let response = await send(thinkingOn)
-    if (thinkingOn && !response.ok) {
+    if (!response.ok) {
       const body = await response.clone().text().catch(() => '')
-      if (isUnsupportedParamError(response.status, body)) response = await send(false)
+      if (streaming && isStreamUnsupportedError(response.status, body)) {
+        streaming = false
+        logger.warn(`[${this.name}] ${this.model} 不支持流式，退回一次性响应`)
+        response = await send(thinkingOn)
+      } else if (thinkingOn && isUnsupportedParamError(response.status, body)) {
+        response = await send(false)
+      }
     }
 
     if (!response.ok) {
@@ -68,6 +79,18 @@ export class GeminiProvider extends BaseAIProvider {
         model: this.model,
       })
       throw error
+    }
+
+    if (streaming && isEventStream(response)) {
+      const stream = await parseGeminiStream(response)
+      const tokens = stream.usage?.total
+      if (typeof tokens === 'number') this.recordTokenUsage(tokens)
+      return {
+        content: stream.content,
+        tokenCount: tokens,
+        // MAX_TOKENS 会被 isTruncatedFinishReason 归一为 length
+        finishReason: stream.finishReason,
+      }
     }
 
     const data = await response.json()

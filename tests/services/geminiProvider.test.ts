@@ -53,7 +53,7 @@ afterEach(() => {
 })
 
 describe('GeminiProvider', () => {
-  it('打 {baseUrl}/models/{model}:generateContent；systemPrompt 合并到用户提示；统计 token', async () => {
+  it('打 {baseUrl}/models/{model}:streamGenerateContent?alt=sse（流式，避开代理 100s 超时）；systemPrompt 合并到用户提示；统计 token', async () => {
     fetchMock.mockResolvedValue(geminiResponse('答案'))
     const onTokenUsage = vi.fn()
     const ctrl = new AbortController()
@@ -70,7 +70,8 @@ describe('GeminiProvider', () => {
 
     const [url, init] = fetchMock.mock.calls[0] as FetchArgs
     expect(url).toContain('/api/ai?path=')
-    expect(proxyPath(url)).toBe('models/gemini-2.0-flash:generateContent')
+    // 默认流式：非流式在 Cloudflare 同源代理上超过 100 秒会被切成 524
+    expect(proxyPath(url)).toBe('models/gemini-2.0-flash:streamGenerateContent?alt=sse')
 
     const headers = new Headers(init.headers)
     expect(headers.get('Content-Type')).toBe('application/json')
