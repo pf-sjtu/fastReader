@@ -97,6 +97,9 @@ class BatchConfig:
     concurrency: int = DEFAULT_CHAPTER_CONCURRENCY  # 章节级并发数
     maxRetries: int = 3
     retryDelays: list = field(default_factory=lambda: [60, 120, 240, 480])
+    # 内容审核兜底：主模型被拦截时改用这些模型重跑（"providerId/modelId"）。
+    # 国产服务商对政治/历史题材有内容审核（实测 MiniMax 422 new_sensitive），换境外/聚合服务商可解
+    fallbackModels: list = field(default_factory=list)
 
 
 @dataclass
@@ -388,6 +391,8 @@ class ConfigLoader:
             concurrency=int(os.environ.get('FASTREADER_CONCURRENCY', data.get('concurrency', DEFAULT_CHAPTER_CONCURRENCY))),
             # 环境变量: FASTREADER_MAX_RETRIES
             maxRetries=int(os.environ.get('FASTREADER_MAX_RETRIES', data.get('maxRetries', 3))),
+            fallbackModels=_parse_fallback_models(
+                os.environ.get('FASTREADER_FALLBACK_MODELS', data.get('fallbackModels', []))),
             retryDelays=list(data.get('retryDelays', [60, 120, 240, 480]))
         )
 
@@ -437,6 +442,31 @@ class ConfigLoader:
             versions=versions,
             currentVersion=current_version
         )
+
+
+def _parse_fallback_models(value) -> list:
+    """备用模型链：接受 "providerId/modelId" 列表，或环境变量里的逗号分隔串"""
+    if isinstance(value, str):
+        value = value.split(",")
+    out = []
+    for item in value or []:
+        text = str(item).strip()
+        if text and "/" in text and text not in out:
+            out.append(text)
+    return out
+
+
+def resolve_fallback_providers(ai: AIConfig, specs: list) -> list:
+    """把 "providerId/modelId" 解析成 providers 里的具体配置（找不到的跳过）"""
+    resolved = []
+    for spec in specs:
+        provider_id, _, model_id = spec.partition("/")
+        for provider in ai.providers:
+            if getattr(provider, "providerId", "") == provider_id and provider.model == model_id:
+                if provider not in resolved:
+                    resolved.append(provider)
+                break
+    return resolved
 
 
 def active_provider(ai: AIConfig):

@@ -455,12 +455,19 @@ def create_ai_client(config, logger: Logger, prompt_templates: PromptTemplates =
     return _create_client_for_provider(config, config, logger, prompt_templates, **client_kwargs)
 
 
+def create_ai_client_for_provider(provider_config, logger: Logger,
+                                  prompt_templates: PromptTemplates = None, **client_kwargs) -> Optional[AIClient]:
+    """按指定的提供商配置创建客户端（内容审核兜底模型用）"""
+    return _create_client_for_provider(provider_config, None, logger, prompt_templates, **client_kwargs)
+
+
 def _create_client_for_provider(provider_config, full_config, logger: Logger,
                                 prompt_templates: PromptTemplates = None,
                                 **client_kwargs) -> Optional[AIClient]:
     """根据提供商配置创建客户端"""
     provider = provider_config.provider.lower()
-    provider_config.model = getattr(provider_config, 'model', '') or full_config.model
+    if full_config is not None:
+        provider_config.model = getattr(provider_config, 'model', '') or full_config.model
 
     if provider == 'gemini':
         return GeminiClient(provider_config, logger, prompt_templates, **client_kwargs)

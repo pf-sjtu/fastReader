@@ -11,9 +11,10 @@ from typing import Optional
 import random
 import tempfile
 
-from .config import Config, active_provider
+from .config import Config, active_provider, resolve_fallback_providers
 from .webdav_client import WebDAVClientWrapper, WebDAVProbeError
-from .ai_client import create_ai_client, AIClient
+from .ai_client import create_ai_client, create_ai_client_for_provider, AIClient
+from .fallback_client import FallbackAIClient
 from .model_quirks import QuirkStore
 from .prompts import PromptTemplates, resolve_prompts_dir
 from .retry import RetryPolicy
@@ -53,12 +54,30 @@ class BatchProcessor:
         if self.quirks.enabled:
             n = self.quirks.load()
             logger.info(f"已载入后端模型参数存档 {n} 条")
-        self.ai_client: Optional[AIClient] = create_ai_client(
+        primary = create_ai_client(
             config.ai, logger, self.prompt_templates,
             retry_policy=retry_policy,
             timeout=config.advanced.requestTimeout,
             exchange_rate=config.advanced.exchangeRate,
             quirks=self.quirks,
+        )
+        # 内容审核兜底链：主模型被拦下时改用备用模型重跑（国产服务商对政治/历史题材会审核）
+        fallback_clients = []
+        for provider in resolve_fallback_providers(config.ai, config.batch.fallbackModels):
+            client = create_ai_client_for_provider(
+                provider, logger, self.prompt_templates,
+                retry_policy=retry_policy,
+                timeout=config.advanced.requestTimeout,
+                exchange_rate=config.advanced.exchangeRate,
+                quirks=self.quirks,
+            )
+            if client:
+                fallback_clients.append(client)
+                logger.info(f"内容审核兜底模型: {getattr(provider, 'providerId', '')}/{provider.model}")
+        if config.batch.fallbackModels and not fallback_clients:
+            logger.warning("配置了 fallbackModels 但没有可用的兜底模型（检查 providerId/modelId 与密钥）")
+        self.ai_client: Optional[AIClient] = (
+            FallbackAIClient(primary, fallback_clients, logger) if primary and fallback_clients else primary
         )
         self.formatter = ResultFormatter(logger)
         self._start_time: Optional[float] = None
@@ -296,6 +315,8 @@ class BatchProcessor:
                                     processing_time=time.time() - start_time)
 
         # 1. 下载
+        if hasattr(self.ai_client, "reset_usage"):
+            self.ai_client.reset_usage()  # 兜底用量按书统计
         print(f"\n📥 正在下载: {book.name}...")
         local_path = self._download_book(book)
         if not local_path:
@@ -352,9 +373,11 @@ class BatchProcessor:
 
             # 7. 生成产物（与前端统一格式一致）
             chapter_rows = [(o.title, o.summary) for o in outcomes]
+            used_models = getattr(self.ai_client, "used_models", [])
+            model_label = self.model_name + ("".join(f" + {m}" for m in used_models) if used_models else "")
             metadata = build_metadata(
                 file_name=book.name,
-                model=self.model_name,
+                model=model_label,
                 chapter_detection_mode=mode,
                 epub_toc_depth=self.config.processing.epubTocDepth if mode == "epub-toc" else None,
                 selected_chapters=list(range(1, len(outcomes) + 1)),
