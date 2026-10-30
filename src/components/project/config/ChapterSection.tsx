@@ -57,7 +57,7 @@ export function ChapterSection({ processing }: { processing: boolean }) {
                 <SelectItem value="numbered">{t('config.numberedNaming')}</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-600 dark:text-gray-400">{t('config.chapterNamingModeDescription')}</p>
+            <p className="text-xs text-muted-foreground">{t('config.chapterNamingModeDescription')}</p>
           </div>
 
           <div className="space-y-2 min-w-0 w-full">
@@ -73,7 +73,7 @@ export function ChapterSection({ processing }: { processing: boolean }) {
                 {t('config.enableNotification')}
               </Label>
             </div>
-            <p className="text-xs text-gray-600 dark:text-gray-400">{t('config.notificationDescription')}</p>
+            <p className="text-xs text-muted-foreground">{t('config.notificationDescription')}</p>
           </div>
         </div>
       </div>
@@ -83,7 +83,7 @@ export function ChapterSection({ processing }: { processing: boolean }) {
           <Label htmlFor="skip-non-essential" className="text-sm font-medium">
             {t('config.skipIrrelevantChapters')}
           </Label>
-          <p className="text-xs text-gray-600">{t('config.skipIrrelevantChaptersDescription')}</p>
+          <p className="text-xs text-muted-foreground">{t('config.skipIrrelevantChaptersDescription')}</p>
         </div>
         <Switch
           id="skip-non-essential"
@@ -114,7 +114,7 @@ export function ChapterSection({ processing }: { processing: boolean }) {
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-gray-600">{t('config.recursionDepthDescription')}</p>
+          <p className="text-xs text-muted-foreground">{t('config.recursionDepthDescription')}</p>
         </div>
       </div>
 
@@ -139,7 +139,7 @@ export function ChapterSection({ processing }: { processing: boolean }) {
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-gray-600 dark:text-gray-400">{t('config.chapterConcurrencyDescription')}</p>
+          <p className="text-xs text-muted-foreground">{t('config.chapterConcurrencyDescription')}</p>
         </div>
       </div>
 
@@ -169,7 +169,7 @@ export function ChapterSection({ processing }: { processing: boolean }) {
                       {t(m.labelKey)}
                     </Label>
                   </div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 ml-6">{t(m.descKey)}</p>
+                  <p className="text-xs text-muted-foreground ml-6">{t(m.descKey)}</p>
                 </div>
               ))}
             </div>
@@ -196,7 +196,7 @@ export function ChapterSection({ processing }: { processing: boolean }) {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-gray-600 dark:text-gray-400">{t('config.epubTocDepthDescription')}</p>
+              <p className="text-xs text-muted-foreground">{t('config.epubTocDepthDescription')}</p>
             </div>
           )}
         </div>

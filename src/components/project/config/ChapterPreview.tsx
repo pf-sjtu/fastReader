@@ -46,7 +46,7 @@ export function ChapterPreview({ open, file }: ChapterPreviewProps) {
   if (!file) return null
 
   return (
-    <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border dark:border-gray-700">
+    <div className="space-y-4 p-4 bg-muted/50 rounded-lg border">
       <div className="flex items-center gap-2 mb-3">
         <Settings className="h-4 w-4" />
         <Label className="text-sm font-medium">
@@ -60,20 +60,20 @@ export function ChapterPreview({ open, file }: ChapterPreviewProps) {
           {chapters.map((chapter, index) => (
             <div
               key={`${chapter.title}-${index}`}
-              className="flex items-start gap-2 p-2 bg-white dark:bg-gray-900 rounded border dark:border-gray-600"
+              className="flex items-start gap-2 p-2 bg-card rounded border"
             >
-              <span className="text-xs text-gray-500 dark:text-gray-400 font-mono shrink-0 w-8">
+              <span className="text-xs text-muted-foreground font-mono shrink-0 w-8">
                 {(index + 1).toString().padStart(2, '0')}.
               </span>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{chapter.title}</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400 truncate">{chapter.preview}</div>
+                <div className="text-sm font-medium text-foreground truncate">{chapter.title}</div>
+                <div className="text-xs text-muted-foreground truncate">{chapter.preview}</div>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="text-sm text-gray-600 dark:text-gray-400 text-center py-4">
+        <div className="text-sm text-muted-foreground text-center py-4">
           {loading ? t('config.loadingPreview') : t('config.noChaptersFound')}
         </div>
       )}

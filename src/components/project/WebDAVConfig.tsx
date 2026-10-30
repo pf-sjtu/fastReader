@@ -226,7 +226,7 @@ export function WebDAVConfig() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  {STATUS_ICON[statusKey] ?? <XCircle className="h-4 w-4 text-gray-400" />}
+                  {STATUS_ICON[statusKey] ?? <XCircle className="h-4 w-4 text-muted-foreground/70" />}
                   <span className="text-sm">{t(`webdav.config.status.${statusKey}`)}</span>
                 </div>
                 <div className="flex gap-2">

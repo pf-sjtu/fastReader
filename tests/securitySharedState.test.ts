@@ -114,6 +114,27 @@ describe('登录与会话', () => {
   })
 })
 
+describe('登录的 Origin 校验', () => {
+  const loginFrom = (host: string, origin: string) =>
+    authHandler({
+      request: new Request(`https://${host}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: origin },
+        body: JSON.stringify({ password: 'pw-x' }),
+      }),
+      env: createEnv({ APP_PASSWORD: 'pw-x' }),
+      next: async () => new Response('next'),
+    } as never)
+
+  it('同源请求放行：自定义域名不在白名单里也能登录（回归：曾一律 403）', async () => {
+    expect((await loginFrom('reader.example.org', 'https://reader.example.org')).status).toBe(200)
+  })
+
+  it('跨源且不在白名单 → 403', async () => {
+    expect((await loginFrom('reader.example.org', 'https://evil.example')).status).toBe(403)
+  })
+})
+
 describe('密码比较', () => {
   it('相等 / 不等 / 长度不同 / 非字符串', async () => {
     expect(await passwordMatches('123456a', '123456a')).toBe(true)

@@ -104,7 +104,9 @@ export async function onRequest(context) {
 
   const cors = {}
   if (origin) {
-    if (!isAllowedOrigin(origin, requestOrigin, allowedOrigins)) {
+    // 同源请求（本站页面自己发起）天然可信；只有跨源请求才需要在白名单里。
+    // 先前漏了同源豁免：不在白名单里的自定义域名 / 本地端口一律登录失败（403）
+    if (!isAllowedOrigin(origin, requestOrigin, allowedOrigins) && !isSameOriginRequest(request, origin)) {
       return json({ error: 'origin_not_allowed' }, 403)
     }
     cors['Access-Control-Allow-Origin'] = origin

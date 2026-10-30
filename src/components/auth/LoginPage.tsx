@@ -1,7 +1,8 @@
 // 登录页：共享密码登录（密码来自部署环境变量 APP_PASSWORD）
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LockKeyhole, Loader2, Eye, EyeOff } from 'lucide-react'
+import { Loader2, Eye, EyeOff } from 'lucide-react'
+import { SealIcon } from '@/components/BrandMark'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -35,6 +36,8 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
       if (err instanceof SharedApiError) {
         if (err.status === 429) setError(t('auth.tooManyAttempts'))
         else if (err.status === 401) setError(t('auth.invalidPassword'))
+        else if (err.code === 'password_not_configured') setError(t('auth.passwordNotConfigured'))
+        else if (err.code === 'origin_not_allowed') setError(t('auth.originNotAllowed'))
         else setError(t('auth.loginFailed'))
       } else {
         setError(t('auth.loginFailed'))
@@ -50,17 +53,20 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
         <LanguageSwitcher />
         <DarkModeToggle />
       </div>
-      <div className="flex-1 flex items-center justify-center px-4 pb-16">
-        <Card className="w-full max-w-sm">
+      <div className="relative flex-1 flex items-center justify-center px-4 pb-16">
+        <Card className="w-full max-w-[26rem] shadow-sm">
           <CardHeader className="space-y-2 text-center">
-            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
-              <LockKeyhole className="h-5 w-5 text-primary" />
+            <div className="mx-auto">
+              <SealIcon className="h-14 w-14" title={t('app.title')} />
             </div>
-            <CardTitle className="text-xl">{t('auth.title')}</CardTitle>
-            <CardDescription>{t('auth.description')}</CardDescription>
+            <CardTitle className="font-brand text-2xl">{t('app.title')}</CardTitle>
+            <p className="font-brand text-xs uppercase tracking-[0.4em] text-muted-foreground">{t('app.latin')}</p>
+            <CardDescription className="text-balance">{t('auth.description')}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* 共享密码没有用户名；放一个隐藏的固定用户名，消除 Chrome 无障碍警告，也让密码管理器能记住 */}
+              <input type="text" name="username" autoComplete="username" value="juhua" readOnly hidden aria-hidden="true" />
               <div className="space-y-2">
                 <Label htmlFor="fr-password">{t('auth.passwordLabel')}</Label>
                 <div className="relative">
@@ -99,10 +105,13 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                 {t('auth.submit')}
               </Button>
 
-              <p className="text-xs text-muted-foreground text-center">{t('auth.hint')}</p>
+              <p className="text-xs text-muted-foreground text-center text-balance">{t('auth.hint')}</p>
             </form>
           </CardContent>
         </Card>
+        <p className="absolute bottom-6 left-0 right-0 text-center font-brand text-xs text-muted-foreground/70">
+          {t('app.motto')}
+        </p>
       </div>
     </div>
   )

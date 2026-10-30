@@ -35,7 +35,7 @@ export function ViewContentDialog({ title, content, chapterIndex, contentType = 
       case 'html':
         return (
           <div 
-            className="text-gray-700 dark:text-gray-200 leading-relaxed text-sm max-w-none w-full break-words"
+            className="text-muted-foreground leading-relaxed text-sm max-w-none w-full break-words"
             dangerouslySetInnerHTML={{ __html: sanitizeBookHtml(content || '') }}
           />
         )

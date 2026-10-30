@@ -76,7 +76,10 @@ git push -u origin HEAD
 # Project Context (Architecture)
 
 ## Overview
-**fastReader** - AI驱动的电子书解析工具，支持EPUB/PDF转思维导图和总结。
+**咀华 Juhua**（原名 fastReader）- AI 电子书精读工具，EPUB/PDF 转章节总结、思维导图与全书综述。
+品牌：朱砂印章 logo（`public/logo.svg`，小尺寸用 `favicon.svg`）、宣纸/松烟墨/朱砂配色（`src/index.css` 的 token）、
+标题衬线 `.font-brand`。仓库名、Pages 项目 `fast-read`、存储键与 `FASTREADER_*` 环境变量为兼容保留原名，不要改。
+样式一律用语义 token（`bg-muted`/`text-muted-foreground`…），不要写 `gray-*`/`slate-*` 这类冷灰硬编码。
 
 ## Architecture
 - **SPA**: React 19 + TypeScript + Vite

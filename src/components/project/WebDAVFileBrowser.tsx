@@ -49,9 +49,9 @@ function FileIcon({ file }: { file: WebDAVFileInfo }) {
       return <Book className="h-4 w-4 text-purple-500" />
     case '.md':
     case '.txt':
-      return <FileText className="h-4 w-4 text-gray-500" />
+      return <FileText className="h-4 w-4 text-muted-foreground" />
     default:
-      return <File className="h-4 w-4 text-gray-400" />
+      return <File className="h-4 w-4 text-muted-foreground/70" />
   }
 }
 
@@ -311,7 +311,7 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
                             role="button"
                             tabIndex={0}
                             aria-pressed={file.type === 'file' ? selectedFile?.filename === file.filename : undefined}
-                            className={`flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer border-b border-gray-100 dark:border-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                            className={`flex items-center gap-2 px-3 py-1.5 hover:bg-accent cursor-pointer border-b border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                               selectedFile?.filename === file.filename ? 'bg-accent' : ''
                             }`}
                             onClick={() => activateEntry(file)}
@@ -362,7 +362,7 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
           </div>
 
           {selectedFile && selectedFile.type === 'file' && (
-            <div className="flex-shrink-0 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 rounded-md">
+            <div className="flex-shrink-0 px-3 py-1.5 bg-muted rounded-md">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 <span className="font-medium text-foreground min-w-0 truncate" title={selectedFile.basename}>
                   {selectedFile.basename.length > 30 ? selectedFile.basename.substring(0, 30) + '...' : selectedFile.basename}

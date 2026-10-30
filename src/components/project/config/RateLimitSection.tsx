@@ -27,7 +27,7 @@ export function RateLimitSection({ processing }: { processing: boolean }) {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Info className="h-4 w-4 text-gray-500 cursor-help" />
+              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
             </TooltipTrigger>
             <TooltipContent>
               <p className="max-w-xs">{t('config.rateLimit.tooltip')}</p>
@@ -52,7 +52,7 @@ export function RateLimitSection({ processing }: { processing: boolean }) {
             disabled={processing}
             className="w-full"
           />
-          <p className="text-xs text-gray-600 dark:text-gray-400">{t('config.rateLimit.maxRetriesHint')}</p>
+          <p className="text-xs text-muted-foreground">{t('config.rateLimit.maxRetriesHint')}</p>
         </div>
 
         <div className="space-y-2">
@@ -72,7 +72,7 @@ export function RateLimitSection({ processing }: { processing: boolean }) {
             disabled={processing}
             className="w-full"
           />
-          <p className="text-xs text-gray-600 dark:text-gray-400">{t('config.rateLimit.retryDelayHint')}</p>
+          <p className="text-xs text-muted-foreground">{t('config.rateLimit.retryDelayHint')}</p>
         </div>
       </div>
 

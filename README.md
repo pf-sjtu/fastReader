@@ -1,8 +1,17 @@
-# 电子书转思维导图
+<p align="center"><img src="public/logo.svg" width="88" alt="咀华"></p>
 
-[English](README.en.md) | 中文
+<h1 align="center">咀华 · Juhua</h1>
 
-一个基于 AI 技术的智能电子书解析工具，支持将 EPUB 和 PDF 格式的电子书转换为结构化的思维导图和文字总结。
+<p align="center">把一本书，咀嚼成一页知识</p>
+
+<p align="center">[English](README.en.md) | 中文</p>
+
+> 「沉浸醲郁，含英咀华」——韩愈《进学解》。细细咀嚼文章，取其精华。
+
+咀华是一个 AI 电子书精读工具：把 EPUB / PDF 拆成章节，逐章总结、生成思维导图，再串起章节关联与全书综述。
+配置与阅读记录全员共享，适合小团队共建一个「读过的书都有笔记」的书库。
+
+> 项目原名 fastReader；仓库、Cloudflare Pages 项目名（`fast-read`）、存储键与 CLI 环境变量（`FASTREADER_*`）为兼容保留原名。
 
 ## ✨ 功能特性
 

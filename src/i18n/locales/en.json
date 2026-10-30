@@ -10,8 +10,10 @@
     "baseSize": "Base Size"
   },
   "app": {
-    "title": "Fast Reader",
-    "description": "Quick EPUB eBook Knowledge Summarizer"
+    "title": "Juhua",
+    "description": "Savor a whole book, keep the essence",
+    "latin": "Ju · Hua",
+    "motto": "“Savor the blossoms” — Han Yu"
   },
   "upload": {
     "title": "File Upload & Configuration",
@@ -1011,20 +1013,22 @@
   },
   "auth": {
     "title": "Sign in required",
-    "description": "Enter the shared password. Configuration and state are shared by everyone.",
+    "description": "Enter the shared password. Settings and history are shared by all members.",
     "passwordLabel": "Password",
     "passwordPlaceholder": "Enter the shared password",
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "submit": "Sign in",
-    "hint": "You stay signed in on this browser for 30 days. The password is configured by whoever deployed this instance.",
+    "hint": "This browser stays signed in for 30 days",
     "loading": "Loading shared configuration…",
     "loadFailed": "Failed to load shared configuration",
     "invalidPassword": "Incorrect password",
     "tooManyAttempts": "Too many attempts. Please try again later.",
     "loginFailed": "Sign-in failed. Please try again.",
     "logout": "Sign out",
-    "logoutFailed": "Sign-out failed"
+    "logoutFailed": "Sign-out failed",
+    "passwordNotConfigured": "The server has no access password (APP_PASSWORD) configured",
+    "originNotAllowed": "This address is not on the allowed origins list"
   },
   "sync": {
     "synced": "Configuration synced",

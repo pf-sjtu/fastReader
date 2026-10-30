@@ -107,8 +107,8 @@ export function FileUploadCard({
 
         <div className="space-y-2">
           <Label htmlFor="file">{t('upload.selectFile')}</Label>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg bg-gray-50 dark:bg-gray-800 gap-3">
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 min-w-0 flex-1 overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 border border-dashed rounded-lg bg-background/60 gap-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 flex-1 overflow-hidden">
               <FileText className="h-4 w-4 shrink-0" />
               <span className="truncate block">{file?.name || t('upload.noFileSelected')}</span>
             </div>

@@ -292,7 +292,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
             return (
               <div
                 key={chapter.id}
-                className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="flex items-center gap-2 p-2 bg-muted rounded-lg hover:bg-accent transition-colors"
               >
                 <Checkbox
                   id={`chapter-${chapter.id}`}
@@ -336,7 +336,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
             className="min-h-20 resize-none"
             disabled={processing || extractingChapters}
           />
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-muted-foreground">
             {t('chapters.customPromptDescription')}
           </p>
         </div>

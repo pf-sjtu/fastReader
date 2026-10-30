@@ -43,7 +43,7 @@ export function ProcessingSection({ processing }: { processing: boolean }) {
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-gray-600">{t('config.outputLanguageDescription')}</p>
+          <p className="text-xs text-muted-foreground">{t('config.outputLanguageDescription')}</p>
         </div>
       </div>
 
@@ -67,7 +67,7 @@ export function ProcessingSection({ processing }: { processing: boolean }) {
                 <SelectItem value="combined-mindmap">{t('config.combinedMindmapMode')}</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-600">{t('config.processingModeDescription')}</p>
+            <p className="text-xs text-muted-foreground">{t('config.processingModeDescription')}</p>
           </div>
 
           <div className="space-y-2">
@@ -83,7 +83,7 @@ export function ProcessingSection({ processing }: { processing: boolean }) {
                 <SelectItem value="fiction">{t('config.novelType')}</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-muted-foreground">
               {t('config.bookTypeDescription', {
                 type: processingMode === 'summary' ? t('config.summary') : t('config.mindmap'),
               })}

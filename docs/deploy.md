@@ -1,6 +1,6 @@
 # 部署与本地开发
 
-fastReader 从「纯浏览器 SPA」改成了「Pages Functions + 共享状态」架构：
+咀华（原 fastReader）从「纯浏览器 SPA」改成了「Pages Functions + 共享状态」架构：
 
 - **所有配置与状态**（AI 服务商、处理选项、WebDAV、提示词、处理历史、批量队列、Token 用量）保存在 Cloudflare KV，全员共用一份。
 - **API Key / WebDAV 密码只存在于服务端**，由 `/api/ai` 与 `/api/dav` 代理在转发时注入；浏览器只拿得到 `{ hasSecret: true }`。

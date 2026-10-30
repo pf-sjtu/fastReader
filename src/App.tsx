@@ -10,7 +10,8 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'
-import { BookOpen, Brain, ChevronUp, List, Eye } from 'lucide-react'
+import { Brain, ChevronUp, List, Eye } from 'lucide-react'
+import { BrandMark } from '@/components/BrandMark'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
 import type { MindElixirInstance } from 'mind-elixir'
@@ -400,9 +401,8 @@ function App() {
         <div className="flex flex-col gap-2 sm:block sm:relative sm:space-y-2 sm:text-center">
           <div className="flex items-center justify-between gap-2 sm:absolute sm:top-0 sm:right-0 sm:justify-end">
             <div className="sm:hidden flex-1 min-w-0">
-              <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 truncate">
-                <BookOpen className="h-6 w-6 text-primary shrink-0" />
-                <span className="truncate">{t('app.title')}</span>
+              <h1 className="min-w-0">
+                <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" />
               </h1>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -411,14 +411,17 @@ function App() {
               <DarkModeToggle />
             </div>
           </div>
-          <div className="hidden sm:block text-center space-y-2">
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 flex items-center justify-center gap-2">
-              <BookOpen className="h-8 w-8 text-primary" />
-              {t('app.title')}
+          <div className="hidden sm:flex flex-col items-center gap-3 pt-1">
+            <h1>
+              <BrandMark name={t('app.title')} latin={t('app.latin')} />
             </h1>
-            <p className="text-gray-600 dark:text-gray-300">{t('app.description')}</p>
+            <p className="font-brand text-sm text-muted-foreground">
+              {t('app.description')}
+              <span className="mx-2 text-border" aria-hidden="true">·</span>
+              <span className="text-muted-foreground/80">{t('app.motto')}</span>
+            </p>
           </div>
-          <p className="sm:hidden text-sm text-gray-600 dark:text-gray-300">{t('app.description')}</p>
+          <p className="sm:hidden font-brand text-sm text-muted-foreground">{t('app.description')}</p>
         </div>
 
         {/* 统一状态栏 */}
@@ -585,8 +588,8 @@ function App() {
               ) : (
                 <Card>
                   <CardContent className="py-12 text-center">
-                    <Brain className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500 dark:text-gray-400">
+                    <Brain className="h-12 w-12 text-muted-foreground/70 mx-auto mb-4" />
+                    <p className="text-muted-foreground">
                       {t('results.noResults')}
                     </p>
                     <Button
@@ -671,13 +674,12 @@ function App() {
           </SheetContent>
         </Sheet>
 
-        {/* 构建号：YYYYMMDD.bN，提交前自动 bump */}
-        <p
-          className="pt-6 pb-1 text-center text-[10px] leading-none text-muted-foreground/40 select-all tabular-nums tracking-wide"
-          title="build version"
-        >
-          {BUILD_VERSION}
-        </p>
+        {/* 页脚：构建号（YYYYMMDD.bN，提交前自动 bump）；典故已在页头副标题里，这里不重复 */}
+        <footer className="pt-8 pb-2 text-center select-none">
+          <p className="text-[10px] leading-none text-muted-foreground/40 select-all tabular-nums tracking-wide" title="build version">
+            {BUILD_VERSION}
+          </p>
+        </footer>
 
         {/* 回到顶部按钮 */}
         {showBackToTop && (

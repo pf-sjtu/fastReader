@@ -23,8 +23,8 @@ export const ThemeSwitcher: React.FC<{ className?: string }> = ({ className }) =
           className={cn(
             'p-2 rounded-md transition-colors',
             theme === name
-              ? 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-100'
-              : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+              ? 'bg-accent text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
           )}
           title={label}
           aria-label={label}

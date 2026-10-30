@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="t">
+  <title id="t">咀华 Juhua</title>
+  <defs>
+    <!-- 朱砂印泥：中心略亮、边缘沉，模拟钤印时印泥的堆积 -->
+    <radialGradient id="ink" cx="40%" cy="34%" r="80%">
+      <stop offset="0" stop-color="#D24A33"/>
+      <stop offset="0.6" stop-color="#B5321F"/>
+      <stop offset="1" stop-color="#8C2315"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 印面 -->
+  <rect x="4" y="4" width="56" height="56" rx="10" fill="url(#ink)"/>
+
+  <!-- 内框：细阳文边线 -->
+  <rect x="9.5" y="9.5" width="45" height="45" rx="6" fill="none" stroke="#F6E9DA" stroke-opacity="0.5" stroke-width="1"/>
+
+  <!-- 一滴「华」：含英咀华——从书里提炼出的精华，落在书脊正上方 -->
+  <path fill="#F6E9DA" d="M32 14 C32 14 27.6 19 27.6 21.8 A4.4 4.4 0 0 0 36.4 21.8 C36.4 19 32 14 32 14 Z"/>
+
+  <!-- 阴文：一本翻开的书，两页向中缝微陷 -->
+  <g fill="#F6E9DA">
+    <path d="M15.5 28.5 Q23 26.2 31 29.4 V48.2 Q23.2 45.2 15.5 47.4 Z"/>
+    <path d="M48.5 28.5 Q41 26.2 33 29.4 V48.2 Q40.8 45.2 48.5 47.4 Z"/>
+  </g>
+  <!-- 字行 -->
+  <g stroke="#B5321F" stroke-opacity="0.36" stroke-width="1" stroke-linecap="round" fill="none">
+    <path d="M19 33.6 Q23.6 32.3 27.8 33.9"/>
+    <path d="M19 37.6 Q23.6 36.3 27.8 37.9"/>
+    <path d="M19 41.6 Q23 40.5 26.2 41.8"/>
+    <path d="M45 33.6 Q40.4 32.3 36.2 33.9"/>
+    <path d="M45 37.6 Q40.4 36.3 36.2 37.9"/>
+  </g>
+</svg>

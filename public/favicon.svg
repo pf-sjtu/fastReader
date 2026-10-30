@@ -1,67 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Fast Reader">
-  <!-- 橙色圆角底 #F97316 -->
-  <rect width="64" height="64" rx="14" fill="#F97316"/>
-
-  <!-- 白色主图形：更高填充（边距约 6–8%） -->
-  <g fill="#FFFFFF">
-    <!-- 速度线（贴近书本，粗实） -->
-    <rect x="2.5" y="17.5" width="10.5" height="4.4" rx="2.2"/>
-    <rect x="1.5" y="25.5" width="12.5" height="4.4" rx="2.2"/>
-    <rect x="3" y="33.5" width="9.5" height="4.4" rx="2.2"/>
-    <rect x="4.5" y="41.5" width="7" height="3.6" rx="1.8" opacity="0.72"/>
-
-    <!-- 开书：放大，底部中心 V -->
-    <path d="
-      M13.5 12.5
-      C13.5 10.5 15.2 8.8 17.2 8.8
-      H32.0
-      V55.0
-      C28.5 52.6 24.4 51.4 20.4 51.4
-      C18.0 51.4 15.9 51.7 13.5 52.2
-      Z
-    "/>
-    <path d="
-      M32.0 8.8
-      H46.8
-      C48.8 8.8 50.5 10.5 50.5 12.5
-      V52.2
-      C48.1 51.7 46.0 51.4 43.6 51.4
-      C39.6 51.4 35.5 52.6 32.0 55.0
-      Z
-    "/>
-  </g>
-
-  <!-- 书脊 -->
-  <path d="M32.0 10.2 V53.5" fill="none" stroke="#F97316" stroke-width="2.2" stroke-linecap="round"/>
-
-  <!-- 左页行（镂空） -->
-  <g fill="#F97316">
-    <rect x="18.2" y="16.5" width="11" height="3.4" rx="1.7"/>
-    <rect x="18.2" y="23.2" width="9.2" height="3.4" rx="1.7"/>
-    <rect x="18.2" y="29.9" width="10.4" height="3.4" rx="1.7"/>
-  </g>
-
-  <!-- 右页 AI 节点（镂空） -->
-  <g fill="#F97316" stroke="#F97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="37.0" cy="18.2" r="2.3" stroke="none"/>
-    <circle cx="46.2" cy="21.5" r="2.3" stroke="none"/>
-    <circle cx="36.2" cy="38.5" r="2.3" stroke="none"/>
-    <circle cx="46.5" cy="36.2" r="2.3" stroke="none"/>
-    <path d="M37.0 18.2 L41.0 27.0 L46.2 21.5" fill="none"/>
-    <path d="M41.0 27.0 L36.2 38.5" fill="none"/>
-    <path d="M41.0 27.0 L46.5 36.2" fill="none"/>
-    <path fill="#F97316" stroke="none" d="
-      M41.0 23.6
-      L42.2 26.8
-      L45.6 27.0
-      L42.9 29.2
-      L43.8 32.6
-      L41.0 30.8
-      L38.2 32.6
-      L39.1 29.2
-      L36.4 27.0
-      L39.8 26.8
-      Z
-    "/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="咀华 Juhua">
+  <!-- 小尺寸专用：去掉字行与内框，只保留印面 + 书 + 一滴精华，16px 下仍能认出 -->
+  <rect x="1" y="1" width="30" height="30" rx="6.5" fill="#B5321F"/>
+  <path fill="#F6E9DA" d="M16 4.6 C16 4.6 13.4 7.7 13.4 9.4 A2.6 2.6 0 0 0 18.6 9.4 C18.6 7.7 16 4.6 16 4.6 Z"/>
+  <path fill="#F6E9DA" d="M5 13.2 Q10.4 11.6 14.6 14 V26.4 Q10 24.4 5 25.8 Z"/>
+  <path fill="#F6E9DA" d="M27 13.2 Q21.6 11.6 17.4 14 V26.4 Q22 24.4 27 25.8 Z"/>
 </svg>

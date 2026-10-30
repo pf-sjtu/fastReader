@@ -9,6 +9,9 @@ import { AIProviderConfig } from '../src/components/project/AIProviderConfig'
 import { CloudCacheSection } from '../src/components/sections/CloudCacheSection'
 import i18n from '../src/i18n'
 
+// Radix 弹层 + 多步异步交互：全量并行跑时单测可能超过默认 5s（与 w2uiConfig 同一处理）
+vi.setConfig({ testTimeout: 30000 })
+
 let m: Mounted | null = null
 afterEach(() => {
   m?.unmount()

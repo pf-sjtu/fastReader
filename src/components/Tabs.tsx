@@ -46,7 +46,7 @@ export const TabsList: React.FC<TabsListProps & { activeTab?: string; setActiveT
   setActiveTab 
 }) => {
   return (
-    <div className={cn('flex space-x-1 rounded-lg bg-gray-100 p-1', className)}>
+    <div className={cn('flex space-x-1 rounded-lg bg-muted p-1', className)}>
       {React.Children.map(children, (child) => {
         if (React.isValidElement(child)) {
           return React.cloneElement(child as React.ReactElement<{ activeTab?: string; setActiveTab?: (value: string) => void }>, { activeTab, setActiveTab });
@@ -69,8 +69,8 @@ export const TabsTrigger: React.FC<TabsTriggerProps & { activeTab?: string; setA
       className={cn(
         'px-3 py-2 text-sm font-medium rounded-md transition-colors',
         activeTab === value
-          ? 'bg-white text-gray-900 shadow-sm'
-          : 'text-gray-600 hover:text-gray-900',
+          ? 'bg-card text-foreground shadow-sm'
+          : 'text-muted-foreground hover:text-foreground',
         className
       )}
       onClick={() => setActiveTab?.(value)}
