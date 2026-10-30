@@ -36,7 +36,7 @@ export class GeminiProvider extends BaseAIProvider {
     const finalPrompt = systemPrompt ? `${prompt}\n\n**${systemPrompt}**` : prompt
 
     const url = `${this.apiUrl.replace(/\/+$/, '')}/models/${encodeURIComponent(this.model)}:generateContent`
-    const thinking = geminiReasoningParams(this.config.reasoningEffort)
+    const thinking = geminiReasoningParams(this.effectiveReasoningEffort)
     const maxTokens = resolveMaxOutputTokens(
       this.config.maxOutputTokens,
       this.config.contextWindow,
@@ -50,7 +50,7 @@ export class GeminiProvider extends BaseAIProvider {
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
           generationConfig: {
-            temperature: temperature ?? this.temperature,
+            ...(this.wantsTemperature ? { temperature: temperature ?? this.temperature } : {}),
             ...(maxTokens ? { maxOutputTokens: maxTokens } : {}),
             ...(withThinking ? thinking : {}),
           },

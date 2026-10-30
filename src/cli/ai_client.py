@@ -12,6 +12,9 @@ from dataclasses import dataclass
 
 from .models import ChapterInfo
 from .logger import Logger
+from .model_budget import (
+    is_temperature_param_error, resolve_input_budget, resolve_post_process_limits, split_by_budget,
+)
 from .prompts import (
     PromptTemplates,
     RESULT_PREFIX,
@@ -152,6 +155,9 @@ class AIClient:
         self.retry_policy = retry_policy or RetryPolicy()
         self.timeout = timeout
         self.exchange_rate = exchange_rate
+        # 目录明确不支持温度则不发；运行中被服务商拒绝后也关掉（之后的请求都不再发）
+        self.send_temperature = getattr(config, 'supportsTemperature', None) is not False
+        self.supports_reasoning = getattr(config, 'supportsReasoning', None) is not False
 
     def get_pricing(self) -> Optional[dict]:
         """获取模型定价：配置里的单价（2.0.0 的 models[].meta）优先，其次内置表；未登记返回 None"""
@@ -233,16 +239,55 @@ class AIClient:
 
     # ---- 业务方法 ----
 
+    # 超长章节分段的最大递归层数（与前端 aiService MAX_SEGMENT_DEPTH 一致）
+    MAX_SEGMENT_DEPTH = 3
+
+    def _input_budget(self) -> Optional[int]:
+        return resolve_input_budget(getattr(self.config, 'contextWindow', None),
+                                    getattr(self.config, 'maxOutputTokens', None))
+
+    def _post_process_limits(self) -> dict:
+        return resolve_post_process_limits(getattr(self.config, 'contextWindow', None),
+                                           getattr(self.config, 'maxOutputTokens', None))
+
+    def _summarize_long(self, title: str, content: str, book_type: str, language: str,
+                        depth: int = 0) -> AIResponse:
+        """正文超出模型输入预算：按段落切分 → 每段同一提示词总结 → 再用同一提示词合并（与前端同语义）"""
+        budget = self._input_budget()
+        template_len = len(self.prompts.build_chapter_prompt('', '', book_type))
+        room = max(budget - template_len, 1000) if budget else None
+        if not room or len(content) <= room or depth >= self.MAX_SEGMENT_DEPTH:
+            return self._generate(self.prompts.build_chapter_prompt(title, content, book_type), language)
+
+        parts = split_by_budget(content, room)
+        self.logger.info(f"「{title}」{len(content)} 字超出模型输入预算 {room}，分 {len(parts)} 段总结后合并")
+        partials: list[str] = []
+        in_tok = out_tok = 0
+        for i, part in enumerate(parts, 1):
+            r = self._generate(self.prompts.build_chapter_prompt(f"{title}（第 {i}/{len(parts)} 部分）", part, book_type),
+                               language)
+            in_tok += r.input_tokens
+            out_tok += r.output_tokens
+            if not r.success:
+                # 任一段失败即整章失败（与普通章节一致，由上层计入失败章节、可续跑）
+                return AIResponse(success=False, content='', error=f"分段 {i}/{len(parts)} 失败: {r.error}",
+                                  input_tokens=in_tok, output_tokens=out_tok)
+            partials.append(f"【第 {i}/{len(parts)} 部分总结】\n{r.content}")
+        merged = self._summarize_long(f"{title}（由 {len(parts)} 段分段总结合并）", "\n\n".join(partials),
+                                      book_type, language, depth + 1)
+        merged.input_tokens += in_tok
+        merged.output_tokens += out_tok
+        return merged
+
     def summarize_chapter(self, chapter: ChapterInfo, book_type: str, language: str) -> AIResponse:
-        """总结章节（原文过短则直接标记跳过）"""
+        """总结章节（原文过短则直接标记跳过；超出模型输入预算则自动分段总结再合并）"""
         if len((chapter.content or '').strip()) < MIN_CHAPTER_CHARS:
             return AIResponse(success=True, content=SKIPPED_SHORT_TEXT, skipped=True)
-        prompt = self.prompts.build_chapter_prompt(chapter.title, chapter.content, book_type)
-        return self._generate(prompt, language)
+        return self._summarize_long(chapter.title, chapter.content, book_type, language)
 
     def analyze_connections(self, chapters: list[tuple[str, str]], language: str) -> AIResponse:
         """分析章节关联；chapters 为 (标题, 章节摘要)，只使用可用摘要"""
-        items = prepare_post_process_chapters(chapters)
+        items = prepare_post_process_chapters(chapters, self._post_process_limits()['chapters'])
         if len(items) < 2:
             return AIResponse(success=True, content=CONNECTIONS_NOT_ENOUGH)
         return self._generate(self.prompts.build_connections_prompt(items), language)
@@ -250,10 +295,11 @@ class AIClient:
     def generate_overall_summary(self, title: str, chapters: list[tuple[str, str]],
                                  connections: str, language: str) -> AIResponse:
         """生成全书总结；chapters 为 (标题, 章节摘要)"""
-        items = prepare_post_process_chapters(chapters)
+        limits = self._post_process_limits()
+        items = prepare_post_process_chapters(chapters, limits['chapters'])
         if not items:
             return AIResponse(success=True, content=OVERALL_NO_CHAPTERS)
-        prompt = self.prompts.build_overall_prompt(title, items, connections)
+        prompt = self.prompts.build_overall_prompt(title, items, connections, limits['connections'])
         return self._generate(prompt, language)
 
 
@@ -284,7 +330,7 @@ class GeminiClient(AIClient):
             model=self.model,
             contents=prompt,
             config={
-                'temperature': self.temperature,
+                **({'temperature': self.temperature} if self.send_temperature else {}),
                 'max_output_tokens': max_tokens,
                 'system_instruction': system,
             },
@@ -321,26 +367,39 @@ class OpenAIClient(AIClient):
         return self._client
 
     def _call(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool = False) -> tuple[str, int, int]:
-        kwargs = dict(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=self.temperature,
-            max_tokens=max_tokens,
-        )
-        if low_reasoning:
+        def build(with_reasoning: bool) -> dict:
+            kwargs = dict(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=max_tokens,
+            )
+            if self.send_temperature:
+                kwargs["temperature"] = self.temperature
+            if with_reasoning:
+                kwargs["reasoning_effort"] = "low"
+            return kwargs
+
+        with_reasoning = low_reasoning and self.supports_reasoning
+        response = None
+        # 参数被拒时逐个降级（与前端 openaiProvider 同策略）：temperature → 省略；reasoning_effort → 省略
+        for _ in range(3):
             try:
-                response = self._get_client().chat.completions.create(**kwargs, reasoning_effort="low")
+                response = self._get_client().chat.completions.create(**build(with_reasoning))
+                break
             except Exception as e:
-                # 不认识 reasoning_effort 的网关：去掉参数再试（与前端 services/ai/reasoning.ts 同策略）
-                if getattr(e, 'status_code', None) in (400, 422):
-                    response = self._get_client().chat.completions.create(**kwargs)
+                status = getattr(e, 'status_code', None)
+                if self.send_temperature and is_temperature_param_error(status, str(e)):
+                    self.send_temperature = False
+                    self.logger.warning(f"{self.model} 不支持自定义温度，已按服务商默认重试")
+                elif with_reasoning and status in (400, 422):
+                    with_reasoning = False
                 else:
                     raise
-        else:
-            response = self._get_client().chat.completions.create(**kwargs)
+        if response is None:
+            raise RuntimeError("参数降级重试耗尽")
         content = strip_thinking(response.choices[0].message.content or "")
         usage = getattr(response, 'usage', None)
         in_tok = getattr(usage, 'prompt_tokens', 0) or 0

@@ -226,12 +226,13 @@ class PromptTemplates:
             {"name": "chapterSummaries", "label": "已处理的章节列表", "value": _json(chapters_json)},
         ])
 
-    def build_overall_prompt(self, book_title: str, chapters_json: list[dict], connections: str) -> str:
+    def build_overall_prompt(self, book_title: str, chapters_json: list[dict], connections: str,
+                             connections_limit: int = POST_PROCESS_CONNECTIONS_SOFT_LIMIT) -> str:
         return render_prompt(self.get_prompt("overallSummary"), [
             {"name": "bookTitle", "label": "书名", "value": book_title, "inline": True},
             {"name": "chapterInfo", "label": "已处理的章节列表", "value": _json(chapters_json)},
             {"name": "connections", "label": "章节关联分析",
-             "value": _truncate(connections or "", POST_PROCESS_CONNECTIONS_SOFT_LIMIT)},
+             "value": _truncate(connections or "", connections_limit)},
         ])
 
 

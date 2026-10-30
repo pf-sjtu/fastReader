@@ -104,6 +104,9 @@ git push -u origin HEAD
 - Prompts 只有 v2（`services/prompts/config/v2-prompts.yaml`）；用户自定义以「相对默认的覆盖项」存于 `prompts` 分区，
   前端 `renderPrompt` 与 CLI `render_prompt` 同语义（见该目录 README）
 - 章节缓存：IndexedDB，键含文件指纹/内容/模型/prompt/语言（`services/pipeline/cacheKeys.ts`）
+- 模型参数全部由目录元数据（models.dev / OpenRouter / 网关，`meta.*`）自动驱动，规则在 `services/ai/outputBudget.ts` ↔ CLI `src/cli/model_budget.py`，契约 `tests/fixtures/model-budget-cases.json`：
+  输出上限 = `meta.output`（不超窗口，超限按报错重发）；输入超预算的章节按段落分段总结再合并；后处理压缩阈值按窗口计算；
+  `meta.temperature/reasoning === false` 时不发对应参数，未知照常发、被拒降级重试。不要再写死 token / 字数上限
 - 结果状态统一用 `utils/resultStatus.ts`（失败/跳过前缀），书籍 HTML 入 DOM 前必经 `utils/sanitizeHtml.ts`
 - 价格：`services/ai/catalog.ts` 用 models.dev 元数据匹配，`services/metadataFormatter.ts` 通过 `setPricingProvider` /
   `setExchangeRateProvider` 注入（`services/pricingBridge.ts` 在启动时接好）；查不到价格时标 `pricingKnown:false`，不估价

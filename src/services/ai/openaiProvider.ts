@@ -14,7 +14,13 @@ import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
 import { isUnsupportedParamError, openAIReasoningParams } from './reasoning'
-import { estimatePromptTokens, isMaxTokensParamError, parseMaxTokensCap, resolveMaxOutputTokens } from './outputBudget'
+import {
+  estimatePromptTokens,
+  isMaxTokensParamError,
+  isTemperatureParamError,
+  parseMaxTokensCap,
+  resolveMaxOutputTokens
+} from './outputBudget'
 
 type TokenParam = 'max_tokens' | 'max_completion_tokens' | null
 
@@ -74,19 +80,19 @@ export class OpenAIProvider extends BaseAIProvider {
         body: JSON.stringify({
           model: this.model,
           messages,
-          temperature: temperature ?? this.temperature,
+          ...(this.wantsTemperature ? { temperature: temperature ?? this.temperature } : {}),
           ...(tokenParam && maxTokens ? { [tokenParam]: maxTokens } : {}),
-          ...(withReasoning ? openAIReasoningParams(this.config.reasoningEffort) : {})
+          ...(withReasoning ? openAIReasoningParams(this.effectiveReasoningEffort) : {})
         }),
         signal: opts?.signal
       })
 
-    let withReasoning = Object.keys(openAIReasoningParams(this.config.reasoningEffort)).length > 0
+    let withReasoning = Object.keys(openAIReasoningParams(this.effectiveReasoningEffort)).length > 0
     let tokenParam: TokenParam = maxTokens ? 'max_tokens' : null
     let response = await send(withReasoning, tokenParam)
     // 参数不被接受时逐个降级重试，而不是让整章失败：
-    // max_tokens → max_completion_tokens（OpenAI 推理模型）→ 省略；reasoning_effort → 省略
-    for (let attempt = 0; attempt < 3 && !response.ok; attempt++) {
+    // max_tokens → max_completion_tokens（OpenAI 推理模型）→ 省略；reasoning_effort → 省略；temperature → 省略
+    for (let attempt = 0; attempt < 4 && !response.ok; attempt++) {
       const body = await response.clone().text().catch(() => '')
       const cap = tokenParam && maxTokens ? parseMaxTokensCap(body, maxTokens) : undefined
       if (cap && (response.status === 400 || response.status === 422)) {
@@ -96,6 +102,9 @@ export class OpenAIProvider extends BaseAIProvider {
       } else if (tokenParam && isMaxTokensParamError(response.status, body)) {
         tokenParam = tokenParam === 'max_tokens' ? 'max_completion_tokens' : null
         logger.warn(`[${this.name}] ${this.model} 不接受当前输出上限参数，改用 ${tokenParam ?? '服务商默认'} 重试`)
+      } else if (this.wantsTemperature && isTemperatureParamError(response.status, body)) {
+        this.sendTemperature = false
+        logger.warn(`[${this.name}] ${this.model} 不支持自定义温度，已按服务商默认重试`)
       } else if (withReasoning && isUnsupportedParamError(response.status, body)) {
         withReasoning = false
         logger.warn(`[${this.name}] ${this.model} 不支持思考强度参数，已按默认重试`)

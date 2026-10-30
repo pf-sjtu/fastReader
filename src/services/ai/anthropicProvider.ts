@@ -9,7 +9,7 @@ import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
 import { anthropicReasoningParams, isUnsupportedParamError } from './reasoning'
-import { estimatePromptTokens, parseMaxTokensCap, resolveMaxOutputTokens } from './outputBudget'
+import { estimatePromptTokens, isTemperatureParamError, parseMaxTokensCap, resolveMaxOutputTokens } from './outputBudget'
 
 /** Anthropic 要求显式 max_tokens：模型元数据缺失时的保底值 */
 const DEFAULT_MAX_TOKENS = 8192
@@ -44,7 +44,7 @@ export class AnthropicProvider extends BaseAIProvider {
     let maxTokens =
       resolveMaxOutputTokens(this.config.maxOutputTokens, this.config.contextWindow, estimatePromptTokens(prompt, systemPrompt)) ??
       DEFAULT_MAX_TOKENS
-    const reasoning = anthropicReasoningParams(this.config.reasoningEffort, maxTokens)
+    const reasoning = anthropicReasoningParams(this.effectiveReasoningEffort, maxTokens)
     const thinkingOn = Object.keys(reasoning.params).length > 0
     const send = (withThinking: boolean) =>
       this.fetchWithProxy(url, {
@@ -55,21 +55,32 @@ export class AnthropicProvider extends BaseAIProvider {
           max_tokens: withThinking ? reasoning.maxTokens : maxTokens,
           ...(systemPrompt ? { system: systemPrompt } : {}),
           messages: [{ role: 'user', content: prompt }],
-          // 开启 thinking 时 Anthropic 只接受 temperature=1
-          temperature: withThinking ? 1 : (temperature ?? this.temperature),
+          // 开启 thinking 时 Anthropic 只接受 temperature=1；目录标注不支持温度则不发
+          ...(withThinking
+            ? { temperature: 1 }
+            : this.wantsTemperature
+              ? { temperature: temperature ?? this.temperature }
+              : {}),
           ...(withThinking ? reasoning.params : {}),
         }),
         signal: opts?.signal,
       })
 
     let response = await send(thinkingOn)
-    if (!response.ok && (response.status === 400 || response.status === 422)) {
-      const cap = parseMaxTokensCap(await response.clone().text().catch(() => ''), maxTokens)
+    // 参数被拒时逐个降级：输出上限超范围 → 按报错上限；temperature 不支持 → 省略
+    for (let attempt = 0; attempt < 2 && !response.ok && (response.status === 400 || response.status === 422); attempt++) {
+      const body = await response.clone().text().catch(() => '')
+      const cap = parseMaxTokensCap(body, maxTokens)
       if (cap) {
         logger.warn(`[${this.name}] ${this.model} 输出上限 ${maxTokens} 超出服务商范围，按 ${cap} 重试`)
         maxTokens = cap
-        response = await send(thinkingOn)
+      } else if (this.wantsTemperature && isTemperatureParamError(response.status, body)) {
+        this.sendTemperature = false
+        logger.warn(`[${this.name}] ${this.model} 不支持自定义温度，已按服务商默认重试`)
+      } else {
+        break
       }
+      response = await send(thinkingOn)
     }
     if (thinkingOn && !response.ok) {
       const body = await response.clone().text().catch(() => '')

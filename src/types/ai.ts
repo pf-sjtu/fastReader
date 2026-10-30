@@ -122,8 +122,12 @@ export interface AIProviderConfig {
   reasoningEffort?: ReasoningEffort
   /** 模型最大输出 token（来自 meta.output）：请求时自动给满，避免推理耗尽预算返回空内容 */
   maxOutputTokens?: number
-  /** 模型上下文窗口（来自 meta.context）：输出预算不超过「窗口 − 输入」 */
+  /** 模型上下文窗口（来自 meta.context）：输出预算不超过「窗口 − 输入」，输入超预算时自动分段 */
   contextWindow?: number
+  /** 目录明确标注不支持 temperature（meta.temperature === false）时为 false：请求不发该参数 */
+  supportsTemperature?: boolean
+  /** 目录明确标注不是推理模型（meta.reasoning === false）时为 false：不发思考强度参数 */
+  supportsReasoning?: boolean
   proxyUrl?: string
   proxyEnabled?: boolean
   /** 历史字段：旧配置的附加项，导入时忽略 */

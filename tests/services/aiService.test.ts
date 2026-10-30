@@ -190,3 +190,66 @@ describe('AIService', () => {
     await expect(new AIService(mockConfig).testConnection()).resolves.toEqual({ success: false, error: 'boom' })
   })
 })
+
+describe('超长章节按模型输入预算自动分段总结', () => {
+  beforeEach(() => providerMock.generateContent.mockReset())
+
+  // 小上下文模型：输入预算 = 8192 − min(2048, 8192/4) − 2048 = 4096 字
+  const small = { ...mockConfig, contextWindow: 8192, maxOutputTokens: 2048 }
+  const prompt = '总结：{{title}}\n{{content}}'
+  const para = (i: number) => `第${i}段。` + '字'.repeat(900)
+  const longChapter = Array.from({ length: 10 }, (_, i) => para(i)).join('\n\n') // ~9K 字
+
+  it('未超预算：单次调用（行为不变）', async () => {
+    providerMock.generateContent.mockResolvedValue({ content: '整章总结' })
+    const svc = new AIService({ ...mockConfig, contextWindow: 1_000_000, maxOutputTokens: 8192 }, () => ({
+      chapterSummary: { fiction: prompt, nonFiction: prompt },
+      mindmap: { chapter: '', arrow: '', combined: '' },
+      connectionAnalysis: '',
+      overallSummary: '',
+    }))
+    expect(await svc.summarizeChapter('长章', longChapter, 'non-fiction', 'zh')).toBe('整章总结')
+    expect(providerMock.generateContent).toHaveBeenCalledTimes(1)
+  })
+
+  it('超预算：分段 → 每段同一提示词总结 → 合并；每次请求都不超预算，正文不丢', async () => {
+    let n = 0
+    providerMock.generateContent.mockImplementation(async () => ({ content: `分段总结${++n}` }))
+    const svc = new AIService(small, () => ({
+      chapterSummary: { fiction: prompt, nonFiction: prompt },
+      mindmap: { chapter: '', arrow: '', combined: '' },
+      connectionAnalysis: '',
+      overallSummary: '',
+    }))
+    const out = await svc.summarizeChapter('长章', longChapter, 'non-fiction', 'zh')
+    const prompts = providerMock.generateContent.mock.calls.map((c) => c[0].prompt as string)
+
+    expect(prompts.length).toBeGreaterThanOrEqual(4) // ≥3 段 + 1 次合并
+    for (const p of prompts) expect(p.length).toBeLessThanOrEqual(4096 + prompt.length)
+    // 所有段落都出现在某个分段请求里（不截断丢内容）
+    for (let i = 0; i < 10; i++) expect(prompts.some((p) => p.includes(`第${i}段。`))).toBe(true)
+    // 分段请求带「第 i/n 部分」，合并请求带全部分段总结
+    expect(prompts[0]).toMatch(/长章（第 1\/\d+ 部分）/)
+    const last = prompts[prompts.length - 1]
+    expect(last).toContain('分段总结合并')
+    expect(last).toContain('【第 1/')
+    expect(out).toBe(`分段总结${n}`)
+  })
+
+  it('无上下文元数据：不切分（保持旧行为）', async () => {
+    providerMock.generateContent.mockResolvedValue({ content: 'x' })
+    const svc = new AIService(mockConfig)
+    await svc.summarizeChapter('长章', longChapter, 'non-fiction', 'zh')
+    expect(providerMock.generateContent).toHaveBeenCalledTimes(1)
+  })
+
+  it('后处理阈值随模型上下文缩小：小窗口模型的关联分析输入被压缩', async () => {
+    providerMock.generateContent.mockResolvedValue({ content: '关联' })
+    const svc = new AIService(small)
+    const big = Array.from({ length: 6 }, (_, i) => ({ id: `${i}`, title: `章${i}`, content: 'c', summary: '摘'.repeat(3000) }))
+    await svc.analyzeConnections(big, 'zh')
+    const p = providerMock.generateContent.mock.calls[0][0].prompt as string
+    // 6×3000=18000 字被压到「4096×3/4 = 3072」量级（每章至少 400）
+    expect(p.length).toBeLessThan(6000)
+  })
+})

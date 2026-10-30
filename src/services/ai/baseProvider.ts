@@ -223,6 +223,18 @@ export abstract class BaseAIProvider implements CancellableAIProvider {
   /**
    * 获取温度参数
    */
+  /** 本次请求是否发送 temperature（目录明确不支持则不发；运行中被拒后也会关掉） */
+  protected sendTemperature = true
+
+  protected get wantsTemperature(): boolean {
+    return this.sendTemperature && this.config.supportsTemperature !== false
+  }
+
+  /** 思考强度：目录明确标注非推理模型时不发（省一次被拒的请求） */
+  protected get effectiveReasoningEffort() {
+    return this.config.supportsReasoning === false ? undefined : this.config.reasoningEffort
+  }
+
   protected get temperature(): number {
     return this.config.temperature ?? 0.7
   }

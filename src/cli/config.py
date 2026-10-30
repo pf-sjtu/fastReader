@@ -54,6 +54,9 @@ class AIProviderConfig:
     # 模型最大输出 / 上下文窗口（models[].meta.output / meta.context）：请求时输出上限自动给满
     maxOutputTokens: Optional[int] = None
     contextWindow: Optional[int] = None
+    # 目录明确否定时为 False：不发 temperature / 不发思考强度参数（未知为 None，照常发送）
+    supportsTemperature: Optional[bool] = None
+    supportsReasoning: Optional[bool] = None
 
 
 @dataclass
@@ -283,6 +286,8 @@ class ConfigLoader:
                     outputCost=meta.get('outputCost') if isinstance(meta.get('outputCost'), (int, float)) else None,
                     maxOutputTokens=_positive_int(meta.get('output')),
                     contextWindow=_positive_int(meta.get('context')),
+                    supportsTemperature=False if meta.get('temperature') is False else None,
+                    supportsReasoning=False if meta.get('reasoning') is False else None,
                 ))
 
         if not providers:

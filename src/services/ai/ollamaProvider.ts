@@ -73,7 +73,7 @@ export class OllamaProvider extends BaseAIProvider {
         messages,
         stream: false,
         options: {
-          temperature: temperature ?? this.temperature,
+          ...(this.wantsTemperature ? { temperature: temperature ?? this.temperature } : {}),
           ...(maxTokens ? { num_predict: maxTokens } : {})
         }
       }),

@@ -29,7 +29,6 @@ import { createAIProvider } from './factory'
 import { RESULT_PREFIX } from '../../utils/resultStatus'
 import { renderPrompt } from '../prompts/render'
 import {
-  POST_PROCESS_CONNECTIONS_SOFT_LIMIT,
   arrowVars,
   chapterVars,
   combinedMindMapVars,
@@ -41,6 +40,10 @@ import {
   usableChapters
 } from './promptInputs'
 import { logger } from '../../lib/logger'
+import { resolveInputBudget, resolvePostProcessLimits, splitByBudget } from './outputBudget'
+
+/** 超长章节分段总结的最大递归层数（每层把分段总结再分段合并） */
+const MAX_SEGMENT_DEPTH = 3
 
 // 已跳过章节的标记前缀
 const SKIPPED_SUMMARY_PREFIX = RESULT_PREFIX.chapterSkipped
@@ -225,6 +228,58 @@ export class AIService {
     return response.content
   }
 
+  /** 当前模型单次请求可放入的正文字符数（无上下文元数据则不限制） */
+  private inputBudget(): number | undefined {
+    const c = this.getCurrentConfig()
+    return resolveInputBudget(c.contextWindow, c.maxOutputTokens)
+  }
+
+  /** 后处理（关联 / 全书总结 / 图表 / 整书导图）的压缩上限：按模型上下文窗口计算 */
+  private postProcessLimits() {
+    const c = this.getCurrentConfig()
+    return resolvePostProcessLimits(c.contextWindow, c.maxOutputTokens)
+  }
+
+  /**
+   * 正文超出模型输入预算时：按段落切分 → 每段用同一章节提示词总结 → 再用同一提示词合并分段总结。
+   * 不截断丢内容；切分点只落在段落 / 句末。未超预算时直接单次调用。
+   */
+  private async generateForLongContent(
+    basePrompt: string,
+    chapterTitle: string,
+    chapterContent: string,
+    outputLanguage: SupportedLanguage | undefined,
+    opts: AICallOptions | undefined,
+    depth = 0
+  ): Promise<string> {
+    const budget = this.inputBudget()
+    // 提示词模板本身也占输入：从预算里扣掉模板长度
+    const room = budget ? Math.max(budget - basePrompt.length, 1000) : undefined
+    // 到达递归上限时不再切分，交给服务商（超窗会报错，由上层计为失败章节）
+    if (!room || chapterContent.length <= room || depth >= MAX_SEGMENT_DEPTH) {
+      return this.generateContent(renderPrompt(basePrompt, chapterVars(chapterTitle, chapterContent)), outputLanguage, opts)
+    }
+
+    const parts = splitByBudget(chapterContent, room)
+    logger.info(`[AIService] 「${chapterTitle}」${chapterContent.length} 字超出模型输入预算 ${room}，分 ${parts.length} 段总结后合并`)
+    const partials: string[] = []
+    for (let i = 0; i < parts.length; i++) {
+      const title = `${chapterTitle}（第 ${i + 1}/${parts.length} 部分）`
+      partials.push(await this.generateContent(renderPrompt(basePrompt, chapterVars(title, parts[i])), outputLanguage, opts))
+    }
+    // 合并：把分段总结当作「章节内容」再走一次同一提示词，保证输出格式与普通章节一致。
+    // 分段总结合起来仍超预算（极长章节）时递归再分段，每层都显著变短；最多 3 层
+    const merged = partials.map((s, i) => `【第 ${i + 1}/${parts.length} 部分总结】\n${s}`).join('\n\n')
+    return this.generateForLongContent(
+      basePrompt,
+      `${chapterTitle}（由 ${parts.length} 段分段总结合并）`,
+      merged,
+      outputLanguage,
+      opts,
+      depth + 1
+    )
+  }
+
   /**
    * 生成章节总结
    */
@@ -249,9 +304,7 @@ export class AIService {
         ? promptConfig.chapterSummary.fiction || getFictionChapterSummaryPrompt()
         : promptConfig.chapterSummary.nonFiction || getNonFictionChapterSummaryPrompt()
 
-    const prompt = renderPrompt(customPrompt || basePrompt, chapterVars(chapterTitle, chapterContent))
-
-    return this.generateContent(prompt, outputLanguage, opts)
+    return this.generateForLongContent(customPrompt || basePrompt, chapterTitle, chapterContent, outputLanguage, opts)
   }
 
   /**
@@ -267,7 +320,7 @@ export class AIService {
     const basePrompt =
       promptConfig.connectionAnalysis || getChapterConnectionsAnalysisPrompt()
 
-    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters))
+    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters), this.postProcessLimits().chapters)
 
     if (processedChapters.length < 2) {
       return '章节数量不足，无法分析关联。'
@@ -291,7 +344,7 @@ export class AIService {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.overallSummary || getOverallSummaryPrompt()
 
-    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters))
+    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters), this.postProcessLimits().chapters)
 
     if (processedChapters.length === 0) {
       return '没有可用的章节摘要，无法生成全书总结。'
@@ -300,7 +353,7 @@ export class AIService {
     // 关联分析正文同样默认不截；仅超软上限时截
     const connectionsText = truncateText(
       connections || '',
-      POST_PROCESS_CONNECTIONS_SOFT_LIMIT
+      this.postProcessLimits().connections
     )
 
     const prompt = renderPrompt(basePrompt, overallVars(bookTitle, processedChapters, connectionsText))
@@ -321,7 +374,7 @@ export class AIService {
     opts?: AICallOptions
   ): Promise<BookCharts> {
     const basePrompt = getKeyChartsPrompt()
-    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters))
+    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters), this.postProcessLimits().chapters)
 
     if (processedChapters.length === 0) {
       throw new Error('没有可用的章节摘要，无法生成关键图表。')
@@ -329,11 +382,11 @@ export class AIService {
 
     const connectionsText = truncateText(
       connections || '',
-      POST_PROCESS_CONNECTIONS_SOFT_LIMIT
+      this.postProcessLimits().connections
     )
     const overallText = truncateText(
       overallSummary || '',
-      POST_PROCESS_CONNECTIONS_SOFT_LIMIT
+      this.postProcessLimits().connections
     )
 
     const prompt = renderPrompt(
@@ -361,7 +414,17 @@ export class AIService {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.mindmap.chapter || getChapterMindMapPrompt()
 
-    const prompt = renderPrompt(basePrompt, chapterVars(chapterTitle, chapterContent))
+    // 导图是 JSON 树，分段结果无法可靠合并：正文超出模型输入预算时，先用章节总结流程（分段 → 合并）
+    // 把正文压缩成完整摘要，再以摘要生成导图。未超预算时不变。
+    const budget = this.inputBudget()
+    const room = budget ? Math.max(budget - basePrompt.length, 1000) : undefined
+    let content = chapterContent
+    if (room && chapterContent.length > room) {
+      const condensePrompt = promptConfig.chapterSummary.nonFiction || getNonFictionChapterSummaryPrompt()
+      content = await this.generateForLongContent(condensePrompt, chapterTitle, chapterContent, outputLanguage, opts)
+    }
+
+    const prompt = renderPrompt(basePrompt, chapterVars(chapterTitle, content))
 
     const response = await this.generateContent(prompt, outputLanguage, opts)
     return parseJsonMatch<MindElixirData>(response, /\{[\s\S]*\}/, '思维导图')
@@ -378,11 +441,14 @@ export class AIService {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.mindmap.arrow || getMindMapArrowPrompt()
 
-    const chapterList = usableChapters(chapters).map((chapter, index) => ({
+    // 与其它后处理一致：总长超出模型上下文换算的上限时按章均分压缩（id 不变，箭头仍能对上）
+    const usable = usableChapters(chapters)
+    const compressed = prepareChapterSummariesForPostProcess(usable, this.postProcessLimits().chapters)
+    const chapterList = usable.map((chapter, index) => ({
       index: index + 1,
       id: chapter.id,
       title: chapter.title,
-      summary: chapter.summary
+      summary: compressed[index]?.summary ?? chapter.summary
     }))
 
     const prompt = renderPrompt(basePrompt, arrowVars(chapterList))
@@ -405,7 +471,7 @@ export class AIService {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.mindmap.combined || getCombinedMindMapPrompt()
 
-    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters))
+    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters), this.postProcessLimits().chapters)
 
     if (processedChapters.length === 0) {
       return null

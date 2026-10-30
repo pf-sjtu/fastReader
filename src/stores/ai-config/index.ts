@@ -84,6 +84,9 @@ export function computeAIConfig(ai: AIState): AIProviderConfig {
     reasoningEffort: model?.reasoningEffort ?? ai.reasoningEffort ?? 'auto',
     ...(model?.meta?.output ? { maxOutputTokens: model.meta.output } : {}),
     ...(model?.meta?.context ? { contextWindow: model.meta.context } : {}),
+    // 只在目录「明确否定」时关闭；未知（undefined）照常发送，被拒时由 provider 降级重试
+    ...(model?.meta?.temperature === false ? { supportsTemperature: false } : {}),
+    ...(model?.meta?.reasoning === false ? { supportsReasoning: false } : {}),
     // Ollama 本机直连不需要密钥；其它协议看服务端是否已保存（或本会话待提交）
     hasCredentials: provider.type === 'ollama' || Boolean(provider.apiKey?.hasSecret) || pendingSecrets.has(provider.id),
   }

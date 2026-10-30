@@ -58,3 +58,83 @@ export function isMaxTokensParamError(status: number | undefined, body: string |
   if (status !== 400 && status !== 422) return false
   return /max_completion_tokens|max_tokens/i.test(body ?? '')
 }
+
+// ---- 输入预算：按模型上下文窗口自动计算（与 CLI src/cli/model_budget.py 同语义，契约见 tests/fixtures/model-budget-cases.json）----
+
+/** 元数据缺失时为输出预留的 token */
+const DEFAULT_OUTPUT_RESERVE = 8192
+/** 提示词模板、系统提示与估算误差的余量 */
+const PROMPT_OVERHEAD = 2048
+/** 输入预算保底（字符） */
+const MIN_INPUT_CHARS = 2000
+/** 后处理历史默认上限（无上下文元数据时沿用） */
+export const DEFAULT_POST_PROCESS_LIMITS = { chapters: 200_000, connections: 50_000 }
+
+/**
+ * 单次请求可放入的正文字符数（按 1 字 ≈ 1 token 保守估计）。无上下文元数据返回 undefined（不限制）。
+ * 输出预留 = min(模型最大输出, 上下文/4)：大输出模型（如 1M 窗口 / 524K 输出）不至于把输入挤没。
+ */
+export function resolveInputBudget(contextWindow: number | undefined, outputLimit: number | undefined): number | undefined {
+  if (!contextWindow || contextWindow <= 0) return undefined
+  const reserve = Math.min(outputLimit && outputLimit > 0 ? outputLimit : DEFAULT_OUTPUT_RESERVE, Math.floor(contextWindow / 4))
+  return Math.max(Math.floor(contextWindow - reserve - PROMPT_OVERHEAD), MIN_INPUT_CHARS)
+}
+
+/** 后处理（关联分析 / 全书总结）的压缩上限：预算按 3:1 分给章节摘要与关联分析，且不超过历史默认 */
+export function resolvePostProcessLimits(
+  contextWindow: number | undefined,
+  outputLimit: number | undefined
+): { chapters: number; connections: number } {
+  const budget = resolveInputBudget(contextWindow, outputLimit)
+  if (!budget) return { ...DEFAULT_POST_PROCESS_LIMITS }
+  const connections = Math.floor(budget / 4)
+  return {
+    chapters: Math.min(DEFAULT_POST_PROCESS_LIMITS.chapters, budget - connections),
+    connections: Math.min(DEFAULT_POST_PROCESS_LIMITS.connections, connections),
+  }
+}
+
+/**
+ * 把超长正文切成不超过 budget 字符的若干段：优先在空行（段落）处切，单段过长再按句末标点切，
+ * 仍过长才硬切。段内顺序与内容不丢失（各段拼接后等于原文去掉切分处的分隔符）。
+ */
+export function splitByBudget(text: string, budget: number): string[] {
+  if (text.length <= budget) return [text]
+  // 切成带「前置分隔符」的片段：段落之间是空行，同段内的句子 / 硬切块之间无分隔
+  const pieces: Array<{ text: string; sep: string }> = []
+  text.split(/\n\s*\n/).forEach((para, pi) => {
+    const paraSep = pi === 0 ? '' : '\n\n'
+    if (para.length <= budget) {
+      pieces.push({ text: para, sep: paraSep })
+      return
+    }
+    // 单段超长：按句末标点切（标点留在句尾），仍过长再硬切
+    const sentences = para.match(/[^。！？!?.；;\n]+[。！？!?.；;\n]*/g) ?? [para]
+    let first = true
+    for (const sentence of sentences) {
+      for (let i = 0; i < sentence.length; i += budget) {
+        pieces.push({ text: sentence.slice(i, i + budget), sep: first ? paraSep : '' })
+        first = false
+      }
+    }
+  })
+  // 贪心合并到不超过 budget；新块开头不带分隔符
+  const chunks: string[] = []
+  let current = ''
+  for (const piece of pieces) {
+    if (current && current.length + piece.sep.length + piece.text.length > budget) {
+      chunks.push(current)
+      current = piece.text
+    } else {
+      current = current ? current + piece.sep + piece.text : piece.text
+    }
+  }
+  if (current) chunks.push(current)
+  return chunks
+}
+
+/** 服务商因不支持 temperature 拒绝请求（OpenAI o 系列 / gpt-5 等） */
+export function isTemperatureParamError(status: number | undefined, body: string | undefined): boolean {
+  if (status !== 400 && status !== 422) return false
+  return /temperature/i.test(body ?? '') && /unsupported|not support|only the default|does not support|invalid/i.test(body ?? '')
+}

@@ -1,0 +1,131 @@
+{
+  "_comment": "模型参数自动化：前端 src/services/ai/outputBudget.ts 与 CLI src/cli/model_budget.py 同语义，两端测试共读本文件",
+  "inputBudget": [
+    {
+      "name": "无上下文元数据：不限制",
+      "context": null,
+      "output": 8192,
+      "expected": null
+    },
+    {
+      "name": "1M 上下文、524K 输出：输出预留封顶为上下文的 1/4",
+      "context": 1000000,
+      "output": 524288,
+      "expected": 747952
+    },
+    {
+      "name": "128K 上下文、96K 输出：预留 32K",
+      "context": 131072,
+      "output": 98304,
+      "expected": 96256
+    },
+    {
+      "name": "200K 上下文、64K 输出：预留 50K（上下文/4）",
+      "context": 200000,
+      "output": 64000,
+      "expected": 147952
+    },
+    {
+      "name": "无输出元数据：按默认 8192 预留",
+      "context": 32768,
+      "output": null,
+      "expected": 22528
+    },
+    {
+      "name": "极小上下文：保底 2000 字",
+      "context": 4096,
+      "output": 4096,
+      "expected": 2000
+    }
+  ],
+  "split": [
+    {
+      "name": "不超预算：原样一段",
+      "text": "第一段。\n\n第二段。",
+      "budget": 100,
+      "expected": [
+        "第一段。\n\n第二段。"
+      ]
+    },
+    {
+      "name": "按段落边界切，段落不跨块",
+      "text": "aaaa\n\nbbbb\n\ncccc\n\ndddd",
+      "budget": 10,
+      "expected": [
+        "aaaa\n\nbbbb",
+        "cccc\n\ndddd"
+      ]
+    },
+    {
+      "name": "单段超长：按句号再切",
+      "text": "一二三四。五六七八。九十甲乙。",
+      "budget": 10,
+      "expected": [
+        "一二三四。五六七八。",
+        "九十甲乙。"
+      ]
+    },
+    {
+      "name": "无标点超长：硬切",
+      "text": "abcdefghijklmnopqrstuvwxy",
+      "budget": 10,
+      "expected": [
+        "abcdefghij",
+        "klmnopqrst",
+        "uvwxy"
+      ]
+    }
+  ],
+  "temperatureError": [
+    {
+      "status": 400,
+      "body": "Unsupported parameter: 'temperature' is not supported with this model.",
+      "expected": true
+    },
+    {
+      "status": 400,
+      "body": "temperature does not support 0.7 with this model. Only the default (1) value is supported.",
+      "expected": true
+    },
+    {
+      "status": 400,
+      "body": "invalid api key",
+      "expected": false
+    },
+    {
+      "status": 500,
+      "body": "temperature",
+      "expected": false
+    }
+  ],
+  "postProcessLimits": [
+    {
+      "name": "无上下文元数据：保持历史默认",
+      "context": null,
+      "output": null,
+      "expected": {
+        "chapters": 200000,
+        "connections": 50000
+      }
+    },
+    {
+      "name": "128K：预算 96256 按 3:1 分",
+      "context": 131072,
+      "output": 98304,
+      "expected": {
+        "chapters": 72192,
+        "connections": 24064
+      }
+    },
+    {
+      "name": "1M：两项都封顶在历史默认",
+      "context": 1000000,
+      "output": 524288,
+      "expected": {
+        "chapters": 200000,
+        "connections": 50000
+      }
+    }
+  ],
+  "_rule": "输入预算（字符，按 1 字≈1 token 保守估计）= 上下文窗口 − 输出预留 − 2048（提示词模板与余量），保底 2000；输出预留 = min(模型最大输出 ?? 8192, 上下文/4)。无上下文元数据则不限制。后处理：章节摘要上限 = min(200000, 预算×3/4)，关联分析上限 = min(50000, 预算/4)。"
+}
