@@ -12,8 +12,10 @@ from dataclasses import dataclass
 
 from .models import ChapterInfo
 from .logger import Logger
-from .model_budget import (
-    is_temperature_param_error, resolve_input_budget, resolve_post_process_limits, split_by_budget,
+from .model_budget import (  # noqa: F401  parse_max_tokens_cap / resolve_max_output_tokens 供旧调用方从此处导入
+    MIN_OUTPUT_TOKENS, estimate_prompt_tokens, is_max_tokens_param_error, is_temperature_param_error,
+    parse_max_tokens_cap, resolve_input_budget, resolve_max_output_tokens, resolve_post_process_limits,
+    split_by_budget,
 )
 from .prompts import (
     PromptTemplates,
@@ -57,33 +59,7 @@ DEFAULT_TIMEOUT = 120.0
 DEFAULT_EXCHANGE_RATE = 7.0
 # 模型元数据缺失时的单次输出上限。推理模型的「思考」也算输出 token：4096 对长章节偏紧
 DEFAULT_MAX_OUTPUT_TOKENS = 8192
-# 与前端 services/ai/outputBudget.ts 同语义
-CONTEXT_SAFETY_MARGIN = 1024
-MIN_OUTPUT_TOKENS = 1024
-
-
-def parse_max_tokens_cap(message: str, current: int) -> Optional[int]:
-    """从「输出上限超出范围」的报错里读出真实上限（与前端 parseMaxTokensCap 同语义）"""
-    if not message or not re.search(r'max.?tokens|max_completion_tokens|max_output_tokens', message, re.I):
-        return None
-    nums = [int(n) for n in re.findall(r'\d{3,}', message) if MIN_OUTPUT_TOKENS <= int(n) < current]
-    return max(nums) if nums else None
-
-
-def resolve_max_output_tokens(output_limit: Optional[int], context_window: Optional[int],
-                              prompt_tokens: int) -> Optional[int]:
-    """输出上限取模型最大输出（meta.output），并保证「输入 + 输出」不超过上下文窗口。
-
-    未知上限返回 None（调用方用 DEFAULT_MAX_OUTPUT_TOKENS）。prompt_tokens 按字符数粗估，宁可高估。
-    """
-    if not output_limit or output_limit <= 0:
-        return None
-    budget = int(output_limit)
-    if context_window and context_window > 0:
-        room = int(context_window - prompt_tokens - CONTEXT_SAFETY_MARGIN)
-        if room < budget:
-            budget = max(room, MIN_OUTPUT_TOKENS)
-    return budget
+# 输出上限 / 报错上限解析规则在 model_budget.py（与前端 services/ai/outputBudget.ts 同语义）
 # 前端 aiService.summarizeChapter：内容不足 100 字视为非实质章节，直接跳过不调用 AI
 MIN_CHAPTER_CHARS = 100
 SKIPPED_SHORT_TEXT = f"{RESULT_PREFIX['chapterSkipped']}内容太短，可能是非实质性章节"
@@ -158,6 +134,10 @@ class AIClient:
         # 目录明确不支持温度则不发；运行中被服务商拒绝后也关掉（之后的请求都不再发）
         self.send_temperature = getattr(config, 'supportsTemperature', None) is not False
         self.supports_reasoning = getattr(config, 'supportsReasoning', None) is not False
+        # 运行中学到的服务商真实输出上限（整批复用，避免每章都先超限被拒再重发）
+        self.learned_output_cap: Optional[int] = None
+        # OpenAI 推理模型只认 max_completion_tokens；None 表示不发该参数
+        self.token_param: Optional[str] = 'max_tokens'
 
     def get_pricing(self) -> Optional[dict]:
         """获取模型定价：配置里的单价（2.0.0 的 models[].meta）优先，其次内置表；未登记返回 None"""
@@ -187,14 +167,16 @@ class AIClient:
 
     def _call_once(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool) -> tuple[str, int, int]:
         def attempt():
+            tokens = min(max_tokens, self.learned_output_cap) if self.learned_output_cap else max_tokens
             try:
-                return self._call(prompt, system, max_tokens, low_reasoning)
+                return self._call(prompt, system, tokens, low_reasoning)
             except Exception as e:
-                # 元数据高于服务商真实上限（如目录 393216、实际 384000）：按报错里的上限重发一次
-                cap = parse_max_tokens_cap(str(e), max_tokens) if getattr(e, 'status_code', None) in (400, 422) else None
+                # 元数据高于服务商真实上限（如目录 393216、实际 384000）：按报错里的上限重发，并整批记住
+                cap = parse_max_tokens_cap(str(e), tokens) if getattr(e, 'status_code', None) in (400, 422) else None
                 if not cap:
                     raise
-                self.logger.warning(f"{type(self).__name__}: 输出上限 {max_tokens} 超出服务商范围，按 {cap} 重试")
+                self.learned_output_cap = cap
+                self.logger.warning(f"{type(self).__name__}: 输出上限 {tokens} 超出服务商范围，按 {cap} 重试（本批记住）")
                 return self._call(prompt, system, cap, low_reasoning)
         return call_with_retry(
             attempt,
@@ -208,7 +190,7 @@ class AIClient:
         resolved = resolve_max_output_tokens(
             getattr(self.config, 'maxOutputTokens', None),
             getattr(self.config, 'contextWindow', None),
-            len(prompt) + len(system),
+            estimate_prompt_tokens(prompt, system),
         )
         return (resolved, True) if resolved else (DEFAULT_MAX_OUTPUT_TOKENS, False)
 
@@ -374,8 +356,9 @@ class OpenAIClient(AIClient):
                     {"role": "system", "content": system},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=max_tokens,
             )
+            if self.token_param:
+                kwargs[self.token_param] = max_tokens
             if self.send_temperature:
                 kwargs["temperature"] = self.temperature
             if with_reasoning:
@@ -384,18 +367,24 @@ class OpenAIClient(AIClient):
 
         with_reasoning = low_reasoning and self.supports_reasoning
         response = None
-        # 参数被拒时逐个降级（与前端 openaiProvider 同策略）：temperature → 省略；reasoning_effort → 省略
-        for _ in range(3):
+        # 参数被拒时逐个降级（与前端 openaiProvider 同策略），学到的结果整批记住：
+        # max_tokens → max_completion_tokens（OpenAI 推理模型）→ 省略；temperature → 省略；reasoning_effort → 省略
+        for _ in range(4):
             try:
                 response = self._get_client().chat.completions.create(**build(with_reasoning))
                 break
             except Exception as e:
                 status = getattr(e, 'status_code', None)
-                if self.send_temperature and is_temperature_param_error(status, str(e)):
+                text = str(e)
+                if self.token_param and is_max_tokens_param_error(status, text):
+                    self.token_param = 'max_completion_tokens' if self.token_param == 'max_tokens' else None
+                    self.logger.warning(f"{self.model} 不接受当前输出上限参数，改用 {self.token_param or '服务商默认'} 重试")
+                elif self.send_temperature and is_temperature_param_error(status, text):
                     self.send_temperature = False
                     self.logger.warning(f"{self.model} 不支持自定义温度，已按服务商默认重试")
-                elif with_reasoning and status in (400, 422):
+                elif with_reasoning and status in (400, 422) and re.search(r"reasoning", text, re.I):
                     with_reasoning = False
+                    self.supports_reasoning = False
                 else:
                     raise
         if response is None:

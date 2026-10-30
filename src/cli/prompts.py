@@ -112,7 +112,8 @@ def prepare_post_process_chapters(
     total = sum(len(c["summary"]) for c in full)
     if total <= soft_limit or not full:
         return full
-    per = max(400, soft_limit // len(full))
+    # 按章均分；不设每章保底（与前端 promptInputs 一致：保底会让小窗口模型超上限）
+    per = max(1, soft_limit // len(full))
     return [{**c, "summary": _truncate(c["summary"], per)} for c in full]
 
 

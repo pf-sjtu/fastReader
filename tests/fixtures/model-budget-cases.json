@@ -11,25 +11,25 @@
       "name": "1M 上下文、524K 输出：输出预留封顶为上下文的 1/4",
       "context": 1000000,
       "output": 524288,
-      "expected": 747952
+      "expected": 598361
     },
     {
       "name": "128K 上下文、96K 输出：预留 32K",
       "context": 131072,
       "output": 98304,
-      "expected": 96256
+      "expected": 77004
     },
     {
       "name": "200K 上下文、64K 输出：预留 50K（上下文/4）",
       "context": 200000,
       "output": 64000,
-      "expected": 147952
+      "expected": 118361
     },
     {
       "name": "无输出元数据：按默认 8192 预留",
       "context": 32768,
       "output": null,
-      "expected": 22528
+      "expected": 18022
     },
     {
       "name": "极小上下文：保底 2000 字",
@@ -96,6 +96,16 @@
       "status": 500,
       "body": "temperature",
       "expected": false
+    },
+    {
+      "status": 400,
+      "body": "Invalid value for 'messages[0].content': temperature of the reactor is 300",
+      "expected": false
+    },
+    {
+      "status": 400,
+      "body": "Unsupported parameter: 'temperature' is not supported with this model.",
+      "expected": true
     }
   ],
   "postProcessLimits": [
@@ -109,12 +119,12 @@
       }
     },
     {
-      "name": "128K：预算 96256 按 3:1 分",
+      "name": "128K：预算 77004 按 3:1 分",
       "context": 131072,
       "output": 98304,
       "expected": {
-        "chapters": 72192,
-        "connections": 24064
+        "chapters": 57753,
+        "connections": 19251
       }
     },
     {
@@ -127,5 +137,108 @@
       }
     }
   ],
-  "_rule": "输入预算（字符，按 1 字≈1 token 保守估计）= 上下文窗口 − 输出预留 − 2048（提示词模板与余量），保底 2000；输出预留 = min(模型最大输出 ?? 8192, 上下文/4)。无上下文元数据则不限制。后处理：章节摘要上限 = min(200000, 预算×3/4)，关联分析上限 = min(50000, 预算/4)。"
+  "_rule": "输入预算（字符）= (上下文窗口 − 输出预留 − 2048) ÷ 1.25，保底 2000；1.25 是「字符→token」的保守系数（CJK / 生僻字在部分分词器上 >1 token/字）。输出预留 = min(模型最大输出 ?? 8192, 上下文/4)。无上下文元数据则不限制。后处理：章节摘要上限 = min(200000, 预算×3/4)，关联分析上限 = min(50000, 预算/4)。请求输出上限 = min(模型最大输出, max(32768, 输入估算×4), 窗口 − 输入 − 1024)，保底 1024。",
+  "outputCap": [
+    {
+      "name": "无输出元数据：不设",
+      "output": null,
+      "context": 1000000,
+      "prompt": 100,
+      "expected": null
+    },
+    {
+      "name": "短提示：不按模型最大 524288 预占，封顶 32768（限速/额度按 max_tokens 预扣）",
+      "output": 524288,
+      "context": 1000000,
+      "prompt": 5000,
+      "expected": 32768
+    },
+    {
+      "name": "长提示：给到输入的 4 倍（推理模型思考空间）",
+      "output": 524288,
+      "context": 1000000,
+      "prompt": 50000,
+      "expected": 200000
+    },
+    {
+      "name": "模型上限更小：取模型上限",
+      "output": 8192,
+      "context": 128000,
+      "prompt": 50000,
+      "expected": 8192
+    },
+    {
+      "name": "上下文吃紧：窗口 − 输入 − 1024",
+      "output": 98304,
+      "context": 131072,
+      "prompt": 60000,
+      "expected": 70048
+    },
+    {
+      "name": "上下文几乎用尽：保底 1024",
+      "output": 64000,
+      "context": 200000,
+      "prompt": 199900,
+      "expected": 1024
+    }
+  ],
+  "maxTokensCap": [
+    {
+      "body": "field MaxTokens invalid, should be in [1, 384000]",
+      "current": 393216,
+      "expected": 384000
+    },
+    {
+      "body": "model[MiniMax-M3.1-Flash] does not support max tokens > 524288 (2013)",
+      "current": 600000,
+      "expected": 524288
+    },
+    {
+      "body": "max_tokens must be <= 8192",
+      "current": 16384,
+      "expected": 8192
+    },
+    {
+      "body": "max_tokens: 128000 > 64000, which is the maximum allowed number of output tokens for claude-haiku-4-5",
+      "current": 128000,
+      "expected": 64000
+    },
+    {
+      "body": "max_tokens too large for gpt-4.1-2025-04-14",
+      "current": 32768,
+      "expected": null
+    },
+    {
+      "body": "'max_tokens' is too large: 120000. This model's maximum context length is 131072 tokens and your request has 20000 input tokens (120000 > 131072 - 20000)",
+      "current": 120000,
+      "expected": null
+    },
+    {
+      "body": "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+      "current": 128000,
+      "expected": null
+    },
+    {
+      "body": "invalid api key 12345",
+      "current": 16384,
+      "expected": null
+    }
+  ],
+  "maxTokensParamName": [
+    {
+      "status": 400,
+      "body": "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+      "expected": true
+    },
+    {
+      "status": 400,
+      "body": "'max_tokens' is too large: 120000. This model's maximum context length is 131072 tokens",
+      "expected": false
+    },
+    {
+      "status": 400,
+      "body": "invalid api key",
+      "expected": false
+    }
+  ]
 }

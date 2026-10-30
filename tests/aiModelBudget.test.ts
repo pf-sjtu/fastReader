@@ -6,8 +6,11 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
+  isMaxTokensParamError,
   isTemperatureParamError,
+  parseMaxTokensCap,
   resolveInputBudget,
+  resolveMaxOutputTokens,
   resolvePostProcessLimits,
   splitByBudget,
 } from '../src/services/ai/outputBudget'
@@ -30,6 +33,21 @@ describe('共享契约 model-budget-cases.json', () => {
       const got = splitByBudget(c.text, c.budget)
       expect(got).toEqual(c.expected)
       for (const chunk of got) expect(chunk.length).toBeLessThanOrEqual(c.budget)
+    })
+  }
+  for (const c of cases.outputCap) {
+    it(`输出上限：${c.name}`, () => {
+      expect(resolveMaxOutputTokens(c.output ?? undefined, c.context ?? undefined, c.prompt) ?? null).toBe(c.expected)
+    })
+  }
+  for (const c of cases.maxTokensCap) {
+    it(`报错读上限：${c.body.slice(0, 40)}`, () => {
+      expect(parseMaxTokensCap(c.body, c.current) ?? null).toBe(c.expected)
+    })
+  }
+  for (const c of cases.maxTokensParamName) {
+    it(`参数名报错：${c.body.slice(0, 40)}`, () => {
+      expect(isMaxTokensParamError(c.status, c.body)).toBe(c.expected)
     })
   }
   for (const c of cases.temperatureError) {

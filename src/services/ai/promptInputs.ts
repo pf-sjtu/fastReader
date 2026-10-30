@@ -48,7 +48,8 @@ export function prepareChapterSummariesForPostProcess(
   }
 
   // 极端情况：按比例压到 softLimit（保留尽量多信息）
-  const per = Math.max(400, Math.floor(softLimitChars / full.length))
+  // 按章均分；不设每章保底（原先保底 400 字会让「章节数 × 400」超出小窗口模型的上限）
+  const per = Math.max(1, Math.floor(softLimitChars / full.length))
   console.warn(
     `[AIService] 后处理摘要总长 ${totalChars} 字超过软上限 ${softLimitChars}，按章截至约 ${per} 字`
   )

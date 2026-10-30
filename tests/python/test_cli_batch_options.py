@@ -208,7 +208,9 @@ class TestModelMaxOutput:
     def test_resolve(self):
         from src.cli.ai_client import resolve_max_output_tokens as r
         assert r(None, 1_000_000, 10) is None
-        assert r(524288, 1_000_000, 50_000) == 524288
+        # 不按模型最大值预占：给到输入的 4 倍（至少 32768），不超模型上限
+        assert r(524288, 1_000_000, 50_000) == 200_000
+        assert r(524288, 1_000_000, 5_000) == 32768
         assert r(98304, 131072, 60_000) == 131072 - 60_000 - 1024
         assert r(64000, 200_000, 199_900) == 1024
 
@@ -234,17 +236,19 @@ config:
         p = ConfigLoader(str(cfg)).load().ai.providers[0]
         assert (p.maxOutputTokens, p.contextWindow) == (524288, 1000000)
 
-        c = TestReasoningBudgetExhausted._Scripted([("总结", 10, 100)])
+        c = TestReasoningBudgetExhausted._Scripted([("总结", 10, 100), ("总结", 10, 100)])
         c.config.maxOutputTokens, c.config.contextWindow = p.maxOutputTokens, p.contextWindow
         assert c._generate("p" * 1000, "zh").success
-        assert c.calls[0][0] == 524288
+        assert c.calls[0][0] == 32768  # 短提示：封顶 32768，不按 524288 预占限速 / 额度
+        assert c._generate("p" * 200_000, "zh").success
+        assert c.calls[1][0] == 524288  # 长提示：放宽到模型上限
 
     def test_at_model_max_retry_does_not_exceed_limit(self):
         """已是模型最大输出时，补救重试只降推理强度，不翻倍（翻倍会被服务商以超限拒绝）"""
-        c = TestReasoningBudgetExhausted._Scripted([("", 10, 64000), ("总结", 10, 3000)])
-        c.config.maxOutputTokens = 64000
+        c = TestReasoningBudgetExhausted._Scripted([("", 10, 8192), ("总结", 10, 3000)])
+        c.config.maxOutputTokens = 8192
         r = c._generate("p", "zh")
-        assert r.success and c.calls == [(64000, False), (64000, True)]
+        assert r.success and c.calls == [(8192, False), (8192, True)]
 
     def test_unknown_meta_falls_back_to_default(self):
         from src.cli.ai_client import DEFAULT_MAX_OUTPUT_TOKENS
@@ -275,5 +279,5 @@ class TestMaxTokensCapRetry:
 
         c._call = call
         c.config.maxOutputTokens = 393216
-        assert c._generate("p", "zh").success
+        assert c._generate("x" * 100_000, "zh").success  # 长提示 → 输出给到模型上限
         assert seen == [393216, 384000]

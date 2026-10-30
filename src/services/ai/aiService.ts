@@ -374,20 +374,18 @@ export class AIService {
     opts?: AICallOptions
   ): Promise<BookCharts> {
     const basePrompt = getKeyChartsPrompt()
-    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters), this.postProcessLimits().chapters)
+    // 三份输入（章节摘要 + 关联 + 全书总结）共享一个输入预算：关联配额对半分给关联与全书总结，
+    // 否则三份各按上限取会达到预算的 1.25 倍，小窗口模型超窗被拒
+    const limits = this.postProcessLimits()
+    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters), limits.chapters)
 
     if (processedChapters.length === 0) {
       throw new Error('没有可用的章节摘要，无法生成关键图表。')
     }
 
-    const connectionsText = truncateText(
-      connections || '',
-      this.postProcessLimits().connections
-    )
-    const overallText = truncateText(
-      overallSummary || '',
-      this.postProcessLimits().connections
-    )
+    const half = Math.floor(limits.connections / 2)
+    const connectionsText = truncateText(connections || '', half)
+    const overallText = truncateText(overallSummary || '', half)
 
     const prompt = renderPrompt(
       basePrompt,
@@ -409,18 +407,22 @@ export class AIService {
     chapterTitle: string,
     chapterContent: string,
     outputLanguage?: SupportedLanguage,
-    opts?: AICallOptions
+    opts?: AICallOptions,
+    bookType: 'fiction' | 'non-fiction' = 'non-fiction'
   ): Promise<MindElixirData | null> {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.mindmap.chapter || getChapterMindMapPrompt()
 
     // 导图是 JSON 树，分段结果无法可靠合并：正文超出模型输入预算时，先用章节总结流程（分段 → 合并）
-    // 把正文压缩成完整摘要，再以摘要生成导图。未超预算时不变。
+    // 把正文压缩成完整摘要，再以摘要生成导图。未超预算时不变。压缩用与本书类型对应的章节总结提示词。
     const budget = this.inputBudget()
     const room = budget ? Math.max(budget - basePrompt.length, 1000) : undefined
     let content = chapterContent
     if (room && chapterContent.length > room) {
-      const condensePrompt = promptConfig.chapterSummary.nonFiction || getNonFictionChapterSummaryPrompt()
+      const condensePrompt =
+        bookType === 'fiction'
+          ? promptConfig.chapterSummary.fiction || getFictionChapterSummaryPrompt()
+          : promptConfig.chapterSummary.nonFiction || getNonFictionChapterSummaryPrompt()
       content = await this.generateForLongContent(condensePrompt, chapterTitle, chapterContent, outputLanguage, opts)
     }
 

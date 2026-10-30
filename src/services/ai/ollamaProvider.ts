@@ -6,7 +6,7 @@
 import type { AICallOptions, AIGenerateResult, GenerateContentRequest } from './types'
 import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
-import { estimatePromptTokens, resolveMaxOutputTokens } from './outputBudget'
+import { estimatePromptTokens } from './outputBudget'
 
 export class OllamaProvider extends BaseAIProvider {
   readonly type = 'ollama' as const
@@ -60,11 +60,12 @@ export class OllamaProvider extends BaseAIProvider {
     }
 
     const url = `${this.apiUrl}/api/chat`
-    const maxTokens = resolveMaxOutputTokens(
-      this.config.maxOutputTokens,
-      this.config.contextWindow,
-      estimatePromptTokens(...messages.map((m) => m.content))
-    )
+    const promptTokens = estimatePromptTokens(...messages.map((m) => m.content))
+    const maxTokens = this.resolveOutputCap(promptTokens)
+    // Ollama 默认上下文很小（常见 2K–4K），超出部分会被静默截断：按本次实际需要的窗口显式申请，
+    // 且不超过模型上下文（meta.context）；未知上下文则不发，保持 Ollama 默认
+    const ctx = this.config.contextWindow
+    const numCtx = ctx ? Math.min(ctx, promptTokens + (maxTokens ?? 0) + 1024) : undefined
     const response = await this.fetchWithProxy(url, {
       method: 'POST',
       headers: requestHeaders,
@@ -74,7 +75,8 @@ export class OllamaProvider extends BaseAIProvider {
         stream: false,
         options: {
           ...(this.wantsTemperature ? { temperature: temperature ?? this.temperature } : {}),
-          ...(maxTokens ? { num_predict: maxTokens } : {})
+          ...(maxTokens ? { num_predict: maxTokens } : {}),
+          ...(numCtx ? { num_ctx: numCtx } : {})
         }
       }),
       signal: opts?.signal

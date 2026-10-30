@@ -11,13 +11,21 @@
 const CONTEXT_SAFETY_MARGIN = 1024
 /** 上下文很紧时的保底输出预算 */
 const MIN_OUTPUT_TOKENS = 1024
-
 /**
- * 粗估提示词 token 数：按字符数算（中文约 1 字 ≈ 0.6–1 token，英文约 4 字符 ≈ 1 token），
- * 宁可高估——高估只会让预算略保守，低估会让请求因超出上下文被拒。
+ * 字符 → token 的保守系数。中文多数分词器约 0.6–1 token/字，但 CJK 生僻字、emoji、
+ * Claude / 字节级 BPE 可能 >1 token/字；按 1.25 估算，宁可让预算略保守也不让请求超窗被拒。
  */
+const TOKENS_PER_CHAR = 1.25
+/**
+ * 请求输出上限的「不预占」封顶：服务商（OpenAI / Anthropic / OpenRouter）按 max_tokens 预扣限速与额度，
+ * 每个小章节都按模型最大值（如 524288）申请会频繁 429 / 402。短提示封顶 32768，长提示放宽到输入的 4 倍。
+ */
+const OUTPUT_SOFT_CAP = 32768
+const OUTPUT_PER_INPUT = 4
+
+/** 粗估提示词 token 数（按 TOKENS_PER_CHAR 保守系数，宁可高估） */
 export function estimatePromptTokens(...parts: Array<string | undefined>): number {
-  return parts.reduce((sum, p) => sum + (p?.length ?? 0), 0)
+  return Math.ceil(parts.reduce((sum, p) => sum + (p?.length ?? 0), 0) * TOKENS_PER_CHAR)
 }
 
 /**
@@ -31,7 +39,8 @@ export function resolveMaxOutputTokens(
   promptTokens: number
 ): number | undefined {
   if (!outputLimit || outputLimit <= 0) return undefined
-  let budget = Math.floor(outputLimit)
+  // 推理模型的思考随输入增长：给到输入的 4 倍（至少 32768），但不按模型最大值预占
+  let budget = Math.min(Math.floor(outputLimit), Math.max(OUTPUT_SOFT_CAP, promptTokens * OUTPUT_PER_INPUT))
   if (contextWindow && contextWindow > 0) {
     const room = Math.floor(contextWindow - promptTokens - CONTEXT_SAFETY_MARGIN)
     if (room < budget) budget = Math.max(room, MIN_OUTPUT_TOKENS)
@@ -41,13 +50,23 @@ export function resolveMaxOutputTokens(
 
 /**
  * 元数据可能略高于服务商的真实上限（实测 SenseNova deepseek-v4-flash：目录 393216，实际上限 384000）。
- * 从「超出范围」的报错里读出真实上限：取报错中小于当前值的最大数字。读不出返回 undefined。
- * 已覆盖的报错形态：`should be in [1, 384000]`、`does not support max tokens > 524288`、`<= 8192`。
+ * 只从明确表达「上限」的句式里读数字，读不出返回 undefined（不猜：报错里的日期、输入 token 数等都不是上限）。
+ * 已覆盖：`should be in [1, 384000]`、`does not support max tokens > 524288`、`must be <= 8192`、
+ * `128000 > 64000, which is the maximum allowed`（Anthropic）。
  */
+const CAP_PATTERNS = [
+  /should be in \[\s*\d+\s*,\s*(\d+)\s*\]/i,
+  /max(?:imum)?[ _]?tokens?\s*>\s*(\d+)/i,
+  /(?:<=|≤|less than or equal to|at most|maximum of|up to)\s*(\d+)/i,
+  /\d+\s*>\s*(\d+),?\s*which is the maximum/i,
+]
 export function parseMaxTokensCap(body: string | undefined, current: number): number | undefined {
-  if (!body || !/max.?tokens|max_completion_tokens|maxOutputTokens/i.test(body)) return undefined
-  const nums = (body.match(/\d{3,}/g) ?? []).map(Number).filter((n) => n >= MIN_OUTPUT_TOKENS && n < current)
-  return nums.length ? Math.max(...nums) : undefined
+  if (!body || !/max.?tokens|max_completion_tokens|maxOutputTokens|output tokens/i.test(body)) return undefined
+  for (const re of CAP_PATTERNS) {
+    const n = Number(body.match(re)?.[1])
+    if (n >= MIN_OUTPUT_TOKENS && n < current) return n
+  }
+  return undefined
 }
 
 /**
@@ -56,7 +75,36 @@ export function parseMaxTokensCap(body: string | undefined, current: number): nu
  */
 export function isMaxTokensParamError(status: number | undefined, body: string | undefined): boolean {
   if (status !== 400 && status !== 422) return false
-  return /max_completion_tokens|max_tokens/i.test(body ?? '')
+  // 只认「参数名不被接受」，不认「数值太大 / 超上下文」（那类由 parseMaxTokensCap 或上层失败处理）
+  return /max_completion_tokens/i.test(body ?? '') && /unsupported|not supported|use '?max_completion_tokens/i.test(body ?? '')
+}
+
+// ---- 运行中学到的服务商参数怪癖：按「服务商 + 模型」记住，整个会话内复用 ----
+//
+// AIService 每次请求都新建 provider 实例，实例字段记不住；放模块级表里，
+// 一次 400 之后同一模型的后续章节 / 分段 / 合并请求直接用正确参数，不再每次多花一个往返。
+
+export interface LearnedParams {
+  /** 服务商真实输出上限（从「超出范围」报错读出） */
+  outputCap?: number
+  /** 输出上限参数名：OpenAI 推理模型要 max_completion_tokens；null = 不发 */
+  tokenParam?: 'max_tokens' | 'max_completion_tokens' | null
+  noTemperature?: boolean
+  noReasoning?: boolean
+}
+const learned = new Map<string, LearnedParams>()
+export function learnedParamsKey(providerId: string | undefined, apiUrl: string | undefined, model: string): string {
+  return `${providerId || apiUrl || ''}|${model}`
+}
+export function getLearnedParams(key: string): LearnedParams {
+  return learned.get(key) ?? {}
+}
+export function rememberParams(key: string, patch: LearnedParams): void {
+  learned.set(key, { ...learned.get(key), ...patch })
+}
+/** 测试用：清空学习表 */
+export function resetLearnedParams(): void {
+  learned.clear()
 }
 
 // ---- 输入预算：按模型上下文窗口自动计算（与 CLI src/cli/model_budget.py 同语义，契约见 tests/fixtures/model-budget-cases.json）----
@@ -77,7 +125,7 @@ export const DEFAULT_POST_PROCESS_LIMITS = { chapters: 200_000, connections: 50_
 export function resolveInputBudget(contextWindow: number | undefined, outputLimit: number | undefined): number | undefined {
   if (!contextWindow || contextWindow <= 0) return undefined
   const reserve = Math.min(outputLimit && outputLimit > 0 ? outputLimit : DEFAULT_OUTPUT_RESERVE, Math.floor(contextWindow / 4))
-  return Math.max(Math.floor(contextWindow - reserve - PROMPT_OVERHEAD), MIN_INPUT_CHARS)
+  return Math.max(Math.floor((contextWindow - reserve - PROMPT_OVERHEAD) / TOKENS_PER_CHAR), MIN_INPUT_CHARS)
 }
 
 /** 后处理（关联分析 / 全书总结）的压缩上限：预算按 3:1 分给章节摘要与关联分析，且不超过历史默认 */
@@ -136,5 +184,8 @@ export function splitByBudget(text: string, budget: number): string[] {
 /** 服务商因不支持 temperature 拒绝请求（OpenAI o 系列 / gpt-5 等） */
 export function isTemperatureParamError(status: number | undefined, body: string | undefined): boolean {
   if (status !== 400 && status !== 422) return false
-  return /temperature/i.test(body ?? '') && /unsupported|not support|only the default|does not support|invalid/i.test(body ?? '')
+  // 必须是「temperature 这个参数 / 取值不被支持」，而不是正文里恰好出现 temperature 一词
+  return /(?:parameter|value)[:\s]+'?temperature'?|'temperature'|temperature (?:is not supported|does not support|is unsupported)|only the default \(1\)/i.test(
+    body ?? ''
+  )
 }

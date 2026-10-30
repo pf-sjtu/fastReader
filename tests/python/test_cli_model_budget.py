@@ -9,8 +9,11 @@ import pytest
 from src.cli.ai_client import AIClient, OpenAIClient
 from src.cli.config import AIProviderConfig, ConfigLoader
 from src.cli.model_budget import (
+    is_max_tokens_param_error,
     is_temperature_param_error,
+    parse_max_tokens_cap,
     resolve_input_budget,
+    resolve_max_output_tokens,
     resolve_post_process_limits,
     split_by_budget,
 )
@@ -34,6 +37,21 @@ def test_split(c):
     got = split_by_budget(c["text"], c["budget"])
     assert got == c["expected"]
     assert all(len(x) <= c["budget"] for x in got)
+
+
+@pytest.mark.parametrize("c", CASES["outputCap"], ids=lambda c: c["name"])
+def test_output_cap(c):
+    assert resolve_max_output_tokens(c["output"], c["context"], c["prompt"]) == c["expected"]
+
+
+@pytest.mark.parametrize("c", CASES["maxTokensCap"], ids=lambda c: c["body"][:40])
+def test_max_tokens_cap(c):
+    assert parse_max_tokens_cap(c["body"], c["current"]) == c["expected"]
+
+
+@pytest.mark.parametrize("c", CASES["maxTokensParamName"], ids=lambda c: c["body"][:40])
+def test_max_tokens_param_name(c):
+    assert is_max_tokens_param_error(c["status"], c["body"]) is c["expected"]
 
 
 @pytest.mark.parametrize("c", CASES["temperatureError"], ids=lambda c: c["body"][:30])
@@ -187,3 +205,41 @@ def test_post_process_limit_follows_context():
     big = [(f"章{i}", "摘" * 3000) for i in range(6)]
     assert c.analyze_connections(big, "zh").success
     assert len(c.prompts_seen[0]) < 6000
+
+
+def test_openai_reasoning_model_falls_back_to_max_completion_tokens_and_remembers():
+    """审查发现：CLI 原先遇到 o 系列 / gpt-5 的「请用 max_completion_tokens」直接整章失败"""
+    c, calls, replies, ok = _client()
+    replies.extend([
+        _Err(400, "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."),
+        ok, ok,
+    ])
+    c._call("p", "s", 100)
+    assert "max_tokens" in calls[0] and "max_completion_tokens" in calls[1] and "max_tokens" not in calls[1]
+    c._call("p", "s", 100)  # 整批记住
+    assert "max_completion_tokens" in calls[2] and len(calls) == 3
+
+
+def test_unrelated_400_does_not_drop_reasoning():
+    c, calls, replies, ok = _client()
+    replies.append(_Err(400, "context length exceeded"))
+    with pytest.raises(_Err):
+        c._call("p", "s", 100, low_reasoning=True)
+    assert c.supports_reasoning is True
+
+
+def test_learned_output_cap_reused_across_calls():
+    c = _Scripted(maxOutputTokens=393216)
+    seen = []
+
+    def call(prompt, system, max_tokens, low_reasoning=False):
+        seen.append(max_tokens)
+        if max_tokens > 384000:
+            raise _Err(400, "field MaxTokens invalid, should be in [1, 384000]")
+        return ("总结", 10, 100)
+
+    c._call = call
+    long_prompt = "x" * 100_000  # 估算 125000 token → 输出给到模型上限 393216
+    assert c._generate(long_prompt, "zh").success
+    assert c._generate(long_prompt, "zh").success
+    assert seen == [393216, 384000, 384000]  # 第二次直接用学到的上限

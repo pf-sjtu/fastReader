@@ -18,8 +18,7 @@ import {
   estimatePromptTokens,
   isMaxTokensParamError,
   isTemperatureParamError,
-  parseMaxTokensCap,
-  resolveMaxOutputTokens
+  parseMaxTokensCap
 } from './outputBudget'
 
 type TokenParam = 'max_tokens' | 'max_completion_tokens' | null
@@ -65,11 +64,7 @@ export class OpenAIProvider extends BaseAIProvider {
 
     const url = `${this.apiUrl}/chat/completions`
     // 输出上限自动取模型最大值（meta.output），并保证「输入 + 输出」不超过上下文窗口
-    let maxTokens = resolveMaxOutputTokens(
-      this.config.maxOutputTokens,
-      this.config.contextWindow,
-      estimatePromptTokens(prompt, systemPrompt)
-    )
+    let maxTokens = this.resolveOutputCap(estimatePromptTokens(prompt, systemPrompt))
     const send = (withReasoning: boolean, tokenParam: TokenParam) =>
       this.fetchWithProxy(url, {
         method: 'POST',
@@ -88,7 +83,9 @@ export class OpenAIProvider extends BaseAIProvider {
       })
 
     let withReasoning = Object.keys(openAIReasoningParams(this.effectiveReasoningEffort)).length > 0
-    let tokenParam: TokenParam = maxTokens ? 'max_tokens' : null
+    // 本会话已学到该模型的参数名（如 OpenAI 推理模型只认 max_completion_tokens）则直接用
+    const learnedParam = this.learned.tokenParam
+    let tokenParam: TokenParam = maxTokens ? (learnedParam === undefined ? 'max_tokens' : learnedParam) : null
     let response = await send(withReasoning, tokenParam)
     // 参数不被接受时逐个降级重试，而不是让整章失败：
     // max_tokens → max_completion_tokens（OpenAI 推理模型）→ 省略；reasoning_effort → 省略；temperature → 省略
@@ -97,16 +94,19 @@ export class OpenAIProvider extends BaseAIProvider {
       const cap = tokenParam && maxTokens ? parseMaxTokensCap(body, maxTokens) : undefined
       if (cap && (response.status === 400 || response.status === 422)) {
         // 元数据高于服务商真实上限：按报错里的上限重试（参数名不变）
-        logger.warn(`[${this.name}] ${this.model} 输出上限 ${maxTokens} 超出服务商范围，按 ${cap} 重试`)
+        logger.warn(`[${this.name}] ${this.model} 输出上限 ${maxTokens} 超出服务商范围，按 ${cap} 重试（本会话记住）`)
         maxTokens = cap
+        this.remember({ outputCap: cap })
       } else if (tokenParam && isMaxTokensParamError(response.status, body)) {
         tokenParam = tokenParam === 'max_tokens' ? 'max_completion_tokens' : null
+        this.remember({ tokenParam })
         logger.warn(`[${this.name}] ${this.model} 不接受当前输出上限参数，改用 ${tokenParam ?? '服务商默认'} 重试`)
       } else if (this.wantsTemperature && isTemperatureParamError(response.status, body)) {
-        this.sendTemperature = false
-        logger.warn(`[${this.name}] ${this.model} 不支持自定义温度，已按服务商默认重试`)
+        this.remember({ noTemperature: true })
+        logger.warn(`[${this.name}] ${this.model} 不支持自定义温度，已按服务商默认重试（本会话记住）`)
       } else if (withReasoning && isUnsupportedParamError(response.status, body)) {
         withReasoning = false
+        this.remember({ noReasoning: true })
         logger.warn(`[${this.name}] ${this.model} 不支持思考强度参数，已按默认重试`)
       } else {
         break

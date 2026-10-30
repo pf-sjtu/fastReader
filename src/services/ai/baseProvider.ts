@@ -30,6 +30,13 @@ import {
   waitProviderCooldown
 } from './retry'
 import { logger } from '../../lib/logger'
+import {
+  getLearnedParams,
+  learnedParamsKey,
+  rememberParams,
+  resolveMaxOutputTokens,
+  type LearnedParams
+} from './outputBudget'
 
 /** finishReason 表示输出被长度上限截断（OpenAI: length；Gemini: MAX_TOKENS） */
 export function isTruncatedFinishReason(reason: string | undefined | null): boolean {
@@ -223,16 +230,35 @@ export abstract class BaseAIProvider implements CancellableAIProvider {
   /**
    * 获取温度参数
    */
-  /** 本次请求是否发送 temperature（目录明确不支持则不发；运行中被拒后也会关掉） */
-  protected sendTemperature = true
-
-  protected get wantsTemperature(): boolean {
-    return this.sendTemperature && this.config.supportsTemperature !== false
+  /** 「服务商 + 模型」维度的参数学习表键（跨 provider 实例、整个会话共享） */
+  protected get learnedKey(): string {
+    return learnedParamsKey(this.config.providerId, this.config.apiUrl, this.model)
   }
 
-  /** 思考强度：目录明确标注非推理模型时不发（省一次被拒的请求） */
+  protected get learned(): LearnedParams {
+    return getLearnedParams(this.learnedKey)
+  }
+
+  protected remember(patch: LearnedParams): void {
+    rememberParams(this.learnedKey, patch)
+  }
+
+  /** 是否发送 temperature：目录明确不支持、或本会话内已被该模型拒绝过，则不发 */
+  protected get wantsTemperature(): boolean {
+    return this.config.supportsTemperature !== false && !this.learned.noTemperature
+  }
+
+  /** 思考强度：目录明确标注非推理模型、或本会话内已被拒绝过，则不发 */
   protected get effectiveReasoningEffort() {
-    return this.config.supportsReasoning === false ? undefined : this.config.reasoningEffort
+    if (this.config.supportsReasoning === false || this.learned.noReasoning) return undefined
+    return this.config.reasoningEffort
+  }
+
+  /** 输出上限：模型元数据推导值，再受本会话学到的服务商真实上限约束 */
+  protected resolveOutputCap(promptTokens: number): number | undefined {
+    const resolved = resolveMaxOutputTokens(this.config.maxOutputTokens, this.config.contextWindow, promptTokens)
+    const cap = this.learned.outputCap
+    return resolved && cap ? Math.min(resolved, cap) : resolved
   }
 
   protected get temperature(): number {

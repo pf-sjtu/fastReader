@@ -55,7 +55,8 @@ export interface PipelineAI {
     title: string,
     content: string,
     lang?: SupportedLanguage,
-    opts?: AICallOptions
+    opts?: AICallOptions,
+    bookType?: 'fiction' | 'non-fiction'
   ): Promise<MindElixirData | null>
   generateCombinedMindMap(
     title: string,
@@ -176,7 +177,7 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
         result = { ...base, summary, processed: true }
         if (isUsableText(summary) && cache) await safe(() => cache.setChapter(kind, chapter, summary))
       } else {
-        const mindMap = await ai.generateChapterMindMap(chapter.title, content, lang, opts)
+        const mindMap = await ai.generateChapterMindMap(chapter.title, content, lang, opts, input.bookType)
         throwIfAborted()
         if (!mindMap) throw new Error('思维导图 JSON 解析失败')
         result = { ...base, mindMap, processed: true }
