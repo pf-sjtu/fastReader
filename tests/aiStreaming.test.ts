@@ -7,7 +7,6 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   isStreamUnsupportedError,
   parseAnthropicStream,
-  parseGeminiStream,
   parseOllamaStream,
   parseOpenAIStream,
   readLines,
