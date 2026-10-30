@@ -109,9 +109,6 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
             </form>
           </CardContent>
         </Card>
-        <p className="absolute bottom-6 left-0 right-0 text-center font-brand text-xs text-muted-foreground/70">
-          {t('app.motto')}
-        </p>
       </div>
     </div>
   )

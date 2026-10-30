@@ -4,8 +4,6 @@
 
 <p align="center">Savor a whole book, keep the essence</p>
 
-> The name comes from Han Yu's *Jin Xue Jie*: "savor the blossoms, chew the essence" (含英咀华).
-
 Juhua is an AI close-reading tool for EPUB / PDF: chapter summaries, mind maps, cross-chapter connections and a whole-book overview,
 with configuration and reading history shared by the whole team.
 

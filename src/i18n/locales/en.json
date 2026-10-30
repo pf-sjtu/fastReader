@@ -12,8 +12,7 @@
   "app": {
     "title": "Juhua",
     "description": "Savor a whole book, keep the essence",
-    "latin": "Ju · Hua",
-    "motto": "“Savor the blossoms” — Han Yu"
+    "latin": "Ju · Hua"
   },
   "upload": {
     "title": "File Upload & Configuration",

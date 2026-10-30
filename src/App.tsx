@@ -415,11 +415,7 @@ function App() {
             <h1>
               <BrandMark name={t('app.title')} latin={t('app.latin')} />
             </h1>
-            <p className="font-brand text-sm text-muted-foreground">
-              {t('app.description')}
-              <span className="mx-2 text-border" aria-hidden="true">·</span>
-              <span className="text-muted-foreground/80">{t('app.motto')}</span>
-            </p>
+            <p className="font-brand text-sm text-muted-foreground">{t('app.description')}</p>
           </div>
           <p className="sm:hidden font-brand text-sm text-muted-foreground">{t('app.description')}</p>
         </div>
