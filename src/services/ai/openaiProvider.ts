@@ -15,10 +15,12 @@ import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
 import { isUnsupportedParamError, openAIReasoningParams } from './reasoning'
 import {
+  MAX_CAP_BACKOFFS,
   estimatePromptTokens,
   isMaxTokensParamError,
   isTemperatureParamError,
-  parseMaxTokensCap
+  nextOutputCap,
+  type LearnedParams
 } from './outputBudget'
 
 type TokenParam = 'max_tokens' | 'max_completion_tokens' | null
@@ -65,7 +67,7 @@ export class OpenAIProvider extends BaseAIProvider {
     const url = `${this.apiUrl}/chat/completions`
     // 输出上限自动取模型最大值（meta.output），并保证「输入 + 输出」不超过上下文窗口
     let maxTokens = this.resolveOutputCap(estimatePromptTokens(prompt, systemPrompt))
-    const send = (withReasoning: boolean, tokenParam: TokenParam) =>
+    const send = (withReasoning: boolean, tokenParam: TokenParam, noTemperature: boolean) =>
       this.fetchWithProxy(url, {
         method: 'POST',
         headers: {
@@ -75,7 +77,7 @@ export class OpenAIProvider extends BaseAIProvider {
         body: JSON.stringify({
           model: this.model,
           messages,
-          ...(this.wantsTemperature ? { temperature: temperature ?? this.temperature } : {}),
+          ...(this.wantsTemperature && !noTemperature ? { temperature: temperature ?? this.temperature } : {}),
           ...(tokenParam && maxTokens ? { [tokenParam]: maxTokens } : {}),
           ...(withReasoning ? openAIReasoningParams(this.effectiveReasoningEffort) : {})
         }),
@@ -86,33 +88,45 @@ export class OpenAIProvider extends BaseAIProvider {
     // 本会话已学到该模型的参数名（如 OpenAI 推理模型只认 max_completion_tokens）则直接用
     const learnedParam = this.learned.tokenParam
     let tokenParam: TokenParam = maxTokens ? (learnedParam === undefined ? 'max_tokens' : learnedParam) : null
-    let response = await send(withReasoning, tokenParam)
+    // 本次请求内的降级只是「试探」：只有降级后的请求真正成功才记住并存档（verified），
+    // 降级后仍报同类错误、最终失败的，一律不存档，避免把错误经验写进共享状态
+    const tentative: LearnedParams = {}
+    let noTemperature = false
+    let capBackoffs = 0
+    let response = await send(withReasoning, tokenParam, noTemperature)
     // 参数不被接受时逐个降级重试，而不是让整章失败：
-    // max_tokens → max_completion_tokens（OpenAI 推理模型）→ 省略；reasoning_effort → 省略；temperature → 省略
-    for (let attempt = 0; attempt < 4 && !response.ok; attempt++) {
+    // 输出上限超限 → 报错里的上限，读不出则 ×0.8（最多 3 次）；max_tokens → max_completion_tokens → 省略；
+    // temperature → 省略；reasoning_effort → 省略
+    for (let attempt = 0; attempt < 8 && !response.ok; attempt++) {
       const body = await response.clone().text().catch(() => '')
-      const cap = tokenParam && maxTokens ? parseMaxTokensCap(body, maxTokens) : undefined
-      if (cap && (response.status === 400 || response.status === 422)) {
-        // 元数据高于服务商真实上限：按报错里的上限重试（参数名不变）
-        logger.warn(`[${this.name}] ${this.model} 输出上限 ${maxTokens} 超出服务商范围，按 ${cap} 重试（本会话记住）`)
+      const cap =
+        tokenParam && maxTokens && capBackoffs < MAX_CAP_BACKOFFS
+          ? nextOutputCap(response.status, body, maxTokens)
+          : undefined
+      if (cap) {
+        capBackoffs++
+        logger.warn(`[${this.name}] ${this.model} 输出上限 ${maxTokens} 被拒，改用 ${cap} 重试（第 ${capBackoffs}/${MAX_CAP_BACKOFFS} 次）`)
         maxTokens = cap
-        this.remember({ outputCap: cap })
+        tentative.outputCap = cap
       } else if (tokenParam && isMaxTokensParamError(response.status, body)) {
         tokenParam = tokenParam === 'max_tokens' ? 'max_completion_tokens' : null
-        this.remember({ tokenParam })
+        tentative.tokenParam = tokenParam
         logger.warn(`[${this.name}] ${this.model} 不接受当前输出上限参数，改用 ${tokenParam ?? '服务商默认'} 重试`)
-      } else if (this.wantsTemperature && isTemperatureParamError(response.status, body)) {
-        this.remember({ noTemperature: true })
-        logger.warn(`[${this.name}] ${this.model} 不支持自定义温度，已按服务商默认重试（本会话记住）`)
+      } else if (this.wantsTemperature && !noTemperature && isTemperatureParamError(response.status, body)) {
+        noTemperature = true
+        tentative.noTemperature = true
+        logger.warn(`[${this.name}] ${this.model} 不支持自定义温度，已按服务商默认重试`)
       } else if (withReasoning && isUnsupportedParamError(response.status, body)) {
         withReasoning = false
-        this.remember({ noReasoning: true })
+        tentative.noReasoning = true
         logger.warn(`[${this.name}] ${this.model} 不支持思考强度参数，已按默认重试`)
       } else {
         break
       }
-      response = await send(withReasoning, tokenParam)
+      response = await send(withReasoning, tokenParam, noTemperature)
     }
+    // 降级后成功：经验已被验证，记住并上报后端；失败则丢弃
+    if (response.ok && Object.keys(tentative).length > 0) this.remember(tentative)
 
     if (!response.ok) {
       const error = await this.createHttpError(response, this.name)

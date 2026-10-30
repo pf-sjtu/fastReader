@@ -59,6 +59,33 @@ def parse_max_tokens_cap(message: Optional[str], current: int) -> Optional[int]:
     return None
 
 
+# 读不出上限时的退避系数与单次请求内的最多退避次数（与前端 OUTPUT_CAP_BACKOFF / MAX_CAP_BACKOFFS 一致）
+OUTPUT_CAP_BACKOFF = 0.8
+MAX_CAP_BACKOFFS = 3
+_ABOUT_OUTPUT = re.compile(r"max.?tokens|max_completion_tokens|maxOutputTokens|max_output_tokens|output tokens", re.I)
+_TOO_LARGE = re.compile(r"too large|too many|exceed|greater than|larger than|out of range|must be (?:less|<=)|invalid|maximum", re.I)
+_CONTEXT_OVERFLOW = re.compile(r"(?:maximum|max) context length|context.{0,20}(?:exceed|too long|overflow)|context_length_exceeded", re.I)
+
+
+def is_output_limit_error(status: Optional[int], body: Optional[str]) -> bool:
+    """「输出上限太大 / 超出上下文」但报错里没有可信上限数字；认证、限流、内容审核等其它 400 不算"""
+    if status not in (400, 422):
+        return False
+    text = body or ""
+    return bool((_ABOUT_OUTPUT.search(text) and _TOO_LARGE.search(text)) or _CONTEXT_OVERFLOW.search(text))
+
+
+def next_output_cap(status: Optional[int], body: Optional[str], current: int) -> Optional[int]:
+    """被拒后的下一个尝试值：报错里有可信上限用它；否则若确属输出上限 / 上下文超限按 ×0.8 退避；不是或已到保底返回 None"""
+    parsed = parse_max_tokens_cap(body, current)
+    if parsed:
+        return parsed
+    if not is_output_limit_error(status, body):
+        return None
+    backed = int(current * OUTPUT_CAP_BACKOFF)
+    return backed if MIN_OUTPUT_TOKENS <= backed < current else None
+
+
 def is_max_tokens_param_error(status: Optional[int], body: Optional[str]) -> bool:
     """「max_tokens 参数名不被接受，请用 max_completion_tokens」（OpenAI 推理模型）"""
     if status not in (400, 422):

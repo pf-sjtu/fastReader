@@ -107,6 +107,9 @@ git push -u origin HEAD
 - 模型参数全部由目录元数据（models.dev / OpenRouter / 网关，`meta.*`）自动驱动，规则在 `services/ai/outputBudget.ts` ↔ CLI `src/cli/model_budget.py`，契约 `tests/fixtures/model-budget-cases.json`：
   输出上限 = `meta.output`（不超窗口，超限按报错重发）；输入超预算的章节按段落分段总结再合并；后处理压缩阈值按窗口计算；
   `meta.temperature/reasoning === false` 时不发对应参数，未知照常发、被拒降级重试。不要再写死 token / 字数上限
+- 输出上限被拒：报错有可信上限用它，否则（仅输出上限 / 上下文超限类报错）×0.8 退避，单次请求最多 3 次；
+  降级后**成功**的经验（上限 / 参数名 / 不支持温度 / 不支持思考）才写入 KV `state:modelQuirks`（append，服务端单调合并：
+  上限只降、旗标只开），前端启动时导入、CLI 设 `FASTREADER_SERVER_URL` 后共用；失败的试探值一律不存档
 - 结果状态统一用 `utils/resultStatus.ts`（失败/跳过前缀），书籍 HTML 入 DOM 前必经 `utils/sanitizeHtml.ts`
 - 价格：`services/ai/catalog.ts` 用 models.dev 元数据匹配，`services/metadataFormatter.ts` 通过 `setPricingProvider` /
   `setExchangeRateProvider` 注入（`services/pricingBridge.ts` 在启动时接好）；查不到价格时标 `pricingKnown:false`，不估价

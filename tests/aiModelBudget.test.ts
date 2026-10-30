@@ -8,6 +8,7 @@ import { resolve } from 'node:path'
 import {
   isMaxTokensParamError,
   isTemperatureParamError,
+  nextOutputCap,
   parseMaxTokensCap,
   resolveInputBudget,
   resolveMaxOutputTokens,
@@ -48,6 +49,11 @@ describe('共享契约 model-budget-cases.json', () => {
   for (const c of cases.maxTokensParamName) {
     it(`参数名报错：${c.body.slice(0, 40)}`, () => {
       expect(isMaxTokensParamError(c.status, c.body)).toBe(c.expected)
+    })
+  }
+  for (const c of cases.nextOutputCap) {
+    it(`退避：${c.name}`, () => {
+      expect(nextOutputCap(c.status, c.body, c.current) ?? null).toBe(c.expected)
     })
   }
   for (const c of cases.temperatureError) {

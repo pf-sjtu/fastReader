@@ -14,6 +14,7 @@ import tempfile
 from .config import Config, active_provider
 from .webdav_client import WebDAVClientWrapper, WebDAVProbeError
 from .ai_client import create_ai_client, AIClient
+from .model_quirks import QuirkStore
 from .prompts import PromptTemplates, resolve_prompts_dir
 from .retry import RetryPolicy
 from .checkpoint import ChapterCheckpoint
@@ -47,11 +48,17 @@ class BatchProcessor:
         retry_policy = RetryPolicy(
             max_retries=config.batch.maxRetries, delays=list(config.batch.retryDelays)
         )
+        # 模型参数怪癖：配置了 FASTREADER_SERVER_URL + FASTREADER_APP_PASSWORD 时与浏览器共用后端存档
+        self.quirks = QuirkStore.from_env(logger)
+        if self.quirks.enabled:
+            n = self.quirks.load()
+            logger.info(f"已载入后端模型参数存档 {n} 条")
         self.ai_client: Optional[AIClient] = create_ai_client(
             config.ai, logger, self.prompt_templates,
             retry_policy=retry_policy,
             timeout=config.advanced.requestTimeout,
             exchange_rate=config.advanced.exchangeRate,
+            quirks=self.quirks,
         )
         self.formatter = ResultFormatter(logger)
         self._start_time: Optional[float] = None

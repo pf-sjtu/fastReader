@@ -243,3 +243,105 @@ def test_learned_output_cap_reused_across_calls():
     assert c._generate(long_prompt, "zh").success
     assert c._generate(long_prompt, "zh").success
     assert seen == [393216, 384000, 384000]  # 第二次直接用学到的上限
+
+
+# ---- 0.8× 退避（最多 3 次）+ 只存档验证成功的值 + 后端存档 ----
+from src.cli.model_budget import next_output_cap  # noqa: E402
+from src.cli.model_quirks import QuirkStore, merge_quirk, quirk_key  # noqa: E402
+
+
+@pytest.mark.parametrize("c", CASES["nextOutputCap"], ids=lambda c: c["name"])
+def test_next_output_cap_contract(c):
+    assert next_output_cap(c["status"], c["body"], c["current"]) == c["expected"]
+
+
+class _RecordingStore(QuirkStore):
+    def __init__(self):
+        super().__init__()
+        self.reported = []
+
+    def remember(self, key, patch):
+        self.reported.append((key, dict(patch)))
+        super().remember(key, patch)
+
+
+def _quirk_client(fail_until_below=None, always_fail=False):
+    store = _RecordingStore()
+    c = _Scripted(maxOutputTokens=100_000)
+    c.quirks = store
+    c.quirk_key = quirk_key("gw", "u", "m")
+    seen = []
+
+    def call(prompt, system, max_tokens, low_reasoning=False):
+        seen.append(max_tokens)
+        if always_fail or (fail_until_below and max_tokens > fail_until_below):
+            raise _Err(400, "max_tokens is too large for this model")
+        return ("总结", 10, 100)
+
+    c._call = call
+    c.retry_policy.max_retries = 0
+    return c, store, seen
+
+
+LONG_PROMPT = "x" * 100_000  # 估算 125000 token → 输出预算给到模型上限 100000
+
+
+def test_backoff_then_success_remembers_and_reports():
+    c, store, seen = _quirk_client(fail_until_below=70_000)
+    assert c._generate(LONG_PROMPT, "zh").success
+    assert seen == [100_000, 80_000, 64_000]
+    assert store.reported == [(quirk_key("gw", "u", "m"), {"outputCap": 64_000})]
+    assert c.learned_output_cap == 64_000
+
+
+def test_backoff_at_most_three_times_and_failure_not_archived():
+    c, store, seen = _quirk_client(always_fail=True)
+    r = c._generate(LONG_PROMPT, "zh")
+    assert not r.success
+    assert seen == [100_000, 80_000, 64_000, 51_200]  # 首发 + 3 次退避，不会有第 4 次
+    assert store.reported == [] and c.learned_output_cap is None
+
+
+def test_quirk_store_monotonic_merge():
+    assert merge_quirk({"outputCap": 40_000, "noTemperature": True}, {"outputCap": 90_000, "noTemperature": False}) == {
+        "outputCap": 40_000, "noTemperature": True}
+    assert merge_quirk({"tokenParam": "max_completion_tokens"}, {"tokenParam": "max_tokens"}) == {
+        "tokenParam": "max_completion_tokens"}
+
+
+def test_loaded_archive_applies_on_first_request():
+    store = QuirkStore()
+    store.entries[quirk_key("gw", "u", "m")] = {"outputCap": 50_000, "noTemperature": True,
+                                                "tokenParam": "max_completion_tokens"}
+    c = OpenAIClient(AIProviderConfig(provider="openai", providerId="gw", apiKey="k", apiUrl="u", model="m",
+                                      maxOutputTokens=100_000), MagicMock(), quirks=store)
+    assert c.learned_output_cap == 50_000 and c.send_temperature is False and c.token_param == "max_completion_tokens"
+
+
+def test_param_fallback_only_remembered_on_success():
+    c, calls, replies, ok = _client()
+    store = _RecordingStore()
+    c.quirks = store
+    replies.extend([_Err(400, "Unsupported parameter: 'temperature' is not supported with this model."),
+                    _Err(500, "upstream down")])
+    with pytest.raises(_Err):
+        c._call("p", "s", 100)
+    assert store.reported == [] and c.send_temperature is True  # 降级后仍失败：不记住
+
+
+def test_quirk_store_backend_roundtrip(monkeypatch):
+    """配置了后端：启动 load 读存档；remember 上报 append（打桩 HTTP，不走网络）"""
+    store = QuirkStore("https://x.test", "pw")
+    calls = []
+
+    def fake_request(method, path, body=None):
+        calls.append((method, path, body))
+        if method == "GET":
+            return {"value": {"data": {"entries": {"gw|m": {"outputCap": 50_000}}}}}
+        return {"ok": True}
+
+    monkeypatch.setattr(store, "_request", fake_request)
+    assert store.load() == 1 and store.get("gw|m") == {"outputCap": 50_000}
+    store.remember("gw|m", {"outputCap": 60_000})  # 更大：无变化，不上报
+    store.remember("gw|m", {"outputCap": 40_000})
+    assert calls[1:] == [("POST", "/api/state/modelQuirks/append", {"patch": {"entries": {"gw|m": {"outputCap": 40_000}}}})]

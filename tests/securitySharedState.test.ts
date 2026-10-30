@@ -235,7 +235,18 @@ describe('共享状态读写', () => {
     const res = await call(stateHandler, '/api/state', env, { cookie })
     const body = await res.json()
     expect(body.initialized).toBe(false)
-    expect(body.missing.sort()).toEqual(['ai', 'batch', 'history', 'processing', 'prompts', 'usage', 'webdav'])
+    expect(body.missing.sort()).toEqual(['ai', 'batch', 'history', 'modelQuirks', 'processing', 'prompts', 'usage', 'webdav'])
+  })
+
+  it('只有自动学到的 modelQuirks 时仍视为未初始化（不能让初始化向导被跳过）', async () => {
+    await call(stateHandler, '/api/state/modelQuirks/append', env, {
+      method: 'POST',
+      cookie,
+      body: { patch: { entries: { 'p|m': { outputCap: 9000 } } } },
+    })
+    const body = await (await call(stateHandler, '/api/state', env, { cookie })).json()
+    expect(body.initialized).toBe(false)
+    expect(body.sections.modelQuirks.data.entries['p|m'].outputCap).toBe(9000)
   })
 
   it('写入后 rev 自增，读取按节返回', async () => {
@@ -443,6 +454,38 @@ describe('追加型数据', () => {
     expect(body.value.data.tokenUsage).toBe(150)
     expect(body.value.data.totalCostUSD).toBeCloseTo(0.15)
     expect(body.value.data.byModel['gpt-x'].tokens).toBe(150)
+  })
+
+  it('模型参数怪癖（modelQuirks）单调合并：上限只降、旗标只开、参数名只往保守方向，并发上报互不覆盖', async () => {
+    const append = (entries: unknown) =>
+      call(stateHandler, '/api/state/modelQuirks/append', env, { method: 'POST', cookie, body: { patch: { entries } } })
+
+    await append({ 'sensenova|deepseek-v4-flash': { outputCap: 384000 }, 'openai|o5': { tokenParam: 'max_completion_tokens' } })
+    // 另一台客户端上报更大的上限 / 更激进的参数名 / 关闭旗标：都不应撤销已有经验
+    await append({
+      'sensenova|deepseek-v4-flash': { outputCap: 393216, noTemperature: true },
+      'openai|o5': { tokenParam: 'max_tokens', noTemperature: false },
+    })
+    await append({ 'sensenova|deepseek-v4-flash': { outputCap: 300000 } })
+
+    const body = await (await call(stateHandler, '/api/state/modelQuirks', env, { cookie })).json()
+    const e = body.value.data.entries
+    expect(e['sensenova|deepseek-v4-flash']).toMatchObject({ outputCap: 300000, noTemperature: true })
+    expect(e['openai|o5'].tokenParam).toBe('max_completion_tokens')
+    expect(e['openai|o5'].noTemperature).toBeUndefined()
+  })
+
+  it('modelQuirks 拒绝异常值：过小上限 / 非法参数名 / 超长键', async () => {
+    await call(stateHandler, '/api/state/modelQuirks/append', env, {
+      method: 'POST',
+      cookie,
+      body: { patch: { entries: { 'p|m': { outputCap: 10, tokenParam: 'drop table' }, ['x'.repeat(400)]: { outputCap: 9000 } } } },
+    })
+    const body = await (await call(stateHandler, '/api/state/modelQuirks', env, { cookie })).json()
+    const e = body.value.data.entries
+    expect(e['p|m'].outputCap).toBeUndefined()
+    expect(e['p|m'].tokenParam).toBeUndefined()
+    expect(Object.keys(e)).toEqual(['p|m'])
   })
 
   it('不支持追加的分区返回 400', async () => {

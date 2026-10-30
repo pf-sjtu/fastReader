@@ -240,5 +240,56 @@
       "body": "invalid api key",
       "expected": false
     }
+  ],
+  "nextOutputCap": [
+    {
+      "name": "有可信上限：用它",
+      "status": 400,
+      "body": "field MaxTokens invalid, should be in [1, 384000]",
+      "current": 393216,
+      "expected": 384000
+    },
+    {
+      "name": "读不出上限的超限：×0.8",
+      "status": 400,
+      "body": "max_tokens is too large for this model",
+      "current": 10000,
+      "expected": 8000
+    },
+    {
+      "name": "上下文超限：×0.8",
+      "status": 400,
+      "body": "This model's maximum context length is 131072 tokens",
+      "current": 10000,
+      "expected": 8000
+    },
+    {
+      "name": "无关 400：不退避",
+      "status": 400,
+      "body": "invalid api key",
+      "current": 10000,
+      "expected": null
+    },
+    {
+      "name": "内容审核：不退避",
+      "status": 422,
+      "body": "output new_sensitive (1027)",
+      "current": 10000,
+      "expected": null
+    },
+    {
+      "name": "再退就低于保底 1024：不退避",
+      "status": 400,
+      "body": "max_tokens is too large",
+      "current": 1200,
+      "expected": null
+    },
+    {
+      "name": "5xx：不退避",
+      "status": 500,
+      "body": "max_tokens is too large",
+      "current": 10000,
+      "expected": null
+    }
   ]
 }

@@ -46,6 +46,48 @@ const APPEND_MERGERS = {
   },
 }
 
+/** modelQuirks 单表最多保留的模型数（防滥用；正常远小于此） */
+const MAX_QUIRK_ENTRIES = 500
+
+/**
+ * 运行中学到的服务商参数怪癖：{ entries: { "服务商|模型": {outputCap, tokenParam, noTemperature, noReasoning, updatedAt} } }
+ * 合并规则单调：outputCap 只降不升、旗标只开不关、tokenParam 只往「更保守」方向变；
+ * 多个客户端（浏览器 / CLI）并发上报互不覆盖，也不会被旧数据撤销。
+ */
+const TOKEN_PARAM_ORDER = { max_tokens: 0, max_completion_tokens: 1, none: 2 }
+function mergeQuirks(current, patch) {
+  const entries = { ...(current?.entries && typeof current.entries === 'object' ? current.entries : {}) }
+  const incoming = patch?.entries && typeof patch.entries === 'object' ? patch.entries : {}
+  for (const [key, value] of Object.entries(incoming)) {
+    if (typeof key !== 'string' || key.length > 300 || !value || typeof value !== 'object') continue
+    const prev = entries[key] ?? {}
+    const next = { ...prev }
+    const cap = Number(value.outputCap)
+    if (Number.isFinite(cap) && cap >= 256) {
+      next.outputCap = Number.isFinite(Number(prev.outputCap)) ? Math.min(Number(prev.outputCap), Math.floor(cap)) : Math.floor(cap)
+    }
+    const param = value.tokenParam === null ? 'none' : value.tokenParam
+    if (param in TOKEN_PARAM_ORDER) {
+      const prevParam = prev.tokenParam === null ? 'none' : prev.tokenParam
+      if (!(prevParam in TOKEN_PARAM_ORDER) || TOKEN_PARAM_ORDER[param] > TOKEN_PARAM_ORDER[prevParam]) {
+        next.tokenParam = param === 'none' ? null : param
+      }
+    }
+    if (value.noTemperature === true) next.noTemperature = true
+    if (value.noReasoning === true) next.noReasoning = true
+    next.updatedAt = new Date().toISOString()
+    entries[key] = next
+  }
+  const keys = Object.keys(entries)
+  if (keys.length > MAX_QUIRK_ENTRIES) {
+    // 超量时淘汰最久未更新的
+    keys.sort((a, b) => String(entries[a].updatedAt).localeCompare(String(entries[b].updatedAt)))
+    for (const k of keys.slice(0, keys.length - MAX_QUIRK_ENTRIES)) delete entries[k]
+  }
+  return { entries }
+}
+APPEND_MERGERS.modelQuirks = mergeQuirks
+
 function parsePath(url) {
   const rest = url.pathname.replace(/^\/api\/state\/?/, '').replace(/\/+$/, '')
   if (!rest) return { section: '', append: false }
@@ -75,7 +117,8 @@ export async function onRequest(context) {
         masked[name] = { rev: value.rev, updatedAt: value.updatedAt, data: maskSecrets(value.data) }
       }
       return jsonResponse(
-        { initialized: Object.keys(sections).length > 0, sections: masked, missing },
+        // modelQuirks 是运行中自动学到的数据，不代表「已完成初始化」：只看用户配置类分区
+        { initialized: Object.keys(sections).some((name) => name !== 'modelQuirks'), sections: masked, missing },
         200,
         { 'Cache-Control': 'no-store' }
       )

@@ -9,7 +9,7 @@ import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
 import { anthropicReasoningParams, isUnsupportedParamError } from './reasoning'
-import { estimatePromptTokens, isTemperatureParamError, parseMaxTokensCap } from './outputBudget'
+import { MAX_CAP_BACKOFFS, estimatePromptTokens, isTemperatureParamError, nextOutputCap, type LearnedParams } from './outputBudget'
 
 /** Anthropic 要求显式 max_tokens：模型元数据缺失时的保底值 */
 const DEFAULT_MAX_TOKENS = 8192
@@ -43,12 +43,15 @@ export class AnthropicProvider extends BaseAIProvider {
 
     let maxTokens = this.resolveOutputCap(estimatePromptTokens(prompt, systemPrompt)) ?? DEFAULT_MAX_TOKENS
     const thinkingOn = Object.keys(anthropicReasoningParams(this.effectiveReasoningEffort, maxTokens).params).length > 0
+    // 本次请求内的降级只是试探：降级后成功才记住并存档（与 openaiProvider 同策略）
+    const tentative: LearnedParams = {}
+    let noTemperature = false
+    // 本次已探到的服务商上限：thinking 的 max_tokens（= max(maxTokens, budget+2048)）也不能超过它
+    let probedCap: number | undefined = this.learned.outputCap
     const send = (withThinking: boolean) => {
-      // 每次发送都按当前 maxTokens 重算 thinking 参数：被拒后 maxTokens 会降到服务商上限，
-      // thinking 的 max_tokens（= max(maxTokens, budget+2048)）也必须跟着变，否则重发的仍是同一个超限请求
+      // 每次发送都按当前 maxTokens 重算 thinking 参数，否则重发的仍是同一个超限请求
       const reasoning = anthropicReasoningParams(this.effectiveReasoningEffort, maxTokens)
-      const cap = this.learned.outputCap
-      const thinkingMax = cap ? Math.min(reasoning.maxTokens, cap) : reasoning.maxTokens
+      const thinkingMax = probedCap ? Math.min(reasoning.maxTokens, probedCap) : reasoning.maxTokens
       return this.fetchWithProxy(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,7 +63,7 @@ export class AnthropicProvider extends BaseAIProvider {
           // 开启 thinking 时 Anthropic 只接受 temperature=1；目录标注不支持温度则不发
           ...(withThinking
             ? { temperature: 1 }
-            : this.wantsTemperature
+            : this.wantsTemperature && !noTemperature
               ? { temperature: temperature ?? this.temperature }
               : {}),
           ...(withThinking ? reasoning.params : {}),
@@ -69,32 +72,39 @@ export class AnthropicProvider extends BaseAIProvider {
       })
     }
 
-    let response = await send(thinkingOn)
-    // 参数被拒时逐个降级：输出上限超范围 → 按报错上限；temperature 不支持 → 省略
-    for (let attempt = 0; attempt < 2 && !response.ok && (response.status === 400 || response.status === 422); attempt++) {
+    let withThinking = thinkingOn
+    let capBackoffs = 0
+    let response = await send(withThinking)
+    // 参数被拒时逐个降级：输出上限超限 → 报错上限，读不出则 ×0.8（最多 3 次）；temperature → 省略；thinking → 关闭
+    for (let attempt = 0; attempt < 6 && !response.ok && (response.status === 400 || response.status === 422); attempt++) {
       const body = await response.clone().text().catch(() => '')
-      const cap = parseMaxTokensCap(body, maxTokens)
+      // thinking 开启时实际发出的是 thinking 的 max_tokens，退避要以它为基准
+      const sent = withThinking
+        ? Math.min(anthropicReasoningParams(this.effectiveReasoningEffort, maxTokens).maxTokens, probedCap ?? Infinity)
+        : maxTokens
+      const cap = capBackoffs < MAX_CAP_BACKOFFS ? nextOutputCap(response.status, body, sent) : undefined
       if (cap) {
-        logger.warn(`[${this.name}] ${this.model} 输出上限 ${maxTokens} 超出服务商范围，按 ${cap} 重试（本会话记住）`)
-        maxTokens = cap
-        this.remember({ outputCap: cap })
-      } else if (this.wantsTemperature && isTemperatureParamError(response.status, body)) {
-        this.remember({ noTemperature: true })
-        logger.warn(`[${this.name}] ${this.model} 不支持自定义温度，已按服务商默认重试（本会话记住）`)
+        capBackoffs++
+        logger.warn(`[${this.name}] ${this.model} 输出上限 ${sent} 被拒，改用 ${cap} 重试（第 ${capBackoffs}/${MAX_CAP_BACKOFFS} 次）`)
+        maxTokens = Math.min(maxTokens, cap)
+        probedCap = cap
+        tentative.outputCap = cap
+      } else if (this.wantsTemperature && !noTemperature && !withThinking && isTemperatureParamError(response.status, body)) {
+        noTemperature = true
+        tentative.noTemperature = true
+        logger.warn(`[${this.name}] ${this.model} 不支持自定义温度，已按服务商默认重试`)
+      } else if (withThinking && isUnsupportedParamError(response.status, body) && /thinking|budget_tokens/i.test(body)) {
+        // 只认「thinking 不被支持」：不能把超上限之类的其他 400 也当成它
+        withThinking = false
+        tentative.noReasoning = true
+        logger.warn(`[${this.name}] ${this.model} 不支持 thinking，已按默认重试`)
       } else {
         break
       }
-      response = await send(thinkingOn)
+      response = await send(withThinking)
     }
-    if (thinkingOn && !response.ok) {
-      const body = await response.clone().text().catch(() => '')
-      // 只认「thinking 不被支持」：不能把超上限之类的其他 400 也当成它
-      if (isUnsupportedParamError(response.status, body) && /thinking|budget_tokens/i.test(body)) {
-        this.remember({ noReasoning: true })
-        logger.warn(`[${this.name}] ${this.model} 不支持 thinking，已按默认重试`)
-        response = await send(false)
-      }
-    }
+    // 降级后成功才记住并存档；降级后仍失败的试探值丢弃
+    if (response.ok && Object.keys(tentative).length > 0) this.remember(tentative)
 
     if (!response.ok) {
       const error = await this.createHttpError(response, this.name)

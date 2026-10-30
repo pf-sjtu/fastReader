@@ -7,6 +7,8 @@ import { ThemeProvider } from './components/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthGate } from './components/auth/AuthGate'
 import { installPricingProviders } from './services/pricingBridge'
+// 注册 modelQuirks 共享分区：启动时导入各模型已验证的参数怪癖，运行中学到的新值上报后端
+import './stores/modelQuirks'
 
 // 汇率/价格来自共享配置：启动时装好取数钩子
 installPricingProviders()

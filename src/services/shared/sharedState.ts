@@ -37,7 +37,7 @@ export const useSyncStatusStore = create<SyncState>()((set) => ({
   setStatus: (status, patch) => set({ status, ...(patch ?? {}) }),
 }))
 
-export type SectionName = 'ai' | 'processing' | 'webdav' | 'prompts' | 'history' | 'batch' | 'usage'
+export type SectionName = 'ai' | 'processing' | 'webdav' | 'prompts' | 'history' | 'batch' | 'usage' | 'modelQuirks'
 
 interface SectionBinding<T = unknown> {
   /** 从 store 读当前可写数据 */
@@ -50,7 +50,7 @@ interface SectionBinding<T = unknown> {
   afterFlush?: () => void
 }
 
-const SECTIONS: SectionName[] = ['ai', 'processing', 'webdav', 'prompts', 'history', 'batch', 'usage']
+const SECTIONS: SectionName[] = ['ai', 'processing', 'webdav', 'prompts', 'history', 'batch', 'usage', 'modelQuirks']
 
 const bindings = new Map<SectionName, SectionBinding>()
 /** 上次成功同步（或 hydrate）的远端值，作为三方合并的 base */
@@ -361,7 +361,7 @@ export async function flushAllSections(options: { force?: boolean } = {}): Promi
 }
 
 /** 追加型数据（历史 / 用量）直接走 append 接口 */
-export async function appendToSection<T>(section: 'history' | 'usage', patch: unknown): Promise<T | null> {
+export async function appendToSection<T>(section: 'history' | 'usage' | 'modelQuirks', patch: unknown): Promise<T | null> {
   try {
     const snapshot = await sharedApi.appendSection<T>(section, patch)
     revs.set(section, snapshot.rev)

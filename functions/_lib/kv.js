@@ -1,10 +1,10 @@
 // 共享状态的 KV 存取：分节 + 版本号（rev）实现乐观锁
 
 /** 受支持的共享分区 */
-export const SECTIONS = ['ai', 'processing', 'webdav', 'prompts', 'history', 'batch', 'usage']
+export const SECTIONS = ['ai', 'processing', 'webdav', 'prompts', 'history', 'batch', 'usage', 'modelQuirks']
 
 /** 追加型分区（服务端合并，天然无冲突） */
-export const APPEND_SECTIONS = ['history', 'usage']
+export const APPEND_SECTIONS = ['history', 'usage', 'modelQuirks']
 
 const stateKey = (section) => `state:${section}`
 

@@ -69,6 +69,40 @@ export function parseMaxTokensCap(body: string | undefined, current: number): nu
   return undefined
 }
 
+/** 读不出上限时的退避系数：每次报错把输出上限降到 0.8 倍 */
+export const OUTPUT_CAP_BACKOFF = 0.8
+/**
+ * 单次请求内最多调整输出上限的次数（读报错上限与 0.8 倍退避合计）。
+ * 3 次后仍报同类错误即按失败处理，且本次试探的上限不存档——只有降级后真正成功的值才会写入共享状态。
+ */
+export const MAX_CAP_BACKOFFS = 3
+
+/**
+ * 「输出上限太大」但报错里没有可信上限数字（如 `max_tokens is too large`、
+ * `Requested token count exceeds the model's maximum context length`）。只认明确指向输出上限 / 上下文长度的表述，
+ * 认证、限流、内容审核等其它 400 不算——否则会把上限无谓地一路缩小。
+ */
+export function isOutputLimitError(status: number | undefined, body: string | undefined): boolean {
+  if (status !== 400 && status !== 422) return false
+  const text = body ?? ''
+  const aboutOutput = /max.?tokens|max_completion_tokens|maxOutputTokens|max_output_tokens|output tokens/i.test(text)
+  const tooLarge = /too large|too many|exceed|greater than|larger than|out of range|must be (?:less|<=)|invalid|maximum/i.test(text)
+  const contextOverflow = /(?:maximum|max) context length|context.{0,20}(?:exceed|too long|overflow)|context_length_exceeded/i.test(text)
+  return (aboutOutput && tooLarge) || contextOverflow
+}
+
+/**
+ * 输出上限被拒后的下一个尝试值：报错里有可信上限就用它；否则若确属输出上限 / 上下文超限，按 0.8 倍退避。
+ * 不是这类报错、或已退到保底 1024，返回 undefined（由调用方按普通失败处理）。
+ */
+export function nextOutputCap(status: number | undefined, body: string | undefined, current: number): number | undefined {
+  const parsed = parseMaxTokensCap(body, current)
+  if (parsed) return parsed
+  if (!isOutputLimitError(status, body)) return undefined
+  const backedOff = Math.floor(current * OUTPUT_CAP_BACKOFF)
+  return backedOff >= MIN_OUTPUT_TOKENS && backedOff < current ? backedOff : undefined
+}
+
 /**
  * OpenAI 官方的推理模型（o 系列 / gpt-5）拒绝 max_tokens，要求 max_completion_tokens；
  * 大多数 OpenAI 兼容网关则只认 max_tokens。按报错切换参数名。
@@ -99,9 +133,51 @@ export function learnedParamsKey(providerId: string | undefined, apiUrl: string 
 export function getLearnedParams(key: string): LearnedParams {
   return learned.get(key) ?? {}
 }
-export function rememberParams(key: string, patch: LearnedParams): void {
-  learned.set(key, { ...learned.get(key), ...patch })
+
+const TOKEN_PARAM_RANK = { max_tokens: 0, max_completion_tokens: 1, none: 2 } as const
+const rankOf = (p: LearnedParams['tokenParam']) => (p === undefined ? -1 : TOKEN_PARAM_RANK[p ?? 'none'])
+
+/**
+ * 单调合并（与服务端 functions/api/state 的 mergeQuirks 同规则）：上限只降不升、旗标只开不关、
+ * 参数名只往更保守方向变。返回合并后是否有变化（有变化才上报后端）。
+ */
+function mergeLearned(key: string, patch: LearnedParams): boolean {
+  const prev = learned.get(key) ?? {}
+  const next: LearnedParams = { ...prev }
+  if (patch.outputCap && patch.outputCap > 0) {
+    next.outputCap = prev.outputCap ? Math.min(prev.outputCap, patch.outputCap) : patch.outputCap
+  }
+  if (patch.tokenParam !== undefined && rankOf(patch.tokenParam) > rankOf(prev.tokenParam)) next.tokenParam = patch.tokenParam
+  if (patch.noTemperature) next.noTemperature = true
+  if (patch.noReasoning) next.noReasoning = true
+  const changed =
+    next.outputCap !== prev.outputCap ||
+    next.tokenParam !== prev.tokenParam ||
+    next.noTemperature !== prev.noTemperature ||
+    next.noReasoning !== prev.noReasoning
+  if (changed) learned.set(key, next)
+  return changed
 }
+
+/** 学到新参数时的上报钩子（由 stores 层注入共享状态的 append，避免 services → stores 循环依赖） */
+let persister: ((entries: Record<string, LearnedParams>) => void) | undefined
+export function setLearnedParamsPersister(fn: typeof persister): void {
+  persister = fn
+}
+
+/** 运行中学到一条：合并进本地表；有变化则上报后端，所有用户与 CLI 下次启动即生效 */
+export function rememberParams(key: string, patch: LearnedParams): void {
+  if (mergeLearned(key, patch)) persister?.({ [key]: patch })
+}
+
+/** 启动 / 同步时导入后端存档（只合并，不回报） */
+export function loadLearnedParams(entries: Record<string, LearnedParams> | undefined): void {
+  if (!entries || typeof entries !== 'object') return
+  for (const [key, value] of Object.entries(entries)) {
+    if (value && typeof value === 'object') mergeLearned(key, value)
+  }
+}
+
 /** 测试用：清空学习表 */
 export function resetLearnedParams(): void {
   learned.clear()

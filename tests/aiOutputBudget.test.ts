@@ -228,3 +228,85 @@ describe('学到的服务商参数：跨 provider 实例、整个会话记住（
     expect(bodyOf(f, 1).thinking).toEqual({ type: 'enabled', budget_tokens: 12000 })
   })
 })
+
+import { getLearnedParams, learnedParamsKey, loadLearnedParams, nextOutputCap, setLearnedParamsPersister } from '../src/services/ai/outputBudget'
+
+describe('输出上限 0.8× 退避（最多 3 次）+ 只存档验证成功的值', () => {
+  const tooLarge = () =>
+    new Response(JSON.stringify({ error: { message: 'max_tokens is too large for this model' } }), { status: 400 })
+  const okBody = () => ok({ choices: [{ message: { content: 'ok' } }] })
+  const longPrompt = 'x'.repeat(100_000) // 估算 125000 token → 输出预算给到模型上限
+  const cfg = { ...base, provider: 'openai' as const, providerId: 'gw', model: 'm1', maxOutputTokens: 100_000 }
+
+  it('nextOutputCap：有可信上限用上限；否则仅输出上限 / 上下文超限才 ×0.8；无关 400 不退避', () => {
+    expect(nextOutputCap(400, 'field MaxTokens invalid, should be in [1, 384000]', 393216)).toBe(384000)
+    expect(nextOutputCap(400, 'max_tokens is too large', 10000)).toBe(8000)
+    expect(nextOutputCap(400, "This model's maximum context length is 131072 tokens", 10000)).toBe(8000)
+    expect(nextOutputCap(400, 'invalid api key', 10000)).toBeUndefined()
+    expect(nextOutputCap(400, 'output new_sensitive (1027)', 10000)).toBeUndefined()
+    expect(nextOutputCap(400, 'max_tokens is too large', 1200)).toBeUndefined() // 再退就低于保底 1024
+  })
+
+  it('读不出上限：×0.8 退避后成功 → 记住并上报后端（只报验证成功的值）', async () => {
+    const reported: unknown[] = []
+    setLearnedParamsPersister((e) => reported.push(e))
+    const f = vi.fn().mockResolvedValueOnce(tooLarge()).mockResolvedValueOnce(tooLarge()).mockImplementation(async () => okBody())
+    vi.stubGlobal('fetch', f)
+    const r = await new OpenAIProvider(cfg).generateContent({ prompt: longPrompt })
+    expect(r.content).toBe('ok')
+    expect([0, 1, 2].map((i) => bodyOf(f, i).max_tokens)).toEqual([100_000, 80_000, 64_000])
+    const key = learnedParamsKey('gw', base.apiUrl, 'm1')
+    expect(getLearnedParams(key).outputCap).toBe(64_000)
+    expect(reported).toEqual([{ [key]: { outputCap: 64_000 } }])
+    setLearnedParamsPersister(undefined)
+  })
+
+  it('最多退避 3 次；退避后仍报同一错误 → 失败，且不记住、不上报', async () => {
+    const reported: unknown[] = []
+    setLearnedParamsPersister((e) => reported.push(e))
+    const f = vi.fn().mockImplementation(async () => tooLarge())
+    vi.stubGlobal('fetch', f)
+    await expect(new OpenAIProvider({ ...cfg, model: 'm2' }).generateContent({ prompt: longPrompt })).rejects.toThrow()
+    // 首发 + 3 次退避 = 4 次（重试层可能对 4xx 不再重试；只数本 provider 内的降级尝试）
+    const caps = f.mock.calls.map((_, i) => bodyOf(f, i).max_tokens)
+    expect(caps.slice(0, 4)).toEqual([100_000, 80_000, 64_000, 51_200])
+    expect(new Set(caps).size).toBe(4) // 不会退避第 4 次
+    expect(getLearnedParams(learnedParamsKey('gw', base.apiUrl, 'm2')).outputCap).toBeUndefined()
+    expect(reported).toEqual([])
+    setLearnedParamsPersister(undefined)
+  })
+
+  it('后端存档导入：新会话第一次请求就直接用已验证的上限', async () => {
+    loadLearnedParams({ [learnedParamsKey('gw', base.apiUrl, 'm3')]: { outputCap: 50_000, noTemperature: true } })
+    const f = vi.fn().mockImplementation(async () => okBody())
+    vi.stubGlobal('fetch', f)
+    await new OpenAIProvider({ ...cfg, model: 'm3' }).generateContent({ prompt: longPrompt })
+    expect(f).toHaveBeenCalledTimes(1)
+    expect(bodyOf(f).max_tokens).toBe(50_000)
+    expect(bodyOf(f)).not.toHaveProperty('temperature')
+  })
+
+  it('学习表单调：更大的上限 / 关掉的旗标不会覆盖已有经验', () => {
+    const key = learnedParamsKey('gw', base.apiUrl, 'm4')
+    loadLearnedParams({ [key]: { outputCap: 40_000, noTemperature: true } })
+    loadLearnedParams({ [key]: { outputCap: 90_000, noTemperature: false } })
+    expect(getLearnedParams(key)).toMatchObject({ outputCap: 40_000, noTemperature: true })
+  })
+
+  it('Anthropic thinking 开启：以实际发出的 thinking max_tokens 为基准退避，成功才存档', async () => {
+    const reported: unknown[] = []
+    setLearnedParamsPersister((e) => reported.push(e))
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'max_tokens: value too large' } }), { status: 400 }))
+      .mockImplementation(async () => ok({ content: [{ type: 'text', text: 'ok' }], usage: {} }))
+    vi.stubGlobal('fetch', f)
+    await new AnthropicProvider({
+      ...base, provider: 'anthropic', providerId: 'kiro', model: 'c1', maxOutputTokens: 64000, reasoningEffort: 'high',
+    }).generateContent({ prompt: 'x'.repeat(30_000) })
+    expect(bodyOf(f, 0).max_tokens).toBe(64000)
+    expect(bodyOf(f, 1).max_tokens).toBe(51200)
+    expect(reported).toEqual([{ [learnedParamsKey('kiro', base.apiUrl, 'c1')]: { outputCap: 51200 } }])
+    setLearnedParamsPersister(undefined)
+  })
+})

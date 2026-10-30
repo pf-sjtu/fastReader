@@ -54,6 +54,8 @@ class AIProviderConfig:
     # 模型最大输出 / 上下文窗口（models[].meta.output / meta.context）：请求时输出上限自动给满
     maxOutputTokens: Optional[int] = None
     contextWindow: Optional[int] = None
+    # 服务商 id（2.0.0 配置的 providers[].id）：与前端共用模型参数存档的键
+    providerId: str = ""
     # 目录明确否定时为 False：不发 temperature / 不发思考强度参数（未知为 None，照常发送）
     supportsTemperature: Optional[bool] = None
     supportsReasoning: Optional[bool] = None
@@ -276,6 +278,7 @@ class ConfigLoader:
                     current_index = len(providers)
                 meta = model.get('meta') if isinstance(model.get('meta'), dict) else {}
                 providers.append(AIProviderConfig(
+                    providerId=str(provider.get('id') or ''),
                     provider=protocol,
                     apiKey=api_key,
                     apiUrl=base_url,

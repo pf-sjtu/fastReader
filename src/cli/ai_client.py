@@ -13,10 +13,11 @@ from dataclasses import dataclass
 from .models import ChapterInfo
 from .logger import Logger
 from .model_budget import (  # noqa: F401  parse_max_tokens_cap / resolve_max_output_tokens 供旧调用方从此处导入
-    MIN_OUTPUT_TOKENS, estimate_prompt_tokens, is_max_tokens_param_error, is_temperature_param_error,
-    parse_max_tokens_cap, resolve_input_budget, resolve_max_output_tokens, resolve_post_process_limits,
-    split_by_budget,
+    MAX_CAP_BACKOFFS, MIN_OUTPUT_TOKENS, estimate_prompt_tokens, is_max_tokens_param_error,
+    is_temperature_param_error, next_output_cap, parse_max_tokens_cap, resolve_input_budget,
+    resolve_max_output_tokens, resolve_post_process_limits, split_by_budget,
 )
+from .model_quirks import QuirkStore, quirk_key
 from .prompts import (
     PromptTemplates,
     RESULT_PREFIX,
@@ -122,7 +123,8 @@ class AIClient:
     def __init__(self, config, logger: Logger, prompt_templates: PromptTemplates = None,
                  retry_policy: Optional[RetryPolicy] = None,
                  timeout: float = DEFAULT_TIMEOUT,
-                 exchange_rate: float = DEFAULT_EXCHANGE_RATE):
+                 exchange_rate: float = DEFAULT_EXCHANGE_RATE,
+                 quirks: Optional[QuirkStore] = None):
         self.config = config
         self.logger = logger
         self.model = config.model
@@ -131,13 +133,29 @@ class AIClient:
         self.retry_policy = retry_policy or RetryPolicy()
         self.timeout = timeout
         self.exchange_rate = exchange_rate
-        # 目录明确不支持温度则不发；运行中被服务商拒绝后也关掉（之后的请求都不再发）
-        self.send_temperature = getattr(config, 'supportsTemperature', None) is not False
-        self.supports_reasoning = getattr(config, 'supportsReasoning', None) is not False
-        # 运行中学到的服务商真实输出上限（整批复用，避免每章都先超限被拒再重发）
-        self.learned_output_cap: Optional[int] = None
+        # 运行中学到并「验证成功」的服务商参数怪癖（真实上限 / 参数名 / 不支持温度 / 不支持思考）：
+        # 整批复用；配置了 FASTREADER_SERVER_URL 时与浏览器共用后端 state:modelQuirks 存档
+        self.quirks = quirks or QuirkStore()
+        self.quirk_key = quirk_key(getattr(config, 'providerId', '') or '', getattr(config, 'apiUrl', '') or '', self.model)
+        learned = self.quirks.get(self.quirk_key)
+        # 目录明确不支持 / 已验证不支持 则不发
+        self.send_temperature = getattr(config, 'supportsTemperature', None) is not False and not learned.get('noTemperature')
+        self.supports_reasoning = getattr(config, 'supportsReasoning', None) is not False and not learned.get('noReasoning')
+        self.learned_output_cap: Optional[int] = learned.get('outputCap')
         # OpenAI 推理模型只认 max_completion_tokens；None 表示不发该参数
-        self.token_param: Optional[str] = 'max_tokens'
+        self.token_param: Optional[str] = learned.get('tokenParam', 'max_tokens')
+
+    def _remember(self, patch: dict) -> None:
+        """记住一条已验证成功的经验（本批生效；配置了后端则上报，服务端单调合并）"""
+        if 'outputCap' in patch:
+            self.learned_output_cap = min(self.learned_output_cap or patch['outputCap'], patch['outputCap'])
+        if 'tokenParam' in patch:
+            self.token_param = patch['tokenParam']
+        if patch.get('noTemperature'):
+            self.send_temperature = False
+        if patch.get('noReasoning'):
+            self.supports_reasoning = False
+        self.quirks.remember(self.quirk_key, patch)
 
     def get_pricing(self) -> Optional[dict]:
         """获取模型定价：配置里的单价（2.0.0 的 models[].meta）优先，其次内置表；未登记返回 None"""
@@ -168,16 +186,26 @@ class AIClient:
     def _call_once(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool) -> tuple[str, int, int]:
         def attempt():
             tokens = min(max_tokens, self.learned_output_cap) if self.learned_output_cap else max_tokens
-            try:
-                return self._call(prompt, system, tokens, low_reasoning)
-            except Exception as e:
-                # 元数据高于服务商真实上限（如目录 393216、实际 384000）：按报错里的上限重发，并整批记住
-                cap = parse_max_tokens_cap(str(e), tokens) if getattr(e, 'status_code', None) in (400, 422) else None
-                if not cap:
-                    raise
-                self.learned_output_cap = cap
-                self.logger.warning(f"{type(self).__name__}: 输出上限 {tokens} 超出服务商范围，按 {cap} 重试（本批记住）")
-                return self._call(prompt, system, cap, low_reasoning)
+            backoffs = 0
+            while True:
+                try:
+                    result = self._call(prompt, system, tokens, low_reasoning)
+                except Exception as e:
+                    # 输出上限被拒：报错里有可信上限用它，否则 ×0.8 退避；单次请求最多 3 次
+                    status = getattr(e, 'status_code', None)
+                    cap = next_output_cap(status, str(e), tokens) if backoffs < MAX_CAP_BACKOFFS else None
+                    if not cap:
+                        # 退避后仍报同类错误 / 非上限类错误：按失败处理，本次试探值不存档
+                        raise
+                    backoffs += 1
+                    self.logger.warning(
+                        f"{type(self).__name__}: 输出上限 {tokens} 被拒，改用 {cap} 重试（第 {backoffs}/{MAX_CAP_BACKOFFS} 次）")
+                    tokens = cap
+                    continue
+                if backoffs:
+                    # 降级后成功：经验已验证，记住并存档
+                    self._remember({'outputCap': tokens})
+                return result
         return call_with_retry(
             attempt,
             self.retry_policy,
@@ -366,29 +394,44 @@ class OpenAIClient(AIClient):
             return kwargs
 
         with_reasoning = low_reasoning and self.supports_reasoning
+        token_param, send_temperature = self.token_param, self.send_temperature
+        tentative: dict = {}
         response = None
-        # 参数被拒时逐个降级（与前端 openaiProvider 同策略），学到的结果整批记住：
+
+        def build_now() -> dict:
+            saved = (self.token_param, self.send_temperature)
+            self.token_param, self.send_temperature = token_param, send_temperature
+            try:
+                return build(with_reasoning)
+            finally:
+                self.token_param, self.send_temperature = saved
+
+        # 参数被拒时逐个降级（与前端 openaiProvider 同策略）；降级只是试探，成功后才记住并存档：
         # max_tokens → max_completion_tokens（OpenAI 推理模型）→ 省略；temperature → 省略；reasoning_effort → 省略
         for _ in range(4):
             try:
-                response = self._get_client().chat.completions.create(**build(with_reasoning))
+                response = self._get_client().chat.completions.create(**build_now())
                 break
             except Exception as e:
                 status = getattr(e, 'status_code', None)
                 text = str(e)
-                if self.token_param and is_max_tokens_param_error(status, text):
-                    self.token_param = 'max_completion_tokens' if self.token_param == 'max_tokens' else None
-                    self.logger.warning(f"{self.model} 不接受当前输出上限参数，改用 {self.token_param or '服务商默认'} 重试")
-                elif self.send_temperature and is_temperature_param_error(status, text):
-                    self.send_temperature = False
+                if token_param and is_max_tokens_param_error(status, text):
+                    token_param = 'max_completion_tokens' if token_param == 'max_tokens' else None
+                    tentative['tokenParam'] = token_param
+                    self.logger.warning(f"{self.model} 不接受当前输出上限参数，改用 {token_param or '服务商默认'} 重试")
+                elif send_temperature and is_temperature_param_error(status, text):
+                    send_temperature = False
+                    tentative['noTemperature'] = True
                     self.logger.warning(f"{self.model} 不支持自定义温度，已按服务商默认重试")
                 elif with_reasoning and status in (400, 422) and re.search(r"reasoning", text, re.I):
                     with_reasoning = False
-                    self.supports_reasoning = False
+                    tentative['noReasoning'] = True
                 else:
                     raise
         if response is None:
             raise RuntimeError("参数降级重试耗尽")
+        if tentative:
+            self._remember(tentative)
         content = strip_thinking(response.choices[0].message.content or "")
         usage = getattr(response, 'usage', None)
         in_tok = getattr(usage, 'prompt_tokens', 0) or 0
