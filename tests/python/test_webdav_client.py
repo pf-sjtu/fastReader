@@ -475,6 +475,19 @@ class TestWebDAVExistenceProbe:
         with pytest.raises(WebDAVProbeError):
             wrapper.list_books("/books")
 
+    def test_list_books_reads_webdav4_content_length(self):
+        """webdav4 的 ls(detail=True) 用 content_length 表示大小（没有 size）。
+        只读 size 会让所有书都是 0 字节：小书优先排序与按体积估算费用全部失效（真实服务器实测）。"""
+        from datetime import datetime, timezone
+        wrapper = _connected_wrapper()
+        wrapper.client.ls.return_value = [
+            {"name": "EBook/a.epub", "type": "file", "content_length": 3432735,
+             "modified": datetime(2026, 8, 3, tzinfo=timezone.utc)},
+            {"name": "EBook/legacy.epub", "type": "file", "size": 42, "modified": "2026-01-01T00:00:00"},
+        ]
+        books = {b.name: b.size for b in wrapper.list_books("/EBook")}
+        assert books == {"a.epub": 3432735, "legacy.epub": 42}
+
     def test_check_cache_exists_false_when_missing(self):
         wrapper = _connected_wrapper()
         wrapper.client.exists.return_value = False

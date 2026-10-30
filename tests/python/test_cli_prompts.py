@@ -37,7 +37,7 @@ class FakeClient(AIClient):
         self.replies = list(replies or [])
         self.calls = []
 
-    def _call(self, prompt, system, max_tokens):
+    def _call(self, prompt, system, max_tokens, low_reasoning=False):
         self.calls.append({"prompt": prompt, "system": system, "max_tokens": max_tokens})
         reply = self.replies.pop(0) if self.replies else ("回复", 10, 5)
         if isinstance(reply, BaseException):

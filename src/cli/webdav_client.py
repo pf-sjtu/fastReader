@@ -195,7 +195,9 @@ class WebDAVClientWrapper:
                     modified = "2000-01-01T00:00:00"
                 else:
                     file_name = item.get("name") or item.get("path") or ""
-                    size = item.get("size", 0) or 0
+                    # webdav4 的字段名是 content_length（没有 size）：只读 size 会让所有书大小都是 0，
+                    # 「小书优先」排序与按体积估算费用全部失效
+                    size = item.get("content_length") or item.get("size") or 0
                     modified = (
                         item.get("modified", "2000-01-01T00:00:00")
                         or "2000-01-01T00:00:00"

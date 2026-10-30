@@ -52,6 +52,9 @@ FALLBACK_PRICING_MODEL = None
 
 DEFAULT_TIMEOUT = 120.0
 DEFAULT_EXCHANGE_RATE = 7.0
+# 单次输出上限。推理模型的「思考」也算输出 token：4096 对长章节偏紧，
+# 用 8192 起步；预算被推理耗尽时 _generate 会再翻倍重试一次
+DEFAULT_MAX_OUTPUT_TOKENS = 8192
 # 前端 aiService.summarizeChapter：内容不足 100 字视为非实质章节，直接跳过不调用 AI
 MIN_CHAPTER_CHARS = 100
 SKIPPED_SHORT_TEXT = f"{RESULT_PREFIX['chapterSkipped']}内容太短，可能是非实质性章节"
@@ -142,19 +145,35 @@ class AIClient:
 
     # ---- 底层调用 ----
 
-    def _call(self, prompt: str, system: str, max_tokens: int) -> tuple[str, int, int]:
-        """返回 (content, input_tokens, output_tokens)；失败直接抛 SDK 异常"""
+    def _call(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool = False) -> tuple[str, int, int]:
+        """返回 (content, input_tokens, output_tokens)；失败直接抛 SDK 异常。
+
+        low_reasoning：请求服务商少花推理 token（OpenAI 兼容端点用 reasoning_effort=low，
+        不支持的服务商由实现自行忽略）。只在「推理把输出预算吃光」后的补救重试里用。
+        """
         raise NotImplementedError
 
-    def _generate(self, prompt: str, language: str, max_tokens: int = 4096) -> AIResponse:
+    def _call_once(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool) -> tuple[str, int, int]:
+        return call_with_retry(
+            lambda: self._call(prompt, system, max_tokens, low_reasoning),
+            self.retry_policy,
+            operation=f"{type(self).__name__} 调用",
+            on_retry=self.logger.warning,
+        )
+
+    def _generate(self, prompt: str, language: str, max_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS) -> AIResponse:
         system = get_language_instruction(language)
         try:
-            content, in_tok, out_tok = call_with_retry(
-                lambda: self._call(prompt, system, max_tokens),
-                self.retry_policy,
-                operation=f"{type(self).__name__} 调用",
-                on_retry=self.logger.warning,
-            )
+            content, in_tok, out_tok = self._call_once(prompt, system, max_tokens, False)
+            # 推理模型在长章节上可能把整个输出预算都花在思考上：内容为空、输出 token 顶满上限。
+            # 实测 MiniMax-M3.1-Flash 对 4.8 万字单章：reasoning=4095/4096、content 为空。
+            # 补救一次：翻倍预算 + 降低推理强度。token 两次都计入（都已计费）。
+            if not (content or '').strip() and out_tok >= max_tokens * 0.95:
+                self.logger.warning(
+                    f"{type(self).__name__}: 输出预算 {max_tokens} 被推理耗尽，提高到 {max_tokens * 2} 并降低推理强度重试"
+                )
+                content, in2, out2 = self._call_once(prompt, system, max_tokens * 2, True)
+                in_tok, out_tok = in_tok + in2, out_tok + out2
         except Exception as e:
             self.logger.error(f"{type(self).__name__} API 调用失败: {e}")
             return AIResponse(success=False, content='', error=str(e))
@@ -210,7 +229,8 @@ class GeminiClient(AIClient):
             )
         return self._client
 
-    def _call(self, prompt: str, system: str, max_tokens: int) -> tuple[str, int, int]:
+    def _call(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool = False) -> tuple[str, int, int]:
+        # Gemini 无对应的推理强度参数：low_reasoning 只靠调用方翻倍的 max_tokens 生效
         response = self._get_client().models.generate_content(
             model=self.model,
             contents=prompt,
@@ -251,8 +271,8 @@ class OpenAIClient(AIClient):
             )
         return self._client
 
-    def _call(self, prompt: str, system: str, max_tokens: int) -> tuple[str, int, int]:
-        response = self._get_client().chat.completions.create(
+    def _call(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool = False) -> tuple[str, int, int]:
+        kwargs = dict(
             model=self.model,
             messages=[
                 {"role": "system", "content": system},
@@ -261,6 +281,17 @@ class OpenAIClient(AIClient):
             temperature=self.temperature,
             max_tokens=max_tokens,
         )
+        if low_reasoning:
+            try:
+                response = self._get_client().chat.completions.create(**kwargs, reasoning_effort="low")
+            except Exception as e:
+                # 不认识 reasoning_effort 的网关：去掉参数再试（与前端 services/ai/reasoning.ts 同策略）
+                if getattr(e, 'status_code', None) in (400, 422):
+                    response = self._get_client().chat.completions.create(**kwargs)
+                else:
+                    raise
+        else:
+            response = self._get_client().chat.completions.create(**kwargs)
         content = strip_thinking(response.choices[0].message.content or "")
         usage = getattr(response, 'usage', None)
         in_tok = getattr(usage, 'prompt_tokens', 0) or 0

@@ -37,7 +37,7 @@ class FakeAI(AIClient):
         self.fail_titles = set(fail_titles)
         self.prompts_seen = []
 
-    def _call(self, prompt, system, max_tokens):
+    def _call(self, prompt, system, max_tokens, low_reasoning=False):
         self.prompts_seen.append(prompt)
         for title in self.fail_titles:
             if f"章节标题：{title}" in prompt:

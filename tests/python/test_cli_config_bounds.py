@@ -201,11 +201,27 @@ class TestMainStartup:
         assert "越界" in capsys.readouterr().out
 
     def test_dry_run_ok(self, tmp_path, monkeypatch):
+        """--dry-run 预览队列：连 WebDAV、列书、按配置筛选，但不跑 run()（不调用 AI、不写文件）"""
+        from unittest.mock import MagicMock, patch
         from src.cli import main as main_mod
         path = tmp_path / "c.yaml"
         path.write_text(providers_yaml("currentModelId: 2"), encoding="utf-8")
         monkeypatch.setattr("sys.argv", ["fastreader", "batch", "-c", str(path), "--dry-run"])
-        assert main_mod.main() == 0
+
+        fake = MagicMock()
+        fake.webdav.connect.return_value = True
+        fake.webdav.list_books.return_value = []
+        fake._load_cached_file_names.return_value = set()
+        fake.select_books.return_value = ([], 0)
+        with patch.object(main_mod, "BatchProcessor", return_value=fake):
+            assert main_mod.main() == 0
+        fake.webdav.connect.assert_called_once()
+        fake.run.assert_not_called()
+
+        # WebDAV 连不上时如实返回失败
+        fake.webdav.connect.return_value = False
+        with patch.object(main_mod, "BatchProcessor", return_value=fake):
+            assert main_mod.main() == 1
 
     def test_missing_file_and_version(self, monkeypatch):
         from src.cli import main as main_mod

@@ -79,6 +79,11 @@ Examples:
         action='store_true',
         help='试运行模式，不实际执行处理'
     )
+    batch_parser.add_argument(
+        '-y', '--yes',
+        action='store_true',
+        help='无人值守：跳过「按 Enter 开始」确认（计划任务 / 后台全量处理用）'
+    )
 
     # version 命令
     version_parser = subparsers.add_parser(
@@ -132,14 +137,25 @@ def cmd_batch(args: argparse.Namespace) -> int:
 
         # 试运行模式
         if args.dry_run:
-            print("\n�Dry Run 模式 - 预览处理队列")
-            # TODO: 实现预览功能
-            print("预览功能待实现")
+            # 预览队列：连 WebDAV、列书、按配置筛选排序，但不调用 AI、不写任何文件
+            print("\n🔍 Dry Run 模式 - 预览处理队列（不调用 AI、不写入任何文件）")
+            processor = BatchProcessor(config, logger)
+            if not processor.webdav.connect():
+                print("❌ WebDAV 连接失败")
+                return 1
+            books = processor.webdav.list_books(config.batch.sourcePath)
+            queue, skipped = processor.select_books(books, processor._load_cached_file_names())
+            total_mb = sum((b.size or 0) for b in queue) / 1e6
+            print(f"\n📚 源目录 {len(books)} 本，已处理跳过 {skipped} 本，待处理 {len(queue)} 本（合计 {total_mb:.1f} MB）")
+            for i, book in enumerate(queue[:20], 1):
+                print(f"   {i:3d}. {book.name}  ({(book.size or 0) / 1e6:.2f} MB)")
+            if len(queue) > 20:
+                print(f"   … 另有 {len(queue) - 20} 本")
             return 0
 
         # 初始化批量处理器
         print("\n🚀 初始化批量处理器...")
-        processor = BatchProcessor(config, logger)
+        processor = BatchProcessor(config, logger, auto_confirm=args.yes)
 
         # 执行批量处理
         print("\n⏳ 开始批量处理...")

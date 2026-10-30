@@ -32,9 +32,11 @@ __all__ = ["BatchProcessor", "ChapterOutcome", "FAILED_CHAPTER_RATIO_LIMIT"]
 class BatchProcessor:
     """批量处理器"""
 
-    def __init__(self, config: Config, logger: Logger):
+    def __init__(self, config: Config, logger: Logger, auto_confirm: bool = False):
         self.config = config
         self.logger = logger
+        # 无人值守（计划任务 / 后台）运行时跳过「按 Enter 开始」
+        self.auto_confirm = auto_confirm
         self.webdav = WebDAVClientWrapper(config.webdav, logger)
 
         # Prompt 模板：配置 promptVersionConfig > 共享 YAML
@@ -103,41 +105,23 @@ class BatchProcessor:
                 print("\n⚠️  未找到可处理的电子书")
                 return BatchResult()
 
-            if self.config.batch.include:
-                wanted = set(self.config.batch.include)
-                books = [b for b in books if b.name in wanted]
-                print(f"   🎯 只处理指定书目: {len(books)}/{len(wanted)} 本")
-
             cached_files = self._load_cached_file_names()
-            skipped = 0
-            if self.config.batch.skipProcessed and cached_files:
-                original_count = len(books)
-                books = [book for book in books if book.cache_file_name not in cached_files]
-                skipped = original_count - len(books)
-                if skipped > 0:
-                    print(f"   ⏭️  已过滤已处理文件: {skipped} 本")
-
-            if self.config.batch.order == "random":
-                random.shuffle(books)
-                print("🎲 处理顺序: 随机")
-            elif self.config.batch.order == "smallest-first":
-                books.sort(key=lambda b: (b.size or 0, b.name))
-                print("📏 处理顺序: 小书优先")
-            else:
-                books.sort(key=lambda b: b.name)
-                print("📄 处理顺序: 顺序")
-
-            if self.config.batch.maxFiles > 0:
-                books = books[: self.config.batch.maxFiles]
-                print(f"📊 限制处理数量: {len(books)}")
+            books, skipped = self.select_books(books, cached_files)
 
             print(f"\n📚 找到 {len(books)} 本待处理书籍")
             self._print_config_summary()
 
             # 确认开始（非交互环境如 CI / 管道 / 计划任务不阻塞）
             print("\n" + "-" * 60)
-            if sys.stdin is not None and sys.stdin.isatty():
-                input("按 Enter 开始处理... (Ctrl+C 取消) ")
+            if self.auto_confirm:
+                print("已指定 --yes，自动开始处理")
+            elif sys.stdin is not None and sys.stdin.isatty():
+                # Windows 上 NUL 设备的 isatty() 也是 True（计划任务/重定向时会误判为交互终端），
+                # 所以读到 EOF 也视为「非交互」，而不是让整个批量崩掉
+                try:
+                    input("按 Enter 开始处理... (Ctrl+C 取消) ")
+                except EOFError:
+                    print("\n未检测到交互输入，自动开始处理")
             else:
                 print("非交互环境，自动开始处理")
             print("-" * 60)
@@ -167,6 +151,42 @@ class BatchProcessor:
 
     def _log_progress(self, log_file: str, message: str):
         batch_report.log_progress(log_file, message)
+
+    def select_books(self, books: list, cached_files: set) -> tuple[list, int]:
+        """按配置挑选并排序待处理书目：指定书目 → 跳过已处理 → 排序 → 数量上限。
+
+        返回 (待处理书目, 因已处理而跳过的数量)。纯函数（除打印外），便于测试。
+        """
+        batch = self.config.batch
+        if batch.include:
+            wanted = set(batch.include)
+            books = [b for b in books if b.name in wanted]
+            print(f"   🎯 只处理指定书目: {len(books)}/{len(wanted)} 本")
+
+        skipped = 0
+        if batch.skipProcessed and cached_files:
+            original_count = len(books)
+            books = [book for book in books if book.cache_file_name not in cached_files]
+            skipped = original_count - len(books)
+            if skipped > 0:
+                print(f"   ⏭️  已过滤已处理文件: {skipped} 本")
+
+        if batch.order == "random":
+            books = list(books)
+            random.shuffle(books)
+            print("🎲 处理顺序: 随机")
+        elif batch.order == "smallest-first":
+            books = sorted(books, key=lambda b: (b.size or 0, b.name))
+            print("📏 处理顺序: 小书优先")
+        else:
+            books = sorted(books, key=lambda b: b.name)
+            print("📄 处理顺序: 顺序")
+
+        if batch.maxFiles > 0:
+            books = books[: batch.maxFiles]
+            print(f"📊 限制处理数量: {len(books)}")
+
+        return books, skipped
 
     def _load_cached_file_names(self) -> set[str]:
         """加载云端缓存文件名集合（{sanitizedName}-完整摘要.md）"""
