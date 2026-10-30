@@ -373,9 +373,43 @@ python -m src.cli.main --help
 # 查看 batch 子命令帮助
 python -m src.cli.main batch --help
 
-# 试运行模式（预览处理队列，不实际执行）
+# 试运行模式（预览处理队列与总体积，不调 AI、不写文件）
 python -m src.cli.main batch -c config.yaml --dry-run
+
+# 无人值守（计划任务 / 后台）：跳过「按 Enter 开始」
+python -m src.cli.main batch -c config.yaml --yes
 ```
+
+### 内容审核兜底
+
+国产服务商对政治、历史题材有内容审核（实测 MiniMax 返回 `422 new_sensitive`，整本书会因失败章节过半而不出结果）。
+配置兜底链后，只有「被审核拦截」的章节会改用备用模型重跑，其它错误（限流、密钥）不换：
+
+```yaml
+config:
+  ai:
+    providers: [...]          # 备用模型也必须在这里列出（服务商 + 模型）
+    active: { providerId: minimax, modelId: MiniMax-M3.1-Flash }
+  batch:
+    fallbackModels: ["navira/sensenova/deepseek-flash", "opendesign/gpt-6-luna"]
+```
+
+- 格式 `providerId/modelId`，也可用环境变量 `FASTREADER_FALLBACK_MODELS`（逗号分隔）
+- 章节级与后处理（关联分析 / 全书总结）都走兜底，链上逐个尝试，全部被拦才算失败
+- 费用按各模型单价分别计算后相加；产物元数据里记作 `主模型 + 备用模型`
+- Web 端暂未接入兜底（被拦章节在浏览器里仍会失败）
+
+### 模型参数自动化
+
+输出上限、输入预算、温度、思考强度全部由模型目录元数据（models.dev / OpenRouter / 网关）驱动，不再写死：
+
+- **输出上限**：`meta.output`，并按「上下文窗口 − 输入」收敛；被服务商拒绝时依次尝试报错里的真实上限、
+  退避 0.8 倍（单次请求最多 3 次）
+- **输入预算**：超预算的章节按段落 / 句末 / 硬切分段，每段用同一提示词总结再合并（最多 3 层），不截断丢内容
+- **温度 / 思考强度**：目录明确标注不支持就不发，未知则照常发、被拒后去掉重试
+- **记住已验证的经验**：降级后成功的参数（真实上限 / 参数名 / 不支持温度 / 不支持思考）写入共享状态
+  `modelQuirks`，前端启动即导入；CLI 设 `FASTREADER_SERVER_URL` + `FASTREADER_APP_PASSWORD` 后共用。
+  降级后仍失败的试探值一律不存档
 
 ### 多 AI 提供商配置
 

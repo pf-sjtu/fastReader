@@ -97,10 +97,34 @@
 - [已修] 单测直接 import Functions，绕过打包器，`../../_lib/` 这类路径错误只有部署时才暴露
   → 新增 `scripts/check-functions-build.mjs`（esbuild 逐入口打包），接入 `build:pages` 与 CI；已验证能拦住该 bug
 
+## AI 供应商适配与批量处理（2026-10）
+
+- [已修] `functions/api/auth/[[action]].js` — 同源请求也要求 `Origin` 在白名单内，自定义域名或未登记端口打开站点一律
+  登录 403 → 与 ai/dav 代理一致放行同源请求，并给 `password_not_configured` / `origin_not_allowed` 明确提示
+- [已修] `src/services/ai/modelSync.ts` 探测 — 用 `max_tokens` 极小值探测模型可用性时，推理模型把预算全花在思考上、
+  返回空内容，被误判为「模型不可用」→ 探测给足输出预算
+- [已修] `src/cli/webdav_client.py` — webdav4 的 `ls(detail=True)` 字段是 `content_length`，只读 `size` 导致所有书
+  大小恒为 0，「小书优先」排序与按体积估算费用全部失效
+- [已修] `src/cli/batch_processor.py` — Windows 上 NUL 设备 `isatty()` 为 True，计划任务/后台运行时 `input()` 抛
+  EOFError 整批崩溃 → 新增 `-y/--yes`，EOF 也按非交互处理
+- [已修] `src/cli/ai_client.py` — 推理模型把输出预算全花在思考上导致正文为空（实测 reasoning=4095/4096）→
+  输出上限按模型元数据给足；内容为空且输出顶满上限时降低推理强度重试，token 两次都计入
+- [已修] `anthropicProvider.ts` / `openaiProvider.ts` — 降级重试是「试探」，原先降级前后都直接写入学习表；
+  现在只有降级后成功才记住并存档，失败一律不存
+- [已修] `parseMaxTokensCap` — 原先取报错里「小于当前值的最大数字」，会把日期（`gpt-4.1-2025-04-14`）、
+  输入 token 数（vLLM `120000 > 131072 - 20000`）当成上限 → 只认明确表达上限的句式
+- [已修] 关键图表 — 章节摘要 + 关联 + 全书总结三份输入各按上限取，可达预算的 1.25 倍，小窗口模型超窗被拒
+  → 三份共享一个预算
+- [已修] CLI 缺 OpenAI 推理模型的 `max_tokens → max_completion_tokens` 降级，o 系列 / gpt-5 上每章必然失败 → 补齐
+
 ## 已知取舍（不修）
 
 - [已知取舍] **KV 最终一致**：异地读最多滞后 60s，乐观锁在跨地域同秒并发时可能丢一次同字段改动。小团队场景可接受。
 - [已知取舍] **KV 免费额度**：1000 写/天。写入已做防抖/批量合并，但极端情况下会写满 → 界面进入离线状态并保留本地改动。
 - [已知取舍] **Ollama 不经代理**：本机 `http://localhost:11434` 服务端访问不到，保持浏览器直连（因此也不需要密钥）。
 - [已知取舍] **章节缓存不共享**：仍在各浏览器 IndexedDB（体积大，KV 不适合）。A 处理过的书 B 仍会重跑。
+- [已知取舍] **内容审核兜底只在 CLI**：Web 端被拦章节仍会失败。浏览器端要按「换下一个已配置且有密钥的模型」自动切换，
+  涉及费用归属（元数据只记一个模型）与用户预期的模型选择，暂不自动切换。
+- [已知取舍] **输出上限不按模型最大值预占**：OpenAI / Anthropic / OpenRouter 按 `max_tokens` 预扣限速与额度，
+  一律申请 524K 会频繁 429/402 → 短提示封顶 32768，长提示给到输入的 4 倍。
 - [已知取舍] CSP `connect-src` 只放行 https + 本机 http：局域网 Ollama（`192.168.x.x:11434`）会被拦，需 https 反代或本机地址。
