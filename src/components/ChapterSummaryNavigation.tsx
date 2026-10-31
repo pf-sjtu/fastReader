@@ -24,6 +24,23 @@ interface ChapterSummaryNavigationProps {
   className?: string
 }
 
+const SUBTITLE_SPLIT = /^(.{2,}?)(\s*(?:——|—|：|:)\s*)(.+)$/
+
+/** 主标题为主，副标题弱化；文本总和不变（不丢字） */
+function ChapterTitle({ title }: { title: string }) {
+  const m = SUBTITLE_SPLIT.exec(title)
+  if (!m) return <>{title}</>
+  return (
+    <>
+      {m[1]}
+      <span className="font-normal opacity-60">
+        {m[2]}
+        {m[3]}
+      </span>
+    </>
+  )
+}
+
 export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
   chapters,
   currentStepIndex,
@@ -172,8 +189,9 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
                   onClick={() => chapter.processed && onChapterClick(chapter.id)}
                   disabled={!chapter.processed}
                   aria-current={isViewing ? 'true' : undefined}
+                  title={chapter.title}
                   className={cn(
-                    'ml-2.5 text-left text-xs leading-snug truncate min-w-0 flex-1 transition-colors',
+                    'ml-2.5 min-h-8 min-w-0 flex-1 py-1 text-left text-sm leading-snug line-clamp-2 transition-colors',
                     isViewing && 'text-primary font-semibold',
                     // 已读：更浅
                     isRead && !isViewing && 'text-muted-foreground/45 hover:text-muted-foreground/70',
@@ -183,7 +201,7 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
                     chapter.processed && !isViewing && !isRead && !isUnread && 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  {chapter.title}
+                  <ChapterTitle title={chapter.title} />
                 </button>
               </div>
               {/* 连接线独立于节点下方 */}

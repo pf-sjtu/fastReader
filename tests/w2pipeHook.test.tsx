@@ -168,7 +168,7 @@ describe('useBookProcessing 组合入口', () => {
     m.unmount()
   })
 
-  it('历史加载：解析云端 MD；缺图表时自动补生成', async () => {
+  it('历史加载：解析云端 MD；缺图表时不自动调 AI，用户点「生成」才调', async () => {
     const content = formatUnifiedMarkdown(
       { title: '云书', author: '', chapters: [{ id: '1', title: '一', summary: '摘一' }], overallSummary: '总' },
       generateMetadata({
@@ -188,6 +188,12 @@ describe('useBookProcessing 组合入口', () => {
     expect(ok).toBe(true)
     expect(api().bookSummary?.title).toBe('云书')
     expect(api().cloudCacheContent).toBe(content)
+    // 打开已精读的书不花钱：加载完成后没有任何图表生成调用
+    expect(h.ai.charts).not.toHaveBeenCalled()
+    await act(async () => {
+      await api().regenerateKeyCharts()
+    })
+    await flush()
     expect(h.ai.charts).toHaveBeenCalledTimes(1)
     expect(h.autoSync.syncChartsJson.mock.calls[0][0]).toBe('cloud.epub')
     m.unmount()

@@ -112,7 +112,8 @@ export function ChartsPanel({
 
   if (generating && !charts) {
     return (
-      <div className="text-center text-muted-foreground py-12 text-sm">
+      <div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+        <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
         {t('results.charts.generating')}
       </div>
     )
@@ -138,8 +139,17 @@ export function ChartsPanel({
     return (
       <div className="space-y-3">
         {toolbar}
-        <div className="text-center text-muted-foreground py-8 text-sm">
-          {t('results.charts.empty')}
+        <div className="space-y-3 py-8 text-center">
+          <p className="text-sm text-muted-foreground">{t('results.charts.empty')}</p>
+          {canRegen && (
+            <>
+              <Button size="sm" onClick={() => void handleRegenerate()} disabled={regenBusy}>
+                <RefreshCw className="size-4" />
+                {t('results.charts.generate')}
+              </Button>
+              <p className="t-caption mx-auto max-w-xs">{t('results.charts.generateHint')}</p>
+            </>
+          )}
         </div>
       </div>
     )

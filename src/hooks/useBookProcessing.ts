@@ -149,11 +149,9 @@ export function useBookProcessing() {
     setIsWebDAVBrowserOpen(true)
   }, [webdavEnabled, t, setIsWebDAVBrowserOpen])
 
-  const { setPendingAutoCharts } = charts
-  /** 云 / 历史加载共用：写结果态、自动图表标记、提示、本地落盘 */
+  /** 云 / 历史加载共用：写结果态、提示、本地落盘 */
   const applyLoadedBook = useCallback(
     async (loaded: LoadedCloudBook, fileName: string | null, model: string) => {
-      setPendingAutoCharts(loaded.autoCharts)
       setBookSummary(loaded.summary)
       if (loaded.notices.includes('chartsParseFailed')) toast.warning(t('cloudCache.chartsParseFailed'))
       if (loaded.notices.includes('partial')) toast.warning(t('cloudCache.partialLoaded'))
@@ -163,7 +161,7 @@ export function useBookProcessing() {
         fallbackModel: model,
       })
     },
-    [setPendingAutoCharts, t]
+    [t]
   )
 
   const { setCloud } = book
@@ -306,16 +304,15 @@ export function useBookProcessing() {
       if (type === 'connections') setBookSummary((p) => (p ? { ...p, connections: '' } : p))
       else if (type === 'overall_summary') setBookSummary((p) => (p ? { ...p, overallSummary: '' } : p))
       else if (type === 'key_charts') {
-        // 始终清内存态，否则 UI 看起来「按钮无反应」；并避免立刻被「缺图自动生成」写回
+        // 始终清内存态，否则 UI 看起来「按钮无反应」
         setBookSummary((p) => (p ? { ...p, charts: null, chartsError: null } : p))
         setCloud((prev) => ({ ...prev, chartsJson: null, chartsFileFound: false }))
-        setPendingAutoCharts(false)
       } else if (kind === 'combined_mindmap') {
         setBookMindMap((p) => (p ? { ...p, combinedMindMap: null } : p))
       }
       toast.success(t('cache.specificCleared'))
     },
-    [getBookId, cacheFileNames, setCloud, setPendingAutoCharts, setSelectedChapters, t]
+    [getBookId, cacheFileNames, setCloud, setSelectedChapters, t]
   )
 
   // 清除整书缓存

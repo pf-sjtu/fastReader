@@ -1,7 +1,7 @@
 /**
  * 关键图表：手动重新生成、云/历史加载后缺图自动补生成
  */
-import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import { useCallback, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { AIService } from '@/services/ai'
@@ -47,20 +47,12 @@ export function useKeyCharts(deps: KeyChartsDeps) {
   const [chartsGenerating, setChartsGenerating] = useState(false)
   const busyRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
-  /** 刚从云/历史加载且缺图表，待 bookSummary 落地后自动生成 */
-  const pendingAutoRef = useRef(false)
 
   const resetCharts = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
     busyRef.current = false
-    pendingAutoRef.current = false
     setChartsGenerating(false)
-  }, [])
-
-  /** 设置/取消「缺图自动生成」 */
-  const setPendingAutoCharts = useCallback((on: boolean) => {
-    pendingAutoRef.current = on
   }, [])
 
   const runKeyChartsGeneration = useCallback(
@@ -176,18 +168,6 @@ export function useKeyCharts(deps: KeyChartsDeps) {
     await runKeyChartsGeneration(bookSummary, { silent: false, cacheFileName })
   }, [bookSummary, runKeyChartsGeneration, resolveUploadKey, t])
 
-  // 云/历史加载后：有 MD 无图表则自动生成
-  useEffect(() => {
-    if (!pendingAutoRef.current || !bookSummary) return
-    if (bookSummary.charts) {
-      pendingAutoRef.current = false
-      return
-    }
-    if (chartsGenerating || busyRef.current) return
-    pendingAutoRef.current = false
-    if (!isUsableText(bookSummary.overallSummary) || bookSummary.chapters.length === 0) return
-    void runKeyChartsGeneration(bookSummary, { silent: true, cacheFileName: resolveUploadKey(null) })
-  }, [bookSummary, chartsGenerating, runKeyChartsGeneration, resolveUploadKey])
-
-  return { chartsGenerating, regenerateKeyCharts, resetCharts, setPendingAutoCharts }
+  // 打开已精读的书不自动调用 AI：缺图表时由对照栏的「生成」按钮让用户确认后再生成（规格 ux-audit）
+  return { chartsGenerating, regenerateKeyCharts, resetCharts }
 }

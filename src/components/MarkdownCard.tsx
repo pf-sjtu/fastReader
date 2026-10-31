@@ -138,7 +138,7 @@ export const MarkdownCard = memo(function MarkdownCard({
   return (
     <Card
       id={`chapter-summary-${id}`}
-      className={cn('min-w-0 gap-0 overflow-hidden py-0 shadow-none transition-colors', actualIsCollapsed && 'hover:bg-accent/30', className)}
+      className={cn('min-w-0 gap-0 overflow-hidden py-0 shadow-none', actualIsCollapsed && 'hover:bg-accent/30', className)}
     >
       <button
         type="button"
