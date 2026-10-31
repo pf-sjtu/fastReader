@@ -1,6 +1,8 @@
 /**
  * remark 插件：把正文里的实体名包成 <span class="entity-mark" data-entity-id="...">。
- * - 只处理 text 节点，跳过 code / inlineCode / link 等，不改变 Markdown 语义
+ * - 只处理 text 节点，跳过 code / link 等，不改变 Markdown 语义
+ * - 例外：整段行内代码恰好就是一个实体名（AI 常把 `KKR` 这类缩写写进反引号）按名字标注，去掉等宽样式；
+ *   部分匹配的真代码（如 `KKR_FUND = 1`）保持原样
  * - 悬停 / 点击由容器事件委托处理（见 workspace），这里只产出节点
  * - 不依赖 unist-util-visit：手写递归，避免新增依赖
  */
@@ -70,6 +72,10 @@ function walk(node: MdNode, opts: RemarkEntityMarkOptions): void {
       const parts = splitText(child.value, opts)
       if (parts) next.push(...parts)
       else next.push(child)
+    } else if (child.type === 'inlineCode' && typeof child.value === 'string') {
+      const parts = splitText(child.value, opts)
+      // 只在「整段就是一个实体名」时才改写，避免把真代码里的子串误当实体
+      next.push(parts && parts.length === 1 && parts[0].type === 'entityMark' ? parts[0] : child)
     } else {
       walk(child, opts)
       next.push(child)

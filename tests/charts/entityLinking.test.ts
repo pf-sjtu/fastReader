@@ -216,10 +216,34 @@ describe('remarkEntityMark', () => {
     )
   })
 
-  it('跳过行内代码、代码块与链接', () => {
-    expect(render('`罗斯·约翰逊`')).not.toContain('entity-mark')
+  it('跳过代码块与链接', () => {
     expect(render('```\n罗斯·约翰逊\n```')).not.toContain('entity-mark')
     expect(render('[罗斯·约翰逊](http://x.y)')).not.toContain('entity-mark')
+  })
+
+  describe('行内代码：整段就是实体名才标注（AI 常把 `KKR` 这类缩写写进反引号）', () => {
+    const m = buildEntityMatcher([{ id: 'kkr', name: 'KKR' }, { id: 'ross', name: '罗斯·约翰逊' }])
+
+    it('整段恰好是实体名：标注，且不再带等宽 <code>', () => {
+      const html = renderWith('董事会选择了`KKR`。', m)
+      expect(html).toContain('<span class="entity-mark" data-entity-id="kkr">KKR</span>')
+      expect(html).not.toContain('<code>')
+      expect(renderWith('`罗斯·约翰逊`', m)).toContain('data-entity-id="ross"')
+    })
+
+    it('部分匹配的真代码保持原样：不标注、仍是 <code>', () => {
+      const html = renderWith('`KKR_FUND = 1`', m)
+      expect(html).toContain('<code>KKR_FUND = 1</code>')
+      expect(html).not.toContain('entity-mark')
+    })
+
+    it('一段代码里有两个实体（不是一个名字）：保持原样', () => {
+      expect(renderWith('`KKR 罗斯·约翰逊`', m)).not.toContain('entity-mark')
+    })
+
+    it('与实体无关的行内代码不受影响', () => {
+      expect(renderWith('用 `npm install`', m)).toContain('<code>npm install</code>')
+    })
   })
 
   it('在强调内部仍然生效', () => {
