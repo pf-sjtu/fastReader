@@ -413,7 +413,30 @@
       "providers": "AI 服务商",
       "webdav": "WebDAV配置",
       "exportImport": "导出导入",
-      "processing": "处理设置"
+      "processing": "处理设置",
+      "fonts": "字体"
+    },
+    "fonts": {
+      "intro": "本站不下载字体，只使用你设备上已安装的字体，按下列顺序取第一个可用的；都没有时回退到系统默认字体。",
+      "recheck": "重新检测",
+      "active": "当前生效",
+      "fallbackOnly": "没有检测到推荐字体，将使用系统默认字体",
+      "roles": {
+        "sans": "界面与正文（无衬线）",
+        "serif": "标题、品牌与衬线正文",
+        "mono": "代码"
+      },
+      "status": {
+        "installed": "已安装",
+        "missing": "未安装",
+        "generic": "系统通用回退",
+        "unknown": "无法检测"
+      },
+      "readingFont": "正文阅读字体",
+      "readingSans": "无衬线（默认）",
+      "readingSerif": "衬线",
+      "readingHint": "只影响章节总结等阅读正文，界面其余部分不变。",
+      "install": "推荐安装：Windows 自带微软雅黑；macOS / iOS 自带苹方与宋体-简；想要更好的衬线可安装「思源宋体 / Noto Serif SC」，更好的无衬线可安装「思源黑体 / Noto Sans SC」。"
     },
     "proxy": {
       "test": "测试代理",

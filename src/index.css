@@ -125,9 +125,20 @@
   --sidebar-border: oklch(0.8650 0.0170 72.0);
   --sidebar-ring: oklch(0.5150 0.1680 32.0);
 
-  /* 字体大小控制变量 */
+  /* 字体大小控制变量：基准 15px（原 16px 偏大）；用户可在阅读区用 FontSizeControl 缩放 */
   --font-scale: 1;
-  --base-font-size: 16px;
+  --base-font-size: 15px;
+  /* 中文长文阅读的行高：1.8 比 1.6 舒展，段间不显挤 */
+  --reading-line-height: 1.8;
+
+  /*
+   * 字体栈（唯一来源：设置页「字体」读这里的值来检测是否安装，不要在别处再写一份）。
+   * 全部是系统字体，不下载。顺序 = 优先级：mac/iOS → Windows → 开源/安卓 → 通用回退。
+   * 通用族名（system-ui / serif / sans-serif / monospace …）放最后，永远可用。
+   */
+  --font-sans: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Songti SC", "Source Han Serif SC", "Noto Serif SC", "SimSun", "STSong", "Iowan Old Style", Georgia, serif;
+  --font-mono: "SF Mono", "Cascadia Mono", Consolas, Menlo, "Noto Sans Mono CJK SC", ui-monospace, monospace;
 }
 
 .dark {
@@ -183,11 +194,16 @@
 
   /* 品牌字标与大标题：衬线（宋/明体），呼应「含英咀华」的书卷气；全部用系统字体，不额外下载 */
   .font-brand {
-    font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", "Iowan Old Style", Georgia, serif;
+    font-family: var(--font-serif);
     letter-spacing: 0.04em;
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+  /* 正文阅读字体可在设置里切换为衬线（默认无衬线） */
+  html[data-reading-font="serif"] .markdown-card-content {
+    font-family: var(--font-serif);
   }
   
   /* 全局HTML标签样式支持 */
@@ -220,7 +236,7 @@
   
   .markdown-card-content {
     color: var(--foreground);
-    line-height: 1.625;
+    line-height: var(--reading-line-height);
     font-size: calc(var(--base-font-size) * var(--font-scale));
     max-width: none !important;
     width: 100% !important;
@@ -294,16 +310,16 @@
   /* 特别优化2级标题 */
   .markdown-card-content h2 {
     color: var(--foreground) !important;
-    font-size: 1.5em;
-    margin-top: 1.5em;
-    margin-bottom: 0.75em;
+    font-size: 1.2em;
+    margin-top: 1.4em;
+    margin-bottom: 0.6em;
   }
 
   .dark .markdown-card-content h2 {
     color: var(--foreground) !important;
-    font-size: 1.5em;
-    margin-top: 1.5em;
-    margin-bottom: 0.75em;
+    font-size: 1.2em;
+    margin-top: 1.4em;
+    margin-bottom: 0.6em;
   }
   
   /* 段落样式 */
@@ -326,21 +342,21 @@
   
   /* 加粗文本样式 - 中等浓度黄色马克笔（bottom 50-150%） */
   .markdown-card-content strong {
-    background: linear-gradient(to bottom, transparent 50%, rgba(251, 191, 36, 0.6) 50%, rgba(251, 191, 36, 0.6) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 72%, rgba(251, 191, 36, 0.22) 72%, rgba(251, 191, 36, 0.22) 150%, transparent 150%) !important;
     font-weight: 600 !important;
     padding: 0 0.125rem !important;
     color: inherit !important;
   }
   
   .dark .markdown-card-content strong {
-    background: linear-gradient(to bottom, transparent 50%, rgba(245, 158, 11, 0.45) 50%, rgba(245, 158, 11, 0.45) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 72%, rgba(245, 158, 11, 0.2) 72%, rgba(245, 158, 11, 0.2) 150%, transparent 150%) !important;
     color: inherit !important;
   }
   
   /* 斜体加粗文本样式 - 次浓度黄色马克笔（bottom 50-150%） */
   .markdown-card-content em strong,
   .markdown-card-content strong em {
-    background: linear-gradient(to bottom, transparent 50%, rgba(251, 191, 36, 0.4) 50%, rgba(251, 191, 36, 0.4) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 72%, rgba(251, 191, 36, 0.14) 72%, rgba(251, 191, 36, 0.14) 150%, transparent 150%) !important;
     font-weight: 600 !important;
     font-style: italic !important;
     padding: 0 0.125rem !important;
@@ -362,7 +378,7 @@
   }
   
   .dark .markdown-card-content em {
-    background: linear-gradient(to bottom, transparent 50%, rgba(245, 158, 11, 0.2) 50%, rgba(245, 158, 11, 0.2) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 72%, rgba(245, 158, 11, 0.2) 50%, rgba(245, 158, 11, 0.2) 150%, transparent 150%) !important;
     color: inherit !important;
   }
   
@@ -373,7 +389,7 @@
     /* padding: 0.1rem 0.1rem !important; */
     /* border-radius: 0.25rem !important; */
     font-size: calc(0.99em * var(--font-scale)) !important;
-    font-family: 'Courier New', Courier, 楷体, monospace !important;
+    font-family: var(--font-mono) !important;
     /* border: 1px solid rgba(229, 231, 235, 0.5) !important; */
   }
   
@@ -390,7 +406,7 @@
   
   /* 代码内的加粗、斜体文本使用标准高亮效果 */
   /* .markdown-card-content code strong {
-    background: linear-gradient(to bottom, transparent 50%, rgba(251, 191, 36, 0.6) 50%, rgba(251, 191, 36, 0.6) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 72%, rgba(251, 191, 36, 0.22) 72%, rgba(251, 191, 36, 0.22) 150%, transparent 150%) !important;
     font-weight: 600 !important;
     padding: 0 0.125rem !important;
     color: inherit !important;
@@ -402,7 +418,7 @@
   }
   
   .markdown-card-content code em {
-    background: linear-gradient(to bottom, transparent 50%, rgba(251, 191, 36, 0.4) 50%, rgba(251, 191, 36, 0.4) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 72%, rgba(251, 191, 36, 0.14) 72%, rgba(251, 191, 36, 0.14) 150%, transparent 150%) !important;
     font-style: italic !important;
     padding: 0 0.125rem !important;
     color: inherit !important;
@@ -522,7 +538,7 @@
   }
   
   .prose tt {
-    font-family: 'Courier New', Courier, monospace;
+    font-family: var(--font-mono);
     background-color: var(--muted);
     padding: 0.125rem 0.25rem;
     border-radius: 0.25rem;

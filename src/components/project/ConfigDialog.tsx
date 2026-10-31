@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PromptEditor } from './PromptEditor'
 import { WebDAVConfig } from './WebDAVConfig'
 import { AIProviderConfig } from './AIProviderConfig'
+import { FontSettings } from './FontSettings'
 import { ConfigExportImport } from '../ConfigExportImport'
 import { RateLimitSection } from './config/RateLimitSection'
 import { ProcessingSection } from './config/ProcessingSection'
@@ -21,6 +22,7 @@ const TAB_TITLE_KEY = {
   processing: 'config.tabs.processing',
   prompts: 'promptEditor.title',
   webdav: 'config.tabs.webdav',
+  fonts: 'config.tabs.fonts',
   'export-import': 'config.tabs.exportImport',
 } as const
 type ConfigTab = keyof typeof TAB_TITLE_KEY
@@ -59,6 +61,7 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
               <TabsTrigger value="processing" className="flex-1 min-w-fit">{t('config.tabs.processing')}</TabsTrigger>
               <TabsTrigger value="prompts" className="flex-1 min-w-fit">{t('promptEditor.title')}</TabsTrigger>
               <TabsTrigger value="webdav" className="flex-1 min-w-fit">{t('config.tabs.webdav')}</TabsTrigger>
+              <TabsTrigger value="fonts" className="flex-1 min-w-fit">{t('config.tabs.fonts')}</TabsTrigger>
               <TabsTrigger value="export-import" className="flex-1 min-w-fit">{t('config.tabs.exportImport')}</TabsTrigger>
             </TabsList>
 
@@ -80,6 +83,10 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
 
             <TabsContent value="webdav" className="mt-4">
               <WebDAVConfig />
+            </TabsContent>
+
+            <TabsContent value="fonts" className="mt-4">
+              <FontSettings />
             </TabsContent>
 
             <TabsContent value="export-import" className="mt-4">

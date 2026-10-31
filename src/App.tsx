@@ -11,7 +11,7 @@ import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
 import { useLibraryOpen } from '@/hooks/useLibraryOpen'
 import { useAppExports } from '@/hooks/useAppExports'
-import { useBackToTop, useWebDAVAutoConnect } from '@/hooks/useAppShell'
+import { useBackToTop, useReadingFontAttr, useWebDAVAutoConnect } from '@/hooks/useAppShell'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -81,6 +81,7 @@ function App() {
 
   const showBackToTop = useBackToTop()
   useWebDAVAutoConnect(webdavConfig)
+  useReadingFontAttr()
   const { downloadAllMarkdown, downloadMindMap } = useAppExports(bookSummary, file?.name)
 
   // 开始处理并切换到结果页

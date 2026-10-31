@@ -70,3 +70,5 @@ pnpm dlx @fission-ai/openspec validate add-reader-workspace --strict
 - **变异验证**：新增测试后临时破坏被测逻辑确认会失败再还原（已对防剧透、GC、拖拽方向、自动载入竞态、换一批等做过）。
 - **浏览器验证**：隐藏窗格里 rAF/滚动事件不触发；用 `resize_window` + JS 探针；临时夹具页放 `tmp/`，**lint/提交前删除**（会触发 react-refresh 规则）。wrangler 本地在 ARM64 缺 workerd，改用 vite 夹具。
 - **Windows 脚本**：含 `\n`/正则的 Python 补丁先落盘 `tmp/*.py` 再执行，且字符串里的 `\n` 要写成 `\\n`（否则被转成真换行，曾破坏过源码）。
+
+- **字体（9.11）**：不自托管字体（`@fontsource` 全字重数十 MB，切片后仍重），改为系统字体栈；栈只写在 `index.css` 的 `--font-*`，设置「字体」页签（`FontSettings` + `utils/fontCheck.ts`）读这些变量做 canvas 实测。`document.fonts.check` 对未声明的系统字体恒为 true，不能用于检测。jsdom 没有 canvas → 状态为「无法检测」。

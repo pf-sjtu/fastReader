@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { webdavService } from '@/services/webdavService'
 import type { WebDAVConfig } from '@/stores/configStore'
+import { useReadingFocusStore } from '@/stores/readingFocus'
 
 /** 滚动容器滚过 300px 后显示「回到顶部」 */
 export function useBackToTop() {
@@ -13,6 +14,14 @@ export function useBackToTop() {
     return () => scrollContainer.removeEventListener('scroll', handleScroll)
   }, [])
   return show
+}
+
+/** 正文阅读字体偏好 → <html data-reading-font>，由 index.css 选择字体栈 */
+export function useReadingFontAttr() {
+  const readingFont = useReadingFocusStore((s) => s.readingFont)
+  useEffect(() => {
+    document.documentElement.dataset.readingFont = readingFont
+  }, [readingFont])
 }
 
 /**

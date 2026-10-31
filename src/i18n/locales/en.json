@@ -428,7 +428,30 @@
       "providers": "AI Providers",
       "webdav": "WebDAV",
       "exportImport": "Export / Import",
-      "processing": "Processing"
+      "processing": "Processing",
+      "fonts": "Fonts"
+    },
+    "fonts": {
+      "intro": "The app downloads no fonts. It uses fonts already installed on your device, taking the first available one in the order below, and falls back to the system default.",
+      "recheck": "Re-check",
+      "active": "In use",
+      "fallbackOnly": "No recommended font detected; the system default will be used",
+      "roles": {
+        "sans": "Interface and body (sans-serif)",
+        "serif": "Headings, brand and serif body",
+        "mono": "Code"
+      },
+      "status": {
+        "installed": "Installed",
+        "missing": "Not installed",
+        "generic": "System generic fallback",
+        "unknown": "Cannot detect"
+      },
+      "readingFont": "Reading font",
+      "readingSans": "Sans-serif (default)",
+      "readingSerif": "Serif",
+      "readingHint": "Only affects reading text such as chapter summaries; the rest of the interface is unchanged.",
+      "install": "Recommended: Windows ships Microsoft YaHei; macOS / iOS ship PingFang and Songti SC. For a nicer serif install Source Han Serif / Noto Serif SC; for a nicer sans install Source Han Sans / Noto Sans SC."
     },
     "proxy": {
       "test": "Test proxy",

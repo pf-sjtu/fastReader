@@ -4,7 +4,6 @@ import { dirname, resolve } from 'node:path'
 import react from '@vitejs/plugin-react-swc'
 import tailwindcss from '@tailwindcss/vite'
 import yaml from '@rollup/plugin-yaml'
-import { dropWoff1 } from './config/vite-drop-woff1.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -21,7 +20,7 @@ function packageName(id: string): string | null {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [dropWoff1(), react(), tailwindcss(), yaml()],
+  plugins: [react(), tailwindcss(), yaml()],
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),

@@ -60,6 +60,8 @@ const safeStorage: StateStorage = {
   },
 }
 
+export type ReadingFont = 'sans' | 'serif'
+
 interface ReadingFocusState {
   focusedEntityId: string | null
   /** 时间线上被聚焦的事件（从事件卡片/实体卡片跳来） */
@@ -80,6 +82,8 @@ interface ReadingFocusState {
   colorizeGraph: boolean
   /** 图谱「截至本章」渐进模式 */
   progressiveGraph: boolean
+  /** 正文阅读字体：无衬线（默认）或衬线；界面其余部分不受影响 */
+  readingFont: ReadingFont
   /** 专注模式：收起目录与对照栏（会话内状态，不持久化） */
   focusMode: boolean
 
@@ -95,6 +99,7 @@ interface ReadingFocusState {
   setAnnotateEntities: (on: boolean) => void
   setColorizeGraph: (on: boolean) => void
   setProgressiveGraph: (on: boolean) => void
+  setReadingFont: (font: ReadingFont) => void
   toggleFocusMode: () => void
 }
 
@@ -112,6 +117,7 @@ export const useReadingFocusStore = create<ReadingFocusState>()(
       annotateEntities: true,
       colorizeGraph: true,
       progressiveGraph: false,
+      readingFont: 'sans',
       focusMode: false,
 
       focusEntity: (id, opts) =>
@@ -143,6 +149,7 @@ export const useReadingFocusStore = create<ReadingFocusState>()(
       setAnnotateEntities: (annotateEntities) => set({ annotateEntities }),
       setColorizeGraph: (colorizeGraph) => set({ colorizeGraph }),
       setProgressiveGraph: (progressiveGraph) => set({ progressiveGraph }),
+      setReadingFont: (readingFont) => set({ readingFont }),
       toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
     }),
     {
@@ -157,6 +164,7 @@ export const useReadingFocusStore = create<ReadingFocusState>()(
         annotateEntities: s.annotateEntities,
         colorizeGraph: s.colorizeGraph,
         progressiveGraph: s.progressiveGraph,
+        readingFont: s.readingFont,
       }),
       // 存档里的宽度可能被手改或来自旧版本：载入时再夹一次
       merge: (persisted, current) => {
@@ -166,6 +174,8 @@ export const useReadingFocusStore = create<ReadingFocusState>()(
           ...p,
           companionWidth: clampCompanionWidth(p.companionWidth ?? current.companionWidth),
           navWidth: clampNavWidth(p.navWidth ?? current.navWidth),
+          // 存档里可能是别的值：只认两种
+          readingFont: p.readingFont === 'serif' ? 'serif' : 'sans',
         }
       },
     }
