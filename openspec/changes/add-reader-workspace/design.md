@@ -25,6 +25,15 @@ store 只存 UI 偏好与聚焦实体：`focusedEntityId / companionTab / compan
 remark 插件（手写递归遍历，不新增 `unist-util-visit` 依赖）把 text 节点按实体名切开，输出 `span.entity-mark[data-entity-id]`，跳过 code/inlineCode/link。
 悬停与点击用容器级事件委托，不覆写 `components`；插件数组 `useMemo` 保持稳定。
 
+### 5b. 关联卡片与防误触交互模型（spec: artifact-linking）
+- **原则：轻点只"选中"，跳转必须是有意图的第二步。** 滚动位置是用户的阅读进度，被误触打断的代价远高于多点一次。
+- 单击任一关联对象 → 展开 `LinkCard`（Popover，非模态）+ 选中高亮；卡内按钮才跳转。拖动位移 >4px 不算点击（cytoscape 的 `tap` 本身已排除拖拽，仍以位移阈值兜底触屏抖动）。悬停预览 300ms 延迟，触屏无悬停。
+- 双击是**可选快捷**（定位到正文下一次出现），不替代卡内按钮。
+- 位置精度：`entityIndex` 在计数之外记录每次出现的 `{chapterId, ordinal, start, end}`，卡片据此生成"第 7 章 · 第 2 次 + 前后各约 18 字摘录"；正文用 `.entity-mark[data-entity-id]` 的第 k 个节点定位（DOM 顺序与 remark 插件产出顺序一致）。
+- 跳转由统一的 `navigateTo(target)` 处理：①必要时展开对照栏/切页签/展开折叠章节 ②等布局稳定后复用 `scrollToChapterWithRetry` ③到达高亮（≤2s，reduced-motion 降级为静态描边）④把跳转前的位置压入历史栈（≤20）供"返回上一位置"。
+- "本章"同步高亮只改样式、不动滚动，避免正文滚动时图谱/时间线跟着乱跑。
+- 图谱「与正文同色」是 `readingFocus` 里的布尔偏好；关闭时回到中性单色，图例始终可见。
+
 ### 6. 书库索引的生命周期
 `{syncPath}/.juhua/library.json`（schemaVersion 1）+ `.juhua/covers/<sha1(path)>.webp`（≈200px，≤30KB）。
 - 失效：PROPFIND 的 size/mtime/etag 变化 → 条目标 stale。
