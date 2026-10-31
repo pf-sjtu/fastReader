@@ -18,10 +18,10 @@
 - [x] 2.4 图谱 0→有尺寸时 fit；"适应画布"按钮；布局后按每节点面积等比压紧（防重叠下限）并放宽 minZoom
 
 ## 3. 阅读工作台
-- [ ] 3.1 `ResizeHandle` + `useResizableWidth`
-- [ ] 3.2 `ReaderWorkspace` + `CompanionDock` + `MobileCompanionDrawer`
-- [ ] 3.3 `ResultsSection` 瘦身；`PreviewPanel variant="dock"`；`MarkdownCard` 按钮精简与排版
-- [ ] 3.4 专注模式
+- [x] 3.1 `ResizeHandle`（指针拖拽 + 键盘 + 双击复位，不另设 hook）
+- [x] 3.2 `ReaderWorkspace` + `CompanionDock`（移动端抽屉内置于工作台）
+- [x] 3.3 `ResultsSection variant="body"`；`PreviewPanel variant="dock"`；章节卡「清除缓存」收进更多菜单；正文限宽居中（衬线正文切换留到阶段 8）
+- [x] 3.4 专注模式
 
 ## 4. 联动与标注
 - [ ] 4.1 图谱高亮/淡化/居中、渐进模式、图例与类型过滤

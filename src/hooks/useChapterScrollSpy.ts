@@ -36,9 +36,22 @@ export interface ChapterRect {
 export function resolveActiveChapterId(
   chapters: ChapterRect[],
   containerTop: number,
-  anchorOffset = 96
+  anchorOffset = 96,
+  /**
+   * 已滚到底部时传入。书尾若是一串折叠的矮卡片，它们的顶边永远够不到锚点，
+   * 按"越过锚点"规则当前章会一直卡在前面某一章；到底部时改取"顶边已进入视口的最后一章"。
+   */
+  bottom?: { atBottom: boolean; containerBottom: number }
 ): string {
   if (chapters.length === 0) return ''
+
+  if (bottom?.atBottom) {
+    let last = ''
+    for (const ch of chapters) {
+      if (ch.top < bottom.containerBottom - 8) last = ch.id
+    }
+    if (last) return last
+  }
 
   const anchorY = containerTop + anchorOffset
   let activeId = ''
@@ -74,7 +87,8 @@ export function useChapterScrollSpy({
   containerSelector = '.scroll-container',
   container: explicitContainer,
   onChapterChange,
-  lockMs = 900,
+  // 要覆盖 scrollToChapterWithRetry 的 200/400/600ms 三次对齐 + 平滑滚动时长，否则点目录后高亮会被反弹
+  lockMs = 1300,
 }: UseChapterScrollSpyOptions) {
   const onChangeRef = useRef(onChapterChange)
   onChangeRef.current = onChapterChange
@@ -105,7 +119,12 @@ export function useChapterScrollSpy({
     const resolveActive = () => {
       if (Date.now() < lockUntilRef.current) return
 
-      const containerTop = container.getBoundingClientRect().top
+      const containerRect = container.getBoundingClientRect()
+      const containerTop = containerRect.top
+      // 可滚动且已到底（留 4px 容差：缩放/亚像素会让 scrollTop 差一点点）
+      const atBottom =
+        container.scrollHeight > container.clientHeight + 1 &&
+        container.scrollTop + container.clientHeight >= container.scrollHeight - 4
       const rects: ChapterRect[] = []
 
       for (const id of chapterIds) {
@@ -115,7 +134,10 @@ export function useChapterScrollSpy({
         rects.push({ id, top: rect.top, bottom: rect.bottom })
       }
 
-      const activeId = resolveActiveChapterId(rects, containerTop)
+      const activeId = resolveActiveChapterId(rects, containerTop, 96, {
+        atBottom,
+        containerBottom: containerRect.bottom,
+      })
 
       if (activeId && activeId !== lastIdRef.current) {
         lastIdRef.current = activeId

@@ -33,6 +33,11 @@ interface ResultsSectionProps {
   chartsGenerating?: boolean
   /** 处理中尚无结果章节时，头部显示的预期总章数 */
   totalChapters?: number
+  /**
+   * full：全部页签（旧布局 / 导图模式）；
+   * body：阅读工作台的正文栏——只留「章节总结 / 章节关联」，综述与图表在对照栏
+   */
+  variant?: 'full' | 'body'
 }
 
 export const ResultsSection = memo(function ResultsSection({
@@ -50,7 +55,9 @@ export const ResultsSection = memo(function ResultsSection({
   onRegenerateKeyCharts,
   chartsGenerating = false,
   totalChapters = 0,
+  variant = 'full',
 }: ResultsSectionProps) {
+  const isBody = variant === 'body'
   const { t } = useTranslation()
   // 受控 Tab，避免切换时整树 default 重置
   const [summaryTab, setSummaryTab] = useState('chapters')
@@ -117,21 +124,26 @@ export const ResultsSection = memo(function ResultsSection({
           <Tabs
             value={summaryTab}
             onValueChange={setSummaryTab}
-            className="w-full min-w-0"
+            // 工作台正文：限定舒适行宽（约 48rem≈中文 40 字/行）并居中，对照栏收起时也不会拉成超长行
+            className={cn('w-full min-w-0', isBody && 'mx-auto max-w-3xl')}
           >
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
+            <TabsList className={cn('grid w-full h-auto', isBody ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4')}>
               <TabsTrigger value="chapters" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
                 {t('results.tabs.chapterSummary')}
               </TabsTrigger>
               <TabsTrigger value="connections" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
                 {t('results.tabs.connections')}
               </TabsTrigger>
-              <TabsTrigger value="overall" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
-                {t('results.tabs.overallSummary')}
-              </TabsTrigger>
-              <TabsTrigger value="charts" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
-                {t('results.tabs.keyCharts')}
-              </TabsTrigger>
+              {!isBody && (
+                <>
+                  <TabsTrigger value="overall" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                    {t('results.tabs.overallSummary')}
+                  </TabsTrigger>
+                  <TabsTrigger value="charts" className="text-xs sm:text-sm px-1 sm:px-3 py-2">
+                    {t('results.tabs.keyCharts')}
+                  </TabsTrigger>
+                </>
+              )}
             </TabsList>
 
             <TabsContent value="chapters" className="grid grid-cols-1 gap-2.5 sm:gap-4">
@@ -166,43 +178,47 @@ export const ResultsSection = memo(function ResultsSection({
               />
             </TabsContent>
 
-            <TabsContent value="overall">
-              <MarkdownCard
-                id="overall"
-                title={t('results.tabs.overallSummary')}
-                content={bookSummary.overallSummary}
-                markdownContent={bookSummary.overallSummary}
-                index={0}
-                showClearCache={true}
-                showViewContent={false}
-                showCopyButton={true}
-                onClearCache={clearOverall}
-              />
-            </TabsContent>
+            {!isBody && (
+              <TabsContent value="overall">
+                <MarkdownCard
+                  id="overall"
+                  title={t('results.tabs.overallSummary')}
+                  content={bookSummary.overallSummary}
+                  markdownContent={bookSummary.overallSummary}
+                  index={0}
+                  showClearCache={true}
+                  showViewContent={false}
+                  showCopyButton={true}
+                  onClearCache={clearOverall}
+                />
+              </TabsContent>
+            )}
 
             {/* forceMount：切走 Tab 不销毁关系图/cytoscape，避免布局抖动 */}
-            <TabsContent
-              value="charts"
-              forceMount
-              className={cn(
-                'min-w-0 mt-2',
-                summaryTab !== 'charts' && 'hidden'
-              )}
-            >
-              <ErrorBoundary section={t('results.tabs.keyCharts')}>
-                <ChartsPanel
-                  charts={bookSummary.charts}
-                  chartsError={bookSummary.chartsError}
-                  generating={chartsGenerating}
-                  onClearCache={clearCharts}
-                  onRegenerate={onRegenerateKeyCharts}
-                  canRegenerate={
-                    isUsableText(bookSummary.overallSummary) &&
-                    bookSummary.chapters.length > 0
-                  }
-                />
-              </ErrorBoundary>
-            </TabsContent>
+            {!isBody && (
+              <TabsContent
+                value="charts"
+                forceMount
+                className={cn(
+                  'min-w-0 mt-2',
+                  summaryTab !== 'charts' && 'hidden'
+                )}
+              >
+                <ErrorBoundary section={t('results.tabs.keyCharts')}>
+                  <ChartsPanel
+                    charts={bookSummary.charts}
+                    chartsError={bookSummary.chartsError}
+                    generating={chartsGenerating}
+                    onClearCache={clearCharts}
+                    onRegenerate={onRegenerateKeyCharts}
+                    canRegenerate={
+                      isUsableText(bookSummary.overallSummary) &&
+                      bookSummary.chapters.length > 0
+                    }
+                  />
+                </ErrorBoundary>
+              </TabsContent>
+            )}
           </Tabs>
         ) : processingMode === 'mindmap' && bookMindMap ? (
           <Tabs

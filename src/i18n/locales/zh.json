@@ -219,6 +219,7 @@
     "clearCache": "清除缓存",
     "copiedToClipboard": "已复制到剪贴板",
     "copyChapterSummary": "复制章节总结",
+    "moreActions": "更多操作",
     "copyChapterContent": "复制章节内容",
     "copyContent": "复制内容",
     "expand": "展开",
@@ -528,6 +529,26 @@
     "chaptersDescription": "选择章节以定位或查看进度",
     "preview": "预览",
     "previewDescription": "查看章节原文内容"
+  },
+  "workspace": {
+    "dock": {
+      "collapse": "收起对照栏",
+      "expand": "展开对照栏",
+      "resize": "调整对照栏宽度"
+    },
+    "tabs": {
+      "source": "原文"
+    },
+    "source": {
+      "empty": "在章节卡片上点「读原文」，这里会显示该章原文，方便和总结对照。"
+    },
+    "focus": {
+      "exit": "退出专注（\\）"
+    },
+    "mobile": {
+      "dock": "对照",
+      "dockDescription": "图谱、时间线、综述与原文"
+    }
   },
   "history": {
     "dialogTitle": "处理历史",

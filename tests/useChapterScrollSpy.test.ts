@@ -45,4 +45,36 @@ describe('resolveActiveChapterId', () => {
     ]
     expect(resolveActiveChapterId(deep, 0)).toBe('c3')
   })
+
+  describe('滚到底部', () => {
+    // 复现：c8 很高，书尾 c9–c11 是折叠的矮卡片，滚到底时它们的顶边都够不到锚点(96)
+    const tail = [
+      { id: 'c8', top: -500, bottom: 120 },
+      { id: 'c9', top: 160, bottom: 230 },
+      { id: 'c10', top: 250, bottom: 320 },
+      { id: 'c11', top: 340, bottom: 410 },
+    ]
+
+    it('不在底部：沿用锚点规则，卡在 c8（这正是要修的现象，用来对照）', () => {
+      expect(resolveActiveChapterId(tail, 0, 96, { atBottom: false, containerBottom: 624 })).toBe('c8')
+    })
+
+    it('在底部：取顶边已进入视口的最后一章', () => {
+      expect(resolveActiveChapterId(tail, 0, 96, { atBottom: true, containerBottom: 624 })).toBe('c11')
+    })
+
+    it('在底部但最后几章仍在视口之外：只算已进入视口的', () => {
+      const partial = [...tail, { id: 'c12', top: 900, bottom: 970 }]
+      expect(resolveActiveChapterId(partial, 0, 96, { atBottom: true, containerBottom: 624 })).toBe('c11')
+    })
+
+    it('不传 bottom 参数时行为不变（向后兼容）', () => {
+      expect(resolveActiveChapterId(tail, 0)).toBe('c8')
+    })
+
+    it('在底部但没有任何章节进入视口时回退到锚点规则', () => {
+      const none = [{ id: 'c1', top: 700, bottom: 800 }]
+      expect(resolveActiveChapterId(none, 0, 96, { atBottom: true, containerBottom: 624 })).toBe('c1')
+    })
+  })
 })

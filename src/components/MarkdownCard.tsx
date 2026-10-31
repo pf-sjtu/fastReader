@@ -2,7 +2,13 @@ import React, { memo, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Trash2, BookOpen, ChevronDown, ChevronUp } from 'lucide-react'
+import { Trash2, BookOpen, ChevronDown, ChevronUp, MoreHorizontal } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkCjkFriendly from "remark-cjk-friendly";
@@ -127,17 +133,27 @@ export const MarkdownCard = memo(function MarkdownCard({
                 title={t('common.copyChapterSummary')}
               />
             )}
+            {/* 破坏性的次要操作收进菜单：少一个常驻按钮，也避免手滑清掉缓存 */}
             {showClearCache && onClearCache && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onClearCache(id)}
-                title={t('common.clearCache')}
-                aria-label={t('common.clearCache')}
-                className="h-8 w-8 p-0"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    title={t('common.moreActions')}
+                    aria-label={t('common.moreActions')}
+                    className="h-8 w-8 p-0"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem variant="destructive" onSelect={() => onClearCache(id)}>
+                    <Trash2 className="h-4 w-4" />
+                    {t('common.clearCache')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             {showReadButton && onReadChapter && (
               <Button

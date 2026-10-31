@@ -16,6 +16,8 @@ export interface ChartsPanelProps {
   /** 手动重新生成关键图表 */
   onRegenerate?: () => void | Promise<void>
   canRegenerate?: boolean
+  /** 只渲染该插件（不显示内层页签）：对照栏每个图表占一个页签时使用 */
+  onlyPlugin?: string
 }
 
 export function ChartsPanel({
@@ -25,6 +27,7 @@ export function ChartsPanel({
   onClearCache,
   onRegenerate,
   canRegenerate = false,
+  onlyPlugin,
 }: ChartsPanelProps) {
   const { t } = useTranslation()
   const plugins = useMemo(() => getSortedPlugins(), [])
@@ -32,8 +35,11 @@ export function ChartsPanel({
   const [activePlugin, setActivePlugin] = useState<string>('')
 
   const available = useMemo(
-    () => (charts ? plugins.filter((p) => p.hasData(charts)) : []),
-    [charts, plugins]
+    () =>
+      charts
+        ? plugins.filter((p) => (!onlyPlugin || p.id === onlyPlugin) && p.hasData(charts))
+        : [],
+    [charts, plugins, onlyPlugin]
   )
 
   // 保持当前子 Tab；数据就绪后默认选第一个
@@ -120,10 +126,21 @@ export function ChartsPanel({
     )
   }
 
-  if (!activePlugin) {
+  // onlyPlugin 不需要等 effect 选出默认页签，首帧就渲染
+  if (!activePlugin && !onlyPlugin) {
     return (
       <div className="space-y-3 min-w-0">
         {toolbar}
+      </div>
+    )
+  }
+
+  if (onlyPlugin) {
+    const Comp = available[0].Component
+    return (
+      <div className="space-y-3 min-w-0">
+        {toolbar}
+        <Comp charts={charts} />
       </div>
     )
   }

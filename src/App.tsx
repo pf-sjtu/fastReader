@@ -23,8 +23,8 @@ import { downloadSummaryMarkdown } from '@/utils/exportSummary'
 import { exportMindMap } from '@/utils/mindmapExport'
 import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
-import { useChapterScrollSpy } from '@/hooks/useChapterScrollSpy'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { cn } from '@/lib/utils'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import type { ProcessingHistoryRecord } from '@/stores/processingHistory'
 
@@ -33,8 +33,8 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { UnifiedStatusBar } from '@/components/UnifiedStatusBar'
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator'
-import { ChapterSummaryNavigation } from '@/components/ChapterSummaryNavigation'
 import { TimelineNavigation } from '@/components/TimelineNavigation'
+import { ReaderWorkspace } from '@/components/workspace/ReaderWorkspace'
 
 import { FileUploadCard } from '@/components/sections/FileUploadCard'
 import { ChapterSelectionSection } from '@/components/sections/ChapterSelectionSection'
@@ -309,82 +309,48 @@ function App() {
     setPreviewSheetOpen(open)
   }, [])
 
-  const summaryNavChapters = useMemo(() => bookSummary?.chapters || [], [bookSummary])
   const mindmapNavChapters = useMemo(() => bookMindMap?.chapters || [], [bookMindMap])
-  const showSummaryNav =
-    currentStepIndex === 2 &&
-    processingMode === 'summary' &&
-    summaryNavChapters.length > 0
+  // 总结模式一旦有结果就进入阅读工作台（目录、scroll spy、对照栏都在工作台内部）；
+  // 导图模式与"尚无结果"仍用经典布局
+  const workspaceMode = currentStepIndex === 2 && processingMode === 'summary' && !!bookSummary
   const showMindmapNav =
     currentStepIndex === 2 &&
     processingMode !== 'summary' &&
     (processing || mindmapNavChapters.length > 0)
-  const showMobileNavTrigger = isMobile && (showSummaryNav || showMindmapNav)
+  const showMobileNavTrigger = isMobile && showMindmapNav
 
-  const summaryChapterIds = useMemo(
-    () => summaryNavChapters.map((ch) => ch.id),
-    [summaryNavChapters]
-  )
+  // 移动端角标：导图模式 = 处理进度
+  const processedNavCount = mindmapNavChapters.filter((ch) => ch.processed).length
+  const totalNavCount = mindmapNavChapters.length
 
-  // 目录跟随主内容滚动：更新当前阅读章节
-  const { lock: lockScrollSpy } = useChapterScrollSpy({
-    chapterIds: summaryChapterIds,
-    enabled: showSummaryNav,
-    idPrefix: 'chapter-summary-',
-    containerSelector: '.scroll-container',
-    onChapterChange: setCurrentViewingChapterSummary,
-  })
+  const previewPanel = (variant: 'sidebar' | 'dock') =>
+    rightPanelContent ? (
+      <PreviewPanel
+        chapter={rightPanelContent.chapter}
+        title={rightPanelContent.title}
+        fileName={file?.name || ''}
+        bookData={fullBookData}
+        fontSize={previewFontSize}
+        isFullscreen={isPreviewFullscreen}
+        onClose={handleCloseRightPanel}
+        onIncreaseFontSize={increasePreviewFontSize}
+        onDecreaseFontSize={decreasePreviewFontSize}
+        onToggleFullscreen={togglePreviewFullscreen}
+        variant={variant}
+      />
+    ) : null
 
-  const handleSummaryNavClick = useCallback(
-    (chapterId: string) => {
-      lockScrollSpy()
-      handleChapterSummaryNavigation(chapterId)
-    },
-    [lockScrollSpy, handleChapterSummaryNavigation]
-  )
-
-  const handleMobileChapterSummaryClick = useCallback(
-    (chapterId: string) => {
-      lockScrollSpy()
-      handleChapterSummaryNavigation(chapterId)
-      setNavSheetOpen(false)
-    },
-    [lockScrollSpy, handleChapterSummaryNavigation]
-  )
-
-  // 移动端角标：处理中=处理进度，完成后=阅读进度
-  const viewingNavIndex = currentViewingChapterSummary
-    ? summaryNavChapters.findIndex((ch) => ch.id === currentViewingChapterSummary)
-    : -1
-  const processedNavCount = showSummaryNav
-    ? processing
-      ? summaryNavChapters.filter((ch) => ch.processed).length
-      : viewingNavIndex >= 0
-        ? viewingNavIndex + 1
-        : 0
-    : mindmapNavChapters.filter((ch) => ch.processed).length
-  const totalNavCount = showSummaryNav
-    ? summaryNavChapters.length
-    : mindmapNavChapters.length
-
-  const desktopPreview = !isMobile && rightPanelContent ? (
-    <PreviewPanel
-      chapter={rightPanelContent.chapter}
-      title={rightPanelContent.title}
-      fileName={file?.name || ''}
-      bookData={fullBookData}
-      fontSize={previewFontSize}
-      isFullscreen={isPreviewFullscreen}
-      onClose={handleCloseRightPanel}
-      onIncreaseFontSize={increasePreviewFontSize}
-      onDecreaseFontSize={decreasePreviewFontSize}
-      onToggleFullscreen={togglePreviewFullscreen}
-      variant="sidebar"
-    />
-  ) : null
+  const desktopPreview = !isMobile && !workspaceMode ? previewPanel('sidebar') : null
+  const dockPreview = !isMobile && workspaceMode ? previewPanel('dock') : null
 
   return (
-    <div className="min-h-screen bg-background px-1.5 py-2.5 sm:p-4 flex justify-center gap-4 h-screen overflow-y-auto overflow-x-hidden scroll-container pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
+    <div
+      className={cn(
+        'bg-background px-1.5 py-2.5 sm:p-4 flex justify-center gap-4 h-screen overflow-x-hidden scroll-container pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]',
+        // 工作台自己管滚动（三栏各自滚），页面本身不滚；class 名保留以兼容仍用选择器的旧逻辑
+        workspaceMode ? 'h-dvh overflow-y-hidden' : 'min-h-screen overflow-y-auto'
+      )}
+    >
       <Toaster />
       <ErrorBoundary section={t('errorBoundary.webdavBrowser')}>
         <Suspense fallback={<PanelSkeleton />}>
@@ -396,29 +362,48 @@ function App() {
         </Suspense>
       </ErrorBoundary>
 
-      <div className="max-w-full xl:max-w-7xl space-y-2.5 sm:space-y-4 w-full flex-1 min-w-0">
-        {/* Header */}
-        <div className="flex flex-col gap-2 sm:block sm:relative sm:space-y-2 sm:text-center">
-          <div className="flex items-center justify-between gap-2 sm:absolute sm:top-0 sm:right-0 sm:justify-end">
-            <div className="sm:hidden flex-1 min-w-0">
-              <h1 className="min-w-0">
-                <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" />
-              </h1>
-            </div>
+      <div
+        className={cn(
+          'w-full flex-1 min-w-0 space-y-2.5 sm:space-y-4',
+          // 工作台要更宽的画布给三栏；纵向 flex 让工作台吃掉剩余高度
+          workspaceMode ? 'max-w-full 2xl:max-w-[110rem] flex flex-col min-h-0 !space-y-0 gap-2' : 'max-w-full xl:max-w-7xl'
+        )}
+      >
+        {/* Header：工作台里压成单行（品牌 + 工具），把高度让给阅读 */}
+        {workspaceMode ? (
+          <div className="flex shrink-0 items-center justify-between gap-2">
+            <h1 className="min-w-0">
+              <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" />
+            </h1>
             <div className="flex items-center gap-1.5 shrink-0">
               <SyncStatusIndicator />
               <LanguageSwitcher />
               <DarkModeToggle />
             </div>
           </div>
-          <div className="hidden sm:flex flex-col items-center gap-3 pt-1">
-            <h1>
-              <BrandMark name={t('app.title')} latin={t('app.latin')} />
-            </h1>
-            <p className="font-brand text-sm text-muted-foreground">{t('app.description')}</p>
+        ) : (
+          <div className="flex flex-col gap-2 sm:block sm:relative sm:space-y-2 sm:text-center">
+            <div className="flex items-center justify-between gap-2 sm:absolute sm:top-0 sm:right-0 sm:justify-end">
+              <div className="sm:hidden flex-1 min-w-0">
+                <h1 className="min-w-0">
+                  <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" />
+                </h1>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <SyncStatusIndicator />
+                <LanguageSwitcher />
+                <DarkModeToggle />
+              </div>
+            </div>
+            <div className="hidden sm:flex flex-col items-center gap-3 pt-1">
+              <h1>
+                <BrandMark name={t('app.title')} latin={t('app.latin')} />
+              </h1>
+              <p className="font-brand text-sm text-muted-foreground">{t('app.description')}</p>
+            </div>
+            <p className="sm:hidden font-brand text-sm text-muted-foreground">{t('app.description')}</p>
           </div>
-          <p className="sm:hidden font-brand text-sm text-muted-foreground">{t('app.description')}</p>
-        </div>
+        )}
 
         {/* 统一状态栏 */}
         <UnifiedStatusBar
@@ -521,23 +506,37 @@ function App() {
 
             {desktopPreview}
           </div>
-        ) : (
-          // 结果步骤
-          <div className="flex flex-col md:flex-row gap-3 md:gap-4 min-w-0">
-            {/* 桌面：左侧导航 */}
-            {!isMobile && processingMode === 'summary' && (
-              <ChapterSummaryNavigation
-                chapters={summaryNavChapters}
-                totalChapters={extractedChapters?.length || 0}
-                currentStepIndex={currentStepIndex}
-                processingMode={processingMode}
-                onChapterClick={handleSummaryNavClick}
+        ) : workspaceMode && bookSummary ? (
+          // 结果步骤（总结模式）：阅读工作台
+          <div className="min-h-0 flex-1">
+            <ErrorBoundary section={t('results.title')}>
+              <ReaderWorkspace
+                bookSummary={bookSummary}
+                file={file}
                 processing={processing}
+                isMobile={isMobile}
+                totalChapters={extractedChapters?.length || 0}
                 currentProcessingChapter={currentProcessingChapter}
                 currentViewingChapter={currentViewingChapterSummary}
-                variant="sidebar"
+                expandedChapters={expandedChapters}
+                chartsGenerating={chartsGenerating}
+                source={dockPreview}
+                sourceKey={rightPanelContent?.chapter.id}
+                onNavigateChapter={handleChapterSummaryNavigation}
+                onViewingChapterChange={setCurrentViewingChapterSummary}
+                onClearChapterCache={clearChapterCache}
+                onClearSpecificCache={clearSpecificCache}
+                onChapterExpandChange={handleChapterExpandChange}
+                onReadChapter={handleReadChapter}
+                onDownloadAllMarkdown={downloadAllMarkdown}
+                onRegenerateKeyCharts={regenerateKeyCharts}
               />
-            )}
+            </ErrorBoundary>
+          </div>
+        ) : (
+          // 结果步骤（导图模式 / 尚无结果）：经典布局
+          <div className="flex flex-col md:flex-row gap-3 md:gap-4 min-w-0">
+            {/* 桌面：左侧导航 */}
             {!isMobile && processingMode !== 'summary' && (
               <TimelineNavigation
                 chapters={mindmapNavChapters}
@@ -612,29 +611,15 @@ function App() {
               <SheetDescription>{t('mobile.chaptersDescription')}</SheetDescription>
             </SheetHeader>
             <div className="h-full pt-2">
-              {processingMode === 'summary' ? (
-                <ChapterSummaryNavigation
-                  chapters={summaryNavChapters}
-                  totalChapters={extractedChapters?.length || 0}
-                  currentStepIndex={currentStepIndex}
-                  processingMode={processingMode}
-                  onChapterClick={handleMobileChapterSummaryClick}
-                  processing={processing}
-                  currentProcessingChapter={currentProcessingChapter}
-                  currentViewingChapter={currentViewingChapterSummary}
-                  variant="sheet"
-                />
-              ) : (
-                <TimelineNavigation
-                  chapters={mindmapNavChapters}
-                  currentStepIndex={currentStepIndex}
-                  processingMode={processingMode}
-                  onChapterClick={handleMobileChapterNavClick}
-                  processing={processing}
-                  currentProcessingChapter={currentProcessingChapter}
-                  variant="sheet"
-                />
-              )}
+              <TimelineNavigation
+                chapters={mindmapNavChapters}
+                currentStepIndex={currentStepIndex}
+                processingMode={processingMode}
+                onChapterClick={handleMobileChapterNavClick}
+                processing={processing}
+                currentProcessingChapter={currentProcessingChapter}
+                variant="sheet"
+              />
             </div>
           </SheetContent>
         </Sheet>
@@ -671,14 +656,16 @@ function App() {
         </Sheet>
 
         {/* 页脚：构建号（YYYYMMDD.bN，提交前自动 bump）；典故已在页头副标题里，这里不重复 */}
-        <footer className="pt-8 pb-2 text-center select-none">
-          <p className="text-[10px] leading-none text-muted-foreground/40 select-all tabular-nums tracking-wide" title="build version">
-            {BUILD_VERSION}
-          </p>
-        </footer>
+        {!workspaceMode && (
+          <footer className="pt-8 pb-2 text-center select-none">
+            <p className="text-[10px] leading-none text-muted-foreground/40 select-all tabular-nums tracking-wide" title="build version">
+              {BUILD_VERSION}
+            </p>
+          </footer>
+        )}
 
-        {/* 回到顶部按钮 */}
-        {showBackToTop && (
+        {/* 回到顶部按钮（工作台在正文栏内自带） */}
+        {showBackToTop && !workspaceMode && (
           <Button
             onClick={scrollToTop}
             className="fixed z-50 rounded-full w-12 h-12 shadow-lg hover:shadow-xl transition-all duration-300 bg-primary hover:bg-primary/90 text-primary-foreground right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))]"

@@ -240,6 +240,7 @@
     "clearCache": "Clear Cache",
     "copiedToClipboard": "Copied to clipboard",
     "copyChapterSummary": "Copy Chapter Summary",
+    "moreActions": "More actions",
     "copyChapterContent": "Copy Chapter Content",
     "copyContent": "Copy Content",
     "expand": "Expand",
@@ -519,6 +520,26 @@
     "chaptersDescription": "Select a chapter to jump or check progress",
     "preview": "Preview",
     "previewDescription": "View original chapter content"
+  },
+  "workspace": {
+    "dock": {
+      "collapse": "Collapse side panel",
+      "expand": "Expand side panel",
+      "resize": "Resize side panel"
+    },
+    "tabs": {
+      "source": "Source"
+    },
+    "source": {
+      "empty": "Click \"Read original\" on a chapter card to show that chapter's text here, next to the summary."
+    },
+    "focus": {
+      "exit": "Exit focus mode (\\)"
+    },
+    "mobile": {
+      "dock": "Side panel",
+      "dockDescription": "Graph, timeline, overview and source"
+    }
   },
   "history": {
     "dialogTitle": "Processing History",
