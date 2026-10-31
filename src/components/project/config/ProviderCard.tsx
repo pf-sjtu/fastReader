@@ -63,11 +63,11 @@ export function ProviderCard({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="min-w-0 truncate text-sm font-medium">{provider.name}</span>
-              <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+              <Badge variant="outline" className="px-1.5 py-0 text-xs">
                 {PROTOCOL_LABEL[provider.type]}
               </Badge>
               {activeModel && (
-                <Badge className="max-w-full px-1.5 py-0 text-[10px]" title={activeModel.id}>
+                <Badge className="max-w-full px-1.5 py-0 text-xs" title={activeModel.id}>
                   <span className="truncate">{t('aiProvider.currentModelBadge', { model: activeModel.label || activeModel.id })}</span>
                 </Badge>
               )}
@@ -78,7 +78,7 @@ export function ProviderCard({
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>{t('aiProvider.modelCount', { enabled: enabledCount, total: provider.models.length })}</span>
               <span className={`inline-flex items-center gap-1 ${keyMissing ? 'text-destructive' : ''}`}>
-                <KeyRound className="h-3 w-3" aria-hidden />
+                <KeyRound className="h-3.5 w-3.5" aria-hidden />
                 {keyLabel}
               </span>
             </div>

@@ -89,7 +89,7 @@ export const ResultsSection = memo(function ResultsSection({
     <Card className="min-w-0 gap-2 sm:gap-4 py-2 sm:py-4">
       <CardHeader className="overflow-hidden px-2 sm:px-4">
         <CardTitle className="min-w-0">
-          <div className="truncate text-[15px] sm:text-base font-brand font-semibold">
+          <div className="t-title truncate">
             {processingMode === 'summary' ? (
               <><BookOpen className="h-5 w-5 inline-block mr-2" />{t('results.summaryTitle', { title: bookSummary?.title })}</>
             ) : processingMode === 'mindmap' ? (

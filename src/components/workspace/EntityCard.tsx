@@ -67,13 +67,13 @@ export function EntityCard({
 
       {s.relations.length > 0 && (
         <section aria-label={t('entityCard.relations')} className="space-y-1.5">
-          <h4 className="text-xs font-medium text-muted-foreground">{t('entityCard.relations')}</h4>
+          <h4 className="t-label">{t('entityCard.relations')}</h4>
           {s.relations.map((g) => (
             <div key={g.key} className="flex flex-wrap items-center gap-1 text-sm">
               <span className="inline-flex items-center gap-0.5 text-muted-foreground">
-                {g.direction === 'in' && <ArrowLeft className="size-3" aria-hidden="true" />}
+                {g.direction === 'in' && <ArrowLeft className="size-3.5" aria-hidden="true" />}
                 {g.relation}
-                {g.direction === 'out' && <ArrowRight className="size-3" aria-hidden="true" />}
+                {g.direction === 'out' && <ArrowRight className="size-3.5" aria-hidden="true" />}
               </span>
               {g.neighbors.map((n) => {
                 const ns = linking.styles.get(n.id)
@@ -89,7 +89,7 @@ export function EntityCard({
                   </button>
                 )
               })}
-              {tagged && <Badge variant="outline" className="text-[10px]">{chapterLabel(g.firstChapterId)}</Badge>}
+              {tagged && <Badge variant="outline" className="text-xs">{chapterLabel(g.firstChapterId)}</Badge>}
             </div>
           ))}
           {s.moreRelations > 0 && (
@@ -100,18 +100,18 @@ export function EntityCard({
 
       {s.events.length > 0 && (
         <section aria-label={t('entityCard.events')} className="space-y-1">
-          <h4 className="text-xs font-medium text-muted-foreground">{t('entityCard.events')}</h4>
+          <h4 className="t-label">{t('entityCard.events')}</h4>
           <ul className="space-y-0.5">
             {s.events.map((ev) => (
               <li key={ev.id} className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={(e) => onOpenEvent(ev.id, rectOf(e.currentTarget))}
-                  className="min-h-7 min-w-0 flex-1 truncate rounded px-1 text-left text-sm hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                  className="min-h-7 min-w-0 flex-1 truncate rounded-md px-1 text-left text-sm hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <span className="text-xs text-muted-foreground">{ev.timeLabel}</span> {ev.label}
                 </button>
-                {tagged && <Badge variant="outline" className="shrink-0 text-[10px]">{chapterLabel(ev.chapterId)}</Badge>}
+                {tagged && <Badge variant="outline" className="shrink-0 text-xs">{chapterLabel(ev.chapterId)}</Badge>}
               </li>
             ))}
           </ul>
@@ -123,14 +123,14 @@ export function EntityCard({
 
       {s.appearances.length > 0 && (
         <section aria-label={t('entityCard.appearances')} className="space-y-1">
-          <h4 className="text-xs font-medium text-muted-foreground">{t('entityCard.appearances')}</h4>
+          <h4 className="t-label">{t('entityCard.appearances')}</h4>
           <ul className="space-y-0.5">
             {s.appearances.slice(0, MAX_APPEARANCE_ROWS * (tagged ? 3 : 1)).map((a) => (
               <li key={a.chapterId} className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => onJumpOccurrence(entityId, a.chapterId, 1)}
-                  className="min-h-7 min-w-0 flex-1 truncate rounded px-1 text-left text-sm hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                  className="min-h-7 min-w-0 flex-1 truncate rounded-md px-1 text-left text-sm hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                   title={a.title}
                 >
                   {a.title}
@@ -141,12 +141,12 @@ export function EntityCard({
                     type="button"
                     onClick={() => onJumpOccurrence(entityId, a.chapterId, i + 1)}
                     aria-label={t('entityCard.nthOccurrence', { n: i + 1, chapter: a.title })}
-                    className="grid size-6 place-items-center rounded border text-[11px] tabular-nums hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                    className="grid size-6 place-items-center rounded-md border text-xs tabular-nums hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                   >
                     {i + 1}
                   </button>
                 ))}
-                {a.count > MAX_ORDINAL_CHIPS && <span className="text-[11px] text-muted-foreground">+{a.count - MAX_ORDINAL_CHIPS}</span>}
+                {a.count > MAX_ORDINAL_CHIPS && <span className="text-xs text-muted-foreground">+{a.count - MAX_ORDINAL_CHIPS}</span>}
               </li>
             ))}
           </ul>
@@ -165,7 +165,7 @@ export function EntityCard({
       <header className="flex items-start gap-2">
         <EntitySwatch cssVar={style.cssVar} shape={style.shape} className="mt-1.5" />
         <div className="min-w-0 flex-1">
-          <h3 className="break-words text-base font-semibold leading-tight">{model.name}</h3>
+          <h3 className="t-title break-words">{model.name}</h3>
           {model.type && <p className="text-xs text-muted-foreground">{model.type}</p>}
         </div>
         {onClose && (
@@ -196,7 +196,7 @@ export function EntityCard({
           </button>
           {reveal && model.revealed && (
             <div className="mt-2 space-y-3 border-t pt-2">
-              <p className="text-[11px] text-amber-700 dark:text-amber-400">{t('entityCard.spoilerWarn')}</p>
+              <p className="text-xs text-warning">{t('entityCard.spoilerWarn')}</p>
               {renderSection(model.revealed, true)}
             </div>
           )}

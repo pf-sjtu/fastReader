@@ -78,7 +78,7 @@ export function RateLimitSection({ processing }: { processing: boolean }) {
 
       <div className="p-3 bg-muted rounded-md border">
         <div className="flex items-start gap-2 text-xs text-primary">
-          <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+          <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
           <div className="space-y-1">
             <div className="font-medium">{t('config.rateLimit.mechanismTitle')}</div>
             <ul className="opacity-90 list-disc ml-4">

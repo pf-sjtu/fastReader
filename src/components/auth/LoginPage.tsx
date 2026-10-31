@@ -59,7 +59,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
             <div className="mx-auto">
               <SealIcon className="h-14 w-14" title={t('app.title')} />
             </div>
-            <CardTitle className="font-brand text-2xl">{t('app.title')}</CardTitle>
+            <CardTitle className="t-display">{t('app.title')}</CardTitle>
             <p className="font-brand text-xs uppercase tracking-[0.4em] text-muted-foreground">{t('app.latin')}</p>
             <CardDescription className="text-balance">{t('auth.description')}</CardDescription>
           </CardHeader>

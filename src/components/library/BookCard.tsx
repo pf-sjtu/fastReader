@@ -20,7 +20,7 @@ const extOf = (path: string) => (path.split('.').pop() ?? '').toUpperCase()
 /** 默认格式不占位：EPUB 最常见，只有 PDF/TXT/MD 这类少数派才值得在封面上标出 */
 const DEFAULT_FORMAT = 'EPUB'
 /** 毛玻璃小胶囊：压在任意封面上都清晰 */
-const PILL = 'rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium leading-4 text-white backdrop-blur-sm'
+const PILL = 'rounded-full bg-black/45 px-2 py-0.5 text-xs font-medium leading-4 text-white backdrop-blur-sm'
 
 /**
  * 书卡：书名与作者放进封面内部底部，用自下而上的深色渐变做底，
@@ -48,7 +48,7 @@ export function BookCard({ entry, opening, disabled, onOpen, caption, showSize =
       disabled={disabled}
       title={detail}
       aria-label={detail.replace(/\n/g, '，')}
-      className="group flex min-h-11 flex-col rounded-xl p-1 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+      className="group flex min-h-11 flex-col rounded-lg p-1 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
     >
       <div
         ref={ref}
@@ -62,11 +62,11 @@ export function BookCard({ entry, opening, disabled, onOpen, caption, showSize =
 
         {/* 底部阴影层：书名 + 作者 */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/55 to-transparent px-2.5 pb-2.5 pt-12 text-white">
-          <span className="font-brand line-clamp-3 text-[13px] font-semibold leading-snug [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">
+          <span className="font-brand line-clamp-3 text-sm font-semibold leading-snug [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">
             {entry.title}
           </span>
           {(entry.author || count || showSize) && (
-            <span className="mt-0.5 flex items-baseline justify-between gap-2 text-[11px] leading-tight text-white/75 [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">
+            <span className="mt-0.5 flex items-baseline justify-between gap-2 text-xs leading-tight text-white/75 [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">
               <span className="line-clamp-1 min-w-0">{entry.author}</span>
               <span className="shrink-0 tabular-nums text-white/65">
                 {[showSize ? fmtSize(entry.size) : null, count].filter(Boolean).join(' · ')}
@@ -79,7 +79,7 @@ export function BookCard({ entry, opening, disabled, onOpen, caption, showSize =
         <div className="pointer-events-none absolute inset-x-1.5 top-1.5 flex items-start justify-between gap-1">
           {caption ? <span className={PILL}>{caption}</span> : oddFormat ? <span className={PILL}>{oddFormat}</span> : <span />}
           {entry.status !== 'unprocessed' && (
-            <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium leading-4 text-primary-foreground shadow-sm">
+            <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium leading-4 text-primary-foreground shadow-sm">
               {entry.status === 'done' ? t('library.status.done') : t('library.status.partial')}
             </span>
           )}

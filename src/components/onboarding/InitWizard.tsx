@@ -144,7 +144,7 @@ export function InitWizard({ onDone }: InitWizardProps) {
                   <HardDriveDownload className="h-4 w-4 text-primary" />
                   {t('init.importLocal')}
                   {localAvailable && (
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                    <Badge variant="secondary" className="text-xs px-1.5 py-0">
                       {t('init.detected')}
                     </Badge>
                   )}
@@ -221,7 +221,7 @@ export function InitWizard({ onDone }: InitWizardProps) {
                     </li>
                   )}
                   {preview.notes.map((note) => (
-                    <li key={note} className="text-amber-600 dark:text-amber-500">
+                    <li key={note} className="text-warning">
                       {note}
                     </li>
                   ))}

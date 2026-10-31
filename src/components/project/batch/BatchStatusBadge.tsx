@@ -6,7 +6,7 @@ import type { BatchQueueItem } from '../../../stores/batchQueueStore'
 const VARIANTS: Record<BatchQueueItem['status'], { variant: 'default' | 'secondary' | 'destructive' | 'outline'; cls?: string }> = {
   pending: { variant: 'secondary' },
   processing: { variant: 'default', cls: 'bg-primary' },
-  completed: { variant: 'default', cls: 'bg-green-500' },
+  completed: { variant: 'default', cls: 'bg-success' },
   failed: { variant: 'destructive' },
   skipped: { variant: 'outline' },
 }

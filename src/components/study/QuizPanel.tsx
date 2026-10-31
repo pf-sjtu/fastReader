@@ -35,7 +35,7 @@ function QuestionCard({ q, index, answered, onAnswer, onJumpChapter }: QuestionP
   const [revealed, setRevealed] = useState(false)
   return (
     <li
-      className={cn('space-y-2 rounded-lg border bg-card p-3', answered && (answered.correct ? 'border-green-600/50' : 'border-destructive/50'))}
+      className={cn('space-y-2 rounded-lg border bg-card p-3', answered && (answered.correct ? 'border-success/50' : 'border-destructive/50'))}
       data-answered={answered ? (answered.correct ? 'correct' : 'wrong') : undefined}
     >
       <p className="text-sm font-medium leading-snug">
@@ -58,13 +58,13 @@ function QuestionCard({ q, index, answered, onAnswer, onJumpChapter }: QuestionP
                 className={cn(
                   'flex min-h-9 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-ring',
                   !answered && 'hover:bg-accent',
-                  answered && isRight && 'border-green-600 bg-green-600/10',
+                  answered && isRight && 'border-success/40 bg-success/10',
                   answered && isPicked && !isRight && 'border-destructive bg-destructive/10'
                 )}
               >
                 <span className="w-4 shrink-0 text-xs text-muted-foreground">{String.fromCharCode(65 + i)}</span>
                 <span className="min-w-0 flex-1">{opt}</span>
-                {answered && isRight && <Check className="size-4 shrink-0 text-green-600" />}
+                {answered && isRight && <Check className="size-4 shrink-0 text-success" />}
                 {answered && isPicked && !isRight && <X className="size-4 shrink-0 text-destructive" />}
               </button>
             )
@@ -202,7 +202,7 @@ export function QuizPanel({ bookSummary, currentChapterId, onJumpChapter }: Prop
                 setWrongOnly(false)
                 resetAnswers()
               }}>
-              <RotateCcw className="size-3" />
+              <RotateCcw className="size-3.5" />
               {t('study.quiz.redo')}
             </Button>
           )}

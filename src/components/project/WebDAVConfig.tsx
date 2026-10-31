@@ -17,9 +17,9 @@ import { useWebDAVClient, isWebDAVConfigComplete } from './webdav/useWebDAVClien
 const AUTO_TEST_DELAY_MS = 1000
 
 const STATUS_ICON: Record<string, ReactNode> = {
-  connected: <CheckCircle className="h-4 w-4 text-green-500" />,
+  connected: <CheckCircle className="h-4 w-4 text-success" />,
   connecting: <Loader2 className="h-4 w-4 text-primary animate-spin" />,
-  error: <XCircle className="h-4 w-4 text-red-500" />,
+  error: <XCircle className="h-4 w-4 text-destructive" />,
 }
 
 function Field({ id, label, hint, children }: { id: string; label: string; hint?: string; children: ReactNode }) {
@@ -244,7 +244,7 @@ export function WebDAVConfig() {
               <LibraryMaintenance />
 
               {testResult && (
-                <Alert className={testResult.success ? 'border-green-200' : 'border-red-200'}>
+                <Alert className={testResult.success ? 'border-success/40' : 'border-destructive/40'}>
                   <AlertDescription>{testResult.message}</AlertDescription>
                 </Alert>
               )}

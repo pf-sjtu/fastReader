@@ -59,7 +59,7 @@ export function PreviewPanel({
     >
       <CardHeader className={cn('pb-3', isFlush && 'px-4 pt-4 shrink-0', isSheet && 'pr-12')}>
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium truncate flex-1 min-w-0">
+          <CardTitle className="truncate flex-1 min-w-0">
             {title}
           </CardTitle>
           <div className="flex items-center gap-1 shrink-0">
@@ -74,7 +74,7 @@ export function PreviewPanel({
                   className="h-8 w-8 p-0"
                   title={t('reader.epub.decreaseFontSize')}
                 >
-                  <Minus className="h-3 w-3" />
+                  <Minus className="h-3.5 w-3.5" />
                 </Button>
                 <span className="text-xs font-medium px-1 min-w-[2.5rem] text-center">
                   {fontSize}px
@@ -87,7 +87,7 @@ export function PreviewPanel({
                   className="h-8 w-8 p-0"
                   title={t('reader.epub.increaseFontSize')}
                 >
-                  <Plus className="h-3 w-3" />
+                  <Plus className="h-3.5 w-3.5" />
                 </Button>
               </>
             )}
@@ -101,7 +101,7 @@ export function PreviewPanel({
                 className="h-8 w-8 p-0"
                 title={isFullscreen ? t('reader.epub.exitFullscreen') : t('reader.epub.enterFullscreen')}
               >
-                {isFullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               </Button>
             )}
 

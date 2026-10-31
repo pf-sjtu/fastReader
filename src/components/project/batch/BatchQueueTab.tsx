@@ -18,9 +18,9 @@ export function BatchQueueTab({ onClearQueue }: { onClearQueue: () => void }) {
 
   const tiles = [
     { value: stats.total, label: t('batch.stats.total'), cls: '' },
-    { value: stats.completed, label: t('batch.stats.completed'), cls: 'text-green-500' },
-    { value: stats.failed, label: t('batch.stats.failed'), cls: 'text-red-500' },
-    { value: stats.skipped, label: t('batch.stats.skipped'), cls: 'text-orange-500' },
+    { value: stats.completed, label: t('batch.stats.completed'), cls: 'text-success' },
+    { value: stats.failed, label: t('batch.stats.failed'), cls: 'text-destructive' },
+    { value: stats.skipped, label: t('batch.stats.skipped'), cls: 'text-warning' },
     { value: `¥${(stats.totalCostRMB || 0).toFixed(2)}`, label: t('batch.stats.cost'), cls: 'text-primary' },
   ]
 
@@ -83,7 +83,7 @@ export function BatchQueueTab({ onClearQueue }: { onClearQueue: () => void }) {
                       <BatchStatusBadge status={item.status} />
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-sm truncate">{item.fileName}</div>
-                        {item.error && <div className="text-xs text-red-500 truncate">{item.error}</div>}
+                        {item.error && <div className="text-xs text-destructive truncate">{item.error}</div>}
                         {item.metadata && (
                           <div className="text-xs text-muted-foreground">
                             {t('batch.chapterCount', { count: item.metadata.chapterCount })}
@@ -92,8 +92,8 @@ export function BatchQueueTab({ onClearQueue }: { onClearQueue: () => void }) {
                         )}
                       </div>
                       {item.status === 'processing' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                      {item.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                      {item.status === 'failed' && <XCircle className="h-4 w-4 text-red-500" />}
+                      {item.status === 'completed' && <CheckCircle className="h-4 w-4 text-success" />}
+                      {item.status === 'failed' && <XCircle className="h-4 w-4 text-destructive" />}
                       {item.status !== 'processing' && (
                         <Button
                           variant="ghost"
@@ -103,7 +103,7 @@ export function BatchQueueTab({ onClearQueue }: { onClearQueue: () => void }) {
                           aria-label={t('batch.removeItemNamed', { name: item.fileName })}
                           title={t('batch.removeItem')}
                         >
-                          <X className="h-3 w-3" />
+                          <X className="h-3.5 w-3.5" />
                         </Button>
                       )}
                     </div>

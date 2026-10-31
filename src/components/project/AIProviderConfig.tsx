@@ -81,7 +81,7 @@ function ActiveModelBar() {
       {result && (
         <p
           role="status"
-          className={`flex items-start gap-1.5 text-xs ${result.success ? 'text-green-700 dark:text-green-400' : 'text-destructive'}`}
+          className={`flex items-start gap-1.5 text-xs ${result.success ? 'text-success' : 'text-destructive'}`}
         >
           {result.success ? (
             <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -165,7 +165,7 @@ export function AIProviderConfig() {
 
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="text-base font-medium">{t('aiProvider.title')}</h3>
+          <h3 className="t-section">{t('aiProvider.title')}</h3>
           <p className="text-xs text-muted-foreground">{t('aiProvider.subtitle')}</p>
         </div>
         <Button size="sm" onClick={() => openWizard()}>

@@ -70,7 +70,7 @@ export function BatchFileTab({ selection: sel, options, onOptionsChange }: Batch
             </div>
             {sel.isCheckingCache && (
               <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 {t('batch.checkingCache')}
               </span>
             )}
@@ -122,9 +122,9 @@ export function BatchFileTab({ selection: sel, options, onOptionsChange }: Batch
                         {isDirectory ? (
                           <FolderOpen className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
                         ) : extOf(file.basename) === '.pdf' ? (
-                          <Book className="h-4 w-4 text-red-500 shrink-0" aria-hidden="true" />
+                          <Book className="h-4 w-4 text-destructive shrink-0" aria-hidden="true" />
                         ) : (
-                          <FileText className="h-4 w-4 text-purple-500 shrink-0" aria-hidden="true" />
+                          <FileText className="h-4 w-4 text-info shrink-0" aria-hidden="true" />
                         )}
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-sm truncate" title={file.basename}>
@@ -133,13 +133,13 @@ export function BatchFileTab({ selection: sel, options, onOptionsChange }: Batch
                           {!isDirectory && <div className="text-xs text-muted-foreground">{formatFileSize(file.size)}</div>}
                         </div>
                         {cached === true && (
-                          <Badge variant="outline" className="text-green-600 border-green-600 shrink-0">
-                            <CheckCircle className="h-3 w-3 mr-1" />
+                          <Badge variant="outline" className="text-success border-success/40 shrink-0">
+                            <CheckCircle className="h-3.5 w-3.5 mr-1" />
                             {t('batch.cached')}
                           </Badge>
                         )}
                         {cached === false && options.skipProcessed && (
-                          <Badge variant="secondary" className="text-orange-600 shrink-0">
+                          <Badge variant="secondary" className="text-warning shrink-0">
                             {t('batch.unprocessed')}
                           </Badge>
                         )}

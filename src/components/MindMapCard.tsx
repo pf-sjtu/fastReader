@@ -72,7 +72,7 @@ export const MindMapCard: React.FC<MindMapCardProps> = ({
   return (
     <Card className={`gap-2 min-w-0 ${className}`}>
       <CardHeader>
-        <CardTitle className="text-base sm:text-lg w-full overflow-hidden">
+        <CardTitle className="w-full overflow-hidden">
           <div className="truncate w-full">
             {title}
           </div>

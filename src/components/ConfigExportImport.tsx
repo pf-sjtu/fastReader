@@ -265,7 +265,7 @@ export function ConfigExportImport() {
                     : t('init.previewPromptsNone')}
                 </li>
                 {importPreview.notes.map((note) => (
-                  <li key={note} className="text-amber-600 dark:text-amber-500">
+                  <li key={note} className="text-warning">
                     {note}
                   </li>
                 ))}

@@ -44,9 +44,9 @@ function FileIcon({ file }: { file: WebDAVFileInfo }) {
   if (file.type === 'directory') return <FolderOpen className="h-4 w-4 text-primary" />
   switch (extOf(file.basename)) {
     case '.pdf':
-      return <FileText className="h-4 w-4 text-red-500" />
+      return <FileText className="h-4 w-4 text-destructive" />
     case '.epub':
-      return <Book className="h-4 w-4 text-purple-500" />
+      return <Book className="h-4 w-4 text-info" />
     case '.md':
     case '.txt':
       return <FileText className="h-4 w-4 text-muted-foreground" />
@@ -280,7 +280,7 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
           </div>
 
           {error && (
-            <Alert className="border-red-200 flex-shrink-0">
+            <Alert className="border-destructive/40 flex-shrink-0">
               <XCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
@@ -334,7 +334,7 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
                                 {file.type === 'file' && ` • ${formatDate(file.lastmod)}`}
                               </div>
                             </div>
-                            {isSelectable(file) && <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0 ml-2" />}
+                            {isSelectable(file) && <CheckCircle className="h-4 w-4 text-success flex-shrink-0 ml-2" />}
                             {file.type === 'file' && (
                               <Button
                                 variant="ghost"

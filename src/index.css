@@ -60,6 +60,9 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -96,6 +99,10 @@
   --accent: oklch(0.9050 0.0280 55.0);          /* 淡朱：悬停底色 */
   --accent-foreground: oklch(0.2450 0.0110 55.0);
   --destructive: oklch(0.5200 0.1900 25.0);
+  /* 状态色：文字/图标/淡底都用它们（淡底写 bg-success/10），不要再写 green-500 之类的调色板色 */
+  --success: oklch(0.4800 0.1200 150.0);
+  --warning: oklch(0.5200 0.1200 65.0);
+  --info: oklch(0.4600 0.1000 255.0);
   --border: oklch(0.8650 0.0170 72.0);
   --input: oklch(0.8650 0.0170 72.0);
   --ring: oklch(0.5150 0.1680 32.0);
@@ -158,6 +165,9 @@
   --accent: oklch(0.3000 0.0300 35.0);
   --accent-foreground: oklch(0.9200 0.0120 75.0);
   --destructive: oklch(0.6400 0.1800 25.0);
+  --success: oklch(0.7600 0.1300 150.0);
+  --warning: oklch(0.8000 0.1300 80.0);
+  --info: oklch(0.7200 0.1000 255.0);
   --border: oklch(0.3200 0.0110 50.0);
   --input: oklch(0.3200 0.0110 50.0);
   --ring: oklch(0.6650 0.1600 35.0);
@@ -185,6 +195,43 @@
   --sidebar-accent-foreground: oklch(0.9200 0.0120 75.0);
   --sidebar-border: oklch(0.3200 0.0110 50.0);
   --sidebar-ring: oklch(0.6650 0.1600 35.0);
+}
+
+@layer components {
+  /* 文字角色：全站标题/标签只从这里取，不在业务组件里写零散的字号字重组合 */
+  .t-display {
+    font-family: var(--font-serif);
+    font-size: 1.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+  }
+  /* 页面 / 面板 / 弹窗 / 抽屉 / 卡片 / 内容标题（书名、章节名、实体名） */
+  .t-title {
+    font-family: var(--font-serif);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.35;
+  }
+  /* 分部标题：同一容器内的一组内容的标题，无衬线 */
+  .t-section {
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  /* 分组小标题 / 表单标签 */
+  .t-label {
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+  .t-caption {
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
 }
 
 @layer base {
@@ -253,6 +300,7 @@
   .markdown-card-content.prose {
     max-width: none !important;
     width: 100% !important;
+    line-height: var(--reading-line-height) !important;
   }
   
   /* 确保所有子元素也能占满宽度 */

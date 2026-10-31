@@ -48,7 +48,7 @@ export function AskPanel({ bookSummary, onJumpChapter }: Props) {
         <p className="text-xs text-muted-foreground">{t('study.ask.hint')}</p>
         {chat.length > 0 && (
           <Button variant="ghost" size="sm" className="h-7 shrink-0 gap-1 px-2 text-xs" onClick={clearChat}>
-            <Trash2 className="size-3" />
+            <Trash2 className="size-3.5" />
             {t('study.ask.clear')}
           </Button>
         )}

@@ -62,8 +62,8 @@ export function CloudCacheSection({
           <p>{t('cloudCache.model')}: {cloudCacheMetadata.model}</p>
           <p>{t('cloudCache.chapterCount')}: {cloudCacheMetadata.chapterCount}</p>
           {cloudCacheIsPartial && (
-            <p className="flex items-start gap-1 text-amber-700 dark:text-amber-400">
-              <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+            <p className="flex items-start gap-1 text-warning">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
               {t('cloudCache.partialLoaded')}
             </p>
           )}
@@ -97,8 +97,8 @@ export function CloudCacheSection({
 
   if (cloudCacheStatusUnknown && file && webdavEnabled) {
     return (
-      <div role="status" className="flex items-start gap-1 text-xs text-amber-700 dark:text-amber-400">
-        <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+      <div role="status" className="flex items-start gap-1 text-xs text-warning">
+        <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
         {t('cloudCache.statusUnknown')}
       </div>
     )

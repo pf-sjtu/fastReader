@@ -18,7 +18,7 @@ const readStack = (cssVar: string) => parseFontStack(getComputedStyle(document.d
 
 const STATUS_ICON: Record<FontStatus, typeof Check> = { installed: Check, missing: X, generic: Minus, unknown: Minus }
 const STATUS_TONE: Record<FontStatus, string> = {
-  installed: 'text-emerald-600 dark:text-emerald-400',
+  installed: 'text-success',
   missing: 'text-muted-foreground',
   generic: 'text-muted-foreground',
   unknown: 'text-muted-foreground',
@@ -32,12 +32,12 @@ function StackList({ report }: { report: StackReport }) {
         const Icon = STATUS_ICON[item.status]
         const isActive = item.name === report.active
         return (
-          <li key={item.name} data-status={item.status} className={cn('flex items-center gap-2 rounded px-2 py-1', isActive && 'bg-accent')}>
+          <li key={item.name} data-status={item.status} className={cn('flex items-center gap-2 rounded-md px-2 py-1', isActive && 'bg-accent')}>
             <span className="w-4 text-xs tabular-nums text-muted-foreground">{i + 1}</span>
             <span className="min-w-0 flex-1 truncate" style={item.status === 'installed' ? { fontFamily: `"${item.name}"` } : undefined}>
               {item.name}
             </span>
-            {isActive && <span className="shrink-0 rounded-sm bg-primary px-1.5 text-xs text-primary-foreground">{t('config.fonts.active')}</span>}
+            {isActive && <span className="shrink-0 rounded-md bg-primary px-1.5 text-xs text-primary-foreground">{t('config.fonts.active')}</span>}
             <span className={cn('flex shrink-0 items-center gap-1 text-xs', STATUS_TONE[item.status])}>
               <Icon className="size-3.5" aria-hidden="true" />
               {t(`config.fonts.status.${item.status}`)}
@@ -100,9 +100,9 @@ export function FontSettings({ measure }: FontSettingsProps) {
 
       {reports.map((r) => (
         <section key={r.id} data-role={r.id} className="space-y-1.5">
-          <h3 className="text-sm font-medium">{t(r.labelKey)}</h3>
+          <h3 className="t-section">{t(r.labelKey)}</h3>
           <StackList report={r.report} />
-          {r.report.noneInstalled && <p className="text-xs text-amber-700 dark:text-amber-400">{t('config.fonts.fallbackOnly')}</p>}
+          {r.report.noneInstalled && <p className="text-xs text-warning">{t('config.fonts.fallbackOnly')}</p>}
         </section>
       ))}
 

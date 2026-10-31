@@ -110,9 +110,9 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
   }
 
   return (
-    <section aria-label={t('library.title')} className="space-y-3 rounded-xl border bg-card p-3 sm:p-4">
+    <section aria-label={t('library.title')} className="space-y-3 rounded-lg border bg-card p-3 sm:p-4">
       <header className="flex flex-wrap items-center gap-2">
-        <h2 className="font-brand mr-auto text-base font-semibold">
+        <h2 className="t-title mr-auto">
           {t('library.title')}
           {total > 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">{total}</span>}
         </h2>
@@ -192,7 +192,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
 
       {resume.length > 0 && (
         <div className="space-y-1.5">
-          <h3 className="text-xs font-medium text-muted-foreground">{t('library.continue')}</h3>
+          <h3 className="t-label">{t('library.continue')}</h3>
           <div className={GRID}>{resume.map((e) => card(e))}</div>
         </div>
       )}
@@ -200,7 +200,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
       {recs.length > 0 && (
         <div className="space-y-1.5" aria-label={t('library.recommend.title')}>
           <div className="flex items-center gap-2">
-            <h3 className="text-xs font-medium text-muted-foreground">{t('library.recommend.title')}</h3>
+            <h3 className="t-label">{t('library.recommend.title')}</h3>
             <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={shuffle}>
               <Shuffle className="size-3.5" />
               {t('library.recommend.shuffle')}
@@ -216,13 +216,13 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
           <div key={g.key} className="space-y-1.5">
             {/* 上面有「继续阅读 / 推荐」时，全量网格也要有自己的标题，否则读起来是同一排 */}
             {group === 'none' && browsing && (resume.length > 0 || recs.length > 0) && (
-              <h3 className="border-b pb-1 text-xs font-medium text-muted-foreground">
+              <h3 className="border-b pb-1 t-label">
                 {t('library.all')}
                 <span className="ml-1.5 font-normal">{g.total}</span>
               </h3>
             )}
             {group !== 'none' && (
-              <h3 className="border-b pb-1 text-xs font-medium text-muted-foreground">
+              <h3 className="border-b pb-1 t-label">
                 {groupLabel(t, g.key)}
                 <span className="ml-1.5 font-normal">{g.total}</span>
               </h3>

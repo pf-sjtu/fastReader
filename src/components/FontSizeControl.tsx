@@ -97,7 +97,7 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold">
+            <h3 className="t-title">
               {t('fontSize.title')}
             </h3>
             <p className="text-sm text-muted-foreground">
@@ -114,7 +114,7 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
               <Minus className="h-4 w-4 mr-1" />
               {t('fontSize.decrease')}
             </Button>
-            <span className="text-sm font-medium px-3 py-1 bg-muted rounded min-w-[80px] text-center">
+            <span className="text-sm font-medium px-3 py-1 bg-muted rounded-md min-w-[80px] text-center">
               {Math.round(fontScale * 100)}%
             </span>
             <Button

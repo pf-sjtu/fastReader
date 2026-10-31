@@ -66,7 +66,7 @@ export function StudyKitPanel({ bookSummary, onJumpChapter }: Props) {
             >
               {c.chapterTitle}
             </button>
-            <p className="font-brand text-sm font-semibold leading-snug">{c.oneLiner}</p>
+            <p className="t-title">{c.oneLiner}</p>
             <ul className="list-disc space-y-0.5 pl-4 text-sm leading-relaxed">
               {c.points.map((p, j) => (
                 <li key={j}>{p}</li>
@@ -85,7 +85,7 @@ export function StudyKitPanel({ bookSummary, onJumpChapter }: Props) {
           </li>
         ))}
       </ol>
-      {kit && <p className="text-right text-[11px] text-muted-foreground">{t('study.kit.count', { count: kit.chapters.length, tokens: formatCount(estimate.inputTokens) })}</p>}
+      {kit && <p className="text-right text-xs text-muted-foreground">{t('study.kit.count', { count: kit.chapters.length, tokens: formatCount(estimate.inputTokens) })}</p>}
     </div>
   )
 }

@@ -78,7 +78,7 @@ export function BatchQueuePanel() {
             <FolderOpen className="h-4 w-4" />
             <span className="font-medium text-sm">{t('batch.panelTitle')}</span>
             <Badge variant="secondary">{queue.length}</Badge>
-            <Badge variant="default" className="bg-green-500">
+            <Badge variant="default" className="bg-success">
               {stats.completed}
             </Badge>
             {stats.failed > 0 && (
@@ -107,7 +107,7 @@ export function BatchQueuePanel() {
           {currentItem && (
             <div className="p-2 bg-muted rounded-md">
               <div className="flex items-center gap-2 text-sm">
-                <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                 <span className="font-medium truncate flex-1">{currentItem.fileName}</span>
                 <BatchStatusBadge status={currentItem.status} className="text-xs" />
               </div>
@@ -123,7 +123,7 @@ export function BatchQueuePanel() {
               {queue.map((item, index) => (
                 <div
                   key={item.id}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs ${
                     item.status === 'processing'
                       ? 'bg-accent'
                       : 'hover:bg-muted/50'
@@ -136,14 +136,14 @@ export function BatchQueuePanel() {
                   )}
                   <span className="truncate flex-1">{item.fileName}</span>
                   {item.status === 'completed' && (
-                    <CheckCircle className="h-3 w-3 text-green-500" />
+                    <CheckCircle className="h-3.5 w-3.5 text-success" />
                   )}
 
                   {item.status === 'failed' && (
-                    <XCircle className="h-3 w-3 text-red-500" />
+                    <XCircle className="h-3.5 w-3.5 text-destructive" />
                   )}
                   {item.error && (
-                    <span className="text-red-500 max-w-[100px] truncate">{item.error}</span>
+                    <span className="text-destructive max-w-[100px] truncate">{item.error}</span>
                   )}
                   {item.status !== 'processing' && (
                     <Button
@@ -154,7 +154,7 @@ export function BatchQueuePanel() {
                       aria-label={t('batch.removeItemNamed', { name: item.fileName })}
                       title={t('batch.removeItem')}
                     >
-                      <X className="h-3 w-3" />
+                      <X className="h-3.5 w-3.5" />
                     </Button>
                   )}
 
@@ -172,7 +172,7 @@ export function BatchQueuePanel() {
             </div>
             {stats.totalCostRMB > 0 && (
               <div className="flex items-center gap-1">
-                <DollarSign className="h-3 w-3" />
+                <DollarSign className="h-3.5 w-3.5" />
                 <span>¥{(stats.totalCostRMB || 0).toFixed(2)}</span>
               </div>
             )}
@@ -190,12 +190,12 @@ export function BatchQueuePanel() {
                 >
                   {isStorePaused ? (
                     <>
-                      <Play className="h-3 w-3 mr-1" />
+                      <Play className="h-3.5 w-3.5 mr-1" />
                       {t('batch.resume')}
                     </>
                   ) : (
                     <>
-                      <Pause className="h-3 w-3 mr-1" />
+                      <Pause className="h-3.5 w-3.5 mr-1" />
                       {t('batch.pause')}
                     </>
                   )}
@@ -206,7 +206,7 @@ export function BatchQueuePanel() {
                   className="flex-1"
                   onClick={controls.stop}
                 >
-                  <Square className="h-3 w-3 mr-1" />
+                  <Square className="h-3.5 w-3.5 mr-1" />
                   {t('batch.stop')}
                 </Button>
               </>
@@ -217,7 +217,7 @@ export function BatchQueuePanel() {
                 className="flex-1"
                 onClick={() => void controls.start()}
               >
-                <Play className="h-3 w-3 mr-1" />
+                <Play className="h-3.5 w-3.5 mr-1" />
                 {t('batch.startProcessing')}
               </Button>
             )}
@@ -228,7 +228,7 @@ export function BatchQueuePanel() {
               aria-label={t('batch.clearQueue')}
               title={t('batch.clearQueue')}
             >
-              <Trash2 className="h-3 w-3" />
+              <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
         </div>

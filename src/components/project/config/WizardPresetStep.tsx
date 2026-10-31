@@ -89,7 +89,7 @@ export function WizardPresetStep({ catalog, onPick }: WizardPresetStepProps) {
   return (
     <div className="space-y-4">
       <section className="space-y-2" aria-labelledby="wizard-generic">
-        <h4 id="wizard-generic" className="text-xs font-medium text-muted-foreground">
+        <h4 id="wizard-generic" className="t-label">
           {t('aiProvider.wizard.generic')}
         </h4>
         <div className="grid gap-2 sm:grid-cols-3">
@@ -115,7 +115,7 @@ export function WizardPresetStep({ catalog, onPick }: WizardPresetStepProps) {
 
       <section className="space-y-2" aria-labelledby="wizard-presets">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 id="wizard-presets" className="text-xs font-medium text-muted-foreground">
+          <h4 id="wizard-presets" className="t-label">
             {t('aiProvider.wizard.presets')}
           </h4>
           {catalog.status === 'ready' && (

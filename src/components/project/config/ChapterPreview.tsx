@@ -51,7 +51,7 @@ export function ChapterPreview({ open, file }: ChapterPreviewProps) {
         <Settings className="h-4 w-4" />
         <Label className="text-sm font-medium">
           {t('config.chapterPreview')}
-          {loading && <Loader2 className="h-3 w-3 animate-spin ml-2" />}
+          {loading && <Loader2 className="h-3.5 w-3.5 animate-spin ml-2" />}
         </Label>
       </div>
 
@@ -60,7 +60,7 @@ export function ChapterPreview({ open, file }: ChapterPreviewProps) {
           {chapters.map((chapter, index) => (
             <div
               key={`${chapter.title}-${index}`}
-              className="flex items-start gap-2 p-2 bg-card rounded border"
+              className="flex items-start gap-2 p-2 bg-card rounded-md border"
             >
               <span className="text-xs text-muted-foreground font-mono shrink-0 w-8">
                 {(index + 1).toString().padStart(2, '0')}.

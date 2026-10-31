@@ -200,7 +200,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="filter" id="char-filter" />
                   <Label htmlFor="char-filter" className="text-sm font-medium flex items-center gap-1 cursor-pointer">
-                    <Filter className="h-3 w-3" />
+                    <Filter className="h-3.5 w-3.5" />
                     {t('chapters.selectModeFilter')}
                   </Label>
                 </div>
@@ -324,7 +324,7 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
                   aria-label={t('chapters.viewChapterContent', { title: chapter.title })}
                   title={t('chapters.viewChapterContent', { title: chapter.title })}
                 >
-                  <BookOpen className="h-3 w-3" />
+                  <BookOpen className="h-3.5 w-3.5" />
                 </Button>
               </div>
             )

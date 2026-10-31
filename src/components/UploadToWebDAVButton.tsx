@@ -226,10 +226,10 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
           variant="outline"
           size="sm"
           onClick={() => uploadToWebDAV()}
-          className={`${className} border-green-200 hover:border-green-300 hover:bg-green-50`}
+          className={`${className} border-success/40 hover:border-success/60 hover:bg-success/10`}
           title={t('upload.reupload')}
         >
-          <Check className="h-4 w-4 mr-1 text-green-600" />
+          <Check className="h-4 w-4 mr-1 text-success" />
           {t('upload.uploaded')}
         </Button>
       )
@@ -273,7 +273,7 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-yellow-600" />
+              <AlertCircle className="h-5 w-5 text-warning" />
               {t('upload.confirmOverwrite')}
             </DialogTitle>
           </DialogHeader>

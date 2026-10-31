@@ -106,7 +106,7 @@ export const TimelineNavigation = memo(function TimelineNavigation({
                 </button>
               </div>
               {isProcessing && (
-                <div className="ml-6 text-[10px] text-primary mt-0.5">{t('common.processing')}</div>
+                <div className="ml-6 text-xs text-primary mt-0.5">{t('common.processing')}</div>
               )}
               {/* 连接线独立于节点下方 */}
               {!isLast && <div className="ml-[7px] w-px h-3 bg-border" />}
@@ -128,7 +128,7 @@ export const TimelineNavigation = memo(function TimelineNavigation({
             }}
             disabled={!chapters.some(ch => ch.processed)}
           >
-            <BookOpen className="h-3 w-3 mr-1" />
+            <BookOpen className="h-3.5 w-3.5 mr-1" />
             {t('timeline.viewFirstChapter')}
           </Button>
         </div>

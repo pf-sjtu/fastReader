@@ -42,19 +42,19 @@ function ModelRow({ provider, model, isActive, defaultTemperature }: ModelRowPro
           <label htmlFor={switchId} className="min-w-0 truncate text-sm font-medium" title={model.id}>
             {label}
           </label>
-          {isActive && <Badge className="px-1.5 py-0 text-[10px]">{t('aiProvider.current')}</Badge>}
+          {isActive && <Badge className="px-1.5 py-0 text-xs">{t('aiProvider.current')}</Badge>}
           {model.source === 'manual' && (
-            <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+            <Badge variant="outline" className="px-1.5 py-0 text-xs">
               {t('aiProvider.models.manual')}
             </Badge>
           )}
           {model.meta?.reasoning && (
-            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+            <Badge variant="secondary" className="px-1.5 py-0 text-xs">
               {t('aiProvider.models.reasoning')}
             </Badge>
           )}
           {model.meta?.temperature === true && (
-            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+            <Badge variant="secondary" className="px-1.5 py-0 text-xs">
               {t('aiProvider.models.temperature')}
             </Badge>
           )}

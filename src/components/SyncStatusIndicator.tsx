@@ -40,7 +40,7 @@ export function SyncStatusIndicator() {
       case 'syncing':
         return { Icon: RefreshCw, className: 'text-muted-foreground animate-spin', label: t('sync.syncing') }
       case 'conflict':
-        return { Icon: AlertTriangle, className: 'text-amber-500', label: t('sync.conflict') }
+        return { Icon: AlertTriangle, className: 'text-warning', label: t('sync.conflict') }
       case 'offline':
         return { Icon: CloudOff, className: 'text-destructive', label: t('sync.offline') }
       case 'error':

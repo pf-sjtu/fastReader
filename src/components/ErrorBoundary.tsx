@@ -94,7 +94,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-background">
         <div className="max-w-md w-full rounded-lg border bg-card p-6 text-center space-y-3">
-          <h1 className="text-lg font-semibold text-foreground">{i18n.t('errorBoundary.pageFailed')}</h1>
+          <h1 className="t-title text-foreground">{i18n.t('errorBoundary.pageFailed')}</h1>
           <p className="text-sm text-muted-foreground">{hint}</p>
           <p className="text-xs font-mono text-left break-all rounded-md bg-muted p-3 text-foreground">
             {message}

@@ -65,7 +65,7 @@ export function NavRail({ chapters, current, onExpand }: NavRailProps) {
         onClick={onExpand}
         aria-label={t('workspace.nav.expand')}
         title={t('workspace.nav.expand')}
-        className="absolute inset-0 cursor-pointer rounded outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
+        className="absolute inset-0 cursor-pointer rounded-md outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
       />
     </div>
   )

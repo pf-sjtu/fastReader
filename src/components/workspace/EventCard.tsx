@@ -47,10 +47,10 @@ export function EventCard({ linking, eventId, currentChapterId, onOpenEntity, on
           {show ? (
             <>
               <p className="text-xs text-muted-foreground">{ev.timeLabel}</p>
-              <h3 className="break-words text-base font-semibold leading-tight">{ev.label}</h3>
+              <h3 className="t-title break-words">{ev.label}</h3>
             </>
           ) : (
-            <h3 className="text-base font-semibold leading-tight">{t('eventCard.folded')}</h3>
+            <h3 className="t-title">{t('eventCard.folded')}</h3>
           )}
         </div>
         {onClose && (
@@ -97,7 +97,7 @@ export function EventCard({ linking, eventId, currentChapterId, onOpenEntity, on
               })}
             </section>
           )}
-          {!safe && <Badge variant="outline" className="text-[10px]">{chapterId ? (linking.chapterTitles.get(chapterId) ?? chapterId) : t('entityCard.unknownChapter')}</Badge>}
+          {!safe && <Badge variant="outline" className="text-xs">{chapterId ? (linking.chapterTitles.get(chapterId) ?? chapterId) : t('entityCard.unknownChapter')}</Badge>}
         </>
       )}
 

@@ -35,7 +35,7 @@ export function LibraryMaintenance() {
   return (
     <div className="space-y-2 rounded-md border p-3">
       <div>
-        <h4 className="text-sm font-medium">{t('library.maintenance.title')}</h4>
+        <h4 className="t-section">{t('library.maintenance.title')}</h4>
         <p className="text-xs text-muted-foreground">{t('library.maintenance.hint')}</p>
       </div>
       <div className="flex flex-wrap gap-2">

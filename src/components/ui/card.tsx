@@ -8,7 +8,7 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card"
       className={cn(
         // 移动端收紧纵向与间距，避免小屏「空一圈」
-        "bg-card text-card-foreground flex flex-col gap-2.5 rounded-xl border py-2.5 shadow-sm sm:gap-4 sm:py-4",
+        "bg-card text-card-foreground flex flex-col gap-2.5 rounded-lg border py-2.5 shadow-sm sm:gap-4 sm:py-4",
         className
       )}
       {...props}
@@ -33,7 +33,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("leading-none font-semibold", className)}
+      className={cn("t-title", className)}
       {...props}
     />
   )

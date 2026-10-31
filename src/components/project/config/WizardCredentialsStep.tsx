@@ -150,7 +150,7 @@ export function WizardCredentialsStep({
 
       <section className="space-y-2" aria-labelledby="wizard-models">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 id="wizard-models" className="text-sm font-medium">
+          <h4 id="wizard-models" className="t-section">
             {t('aiProvider.wizard.models')}
           </h4>
           <Button type="button" size="sm" variant="outline" onClick={onFetch} disabled={loading || baseUrlIssue !== null}>

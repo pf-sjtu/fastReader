@@ -38,9 +38,9 @@ const BatchQueuePanel = lazy(() =>
 function PanelSkeleton() {
   return (
     <div className="space-y-2 py-2" aria-hidden="true">
-      <div className="h-8 w-1/3 animate-pulse rounded bg-muted" />
-      <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
-      <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
+      <div className="h-8 w-1/3 animate-pulse rounded-md bg-muted" />
+      <div className="h-4 w-2/3 animate-pulse rounded-md bg-muted" />
+      <div className="h-4 w-1/2 animate-pulse rounded-md bg-muted" />
     </div>
   )
 }
@@ -345,7 +345,7 @@ function App() {
         {/* 页脚：构建号（YYYYMMDD.bN，提交前自动 bump）；典故已在页头副标题里，这里不重复 */}
         {!workspaceMode && (
           <footer className="pt-8 pb-2 text-center select-none">
-            <p className="text-[10px] leading-none text-muted-foreground/40 select-all tabular-nums tracking-wide" title="build version">
+            <p className="text-xs leading-none text-muted-foreground/40 select-all tabular-nums tracking-wide" title="build version">
               {BUILD_VERSION}
             </p>
           </footer>

@@ -33,7 +33,7 @@ export function ChapterSection({ processing }: { processing: boolean }) {
 
   return (
     <>
-      <div className="space-y-4 p-4 bg-green-50 dark:bg-green-950/50 rounded-lg border dark:border-green-800">
+      <div className="space-y-4 p-4 bg-success/10 rounded-lg border border-success/30">
         <div className="flex items-center gap-2 mb-3">
           <Settings className="h-4 w-4" />
           <Label className="text-sm font-medium">{t('config.chapterAndNotificationSettings')}</Label>
@@ -78,7 +78,7 @@ export function ChapterSection({ processing }: { processing: boolean }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/50 rounded-lg border dark:border-green-800">
+      <div className="flex items-center justify-between p-3 bg-success/10 rounded-lg border border-success/30">
         <div className="space-y-1">
           <Label htmlFor="skip-non-essential" className="text-sm font-medium">
             {t('config.skipIrrelevantChapters')}
@@ -93,7 +93,7 @@ export function ChapterSection({ processing }: { processing: boolean }) {
         />
       </div>
 
-      <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-lg border dark:border-amber-800">
+      <div className="p-3 bg-warning/10 rounded-lg border border-warning/30">
         <div className="space-y-2">
           <Label htmlFor="max-sub-chapter-depth" className="text-sm font-medium">
             {t('config.recursionDepth')}
@@ -118,7 +118,7 @@ export function ChapterSection({ processing }: { processing: boolean }) {
         </div>
       </div>
 
-      <div className="p-3 bg-sky-50 dark:bg-sky-950/50 rounded-lg border dark:border-sky-800">
+      <div className="p-3 bg-info/10 rounded-lg border border-info/30">
         <div className="space-y-2">
           <Label htmlFor="chapter-concurrency" className="text-sm font-medium">
             {t('config.chapterConcurrency')}

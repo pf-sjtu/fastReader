@@ -123,12 +123,12 @@ function PromptEntryEditor({ entry, value, overridden, inUse, preview }: PromptE
           {label}
         </label>
         {inUse && (
-          <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+          <Badge variant="outline" className="px-1.5 py-0 text-xs">
             {t('promptEditor.inUse')}
           </Badge>
         )}
         {overridden && (
-          <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+          <Badge variant="secondary" className="px-1.5 py-0 text-xs">
             {t('promptEditor.customized')}
           </Badge>
         )}
@@ -152,7 +152,7 @@ function PromptEntryEditor({ entry, value, overridden, inUse, preview }: PromptE
         <span>{t(entry.hintKey)}</span>
         <span>{t('promptEditor.placeholders')}:</span>
         {entry.vars.map((name) => (
-          <code key={name} className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+          <code key={name} className="rounded-md bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
             {`{{${name}}}`}
           </code>
         ))}
@@ -221,7 +221,7 @@ export function PromptEditor() {
   return (
     <Card className="w-full">
       <CardHeader className="space-y-1.5">
-        <CardTitle className="flex items-center gap-2 text-base">
+        <CardTitle className="flex items-center gap-2">
           <Pencil className="h-4 w-4" />
           {t('promptEditor.title')}
         </CardTitle>

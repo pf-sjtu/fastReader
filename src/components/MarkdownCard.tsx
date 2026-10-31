@@ -149,7 +149,7 @@ export const MarkdownCard = memo(function MarkdownCard({
         className="flex w-full items-start gap-3 px-3 py-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:px-4"
       >
         {showIndex && <span className="mt-[0.3em] w-5 shrink-0 text-xs tabular-nums text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>}
-        <span className="font-brand min-w-0 flex-1 text-[15px] font-semibold leading-snug sm:text-base">{title}</span>
+        <span className="t-title min-w-0 flex-1">{title}</span>
         <ChevronDown className={cn('mt-[0.3em] size-4 shrink-0 text-muted-foreground transition-transform', !actualIsCollapsed && 'rotate-180')} aria-hidden="true" />
       </button>
 

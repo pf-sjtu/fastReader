@@ -33,7 +33,7 @@ export function GraphOptions() {
             <button
               type="button"
               aria-label={t('graphToolbar.progressiveNote')}
-              className="rounded text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+              className="rounded-md text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
             >
               <Info className="h-3.5 w-3.5" />
             </button>

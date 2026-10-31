@@ -66,10 +66,10 @@ export function ModelSwitcher({ disabled, tokenUsage = 0, className }: ModelSwit
           {missingKey ? <KeyRound className="h-3.5 w-3.5 shrink-0" /> : <Brain className="h-3.5 w-3.5 shrink-0" />}
           <span className="truncate text-xs">{missingKey ? t('statusBar.noApiKey') : label}</span>
           {effort !== 'auto' && !missingKey && (
-            <span className="shrink-0 rounded bg-primary/10 px-1 text-[10px] text-primary">{t(`modelSwitcher.effort.${effort}`)}</span>
+            <span className="shrink-0 rounded-md bg-primary/10 px-1 text-xs text-primary">{t(`modelSwitcher.effort.${effort}`)}</span>
           )}
-          {tokenUsage > 0 && <span className="shrink-0 text-[10px] text-muted-foreground">{formatTokens(tokenUsage)}</span>}
-          <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+          {tokenUsage > 0 && <span className="shrink-0 text-xs text-muted-foreground">{formatTokens(tokenUsage)}</span>}
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
 
@@ -86,7 +86,7 @@ export function ModelSwitcher({ disabled, tokenUsage = 0, className }: ModelSwit
                 aria-checked={effort === value}
                 onClick={() => setReasoningEffort(value)}
                 className={cn(
-                  'rounded px-1 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'rounded-md px-1 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   effort === value ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
@@ -94,7 +94,7 @@ export function ModelSwitcher({ disabled, tokenUsage = 0, className }: ModelSwit
               </button>
             ))}
           </div>
-          <p className="text-[11px] leading-snug text-muted-foreground">{t('modelSwitcher.effortHint')}</p>
+          <p className="text-xs leading-snug text-muted-foreground">{t('modelSwitcher.effortHint')}</p>
         </div>
 
         <DropdownMenuSeparator className="m-0" />
@@ -118,7 +118,7 @@ export function ModelSwitcher({ disabled, tokenUsage = 0, className }: ModelSwit
           {groups.length === 0 && <p className="px-3 py-4 text-center text-xs text-muted-foreground">{t('aiProvider.noEnabledModels')}</p>}
           {groups.map(({ provider, models }) => (
             <div key={provider.id} className="py-1">
-              <div className="flex items-center justify-between px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="flex items-center justify-between px-2 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <span className="truncate">{provider.name}</span>
                 {!provider.apiKey?.hasSecret && provider.type !== 'ollama' && (
                   <span className="text-destructive normal-case">{t('statusBar.noApiKey')}</span>
@@ -135,15 +135,15 @@ export function ModelSwitcher({ disabled, tokenUsage = 0, className }: ModelSwit
                     aria-selected={selected}
                     onClick={() => setActiveModel(provider.id, model.id)}
                     className={cn(
-                      'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs outline-none transition-colors hover:bg-accent focus-visible:bg-accent',
+                      'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs outline-none transition-colors hover:bg-accent focus-visible:bg-accent',
                       selected && 'bg-accent/60'
                     )}
                   >
                     <Check className={cn('h-3.5 w-3.5 shrink-0', selected ? 'opacity-100' : 'opacity-0')} />
                     <span className="min-w-0 flex-1 truncate">{model.label || model.id}</span>
-                    {model.meta?.reasoning && <Brain className="h-3 w-3 shrink-0 text-muted-foreground" aria-label={t('modelSwitcher.reasoning')} />}
+                    {model.meta?.reasoning && <Brain className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label={t('modelSwitcher.reasoning')} />}
                     {typeof ctx === 'number' && (
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                      <span className="shrink-0 text-xs text-muted-foreground">
                         {ctx >= 1_000_000 ? `${Math.round(ctx / 100_000) / 10}M` : `${Math.round(ctx / 1000)}K`}
                       </span>
                     )}

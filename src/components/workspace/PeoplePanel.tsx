@@ -64,7 +64,7 @@ export function PeoplePanel({ linking, currentChapterId, onOpenEntity }: PeopleP
 
       {groups.map(([type, rows]) => (
         <section key={type} aria-label={type}>
-          <h4 className="mb-1 text-xs font-medium text-muted-foreground">
+          <h4 className="mb-1 t-label">
             {type} · {rows.length}
           </h4>
           <ul className="space-y-0.5">
@@ -75,7 +75,7 @@ export function PeoplePanel({ linking, currentChapterId, onOpenEntity }: PeopleP
                   <button
                     type="button"
                     onClick={(e) => onOpenEntity(r.id, rectOf(e.currentTarget))}
-                    className="flex min-h-9 w-full items-start gap-2 rounded px-1.5 py-1 text-left hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                    className="flex min-h-9 w-full items-start gap-2 rounded-md px-1.5 py-1 text-left hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                   >
                     <EntitySwatch cssVar={s.cssVar} shape={s.shape} className="mt-1.5" />
                     <span className="min-w-0 flex-1">
