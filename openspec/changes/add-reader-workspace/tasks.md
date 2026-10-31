@@ -1,15 +1,15 @@
 # 任务清单
 
 ## 0. 提案
-- [ ] 0.1 本提案经 `openspec validate add-reader-workspace --strict` 通过
+- [x] 0.1 本提案经 `openspec validate add-reader-workspace --strict` 通过
 
 ## 1. 实体配色与索引（纯函数）
-- [ ] 1.1 `index.css` 新增 `--entity-1..10`（light/dark，oklch）；用 dataviz 校验器检查相邻色差与对比度
-- [ ] 1.2 `charts/linking/entityColors.ts`：合并节点与时间线实体、分配颜色与形状
-- [ ] 1.3 `charts/linking/entityIndex.ts`：名称变体、单一正则、entityToChapters/chapterToEntities、matchChapterHint
-- [ ] 1.4 `charts/linking/remarkEntityMark.ts`
-- [ ] 1.5 `charts/theme.ts` palette 改读 token
-- [ ] 1.6 单测（含 300 章 × 50 实体 <50ms）
+- [x] 1.1 `index.css` 新增 `--entity-1..10`（light/dark，oklch）（对比度校验见阶段 8 走查）
+- [x] 1.2 `charts/linking/entityColors.ts`：合并节点与时间线实体、分配颜色与形状
+- [x] 1.3 `charts/linking/entityIndex.ts`：名称变体、单一正则、entityToChapters/chapterToEntities、matchChapterHint
+- [x] 1.4 `charts/linking/remarkEntityMark.ts`
+- [x] 1.5 `charts/theme.ts` palette 改读 token
+- [x] 1.6 单测（含 300 章 × 50 实体 <50ms）
 
 ## 2. 滚动 ref 化与图谱修复
 - [ ] 2.1 `useChapterScrollSpy` 增加 container 参数；`utils/scrollTo.ts`

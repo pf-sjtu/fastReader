@@ -27,7 +27,10 @@ const FALLBACK_LIGHT: ChartThemeColors = {
   border: '#d4ccc2',
   accent: '#c9bfb3',
   accentForeground: '#3d3832',
-  palette: ['#8b7355', '#a0674a', '#6b7a4e', '#9a7b4f', '#7a6550', '#a35a45'],
+  palette: [
+    '#b5321f', '#2a4f8c', '#a67c1a', '#3f7d4e', '#6a3f8c',
+    '#2f7d8c', '#b02e52', '#6b4a32', '#7d8a2f', '#a8508f',
+  ],
   isDark: false,
 }
 
@@ -40,7 +43,10 @@ const FALLBACK_DARK: ChartThemeColors = {
   border: '#4a4a4a',
   accent: '#3a3a3a',
   accentForeground: '#ececec',
-  palette: ['#b8956a', '#c47a5a', '#8a9a6a', '#c4a66a', '#a08070', '#c07060'],
+  palette: [
+    '#e8785c', '#7ea2e6', '#e0b84a', '#6fc08a', '#b48ae0',
+    '#5fc0d0', '#e8708f', '#b08a68', '#b8c85a', '#d98ac0',
+  ],
   isDark: true,
 }
 
@@ -99,9 +105,9 @@ export function readChartTheme(): ChartThemeColors {
   const fb = isDark ? FALLBACK_DARK : FALLBACK_LIGHT
   const rootStyle = getComputedStyle(document.documentElement)
 
-  const chartKeys = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5'] as const
-  const basePalette = chartKeys.map((k, i) =>
-    readCssVarAsHex(rootStyle, k, fb.palette[i] || fb.primary)
+  // 实体色 token（index.css --entity-1..10），与正文标注、人物志同源
+  const palette = fb.palette.map((hex, i) =>
+    readCssVarAsHex(rootStyle, `--entity-${i + 1}`, hex)
   )
 
   return {
@@ -125,7 +131,7 @@ export function readChartTheme(): ChartThemeColors {
       '--accent-foreground',
       fb.accentForeground
     ),
-    palette: [...basePalette, ...basePalette],
+    palette,
     isDark,
   }
 }
