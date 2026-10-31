@@ -1,5 +1,6 @@
 /**
- * 垂直分隔条：拖动或用键盘调整右侧栏宽度（手柄在栏的左缘，向左拖 = 变宽）。
+ * 垂直分隔条：拖动或用键盘调整侧栏宽度。
+ * edge='left'（默认）：手柄在右侧栏的左缘，向左拖 = 变宽；edge='right'：手柄在左侧栏的右缘，向右拖 = 变宽。
  * 自写而非引入分栏库：只有一条分隔线，且宽度要按 px 记忆。
  */
 import { useCallback, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
@@ -14,6 +15,8 @@ interface ResizeHandleProps {
   defaultWidth?: number
   label: string
   step?: number
+  /** 手柄贴着被调整栏的哪一侧 */
+  edge?: 'left' | 'right'
   className?: string
 }
 
@@ -27,8 +30,11 @@ export function ResizeHandle({
   defaultWidth,
   label,
   step = 24,
+  edge = 'left',
   className,
 }: ResizeHandleProps) {
+  // 向"栏变宽"的方向为正：右侧栏是向左，左侧栏是向右
+  const sign = edge === 'left' ? -1 : 1
   const [dragging, setDragging] = useState(false)
   const start = useRef({ x: 0, w: 0 })
 
@@ -47,9 +53,9 @@ export function ResizeHandle({
   const onPointerMove = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
       if (!dragging) return
-      onChange(clamp(start.current.w + (start.current.x - e.clientX), min, max))
+      onChange(clamp(start.current.w + sign * (e.clientX - start.current.x), min, max))
     },
-    [dragging, min, max, onChange]
+    [dragging, min, max, onChange, sign]
   )
 
   const endDrag = useCallback((e: PointerEvent<HTMLDivElement>) => {
@@ -61,16 +67,16 @@ export function ResizeHandle({
     (e: KeyboardEvent<HTMLDivElement>) => {
       const delta = e.shiftKey ? step * 4 : step
       let next: number | null = null
-      // 手柄在栏的左缘：← 把边界往左挪 = 变宽
-      if (e.key === 'ArrowLeft') next = width + delta
-      else if (e.key === 'ArrowRight') next = width - delta
+      // 右侧栏（手柄在左缘）：← 把边界往左挪 = 变宽；左侧栏相反
+      if (e.key === 'ArrowLeft') next = width - sign * delta
+      else if (e.key === 'ArrowRight') next = width + sign * delta
       else if (e.key === 'Home') next = min
       else if (e.key === 'End') next = max
       if (next === null) return
       e.preventDefault()
       onChange(clamp(next, min, max))
     },
-    [width, min, max, step, onChange]
+    [width, min, max, step, onChange, sign]
   )
 
   return (

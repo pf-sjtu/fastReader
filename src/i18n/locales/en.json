@@ -571,6 +571,7 @@
     "untyped": "Uncategorised"
   },
   "workspace": {
+    "nav": { "collapse": "Collapse contents", "expand": "Expand contents", "resize": "Resize contents", "progress": "Reading progress" },
     "back": "Back to previous position",
     "dock": {
       "collapse": "Collapse side panel",

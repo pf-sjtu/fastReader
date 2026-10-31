@@ -7,7 +7,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { ChevronUp, Layers, List, Minimize2, PanelRightOpen, Undo2 } from 'lucide-react'
+import { ChevronsLeft, ChevronUp, Layers, List, Minimize2, PanelRightOpen, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -22,6 +22,9 @@ import {
   COMPANION_DEFAULT_WIDTH,
   COMPANION_MAX_WIDTH,
   COMPANION_MIN_WIDTH,
+  NAV_DEFAULT_WIDTH,
+  NAV_MAX_WIDTH,
+  NAV_MIN_WIDTH,
   useReadingFocusStore,
 } from '@/stores/readingFocus'
 import type { BookSummary } from '@/hooks/useBookProcessing'
@@ -29,6 +32,7 @@ import { CompanionDock, type DockTab } from './CompanionDock'
 import { PeoplePanel } from './PeoplePanel'
 import { GraphOptions } from './GraphOptions'
 import { ResizeHandle } from './ResizeHandle'
+import { NavRail } from './NavRail'
 import { useWorkspaceLinking } from './useWorkspaceLinking'
 
 const ResultsSection = lazy(() =>
@@ -100,6 +104,10 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     setCompanionTab,
     setCompanionOpen,
     setCompanionWidth,
+    navWidth,
+    navCollapsed,
+    setNavWidth,
+    setNavCollapsed,
     toggleFocusMode,
   } = useReadingFocusStore(
     useShallow((s) => ({
@@ -110,6 +118,10 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       setCompanionTab: s.setCompanionTab,
       setCompanionOpen: s.setCompanionOpen,
       setCompanionWidth: s.setCompanionWidth,
+      navWidth: s.navWidth,
+      navCollapsed: s.navCollapsed,
+      setNavWidth: s.setNavWidth,
+      setNavCollapsed: s.setNavCollapsed,
       toggleFocusMode: s.toggleFocusMode,
     }))
   )
@@ -121,6 +133,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
 
   const chapters = bookSummary.chapters
   const chapterIds = useMemo(() => chapters.map((c) => c.id), [chapters])
+  const viewingIndex = chapterIds.indexOf(currentViewingChapter) + 1
 
   // 正文栏 = 滚动容器：登记给命令式跳转，显式传给 spy
   useEffect(() => {
@@ -348,7 +361,46 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
 
   return (
     <div className="flex h-full min-h-0 w-full">
-      {!focusMode && <aside className="hidden w-52 shrink-0 pr-3 md:block">{nav('sidebar')}</aside>}
+      {!focusMode && (
+        <>
+          {/* 目录：可拖宽、可折叠成竖向进度条。折叠时目录仍保持挂载（只是隐藏），展开不丢滚动位置 */}
+          <aside
+            className={`hidden shrink-0 md:flex md:flex-col ${navCollapsed ? 'mr-2' : ''}`}
+            style={{ width: navCollapsed ? 24 : navWidth }}
+          >
+            {navCollapsed && <NavRail current={viewingIndex} total={chapters.length} onExpand={() => setNavCollapsed(false)} />}
+            <div className={navCollapsed ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}>
+              <div className="flex shrink-0 justify-end pb-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  onClick={() => setNavCollapsed(true)}
+                  aria-label={t('workspace.nav.collapse')}
+                  title={t('workspace.nav.collapse')}
+                >
+                  <ChevronsLeft className="size-4" />
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1">{nav('sidebar')}</div>
+            </div>
+          </aside>
+          {!navCollapsed && (
+            <ResizeHandle
+              edge="right"
+              width={navWidth}
+              min={NAV_MIN_WIDTH}
+              max={NAV_MAX_WIDTH}
+              defaultWidth={NAV_DEFAULT_WIDTH}
+              onChange={setNavWidth}
+              label={t('workspace.nav.resize')}
+              step={16}
+              className="hidden md:block"
+            />
+          )}
+        </>
+      )}
 
       {link.floating}
       {backChip}

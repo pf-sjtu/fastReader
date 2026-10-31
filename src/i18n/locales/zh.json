@@ -580,6 +580,7 @@
     "untyped": "未分类"
   },
   "workspace": {
+    "nav": { "collapse": "收起目录", "expand": "展开目录", "resize": "调整目录宽度", "progress": "阅读进度" },
     "back": "返回上一位置",
     "dock": {
       "collapse": "收起对照栏",

@@ -20,6 +20,15 @@ export const COMPANION_MIN_WIDTH = 280
 export const COMPANION_MAX_WIDTH = 760
 export const COMPANION_DEFAULT_WIDTH = 440
 
+export const NAV_MIN_WIDTH = 160
+export const NAV_MAX_WIDTH = 360
+export const NAV_DEFAULT_WIDTH = 208
+
+export function clampNavWidth(w: number): number {
+  if (!Number.isFinite(w)) return NAV_DEFAULT_WIDTH
+  return Math.min(NAV_MAX_WIDTH, Math.max(NAV_MIN_WIDTH, Math.round(w)))
+}
+
 export function clampCompanionWidth(w: number): number {
   if (!Number.isFinite(w)) return COMPANION_DEFAULT_WIDTH
   return Math.min(COMPANION_MAX_WIDTH, Math.max(COMPANION_MIN_WIDTH, Math.round(w)))
@@ -61,6 +70,9 @@ interface ReadingFocusState {
   companionTab: CompanionTab
   companionOpen: boolean
   companionWidth: number
+  /** 左侧目录/阅读进度栏宽度与折叠态（折叠后只剩一条竖向进度条） */
+  navWidth: number
+  navCollapsed: boolean
   /** 正文实体标注开关 */
   annotateEntities: boolean
   /** 图谱节点是否使用与正文一致的实体色 */
@@ -77,6 +89,8 @@ interface ReadingFocusState {
   setCompanionTab: (tab: CompanionTab) => void
   setCompanionOpen: (open: boolean) => void
   setCompanionWidth: (width: number) => void
+  setNavWidth: (width: number) => void
+  setNavCollapsed: (collapsed: boolean) => void
   setAnnotateEntities: (on: boolean) => void
   setColorizeGraph: (on: boolean) => void
   setProgressiveGraph: (on: boolean) => void
@@ -92,6 +106,8 @@ export const useReadingFocusStore = create<ReadingFocusState>()(
       companionTab: 'graph',
       companionOpen: true,
       companionWidth: COMPANION_DEFAULT_WIDTH,
+      navWidth: NAV_DEFAULT_WIDTH,
+      navCollapsed: false,
       annotateEntities: true,
       colorizeGraph: true,
       progressiveGraph: false,
@@ -121,6 +137,8 @@ export const useReadingFocusStore = create<ReadingFocusState>()(
       setCompanionTab: (companionTab) => set({ companionTab }),
       setCompanionOpen: (companionOpen) => set({ companionOpen }),
       setCompanionWidth: (w) => set({ companionWidth: clampCompanionWidth(w) }),
+      setNavWidth: (w) => set({ navWidth: clampNavWidth(w) }),
+      setNavCollapsed: (navCollapsed) => set({ navCollapsed }),
       setAnnotateEntities: (annotateEntities) => set({ annotateEntities }),
       setColorizeGraph: (colorizeGraph) => set({ colorizeGraph }),
       setProgressiveGraph: (progressiveGraph) => set({ progressiveGraph }),
@@ -133,6 +151,8 @@ export const useReadingFocusStore = create<ReadingFocusState>()(
         companionTab: s.companionTab,
         companionOpen: s.companionOpen,
         companionWidth: s.companionWidth,
+        navWidth: s.navWidth,
+        navCollapsed: s.navCollapsed,
         annotateEntities: s.annotateEntities,
         colorizeGraph: s.colorizeGraph,
         progressiveGraph: s.progressiveGraph,
@@ -144,6 +164,7 @@ export const useReadingFocusStore = create<ReadingFocusState>()(
           ...current,
           ...p,
           companionWidth: clampCompanionWidth(p.companionWidth ?? current.companionWidth),
+          navWidth: clampNavWidth(p.navWidth ?? current.navWidth),
         }
       },
     }
