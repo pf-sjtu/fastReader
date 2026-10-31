@@ -3,6 +3,7 @@
  */
 import type { MindElixirData } from 'mind-elixir'
 import type { BookCharts } from '@/charts'
+import type { ChapterMeta } from '@/services/prompts/chapterMeta'
 
 export interface Chapter {
   id: string
@@ -12,6 +13,10 @@ export interface Chapter {
   mindMap?: MindElixirData
   /** false 表示未处理或处理失败（失败时 summary 为 failedText 占位） */
   processed: boolean
+  /** v3 旁路：一句话、要点、规范实体名等（仅本次会话/缓存，不写入云端 MD） */
+  meta?: ChapterMeta
+  /** 质量闸：仍有格式/长度问题时为 'warn'（已做过一次定向重写） */
+  quality?: 'warn'
 }
 
 export interface BookSummary {

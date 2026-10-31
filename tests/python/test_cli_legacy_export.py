@@ -58,8 +58,8 @@ def test_web_export_has_no_batch_section_and_is_reported_clearly(config):
     assert validate_config(config) == ["批量处理 sourcePath 不能为空"]
 
 
-def test_missing_prompt_version_falls_back_to_default_v2(tmp_path):
-    """旧文件缺 currentPromptVersion 时，CLI 与前端一样默认 v2。"""
+def test_missing_prompt_version_falls_back_to_default_v3(tmp_path):
+    """旧文件缺 currentPromptVersion 时，CLI 与前端一样取默认版本 v3。"""
     text = FIXTURE.read_text(encoding="utf-8")
     start = text.index("  currentPromptVersion:")
     end = text.index("\n", start) + 1
@@ -68,4 +68,4 @@ def test_missing_prompt_version_falls_back_to_default_v2(tmp_path):
 
     cfg = ConfigLoader(str(stripped)).load()
     assert cfg is not None
-    assert cfg.prompts.currentVersion == "v2"
+    assert cfg.prompts.currentVersion == "v3"

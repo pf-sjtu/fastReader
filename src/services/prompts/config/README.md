@@ -100,3 +100,10 @@ const testPrompt = getSystemPrompt('testConnection')
 | keyCharts（TS 内置，仅前端） | `bookTitle`（inline）、`chapterSummaries`、`connections`、`overallSummary` | 书名 / 章节摘要 / 章节关联分析 / 全书总结 | 无 |
 
 `overallSummary` 的章节列表沿用既有名 `chapterInfo`（不改名，避免已持久化的用户自定义 prompt 失效）。测试 `tests/w2prompt.yamlPrompts.test.ts`、`tests/python/test_cli_render_prompt.py` 会校验 YAML 实际引用的占位符集合与上表一致。
+
+## v3（默认）
+
+- `v3-prompts.yaml` 只改 `chapterSummary`：输出「正文 + `<!--juhua:meta-->` + JSON 旁路」（一句话 / 要点 / 规范实体名与别名 / 术语；小说另含 events）。其余段落与 v2 相同。
+- 解析与清理：前端 `services/prompts/chapterMeta.ts`，CLI `src/cli/chapter_meta.py`，共用 `tests/fixtures/prompts-v3/meta-cases.json`。旁路损坏只会退化为「无旁路」，不会使章节失败。
+- 旁路随章节缓存（缓存值是 `正文 + 标记 + JSON`），不写入云端 MD；各章实体合并成「实体表」，作为 `entityTable` 追加到关联分析 / 全书总结 / 关键图表的提示词末尾。
+- 旧导出配置（1.0.0 / v2 时代）按 **v2 默认文本**求覆盖项：没改过的条目跟随 v3，改过的保持原样。CLI 在配置里找不到 v3 条目时回落到 v2 条目，所以旧的自定义提示词仍然生效。

@@ -1,8 +1,8 @@
 """
-Prompt 模板（与前端共享 src/services/prompts/config/v2-prompts.yaml）
+Prompt 模板（与前端共享 src/services/prompts/config/v{2,3}-prompts.yaml）
 
 - 模板来源优先级：配置文件 promptVersionConfig > 仓库内 YAML
-- 只保留 v2：v1 已废弃，读到 v1 声明时告警并使用 v2
+- 支持 v2 / v3（默认 v3）：v1 已废弃，读到 v1 声明时告警并使用默认版本
 - 输入组装与前端 aiService 对齐：章节摘要用「标题 + 原文」，关联/全书只喂章节摘要 JSON
 - 模板渲染语义见 src/services/prompts/config/README.md；render_prompt 与前端 renderPrompt 等价
   （跨端用例 tests/fixtures/prompts/render-cases.json）
@@ -20,8 +20,8 @@ from typing import Optional
 import yaml
 
 # 前端 configStore 的 currentPromptVersion 默认值
-DEFAULT_PROMPT_VERSION = "v2"  # 与前端 DEFAULT_PROMPT_VERSION 一致
-SUPPORTED_PROMPT_VERSIONS = ("v2",)
+DEFAULT_PROMPT_VERSION = "v3"  # 与前端 DEFAULT_PROMPT_VERSION 一致
+SUPPORTED_PROMPT_VERSIONS = ("v2", "v3")
 
 # 仓库内共享 YAML 目录（src/cli/ → src/services/prompts/config）
 DEFAULT_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "services" / "prompts" / "config"
@@ -73,15 +73,16 @@ def get_language_instruction(language: str) -> str:
 
 
 def load_yaml_prompts(version: str, prompts_dir: Optional[str] = None) -> dict:
-    """读取共享 YAML（v2 文件带 BOM，用 utf-8-sig）
+    """读取共享 YAML（文件可能带 BOM，用 utf-8-sig）
 
-    v1 模板已删除：任何版本入参都读 v2，保证旧配置仍能跑。
+    v1 模板已删除：未知版本入参读默认版本，保证旧配置仍能跑。
     """
     if version not in SUPPORTED_PROMPT_VERSIONS:
         logging.getLogger(__name__).warning(
-            "提示词版本 %s 已废弃（仅支持 %s），将使用 v2 模板",
+            "提示词版本 %s 已废弃（仅支持 %s），将使用 %s 模板",
             version,
             "/".join(SUPPORTED_PROMPT_VERSIONS),
+            DEFAULT_PROMPT_VERSION,
         )
         version = DEFAULT_PROMPT_VERSION
     base = Path(prompts_dir) if prompts_dir else DEFAULT_PROMPTS_DIR
@@ -196,7 +197,9 @@ class PromptTemplates:
         is_fiction = book_type == "fiction"
         # 1. 配置文件中的自定义模板
         versions = getattr(self.prompt_config, "versions", None) or {}
-        vc = versions.get(self.version)
+        # 旧配置（v2 时代导出）里的自定义模板只存在 v2 条目下：默认升到 v3 后仍然生效，
+        # 它们不含 JSON 旁路，clean_chapter_summary 会照常处理
+        vc = versions.get(self.version) or versions.get("v2")
         if vc is not None:
             if prompt_type == "chapterSummary":
                 custom = vc.chapterSummary_fiction if is_fiction else vc.chapterSummary_nonFiction

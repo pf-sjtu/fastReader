@@ -10,6 +10,7 @@ import re
 from typing import Optional
 from dataclasses import dataclass
 
+from .chapter_meta import split_chapter_meta
 from .models import ChapterInfo
 from .logger import Logger
 from .model_budget import (  # noqa: F401  parse_max_tokens_cap / resolve_max_output_tokens 供旧调用方从此处导入
@@ -282,7 +283,8 @@ class AIClient:
                 # 任一段失败即整章失败（与普通章节一致，由上层计入失败章节、可续跑）
                 return AIResponse(success=False, content='', error=f"分段 {i}/{len(parts)} 失败: {r.error}",
                                   input_tokens=in_tok, output_tokens=out_tok)
-            partials.append(f"【第 {i}/{len(parts)} 部分总结】\n{r.content}")
+            # 分段总结的 JSON 旁路不能混进「章节内容」再喂给合并那一轮
+            partials.append(f"【第 {i}/{len(parts)} 部分总结】\n{split_chapter_meta(r.content)[0]}")
         merged = self._summarize_long(f"{title}（由 {len(parts)} 段分段总结合并）", "\n\n".join(partials),
                                       book_type, language, depth + 1)
         merged.input_tokens += in_tok

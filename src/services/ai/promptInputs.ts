@@ -78,6 +78,12 @@ export function connectionVars(chapters: unknown[]): PromptVar[] {
   return [{ name: 'chapterSummaries', label: '已处理的章节列表', value: JSON.stringify(chapters) }]
 }
 
+/** 全书实体表：模板未引用时按「标签: 值」追加在末尾；没有实体表则不发送 */
+export function entityTableVars(table?: string): PromptVar[] {
+  const value = (table || '').trim()
+  return value ? [{ name: 'entityTable', label: '已知实体表（请沿用这些规范名与别名，不要另起写法）', value }] : []
+}
+
 /** 全书总结：{{bookTitle}} {{chapterInfo}} {{connections}} */
 export function overallVars(bookTitle: string, chapters: unknown[], connections: string): PromptVar[] {
   return [

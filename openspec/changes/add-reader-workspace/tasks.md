@@ -90,7 +90,7 @@
 - [ ] 10.6 对照栏 10 个页签在 452px 宽被挤压：常驻 4 项 + 「更多」
 - [x] 10.7 主题切换中间态（深卡片 + 浅文字）：主题 token 不参与 transition（卡片去掉 transition-colors）
 - [ ] 10.8 已精读书点击后不再经过「文件上传与配置」卡（现先弹 toast、再显示配置卡「正在检查云端缓存」，约 8s 才进工作台）；改骨架屏直达
-- [ ] 10.9 提示词 v3（`v3-prompts.yaml`）：章节「正文 + 旁路 JSON」、规范实体名、去掉内心推理/安抚话术、强调系统收敛（加粗 ≤6/章，取消加粗斜体与专名反引号）、fiction 补齐；覆盖项带版本并提供迁移
-- [ ] 10.10 处理机制 v3：书级上下文（实体表快照）、提示词缓存友好排序、map-reduce 书级步骤、步骤独立重试/续跑、预估与账单、质量闸 + 定向重写
-- [ ] 10.11 v2/v3 评测样例集与评分脚本；达标前不切默认；前端与 CLI 共用契约样例
+- [x] 10.9 提示词 v3（`v3-prompts.yaml`）：章节「正文 + 旁路 JSON」、规范实体名、去掉内心推理/安抚话术、强调系统收敛（加粗 ≤6/章，取消加粗斜体与专名反引号）、fiction 补齐；覆盖项带版本并提供迁移（已落地：`v3-prompts.yaml` 章节「正文 + <!--juhua:meta--> JSON 旁路」；`chapterMeta.ts`/CLI `chapter_meta.py` 拆分+清理（标题/分割线/加粗斜体/反引号/加粗≤6），共用 `tests/fixtures/prompts-v3/meta-cases.json`；默认版本 v3，v2 仍可选；旧导出配置按 v2 基线求覆盖项，自定义 v2 提示词在 CLI 下继续生效。**未做**：fiction 的 spoiler 事件尚未接入渐进模式；覆盖项「查看差异/迁移」界面）
+- [ ] 10.10 处理机制 v3：书级上下文（实体表快照）、提示词缓存友好排序、map-reduce 书级步骤、步骤独立重试/续跑、预估与账单、质量闸 + 定向重写（**部分完成**：实体表归并后传给关联/全书总结/图表（`entityTable`）；质量闸 + 最多一次定向重写（过短/问候语）并标 `quality: warn`。**未做**：章节调用的书级上下文快照与提示词缓存友好排序、map-reduce 书级步骤、步骤独立「重试此步」界面、处理前预估/处理后账单的三段拆分）
+- [ ] 10.11 v2/v3 评测样例集与评分脚本；达标前不切默认；前端与 CLI 共用契约样例（**部分完成**：契约样例与前后端一致性测试已有；**未做**：v2/v3 真实模型对比评测脚本——需要 API 额度，默认切换到 v3 的依据目前是格式解析的鲁棒性（旁路损坏仅退化为无旁路）而非模型实测）
 - [x] 10.12 设计系统收敛（已落地：index.css 的 `.t-*` 文字角色 + `--success/--warning/--info` token；`ui/` 默认标题样式；圆角/图标/≤11px 字号批量迁移；`tests/designSystem.test.ts` 守卫；EmptyState 已用 t-title）（规格 design-system）：现状审计——标题角色散乱（`h3 text-lg` / `text-base font-medium` / `h4 text-sm` / `h3 text-xs muted` / CardTitle 默认或 `text-base` / 仅部分用 `font-brand`）；硬编码调色板色（`text-red-500`×8、`green`/`amber` 等）；圆角 `rounded-lg 42 / md 40 / 裸 rounded 35 / sm 7 / xl 3 / 2xl 2`；图标 12/14/16/20px 并存；字号 `text-xs 228 / sm 157`（xs 过多）。步骤：① index.css 定义文字角色 + 状态色 token + 圆角刻度 ② `SectionHeading`/`PanelTitle`/`EmptyState` 组件并改 `ui/` 默认值 ③ 逐目录迁移（设置 → 书库 → 工作台 → 对照栏 → 弹窗/抽屉）④ `tests/designSystem.test.ts` 守卫，违规清单清零后转为强制

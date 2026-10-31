@@ -32,11 +32,13 @@ import { getLanguageInstruction } from '../prompts/utils'
 import { createAIProvider } from './factory'
 import { RESULT_PREFIX } from '../../utils/resultStatus'
 import { renderPrompt } from '../prompts/render'
+import { splitChapterMeta } from '../prompts/chapterMeta'
 import {
   arrowVars,
   chapterVars,
   combinedMindMapVars,
   connectionVars,
+  entityTableVars,
   keyChartsVars,
   studyKitVars,
   quizVars,
@@ -272,7 +274,8 @@ export class AIService {
     const partials: string[] = []
     for (let i = 0; i < parts.length; i++) {
       const title = `${chapterTitle}（第 ${i + 1}/${parts.length} 部分）`
-      partials.push(await this.generateContent(renderPrompt(basePrompt, chapterVars(title, parts[i])), outputLanguage, opts))
+      const partial = await this.generateContent(renderPrompt(basePrompt, chapterVars(title, parts[i])), outputLanguage, opts)
+      partials.push(splitChapterMeta(partial).text)
     }
     // 合并：把分段总结当作「章节内容」再走一次同一提示词，保证输出格式与普通章节一致。
     // 分段总结合起来仍超预算（极长章节）时递归再分段，每层都显著变短；最多 3 层
@@ -311,7 +314,9 @@ export class AIService {
         ? promptConfig.chapterSummary.fiction || getFictionChapterSummaryPrompt()
         : promptConfig.chapterSummary.nonFiction || getNonFictionChapterSummaryPrompt()
 
-    return this.generateForLongContent(customPrompt || basePrompt, chapterTitle, chapterContent, outputLanguage, opts)
+    const prompt = customPrompt || basePrompt
+    const withHint = opts?.rewriteHint ? `${prompt}\n\n## 上一次输出存在的问题（本次必须避免）\n${opts.rewriteHint}` : prompt
+    return this.generateForLongContent(withHint, chapterTitle, chapterContent, outputLanguage, opts)
   }
 
   /**
@@ -333,7 +338,7 @@ export class AIService {
       return '章节数量不足，无法分析关联。'
     }
 
-    const prompt = renderPrompt(basePrompt, connectionVars(processedChapters))
+    const prompt = renderPrompt(basePrompt, [...connectionVars(processedChapters), ...entityTableVars(opts?.entityTable)])
 
     return this.generateContent(prompt, outputLanguage, opts)
   }
@@ -363,7 +368,7 @@ export class AIService {
       this.postProcessLimits().connections
     )
 
-    const prompt = renderPrompt(basePrompt, overallVars(bookTitle, processedChapters, connectionsText))
+    const prompt = renderPrompt(basePrompt, [...overallVars(bookTitle, processedChapters, connectionsText), ...entityTableVars(opts?.entityTable)])
 
     return this.generateContent(prompt, outputLanguage, opts)
   }
@@ -396,7 +401,7 @@ export class AIService {
 
     const prompt = renderPrompt(
       basePrompt,
-      keyChartsVars(bookTitle, processedChapters, connectionsText, overallText)
+      [...keyChartsVars(bookTitle, processedChapters, connectionsText, overallText), ...entityTableVars(opts?.entityTable)]
     )
 
     const response = await this.generateContent(prompt, outputLanguage, opts)

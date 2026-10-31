@@ -7,7 +7,7 @@
  */
 import type { ImportPlan } from '../services/configExportService'
 import { diffPromptOverrides } from '../services/prompts/overrides'
-import { DEFAULT_PROMPT_CONFIG } from '../services/prompts/templates'
+import { LEGACY_V2_PROMPT_CONFIG } from '../services/prompts/templates'
 import { migrateLegacyAI, type LegacyAIConfigManager } from './aiMigration'
 import { normalizeProcessingData } from './processing'
 import { defaultWebDAVConfig } from './webdav'
@@ -102,7 +102,7 @@ export function buildImportPlanFromLocal(snapshot: LocalLegacySnapshot): ImportP
       ? snapshot.prompts.promptVersionConfig[snapshot.prompts.currentPromptVersion]
       : snapshot.prompts?.promptVersionConfig?.v2)
 
-  const prompts = diffPromptOverrides(promptSource, DEFAULT_PROMPT_CONFIG)
+  const prompts = diffPromptOverrides(promptSource, LEGACY_V2_PROMPT_CONFIG)
 
   const normalized = normalizeProcessingData({
     processingOptions: snapshot.processingOptions,

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from .ai_client import AIClient
 from .chapter_extractor import Chapter
+from .chapter_meta import clean_chapter_summary
 from .checkpoint import ChapterCheckpoint
 from .models import ChapterInfo
 from .prompts import RESULT_PREFIX, failed_text
@@ -61,10 +62,12 @@ def summarize_chapters(
             print(f"   ⏭️  跳过{label}")
             return ChapterOutcome(chapter.title, response.content, "skipped")
         if response.success:
-            checkpoint.put(key, chapter.title, response.content,
+            # v3 输出带 JSON 旁路：CLI 只要正文，并做与前端一致的程序化清理
+            summary = clean_chapter_summary(response.content)
+            checkpoint.put(key, chapter.title, summary,
                            response.input_tokens, response.output_tokens)
             print(f"   ✅ 完成{label} (input: {response.input_tokens:,}, output: {response.output_tokens:,})")
-            return ChapterOutcome(chapter.title, response.content, "ok",
+            return ChapterOutcome(chapter.title, summary, "ok",
                                   response.input_tokens, response.output_tokens)
         print(f"   ❌ 失败{label}: {response.error}")
         return ChapterOutcome(

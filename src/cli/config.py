@@ -16,7 +16,7 @@ SUPPORTED_MODES = ("summary",)
 SUPPORTED_DETECTION_MODES = ("normal", "epub-toc")
 SUPPORTED_PROVIDERS = ("gemini", "openai", "302.ai")
 DEFAULT_CHAPTER_CONCURRENCY = 3  # 与前端 chapterConcurrency 默认值一致
-DEFAULT_PROMPT_VERSION = "v2"    # 与前端 DEFAULT_PROMPT_VERSION（services/prompts/templates）一致
+DEFAULT_PROMPT_VERSION = "v3"    # 与前端 DEFAULT_PROMPT_VERSION（services/prompts/templates）一致
 
 
 @dataclass
@@ -529,9 +529,9 @@ def validate_config(config: Config) -> list:
             f"（支持: {', '.join(SUPPORTED_DETECTION_MODES)}）"
         )
 
-    # v1 已废弃：声明 v1 时 prompts.py 会告警并回退 v2，这里不报错，保证旧配置可跑
+    # v1 已废弃：声明 v1 时 prompts.py 会告警并回退默认版本，这里不报错，保证旧配置可跑
     version = config.prompts.currentVersion
-    if version not in ("v1", "v2") and version not in config.prompts.versions:
-        errors.append(f"未知的 Prompt 版本: {version}（仅支持 v2）")
+    if version not in ("v1", "v2", "v3") and version not in config.prompts.versions:
+        errors.append(f"未知的 Prompt 版本: {version}（仅支持 v2 / v3）")
 
     return errors

@@ -1,0 +1,133 @@
+"""
+v3 章节输出 = 正文 + `<!--juhua:meta-->` + JSON 旁路。CLI 只需要正文：拆出旁路并做程序化清理。
+
+与前端 src/services/prompts/chapterMeta.ts 等价；跨端用例 tests/fixtures/prompts-v3/meta-cases.json
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from typing import Optional
+
+META_MARK = "<!--juhua:meta-->"
+_META_MARK_RE = re.compile(r"<!--\s*juhua:meta\s*-->", re.IGNORECASE)
+
+# 每章加粗上限（规格 prompts-v3）
+MAX_BOLD_PER_CHAPTER = 6
+_BOLD_RE = re.compile(r"(?<!\*)\*\*(?!\*)([^*\n]+?)(?<!\*)\*\*(?!\*)")
+
+
+def _first_json_object(raw: str) -> Optional[str]:
+    text = re.sub(r"```(?:json)?", "", raw, flags=re.IGNORECASE)
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
+def _as_str(v, max_len: int = 200) -> str:
+    return v.strip()[:max_len] if isinstance(v, str) else ""
+
+
+def _as_str_list(v, max_items: int, max_len: int = 80) -> list[str]:
+    if not isinstance(v, list):
+        return []
+    return [s for s in (_as_str(x, max_len) for x in v) if s][:max_items]
+
+
+def _coerce_meta(obj) -> Optional[dict]:
+    if not isinstance(obj, dict):
+        return None
+    entities = []
+    raw_entities = obj.get("entities")
+    for e in raw_entities if isinstance(raw_entities, list) else []:
+        if not isinstance(e, dict):
+            continue
+        name = _as_str(e.get("name"), 60)
+        if not name:
+            continue
+        ent = {"name": name, "aliases": _as_str_list(e.get("aliases"), 6, 60)}
+        if _as_str(e.get("type"), 20):
+            ent["type"] = _as_str(e.get("type"), 20)
+        if _as_str(e.get("role"), 60):
+            ent["role"] = _as_str(e.get("role"), 60)
+        entities.append(ent)
+    meta = {
+        "oneLine": _as_str(obj.get("oneLine"), 80),
+        "takeaways": _as_str_list(obj.get("takeaways"), 5, 120),
+        "entities": entities[:20],
+        "terms": _as_str_list(obj.get("terms"), 12, 40),
+    }
+    if not (meta["oneLine"] or meta["takeaways"] or meta["entities"] or meta["terms"]):
+        return None
+    return meta
+
+
+def split_chapter_meta(raw: str) -> tuple[str, Optional[dict]]:
+    """拆出 (正文, 旁路)；永不抛错，旁路损坏时 meta 为 None"""
+    s = raw or ""
+    m = _META_MARK_RE.search(s)
+    if not m:
+        return s.rstrip(), None
+    text = s[:m.start()].rstrip()
+    js = _first_json_object(s[m.end():])
+    if not js:
+        return text, None
+    try:
+        return text, _coerce_meta(json.loads(js))
+    except (ValueError, TypeError):
+        return text, None
+
+
+def sanitize_summary(text: str) -> str:
+    """程序化修复 AI 常见的格式违规：标题符号、分割线、加粗斜体、滥用的反引号、超限的加粗"""
+    out = re.sub(r"^[ \t]{0,3}#{1,6}[ \t]+", "", text, flags=re.MULTILINE)
+    out = re.sub(r"^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$", "", out, flags=re.MULTILINE)
+    out = re.sub(r"\*\*\*([^*\n]+?)\*\*\*", r"**\1**", out)
+    out = re.sub(
+        r"`([^`\n]{1,40})`",
+        lambda m: m.group(0) if re.search(r"[(){}=;<>/\\]", m.group(1)) else m.group(1),
+        out,
+    )
+    out = re.sub(r"\n{3,}", "\n\n", out)
+
+    bolds = list(_BOLD_RE.finditer(out))
+    if len(bolds) > MAX_BOLD_PER_CHAPTER:
+        order = sorted(range(len(bolds)), key=lambda i: (len(bolds[i].group(1)), i))
+        keep = set(order[:MAX_BOLD_PER_CHAPTER])
+        counter = {"i": -1}
+
+        def repl(m: re.Match) -> str:
+            counter["i"] += 1
+            return m.group(0) if counter["i"] in keep else m.group(1)
+
+        out = _BOLD_RE.sub(repl, out)
+    return out.strip()
+
+
+def clean_chapter_summary(raw: str) -> str:
+    """CLI 用：拆旁路 + 清理，返回可直接写入输出的正文"""
+    text, _ = split_chapter_meta(raw)
+    return sanitize_summary(text)

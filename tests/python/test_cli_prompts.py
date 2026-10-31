@@ -56,9 +56,9 @@ class TestYamlPrompts:
         assert data["connectionAnalysis"]
         assert data["overallSummary"]
 
-    def test_v1_request_falls_back_to_v2(self):
-        """v1 模板已删除：请 v1 时应告警并返回 v2 内容，而不是抛错"""
-        assert load_yaml_prompts("v1") == load_yaml_prompts("v2")
+    def test_v1_request_falls_back_to_default(self):
+        """v1 模板已删除：请 v1 时应告警并返回默认版本（v3）内容，而不是抛错"""
+        assert load_yaml_prompts("v1") == load_yaml_prompts("v3")
 
     def test_v2_bom_is_stripped(self):
         assert "chapterSummary" in load_yaml_prompts("v2")
@@ -68,7 +68,7 @@ class TestYamlPrompts:
             load_yaml_prompts("v2", str(tmp_path))
 
     def test_prompts_dir_override(self, tmp_path):
-        (tmp_path / "v2-prompts.yaml").write_text(
+        (tmp_path / "v3-prompts.yaml").write_text(
             "chapterSummary:\n  fiction: F\n  nonFiction: N\nconnectionAnalysis: C\noverallSummary: O\n",
             encoding="utf-8")
         templates = PromptTemplates(prompt_config=V1, prompts_dir=str(tmp_path))
@@ -113,7 +113,7 @@ class TestPromptAssembly:
         assert "{{chapterSummaries}}" not in prompt
 
     def test_connections_prompt_appends_without_placeholder(self, tmp_path):
-        (tmp_path / "v2-prompts.yaml").write_text("connectionAnalysis: 分析\n", encoding="utf-8")
+        (tmp_path / "v3-prompts.yaml").write_text("connectionAnalysis: 分析\n", encoding="utf-8")
         prompt = PromptTemplates(prompt_config=V1, prompts_dir=str(tmp_path)).build_connections_prompt([{"index": 1}])
         assert prompt.startswith("分析\n\n已处理的章节列表:\n")
 
@@ -121,7 +121,7 @@ class TestPromptAssembly:
         items = [{"index": 1, "title": "一", "summary": "s"}]
         prompt = PromptTemplates().build_overall_prompt("书名X", items, "关联Y")
         assert "《书名X》" in prompt and "关联Y" in prompt and '"summary":"s"' in prompt
-        (tmp_path / "v2-prompts.yaml").write_text("overallSummary: 总结\n", encoding="utf-8")
+        (tmp_path / "v3-prompts.yaml").write_text("overallSummary: 总结\n", encoding="utf-8")
         prompt = PromptTemplates(prompt_config=V1, prompts_dir=str(tmp_path)).build_overall_prompt("书名X", items, "关联Y")
         assert prompt.startswith("总结\n\n书名: 书名X\n\n已处理的章节列表:\n")
         assert prompt.endswith("章节关联分析:\n关联Y")

@@ -18,6 +18,15 @@ import { flattenMindMapToText } from '@/utils/mindMapText'
 import { RESULT_PREFIX, failedText, isFailedText, isPlaceholderText, isUsableText } from '@/utils/resultStatus'
 import { createAbortError, isAbortError } from '@/utils/runGuard'
 import { logger } from '@/lib/logger'
+import {
+  buildEntityTable,
+  checkSummaryQuality,
+  joinChapterMeta,
+  sanitizeSummary,
+  splitChapterMeta,
+  type ChapterMeta,
+  type QualityIssue,
+} from '@/services/prompts/chapterMeta'
 
 export interface ChapterInput {
   id: string
@@ -152,6 +161,34 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
   const fromCacheFlags = new Array<boolean>(total).fill(false)
   input.onPhase?.('chapters', 0)
 
+  /** 程序化清理 + 质量判定；过短/带问候语时只做一次带说明的定向重写，仍不达标则保留并标 warn */
+  const summarizeWithQualityGate = async (
+    title: string,
+    content: string
+  ): Promise<{ summary: string; meta: ChapterMeta | null; warn: boolean }> => {
+    const run = async (hint?: string) => {
+      const raw = await ai.summarizeChapter(title, content, input.bookType, lang, input.customPrompt, hint ? { ...opts, rewriteHint: hint } : opts)
+      const split = splitChapterMeta(raw)
+      if (split.metaError) logger.warn(`[pipeline] 「${title}」${split.metaError}`)
+      const summary = isUsableText(split.text) ? sanitizeSummary(split.text) : split.text
+      const issues = isUsableText(summary)
+        ? checkSummaryQuality(summary, content.length, { expectMeta: !input.customPrompt, hasMeta: !!split.meta })
+        : []
+      return { summary, meta: split.meta, issues }
+    }
+    const blocking = (issues: QualityIssue[]) => issues.filter((i) => i !== 'noMeta')
+    let cur = await run()
+    if (blocking(cur.issues).length > 0) {
+      const hint = blocking(cur.issues)
+        .map((i) => (i === 'tooShort' ? '正文字数不足，须按要求写足篇幅并覆盖本章全部论点' : '开头出现了问候语或说明性文字，必须直接从正文开始'))
+        .join('；')
+      throwIfAborted()
+      const retry = await run(hint)
+      if (blocking(retry.issues).length <= blocking(cur.issues).length && retry.summary.length >= cur.summary.length * 0.8) cur = retry
+    }
+    return { summary: cur.summary, meta: cur.meta, warn: blocking(cur.issues).length > 0 }
+  }
+
   const processChapter = async (chapter: ChapterInput, index: number): Promise<Chapter> => {
     throwIfAborted()
     input.onChapterStart?.(chapter, orderedDone, total)
@@ -159,23 +196,24 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
     const hit = cache ? await safe(() => cache.getChapter(kind, chapter)) : null
     throwIfAborted()
     const base = { id: chapter.id, title: chapter.title, content: chapter.content }
-    if (kind === 'summary' ? isUsableText(hit as string) : isMindMap(hit)) {
+    const hitSplit = kind === 'summary' && typeof hit === 'string' ? splitChapterMeta(hit) : null
+    if (kind === 'summary' ? isUsableText(hitSplit?.text) : isMindMap(hit)) {
       cached++
       fromCacheFlags[index] = true
       return kind === 'summary'
-        ? { ...base, summary: hit as string, processed: true }
+        ? { ...base, summary: hitSplit!.text, ...(hitSplit!.meta ? { meta: hitSplit!.meta } : {}), processed: true }
         : { ...base, mindMap: hit as MindElixirData, processed: true }
     }
     try {
       const content = prepareChapterInput(chapter.content)
       let result: Chapter
       if (kind === 'summary') {
-        const summary = await ai.summarizeChapter(
-          chapter.title, content, input.bookType, lang, input.customPrompt, opts
-        )
+        const fin = await summarizeWithQualityGate(chapter.title, content)
         throwIfAborted()
-        result = { ...base, summary, processed: true }
-        if (isUsableText(summary) && cache) await safe(() => cache.setChapter(kind, chapter, summary))
+        result = { ...base, summary: fin.summary, ...(fin.meta ? { meta: fin.meta } : {}), ...(fin.warn ? { quality: 'warn' as const } : {}), processed: true }
+        if (isUsableText(fin.summary) && cache) {
+          await safe(() => cache.setChapter(kind, chapter, joinChapterMeta(fin.summary, fin.meta)))
+        }
       } else {
         const mindMap = await ai.generateChapterMindMap(chapter.title, content, lang, opts, input.bookType)
         throwIfAborted()
@@ -243,6 +281,8 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
 
   if (mode === 'summary') {
     const usable = usableSummaryChapters(chapters)
+    const entityTable = buildEntityTable(chapters.map((c) => c.meta))
+    const bookOpts: AICallOptions = entityTable ? { ...opts, entityTable } : opts
     result.stats.usable = usable.length
     result.charts = null
     result.chartsError = null
@@ -253,7 +293,7 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
       input.onPhase?.('connections', 85)
       result.connections = await bookStep(
         'connections', chapterInput,
-        () => ai.analyzeConnections(usable, lang, opts),
+        () => ai.analyzeConnections(usable, lang, bookOpts),
         usableStr,
         (err) => {
           warnings.add('connections')
@@ -265,7 +305,7 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
       input.onPhase?.('overall', 90)
       result.overall = await bookStep(
         'overall_summary', `${chapterInput}\n${connections}`,
-        () => ai.generateOverallSummary(input.bookTitle, usable, connections, lang, opts),
+        () => ai.generateOverallSummary(input.bookTitle, usable, connections, lang, bookOpts),
         usableStr,
         (err) => {
           warnings.add('overall')
@@ -278,7 +318,7 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
         input.onPhase?.('charts', 96)
         result.charts = await bookStep<BookCharts | null>(
           'key_charts', `${chapterInput}\n${connections}\n${overall}`,
-          () => ai.generateKeyCharts(input.bookTitle, usable, connections, overall, lang, opts),
+          () => ai.generateKeyCharts(input.bookTitle, usable, connections, overall, lang, bookOpts),
           (v) => !!v && typeof v === 'object',
           (err) => {
             warnings.add('charts')

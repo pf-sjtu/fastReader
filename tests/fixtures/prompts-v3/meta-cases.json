@@ -1,0 +1,42 @@
+{
+  "split": [
+    {
+      "name": "标准：正文 + 标记 + JSON",
+      "raw": "第一段。\n\n第二段。\n\n<!--juhua:meta-->\n{\"oneLine\":\"一句话\",\"takeaways\":[\"甲\",\"乙\",\"丙\"],\"entities\":[{\"name\":\"KKR\",\"type\":\"机构\",\"aliases\":[\"Kohlberg Kravis Roberts\"],\"role\":\"收购方\"}],\"terms\":[\"杠杆收购\"]}",
+      "text": "第一段。\n\n第二段。",
+      "meta": {
+        "oneLine": "一句话",
+        "takeaways": ["甲", "乙", "丙"],
+        "entities": [{ "name": "KKR", "type": "机构", "aliases": ["Kohlberg Kravis Roberts"], "role": "收购方" }],
+        "terms": ["杠杆收购"]
+      }
+    },
+    {
+      "name": "容忍标记空白/大小写与代码围栏",
+      "raw": "正文\n<!-- JuHua:Meta -->\n```json\n{\"oneLine\":\"x\",\"takeaways\":[],\"entities\":[],\"terms\":[\"t\"]}\n```",
+      "text": "正文",
+      "meta": { "oneLine": "x", "takeaways": [], "entities": [], "terms": ["t"] }
+    },
+    { "name": "没有标记：原样返回", "raw": "只有正文。", "text": "只有正文。", "meta": null },
+    { "name": "JSON 损坏：正文保留，meta 为空", "raw": "正文\n<!--juhua:meta-->\n{oneLine: 坏了", "text": "正文", "meta": null },
+    { "name": "空对象：视为没有旁路", "raw": "正文\n<!--juhua:meta-->\n{}", "text": "正文", "meta": null },
+    {
+      "name": "字段类型不对被丢弃，不抛错",
+      "raw": "正文\n<!--juhua:meta-->\n{\"oneLine\":\"ok\",\"takeaways\":\"不是数组\",\"entities\":[{\"name\":\"\"},{\"name\":\"A\",\"aliases\":[1,\"a\"]},5],\"terms\":null}",
+      "text": "正文",
+      "meta": { "oneLine": "ok", "takeaways": [], "entities": [{ "name": "A", "aliases": ["a"] }], "terms": [] }
+    }
+  ],
+  "sanitize": [
+    { "name": "去掉标题符号", "input": "# 标题\n正文", "output": "标题\n正文" },
+    { "name": "去掉分割线并压缩空行", "input": "甲\n\n---\n\n\n乙", "output": "甲\n\n乙" },
+    { "name": "加粗斜体降为加粗", "input": "这是***洞察***。", "output": "这是**洞察**。" },
+    { "name": "专有名词反引号去掉", "input": "`KKR` 出价", "output": "KKR 出价" },
+    { "name": "真代码的反引号保留", "input": "用 `a=b` 赋值", "output": "用 `a=b` 赋值" },
+    {
+      "name": "加粗超过 6 处：保留最短的 6 处",
+      "input": "**一二三四五六七**。**一二三四五六**。**一二三四五**。**一二三四**。**一二三**。**一二**。**一**。**一二三四五六七八**。",
+      "output": "一二三四五六七。**一二三四五六**。**一二三四五**。**一二三四**。**一二三**。**一二**。**一**。一二三四五六七八。"
+    }
+  ]
+}

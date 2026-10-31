@@ -17,7 +17,7 @@ import {
   type LegacyAIConfigManager
 } from '../stores/aiMigration'
 import { diffPromptOverrides } from '../services/prompts/overrides'
-import { DEFAULT_PROMPT_CONFIG } from '../services/prompts/templates'
+import { LEGACY_V2_PROMPT_CONFIG } from '../services/prompts/templates'
 import type { ProviderModel } from '../types/ai'
 
 /** 导出/导入的配置版本：1.0.0 = 旧的扁平模型列表；2.0.0 = 服务商化 */
@@ -222,7 +222,7 @@ export class ConfigExportService {
       | undefined
     const prompts = diffPromptOverrides(
       sourcePrompts as Parameters<typeof diffPromptOverrides>[0],
-      DEFAULT_PROMPT_CONFIG
+      LEGACY_V2_PROMPT_CONFIG
     )
     if (requestedVersion !== 'v2' && versionConfig?.[requestedVersion]) {
       notes.push(`旧配置声明的提示词版本为 ${requestedVersion}，已按 v2 处理（v1 已废弃）`)

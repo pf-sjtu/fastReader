@@ -34,6 +34,10 @@ export interface AICallOptions {
   signal?: AbortSignal
   /** 输出因长度上限被截断时回调（AIService 返回字符串，无法挂字段） */
   onTruncated?: (info: { finishReason?: string }) => void
+  /** 章节总结重写：上一次输出的问题说明，追加到提示词末尾（只用于定向重写，最多一次） */
+  rewriteHint?: string
+  /** 全书实体表（各章旁路合并）：书级步骤要求模型沿用其中的规范名与别名 */
+  entityTable?: string
 }
 
 /** provider 返回：在通用响应上补充截断标记 */

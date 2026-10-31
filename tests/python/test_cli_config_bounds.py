@@ -148,7 +148,7 @@ processing:
     def test_defaults_aligned_with_frontend(self, tmp_path):
         config = self.single(tmp_path)
         assert config.batch.concurrency == 3
-        assert config.prompts.currentVersion == "v2"
+        assert config.prompts.currentVersion == "v3"
         assert config.advanced.requestTimeout == 120
 
     def test_advanced_fields(self, tmp_path):
