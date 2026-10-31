@@ -203,3 +203,47 @@ export function forceLayoutOptions(force: number) {
     packingFactor: packing,
   }
 }
+
+export interface LayoutPoint {
+  x: number
+  y: number
+  /** 节点半径 px */
+  r: number
+}
+
+/** 每个节点在画布上"应占"的单元边长：随力强度 0–100 从 110px 到 230px */
+export function cellSide(force: number): number {
+  return 110 + Math.min(100, Math.max(0, force)) * 1.2
+}
+
+/**
+ * 布局后的等比压缩系数 ∈ (0,1]。
+ * fcose 在小图上也会把节点撑到节点总面积的数十倍（实测 22 个 ~75px 节点撑到 2400×2500），
+ * 导致画布里只能看到几个节点、fit 之后标签又小到读不出。
+ * 这里按「n × 单元面积」估目标面积，并保证任意两节点中心距 ≥ (ri+rj)×1.25，压缩不会让节点重叠。
+ */
+export function compactScale(points: readonly LayoutPoint[], force: number): number {
+  const n = points.length
+  if (n < 2) return 1
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const p of points) {
+    minX = Math.min(minX, p.x)
+    maxX = Math.max(maxX, p.x)
+    minY = Math.min(minY, p.y)
+    maxY = Math.max(maxY, p.y)
+  }
+  const area = Math.max(maxX - minX, 1) * Math.max(maxY - minY, 1)
+  const side = cellSide(force)
+  let s = Math.min(1, Math.sqrt((n * side * side) / area))
+
+  // 防重叠下限：压缩后最近的一对仍要留出间隙
+  let floor = 0
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const d = Math.hypot(points[i].x - points[j].x, points[i].y - points[j].y)
+      if (d > 0) floor = Math.max(floor, ((points[i].r + points[j].r) * 1.25) / d)
+    }
+  }
+  s = Math.max(s, Math.min(1, floor))
+  return s
+}

@@ -7,8 +7,13 @@ interface UseChapterScrollSpyOptions {
   enabled: boolean
   /** 章节 DOM id 前缀，最终 id = `${idPrefix}${chapterId}` */
   idPrefix?: string
-  /** 滚动容器选择器 */
+  /** 滚动容器选择器（未传 container 时使用） */
   containerSelector?: string
+  /**
+   * 显式滚动容器（工作台正文栏）。传 null 表示元素尚未挂载，暂不绑定；
+   * 不传（undefined）则回退到 containerSelector。
+   */
+  container?: HTMLElement | null
   /** 当前章节变化回调 */
   onChapterChange: (chapterId: string) => void
   /**
@@ -67,6 +72,7 @@ export function useChapterScrollSpy({
   enabled,
   idPrefix = 'chapter-summary-',
   containerSelector = '.scroll-container',
+  container: explicitContainer,
   onChapterChange,
   lockMs = 900,
 }: UseChapterScrollSpyOptions) {
@@ -88,7 +94,10 @@ export function useChapterScrollSpy({
   useEffect(() => {
     if (!enabled || chapterIds.length === 0) return
 
-    const container = document.querySelector(containerSelector) as HTMLElement | null
+    const container =
+      explicitContainer === undefined
+        ? (document.querySelector(containerSelector) as HTMLElement | null)
+        : explicitContainer
     if (!container) return
 
     let raf = 0
@@ -131,7 +140,7 @@ export function useChapterScrollSpy({
     }
     // chapterIdsKey 代替 chapterIds 引用，避免无意义重绑
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, chapterIdsKey, idPrefix, containerSelector, lockMs])
+  }, [enabled, chapterIdsKey, idPrefix, containerSelector, explicitContainer, lockMs])
 
   return { lock }
 }

@@ -150,6 +150,7 @@
       "entityGraphHint": "Scroll to zoom · drag canvas/nodes · click entity · force slider (bottom-right, remembered)",
       "forceStrength": "Force",
       "relayout": "Relayout",
+      "fitView": "Fit to view",
       "timelineHint": "Vertical axis = time/order, horizontal = entities; click a block for details",
       "timelineTime": "Time",
       "entityType": "Type",

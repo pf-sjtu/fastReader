@@ -1,18 +1,11 @@
 import { toast } from 'sonner'
 import type { MindElixirData, MindElixirInstance } from 'mind-elixir'
+import { scrollContainerToTop } from './scrollTo'
 
 /**
- * 滚动到页面顶部
+ * 滚动到顶部（工作台登记的正文栏，或旧布局的 .scroll-container）
  */
-export const scrollToTop = () => {
-  const scrollContainer = document.querySelector('.scroll-container')
-  if (scrollContainer) {
-    scrollContainer.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    })
-  }
-}
+export const scrollToTop = () => scrollContainerToTop()
 
 /**
  * 在 MindElixir Desktop 中打开思维导图（已禁用）

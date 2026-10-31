@@ -6,16 +6,16 @@
 ## 1. 实体配色与索引（纯函数）
 - [x] 1.1 `index.css` 新增 `--entity-1..10`（light/dark，oklch）（对比度校验见阶段 8 走查）
 - [x] 1.2 `charts/linking/entityColors.ts`：合并节点与时间线实体、分配颜色与形状
-- [x] 1.3 `charts/linking/entityIndex.ts`：名称变体、单一正则、entityToChapters/chapterToEntities、matchChapterHint
+- [x] 1.3 `charts/linking/entityIndex.ts`：名称变体、首字符分桶扫描、entityToChapters/chapterToEntities、matchChapterHint
 - [x] 1.4 `charts/linking/remarkEntityMark.ts`
 - [x] 1.5 `charts/theme.ts` palette 改读 token
-- [x] 1.6 单测（含 300 章 × 50 实体 <50ms）
+- [x] 1.6 单测（含 300 章 × 50 实体性能用例）
 
 ## 2. 滚动 ref 化与图谱修复
-- [ ] 2.1 `useChapterScrollSpy` 增加 container 参数；`utils/scrollTo.ts`
-- [ ] 2.2 `stores/readingFocus.ts`
-- [ ] 2.3 `ChartPluginProps` 扩展（可选字段，向后兼容）
-- [ ] 2.4 图谱 0→有尺寸时 fit；"适应画布"按钮
+- [x] 2.1 `useChapterScrollSpy` 增加 container 参数；`utils/scrollTo.ts`
+- [x] 2.2 `stores/readingFocus.ts`
+- [x] 2.3 `ChartPluginProps` 扩展（可选字段，向后兼容）
+- [x] 2.4 图谱 0→有尺寸时 fit；"适应画布"按钮；布局后按每节点面积等比压紧（防重叠下限）并放宽 minZoom
 
 ## 3. 阅读工作台
 - [ ] 3.1 `ResizeHandle` + `useResizableWidth`

@@ -3,6 +3,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChapterData } from '@/services/epubProcessor'
+import { scrollToChapterWithRetry } from '@/utils/scrollTo'
 
 export interface RightPanelContent {
   type: 'chapter' | 'content'
@@ -25,24 +26,6 @@ const toggleInSet = (prev: Set<string>, id: string, on: boolean) => {
   if (on) next.add(id)
   else next.delete(id)
   return next
-}
-
-/** 滚动到章节总结（滚动容器为 .scroll-container，非 window）；折叠动画未完成时重试 */
-function scrollToChapterSummary(chapterId: string, attempt = 1) {
-  setTimeout(() => {
-    const element = document.getElementById(`chapter-summary-${chapterId}`)
-    if (!element) return
-    const container = document.querySelector('.scroll-container') as HTMLElement | null
-    if (container) {
-      const containerRect = container.getBoundingClientRect()
-      const elRect = element.getBoundingClientRect()
-      const top = container.scrollTop + (elRect.top - containerRect.top) - 80
-      container.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
-    } else {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-    if (attempt < 3) scrollToChapterSummary(chapterId, attempt + 1)
-  }, attempt * 200)
 }
 
 export function useReaderPanel(extractedChapters: ChapterData[] | null) {
@@ -105,7 +88,7 @@ export function useReaderPanel(extractedChapters: ChapterData[] | null) {
   const handleChapterSummaryNavigation = useCallback((chapterId: string) => {
     setCurrentViewingChapterSummary(chapterId)
     setExpandedChapters(new Set([chapterId]))
-    scrollToChapterSummary(chapterId)
+    scrollToChapterWithRetry(chapterId)
   }, [])
 
   // 章节导航（用于思维导图）

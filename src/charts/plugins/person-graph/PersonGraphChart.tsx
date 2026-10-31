@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { Core, EventObject } from 'cytoscape'
 import type { BookCharts, EntityGraphNode } from '../../types'
 import { getEntityGraph } from '../../types'
-import { toCytoscapeElements, forceLayoutOptions } from './toCytoscape'
+import { toCytoscapeElements, forceLayoutOptions, compactScale } from './toCytoscape'
 import { readChartTheme, subscribeThemeChange, type ChartThemeColors } from '../../theme'
 import {
   Sheet,
@@ -15,11 +15,13 @@ import {
 import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { RefreshCw } from 'lucide-react'
+import { Maximize2, RefreshCw } from 'lucide-react'
 
 interface Props {
   charts: BookCharts
 }
+
+const FIT_PADDING = 40
 
 interface SelectedNode {
   node: EntityGraphNode
@@ -90,7 +92,7 @@ function buildStyles(theme: ChartThemeColors): any[] {
         'border-width': 2,
         'border-color': theme.border,
         'border-opacity': 1,
-        'min-zoomed-font-size': 6,
+        'min-zoomed-font-size': 4,
       },
     },
     {
@@ -156,6 +158,44 @@ export function PersonGraphChart({ charts }: Props) {
   const [force, setForce] = useState(readStoredForce)
   const forceRef = useRef(force)
   forceRef.current = force
+  /** 用户手动缩放/平移过之后不再自动 fit，避免和用户抢画布 */
+  const userMovedRef = useRef(false)
+
+  /** 容器有尺寸时重算画布并（若用户没动过视角）把全部节点收进画布 */
+  const fitIfAllowed = useCallback((force = false) => {
+    const cy = cyRef.current
+    const el = containerRef.current
+    if (!cy || !el || el.clientWidth <= 0 || el.clientHeight <= 0) return
+    cy.resize()
+    if (force || !userMovedRef.current) {
+      userMovedRef.current = false
+      cy.fit(undefined, FIT_PADDING)
+    }
+  }, [])
+
+  /** 布局结束：把过度撑开的布局等比压紧（不重叠），再 fit */
+  const compactAndFit = useCallback(() => {
+    const cy = cyRef.current
+    if (!cy) return
+    const nodes = cy.nodes()
+    const pts = nodes.map((n) => ({ x: n.position('x'), y: n.position('y'), r: n.width() / 2 }))
+    const s = compactScale(pts, forceRef.current)
+    if (s >= 0.97 || pts.length < 2) {
+      fitIfAllowed()
+      return
+    }
+    const mx = pts.reduce((a, p) => a + p.x, 0) / pts.length
+    const my = pts.reduce((a, p) => a + p.y, 0) / pts.length
+    nodes.forEach((n, i) => {
+      n.animate(
+        { position: { x: mx + (pts[i].x - mx) * s, y: my + (pts[i].y - my) * s } },
+        { duration: 280, easing: 'ease-out' }
+      )
+    })
+    window.setTimeout(() => {
+      if (cyRef.current === cy && !cy.destroyed()) fitIfAllowed()
+    }, 320)
+  }, [fitIfAllowed])
 
   const updateForce = useCallback((value: number) => {
     const v = Math.min(100, Math.max(0, Math.round(value)))
@@ -196,20 +236,26 @@ export function PersonGraphChart({ charts }: Props) {
     return subscribeThemeChange(() => setThemeTick((n) => n + 1))
   }, [])
 
-  // Tab 切回时容器从 display:none 恢复，需 resize 否则画布空白/错位
+  // 页签切回（display:none → 可见）或对照栏被拖宽时：resize + fit。
+  // 根因：fcose 在 0×0 的隐藏容器里跑完布局并 fit，之后容器变大只 resize 不 fit，节点就溢出画布。
+  // rAF 节流：拖拽分隔条时每帧最多处理一次。
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+    let raf = 0
     const ro = new ResizeObserver(() => {
-      const cy = cyRef.current
-      if (!cy) return
-      if (el.clientWidth > 0 && el.clientHeight > 0) {
-        cy.resize()
-      }
+      if (raf) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        fitIfAllowed()
+      })
     })
     ro.observe(el)
-    return () => ro.disconnect()
-  }, [graph])
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      ro.disconnect()
+    }
+  }, [graph, fitIfAllowed])
 
   useEffect(() => {
     const cy = cyRef.current
@@ -254,7 +300,8 @@ export function PersonGraphChart({ charts }: Props) {
           elements,
           style: buildStyles(theme),
           layout: { name: 'null' },
-          minZoom: 0.25,
+          // 下限要低于"全图 fit"所需缩放，否则 fit 被夹住、节点仍在画布外
+          minZoom: 0.1,
           maxZoom: 3.5,
           // 0.25 默认 → 曾 ×3=0.75 → 再 ×2 ≈ 1.5
           wheelSensitivity: 1.5,
@@ -264,6 +311,13 @@ export function PersonGraphChart({ charts }: Props) {
         })
 
         cyRef.current = cy
+        userMovedRef.current = false
+        // userzoom / userpan 只在用户操作时触发（程序化 fit 不会），据此区分"用户动过视角"
+        cy.on('userzoom userpan', () => {
+          userMovedRef.current = true
+        })
+        // 布局结束：压紧 + 对齐画布（此时容器可能已经变过尺寸）
+        cy.on('layoutstop', () => compactAndFit())
         // 初次：略随机种子 + 力导向散开
         runForceLayout(cy, forceRef.current, true)
 
@@ -328,7 +382,7 @@ export function PersonGraphChart({ charts }: Props) {
       if (cy) cy.destroy()
       cyRef.current = null
     }
-  }, [graph, elements, runForceLayout])
+  }, [graph, elements, runForceLayout, fitIfAllowed, compactAndFit])
 
   if (!graph || (graph.nodes?.length ?? 0) === 0) {
     return (
@@ -391,6 +445,16 @@ export function PersonGraphChart({ charts }: Props) {
           >
             <RefreshCw className="h-3 w-3 mr-1" />
             {t('results.charts.relayout')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs w-full"
+            onClick={() => fitIfAllowed(true)}
+          >
+            <Maximize2 className="h-3 w-3 mr-1" />
+            {t('results.charts.fitView')}
           </Button>
         </div>
       </div>

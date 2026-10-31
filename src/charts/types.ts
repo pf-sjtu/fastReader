@@ -82,8 +82,37 @@ export function getEntityGraph(charts: BookCharts): EntityGraph | undefined {
   return g
 }
 
+/** 阅读焦点：当前章与聚焦实体，由工作台计算后传给图表做高亮 */
+export interface ChartFocus {
+  chapterId?: string
+  /** 当前章出现的实体 id */
+  chapterEntityIds?: ReadonlySet<string>
+  /** 当前章对应的时间线事件 id */
+  chapterEventIds?: ReadonlySet<string>
+  focusedEntityId?: string | null
+}
+
+export interface ChartEntityStyle {
+  cssVar: string
+  shape: 'circle' | 'round-rect' | 'diamond'
+}
+
+/**
+ * 插件入参。除 charts 外全部可选且向后兼容：
+ * 旧插件只读 charts 即可；联动能力由工作台按需传入。
+ */
 export interface ChartPluginProps {
   charts: BookCharts
+  focus?: ChartFocus
+  /** 所在页签是否可见；隐藏时不做 fit / 高亮动画 */
+  active?: boolean
+  onEntitySelect?: (id: string | null) => void
+  onChapterJump?: (chapterId: string) => void
+  /** 实体出现在哪些章节（用于详情里的"出场章节"列表） */
+  resolveEntityChapters?: (id: string) => { chapterId: string; title: string; count: number }[]
+  /** 事件 → 章节（映射不上为 null，UI 置灰） */
+  resolveEventChapter?: (eventId: string) => string | null
+  styleOf?: (id: string) => ChartEntityStyle | undefined
 }
 
 export interface ChartPlugin {
