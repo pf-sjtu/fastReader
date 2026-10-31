@@ -6,6 +6,8 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useViewportWidth } from '@/hooks/useViewportWidth'
+import { containerWidth, fitColumns, isCompactWidth } from './columns'
 import { useShallow } from 'zustand/react/shallow'
 import { ChevronsLeft, ChevronUp, Layers, List, Minimize2, PanelRightOpen, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -102,6 +104,10 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     onRegenerateKeyCharts,
   } = props
   const { t } = useTranslation()
+  // 窄于约 1000px 的窗口（小平板、缩小的桌面窗口）硬挤三栏会把正文压成窄条：改用紧凑布局（抽屉）
+  const viewport = useViewportWidth()
+  const narrow = !isMobile && viewport !== null && isCompactWidth(viewport)
+  const compact = isMobile || narrow
 
   const {
     companionTab,
@@ -202,7 +208,9 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     if (!sourceKey || isMobile) return
     setCompanionTab('source')
     setCompanionOpen(true)
-  }, [sourceKey, isMobile, setCompanionTab, setCompanionOpen])
+    // 紧凑布局里对照栏是抽屉，不打开的话点「读原文」没有任何反馈
+    if (narrow) setDockSheetOpen(true)
+  }, [sourceKey, isMobile, narrow, setCompanionTab, setCompanionOpen])
 
   // 快捷键 \：专注模式（只留正文）
   useEffect(() => {
@@ -345,7 +353,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     />
   )
 
-  if (isMobile) {
+  if (compact) {
     return (
       <div className="flex h-full min-h-0 flex-col gap-2">
         <div className="flex shrink-0 items-center gap-2">
@@ -387,6 +395,15 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     )
   }
 
+  // 三栏：按容器宽度夹紧，保证正文列不被两侧挤没（偏好宽度不变，窗口变宽自动恢复）
+  const fitted = fitColumns({
+    container: containerWidth(viewport ?? 1440),
+    navWidth,
+    navCollapsed,
+    companionWidth,
+    companionOpen,
+  })
+
   return (
     <div className="flex h-full min-h-0 w-full">
       {!focusMode && (
@@ -394,7 +411,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
           {/* 目录：可拖宽、可折叠成竖向进度条。折叠时目录仍保持挂载（只是隐藏），展开不丢滚动位置 */}
           <aside
             className={`hidden shrink-0 md:flex md:flex-col ${navCollapsed ? 'mr-3' : ''}`}
-            style={{ width: navCollapsed ? 14 : navWidth }}
+            style={{ width: navCollapsed ? 14 : fitted.nav }}
           >
             {navCollapsed && <NavRail chapters={chapters} current={viewingIndex} onExpand={() => setNavCollapsed(false)} />}
             <div className={navCollapsed ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}>
@@ -417,7 +434,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
           {!navCollapsed && (
             <ResizeHandle
               edge="right"
-              width={navWidth}
+              width={fitted.nav}
               min={NAV_MIN_WIDTH}
               max={NAV_MAX_WIDTH}
               defaultWidth={NAV_DEFAULT_WIDTH}
@@ -455,7 +472,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       {/* 对照栏：收起时保持挂载（只是隐藏），图谱不必重新布局 */}
       {!focusMode && companionOpen && (
         <ResizeHandle
-          width={companionWidth}
+          width={fitted.companion}
           min={COMPANION_MIN_WIDTH}
           max={COMPANION_MAX_WIDTH}
           defaultWidth={COMPANION_DEFAULT_WIDTH}
@@ -465,7 +482,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       )}
       <aside
         className={focusMode || !companionOpen ? 'hidden' : 'min-h-0 shrink-0 pl-3'}
-        style={{ width: companionWidth + 12 }}
+        style={{ width: fitted.companion + 12 }}
       >
         <CompanionDock
           tabs={tabs}
