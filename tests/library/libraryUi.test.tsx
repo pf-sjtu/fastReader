@@ -85,6 +85,26 @@ describe('LibraryView', () => {
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
+  it('扫描失败且没有任何缓存：显示失败原因与重试，而不是「还没有书」', () => {
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    useLibraryStore.setState({ index: emptyIndex(0), fresh: false, error: '获取目录内容失败: Invalid response: 403', refresh })
+    mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    const text = mounted.container.textContent ?? ''
+    expect(text).toContain('读取同步目录失败：获取目录内容失败: Invalid response: 403')
+    expect(text).not.toContain('还没有书')
+    expect(text).not.toContain('显示的是缓存内容') // 没有任何缓存可显示，不该这么说
+    refresh.mockClear()
+    click(Array.from(mounted.container.querySelectorAll('button')).find((b) => b.textContent?.trim() === '重试'))
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('目录确实是空的（无错误）：才显示「还没有书」', () => {
+    useLibraryStore.setState({ index: emptyIndex(0), fresh: true, error: null })
+    mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    expect(mounted.container.textContent).toContain('还没有书')
+    expect(mounted.container.textContent).not.toContain('读取同步目录失败')
+  })
+
   it('进入即触发刷新；展示全部书、状态角标、章数与进度条', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     expect(useLibraryStore.getState().refresh).toHaveBeenCalled()

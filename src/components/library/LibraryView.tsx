@@ -125,7 +125,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
         </Button>
       </header>
 
-      {(error || (!fresh && !refreshing && total > 0)) && (
+      {total > 0 && (error || (!fresh && !refreshing)) && (
         <p role="status" className="text-xs text-muted-foreground">
           {t('library.stale')}
           {error ? `（${error}）` : ''}
@@ -213,9 +213,20 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
           </div>
         ))
       ) : (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          {refreshing && total === 0 ? t('library.loading') : total === 0 ? t('library.empty') : t('library.noMatch')}
-        </p>
+        <div className="space-y-2 py-6 text-center text-sm text-muted-foreground">
+          {total === 0 && error && !refreshing ? (
+            <>
+              <p role="alert" className="text-destructive">
+                {t('library.scanFailed', { error })}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => void refresh()}>
+                {t('library.retry')}
+              </Button>
+            </>
+          ) : (
+            <p>{refreshing && total === 0 ? t('library.loading') : total === 0 ? t('library.empty') : t('library.noMatch')}</p>
+          )}
+        </div>
       )}
     </section>
   )

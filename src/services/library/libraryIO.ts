@@ -1,4 +1,5 @@
 /** 书库 IO 的生产实现：WebDAV（经 /api/dav 代理）+ IndexedDB 镜像 */
+import { listTree } from './listTree'
 import { createStore, del, get, set } from 'idb-keyval'
 import { webdavService } from '@/services/webdavService'
 import { cloudCacheService } from '@/services/cloudCacheService'
@@ -42,9 +43,8 @@ export function createLibraryIO(): LibraryIO | null {
       if (!r.success) throw new Error(r.error ?? '写入书库索引失败')
     },
     listFiles: async () => {
-      const r = await webdavService.getDirectoryContents(syncPath, true)
-      if (!r.success || !r.data) throw new Error(r.error ?? '读取目录失败')
-      return r.data
+      const all = await listTree((dir, deep) => webdavService.getDirectoryContents(dir, deep), syncPath)
+      return all
         .filter((f) => f.type === 'file')
         .map((f) => ({ path: f.filename, basename: f.basename, size: f.size, mtime: f.lastmod, etag: f.etag }))
     },
