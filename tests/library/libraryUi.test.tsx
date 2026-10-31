@@ -4,8 +4,16 @@ import { act } from 'react'
 import { mount, click, typeInto, flush } from '../uiTestUtils'
 
 const downloadFileAsFile = vi.fn()
+const readyListeners = vi.hoisted(() => new Set<() => void>())
 vi.mock('@/services/webdavService', () => ({
-  webdavService: { downloadFileAsFile: (...a: unknown[]) => downloadFileAsFile(...a), isInitialized: () => false },
+  webdavService: {
+    downloadFileAsFile: (...a: unknown[]) => downloadFileAsFile(...a),
+    isInitialized: () => false,
+    onInitialized: (fn: () => void) => {
+      readyListeners.add(fn)
+      return () => readyListeners.delete(fn)
+    },
+  },
 }))
 const toastError = vi.fn()
 vi.mock('sonner', () => ({ toast: { error: (...a: unknown[]) => toastError(...a), success: vi.fn() } }))
@@ -66,6 +74,16 @@ describe('LibraryView', () => {
     })
   })
   const cards = () => Array.from(mounted!.container.querySelectorAll<HTMLButtonElement>('button.group'))
+
+  it('进入时 WebDAV 还没连上（unavailable）：不显示；连上后自动补刷一次', () => {
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    useLibraryStore.setState({ unavailable: true, refresh })
+    mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    expect(mounted.container.innerHTML).toBe('')
+    refresh.mockClear()
+    act(() => readyListeners.forEach((fn) => fn()))
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
 
   it('进入即触发刷新；展示全部书、状态角标、章数与进度条', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)

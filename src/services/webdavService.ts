@@ -42,6 +42,7 @@ const errMsg = (error: unknown) => (error instanceof Error ? error.message : '�
 export class WebDAVService {
   private client: WebDAVClient | null = null
   private config: WebDAVConfig | null = null
+  private readyListeners = new Set<() => void>()
   /**
    * 串行化所有依赖 X-WebDAV-Path 的请求。
    * 代理模式用共享 client 的可变 header 传真实路径，并发 Promise.all 会互相覆盖导致错读/假 404。
@@ -175,10 +176,17 @@ export class WebDAVService {
         return testResult
       }
 
+      this.readyListeners.forEach((fn) => fn())
       return { success: true, data: true }
     } catch (error) {
       return { success: false, error: `WebDAV客户端初始化失败: ${errMsg(error)}` }
     }
+  }
+
+  /** 订阅「初始化成功」（自动连接 / 手动连接都会触发）；返回取消订阅函数 */
+  onInitialized(listener: () => void): () => void {
+    this.readyListeners.add(listener)
+    return () => this.readyListeners.delete(listener)
   }
 
   /** 测试WebDAV连接 */

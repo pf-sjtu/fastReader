@@ -8,6 +8,7 @@ import { continueReading, listEntries, type LibraryFilter, type LibrarySort } fr
 import { groupEntries, recommendBooks, type GroupBy } from '@/services/library/libraryOrganize'
 import { useLibraryStore } from '@/services/library/libraryStore'
 import type { LibraryEntry } from '@/services/library/types'
+import { webdavService } from '@/services/webdavService'
 import { BookCard } from './BookCard'
 import { groupLabel, reasonLabel } from './labels'
 
@@ -36,6 +37,12 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // 进来时 WebDAV 可能还在自动连接：连上之后补刷一次，否则 unavailable 会让书库永远不出现
+  useEffect(() => {
+    if (!unavailable) return
+    return webdavService.onInitialized(() => void refresh())
+  }, [unavailable, refresh])
 
   const entries = useMemo(() => listEntries(index, { query, filter, sort }), [index, query, filter, sort])
   const groups = useMemo(() => groupEntries(entries, group), [entries, group])
