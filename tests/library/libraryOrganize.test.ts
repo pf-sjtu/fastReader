@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { applyScan, emptyIndex, listEntries, patchEntry } from '@/services/library/libraryIndex'
-import { groupEntries, groupKeyOf, recommendBooks, seededRandom } from '@/services/library/libraryOrganize'
+import { groupEntries, groupKeyOf, limitGroups, recommendBooks, seededRandom } from '@/services/library/libraryOrganize'
 import type { LibraryIndex } from '@/services/library/types'
 
 const sum = (n: string) => `${n.replace(/\.[^/.]+$/, '')}-完整摘要.md`
@@ -77,6 +77,31 @@ describe('分类', () => {
 
   it('格式分组：固定顺序 epub → pdf → txt', () => {
     expect(groupEntries(listEntries(lib), 'format').map((g) => g.key)).toEqual(['epub', 'pdf', 'txt'])
+  })
+})
+
+describe('limitGroups（分页）', () => {
+  const mk = (n: number, prefix: string) => Array.from({ length: n }, (_, i) => ({ path: `/${prefix}${i}.epub` }) as never)
+  const groups = [
+    { key: 'a', entries: mk(5, 'a') },
+    { key: 'b', entries: mk(5, 'b') },
+    { key: 'c', entries: mk(5, 'c') },
+  ]
+
+  it('跨组累计截取；total 仍是该组全部数量；分不到书的组丢弃', () => {
+    const r = limitGroups(groups, 7)
+    expect(r.map((g) => [g.key, g.entries.length, g.total])).toEqual([['a', 5, 5], ['b', 2, 5]])
+  })
+
+  it('上限足够大：原样返回；上限 0/负数：空', () => {
+    expect(limitGroups(groups, 100).map((g) => g.entries.length)).toEqual([5, 5, 5])
+    expect(limitGroups(groups, 0)).toEqual([])
+    expect(limitGroups(groups, -3)).toEqual([])
+  })
+
+  it('不改动传入的分组', () => {
+    limitGroups(groups, 2)
+    expect(groups[0].entries).toHaveLength(5)
   })
 })
 

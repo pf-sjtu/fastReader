@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { continueReading, listEntries, type LibraryFilter, type LibrarySort } from '@/services/library/libraryIndex'
-import { groupEntries, recommendBooks, type GroupBy } from '@/services/library/libraryOrganize'
+import { groupEntries, limitGroups, recommendBooks, type GroupBy } from '@/services/library/libraryOrganize'
 import { useLibraryStore } from '@/services/library/libraryStore'
 import type { LibraryEntry } from '@/services/library/types'
 import { isFillable } from '@/services/library/libraryFill'
@@ -21,6 +21,9 @@ interface LibraryViewProps {
 
 const GRID = 'grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6'
 const RECOMMEND_COUNT = 6
+/** 首屏书数（6 列 × 4 行）与每次「显示更多」追加的数量；超出的不渲染，别把下面的上传区推到几屏之外 */
+const PAGE_FIRST = 24
+const PAGE_STEP = 48
 const SELECT_CLS = 'h-8 rounded-md border bg-background px-2 text-xs focus-visible:outline-2 focus-visible:outline-ring'
 
 export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps) {
@@ -47,6 +50,12 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
 
   const entries = useMemo(() => listEntries(index, { query, filter, sort }), [index, query, filter, sort])
   const groups = useMemo(() => groupEntries(entries, group), [entries, group])
+  // 显示上限：筛选/排序/分组/搜索一变就回到首屏数量
+  const resetKey = `${query}|${filter}|${sort}|${group}`
+  const [page, setPage] = useState({ key: resetKey, n: PAGE_FIRST })
+  const shownCount = page.key === resetKey ? page.n : PAGE_FIRST
+  const pagedGroups = useMemo(() => limitGroups(groups, shownCount), [groups, shownCount])
+  const hiddenCount = entries.length - pagedGroups.reduce((n, g) => n + g.entries.length, 0)
   const browsing = !query && filter === 'all'
   const resume = useMemo(() => (browsing ? continueReading(index) : []), [index, browsing])
   const total = Object.keys(index.entries).length
@@ -202,24 +211,33 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
       )}
 
       {entries.length > 0 ? (
-        groups.map((g) => (
+        <>
+        {pagedGroups.map((g) => (
           <div key={g.key} className="space-y-1.5">
             {/* 上面有「继续阅读 / 推荐」时，全量网格也要有自己的标题，否则读起来是同一排 */}
             {group === 'none' && browsing && (resume.length > 0 || recs.length > 0) && (
               <h3 className="border-b pb-1 text-xs font-medium text-muted-foreground">
                 {t('library.all')}
-                <span className="ml-1.5 font-normal">{g.entries.length}</span>
+                <span className="ml-1.5 font-normal">{g.total}</span>
               </h3>
             )}
             {group !== 'none' && (
               <h3 className="border-b pb-1 text-xs font-medium text-muted-foreground">
                 {groupLabel(t, g.key)}
-                <span className="ml-1.5 font-normal">{g.entries.length}</span>
+                <span className="ml-1.5 font-normal">{g.total}</span>
               </h3>
             )}
             <div className={GRID}>{g.entries.map((e) => card(e))}</div>
           </div>
-        ))
+        ))}
+        {hiddenCount > 0 && (
+          <div className="flex justify-center pt-1">
+            <Button variant="outline" size="sm" onClick={() => setPage({ key: resetKey, n: shownCount + PAGE_STEP })}>
+              {t('library.showMore', { count: hiddenCount })}
+            </Button>
+          </div>
+        )}
+        </>
       ) : (
         <div className="space-y-2 py-6 text-center text-sm text-muted-foreground">
           {total === 0 && error && !refreshing ? (

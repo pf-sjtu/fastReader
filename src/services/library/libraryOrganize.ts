@@ -53,6 +53,27 @@ export function groupEntries(entries: readonly LibraryEntry[], by: GroupBy): Boo
     })
 }
 
+/** 分页后的组：entries 是本页要渲染的，total 仍是该组全部数量 */
+export interface LimitedGroup extends BookGroup {
+  total: number
+}
+
+/**
+ * 按显示上限截取（跨组累计，按组顺序）：几百本书一次铺开会把页面下半部分推到几屏之外。
+ * 超出上限的书不渲染；一本都没分到的组丢弃。
+ */
+export function limitGroups(groups: readonly BookGroup[], limit: number): LimitedGroup[] {
+  let left = Math.max(0, limit)
+  const out: LimitedGroup[] = []
+  for (const g of groups) {
+    if (left <= 0) break
+    const take = g.entries.slice(0, left)
+    left -= take.length
+    out.push({ ...g, entries: take, total: g.entries.length })
+  }
+  return out
+}
+
 /* ---------------- 乱序推荐 ---------------- */
 
 export type RecommendReason = 'resume' | 'sameAuthor' | 'fresh' | 'retry' | 'revisit'

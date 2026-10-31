@@ -134,6 +134,34 @@ describe('LibraryView', () => {
     expect(mounted.container.textContent).not.toContain('显示的是缓存内容')
   })
 
+  it('书很多时分页：首屏 24 本，「显示更多」每次追加 48 本，改排序回到首屏', () => {
+    const files = Array.from({ length: 100 }, (_, i) => ({ path: `/s/书${String(i).padStart(3, '0')}.epub`, size: 1, mtime: 'm' }))
+    useLibraryStore.setState({ index: applyScan(emptyIndex(0), files, { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index })
+    mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    const gridCount = () => {
+      const grids = mounted!.container.querySelectorAll('.grid')
+      return grids[grids.length - 1].querySelectorAll('button.group').length
+    }
+    const more = () => Array.from(mounted!.container.querySelectorAll('button')).find((b) => b.textContent?.includes('显示更多'))
+    expect(gridCount()).toBe(24)
+    expect(more()?.textContent).toContain('还有 76 本')
+    expect(mounted.container.textContent).toContain('全部书籍100') // 标题数量是总数，不是本页数量
+
+    click(more())
+    expect(gridCount()).toBe(72)
+    expect(more()?.textContent).toContain('还有 28 本')
+    click(more())
+    expect(gridCount()).toBe(100)
+    expect(more()).toBeUndefined()
+
+    const sel = mounted.container.querySelector<HTMLSelectElement>('select[aria-label="排序"]')!
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, 'name')
+      sel.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(gridCount()).toBe(24) // 换了排序就回到首屏，不会一下渲染 100 张
+  })
+
   it('目录确实是空的（无错误）：才显示「还没有书」', () => {
     useLibraryStore.setState({ index: emptyIndex(0), fresh: true, error: null })
     mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)

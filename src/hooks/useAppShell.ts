@@ -1,6 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { webdavService } from '@/services/webdavService'
 import type { WebDAVConfig } from '@/stores/configStore'
 
@@ -17,9 +15,11 @@ export function useBackToTop() {
   return show
 }
 
-/** WebDAV 自动连接：配置一变就（重新）连接，而不是只在挂载后 3 秒试一次 */
+/**
+ * WebDAV 自动连接：配置一变就（重新）连接，而不是只在挂载后 3 秒试一次。
+ * 连上是预期状态，不弹提示（每次进站都弹还会压住书架）；失败由同步状态指示器体现。
+ */
 export function useWebDAVAutoConnect(webdavConfig: WebDAVConfig) {
-  const { t } = useTranslation()
   useEffect(() => {
     if (
       !webdavConfig.enabled ||
@@ -30,19 +30,6 @@ export function useWebDAVAutoConnect(webdavConfig: WebDAVConfig) {
     ) {
       return
     }
-
-    let cancelled = false
-    void (async () => {
-      try {
-        const initResult = await webdavService.initialize(webdavConfig)
-        if (!cancelled && initResult.success) toast.success(t('webdav.autoConnected'))
-      } catch (error) {
-        console.error('App: WebDAV 自动连接异常:', error)
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [webdavConfig, t])
+    webdavService.initialize(webdavConfig).catch((error) => console.error('App: WebDAV 自动连接异常:', error))
+  }, [webdavConfig])
 }
