@@ -11,6 +11,7 @@ export type CompanionTab =
   | 'timeline'
   | 'people'
   | 'overall'
+  | 'study'
   | 'ask'
   | 'quiz'
   | 'notes'

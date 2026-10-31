@@ -17,7 +17,7 @@
 | 书卡设计 | 书名·作者·章数在封面内部底部阴影层；EPUB 与体积不占位 | `BookCard.tsx`、`BookCover.tsx` |
 | 元数据与封面 | 用户触发补全（并发 2、可取消）；EPUB 自带 ZIP 读 OPF；真实封面 webp 懒加载（队列并发 2）；索引 gzip 单文件 | `bookMeta.ts`、`libraryFill.ts`、`coverLoader.ts`、`gzip.ts` |
 | 选章页 | token/费用预估（价格未知不估金额，不估耗时） | `services/runEstimate.ts` |
-| 学习功能（仅内核） | 速读包/自测/问书的提示词、zod 解析、`AIService` 方法、检索与引用提取 | `src/study/*`、`services/prompts/study.ts`、`aiService.ts` |
+| 学习功能 | 速读包/自测/问书：提示词、zod 解析、`AIService` 方法、检索与引用、store+持久化、三个页签与三档阅读深度 | `src/study/*`、`src/components/study/*`、`services/prompts/study.ts`、`aiService.ts` |
 
 ## 2. 验证命令（交接后先跑一遍）
 
@@ -34,13 +34,11 @@ pnpm dlx @fission-ai/openspec validate add-reader-workspace --strict
 
 ## 3. 未完成（按优先级）
 
-### 3.1 阶段 6 的界面与持久化（内核已就绪，只差接线）
-- **持久化**：学习包/自测结果存 IndexedDB（`idb-keyval`，仿 `libraryIO.ts` 的 store；键用 `fnv(书名|章节 id 列表|总结长度)`），再考虑 `{name}-学习包.json` 云同步（仿 `autoSyncService.syncChartsJson`）。
-- **生成入口**：仿 `src/hooks/useKeyCharts.ts` 的 `runKeyChartsGeneration`（`new AIService(...)`、`onTokenUsage`、`AbortController`、换书代数 `generationRef`）。三个方法已在 `AIService`：`generateStudyKit(bookTitle, chapters, lang, {signal,onBatch})`、`generateQuiz(bookTitle, chapters, count, lang)`、`askBook(bookTitle, overall, context, history, question, lang)`。
-- **对照栏「学习」页签**：在 `ReaderWorkspace.tsx` 的 `tabs`（`DockTab[]`）里加一项；子区块：速读 / 自测 / 问书。
-- **三档阅读深度**（一句话 / 要点 / 全文）：建议在工作台派生一份**仅用于显示**的 `chapters`（`summary` 替换为速读卡渲染的 Markdown），实体索引仍用原文；注意标注序号与 DOM 可能错位（`pickMark` 已做越界兜底）。
-- **问书**：用 `retrieveChapters(question, chapters, 4)` 取上下文，拼成 `【章节标题】总结…` 块；回答用 `extractCitations` 得到可跳转的章节 id → `navigateChapter`。**provider 层暂无流式接口**，先非流式。
-- 新增 i18n 一律用**静态 key**（`i18nCoverage` 测试禁止动态拼接）。
+### 3.1 阶段 6 的剩余项（主体已完成并接线）
+- 已完成：速读/自测/问书三个对照栏页签 + 正文顶部三档深度切换；学习数据存 IndexedDB（键 = 书名+章节总结长度的指纹，总结变了自动失效）；生成均手动触发、可取消、生成前显示用量预估；换书后旧结果丢弃。
+- **未做**：`{name}-学习包.json` 云同步（仿 `autoSyncService.syncChartsJson`）；闪卡；错题并入笔记页签（依赖阶段 7）；选中正文后"问书"；问书流式输出（需先给 provider 层加流式接口）。
+- 入口与结构：`src/study/`（schema/retrieve/depth/persistence/studyStore）、`src/components/study/`（DepthSwitch、StudyKitPanel、QuizPanel、AskPanel）、`ReaderWorkspace.tsx`（`tabs` 与 `displaySummary`）。
+- **端到端未测**：没有用真实模型跑过三个生成方法；提示词效果（尤其自测题质量、问书依据不足时的措辞）需要用真实模型人工验收。
 
 ### 3.2 阶段 7：笔记与导出
 划线/批注（锚点 = 章节 id + 片段 + 前后文）、`{name}-笔记.json`、Markdown 导出、离线 HTML、命令面板 Ctrl/⌘+K、j/k 等快捷键、断点续读。**尚未开始**。

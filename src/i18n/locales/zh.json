@@ -1240,5 +1240,64 @@
       "medium": "中",
       "high": "高"
     }
+  },
+  "study": {
+    "cancel": "取消",
+    "noChapters": "还没有可用的章节总结",
+    "failed": "失败：{{error}}",
+    "tabs": {
+      "study": "速读",
+      "quiz": "自测",
+      "ask": "问书"
+    },
+    "estimate": {
+      "withCost": "预计约 {{tokens}} tokens，费用约 ¥{{cost}}（粗略估计）",
+      "noPrice": "预计约 {{tokens}} tokens（该模型无价格信息，不估算费用）"
+    },
+    "depth": {
+      "label": "阅读深度",
+      "full": "全文",
+      "points": "要点",
+      "oneliner": "一句话",
+      "needKit": "先在「速读」页签生成速读包",
+      "partial": "{{covered}}/{{total}} 章有速读卡，其余保持全文",
+      "terms": "术语"
+    },
+    "kit": {
+      "generate": "生成速读包",
+      "regenerate": "重新生成",
+      "generating": "正在生成…",
+      "progress": "生成中 {{done}}/{{total}}",
+      "empty": "速读包把每一章压缩成一句话、三个要点和关键术语，方便快速回顾与定位。点击上方按钮生成（会调用一次或多次模型）。",
+      "count": "共 {{count}} 章 · 输入约 {{tokens}} tokens"
+    },
+    "quiz": {
+      "scope": "范围",
+      "scopeAll": "全书",
+      "scopeChapter": "当前章",
+      "count": "题数",
+      "generate": "生成自测题",
+      "regenerate": "重新出题",
+      "generating": "正在出题…",
+      "empty": "根据章节总结生成选择题与简答题，答完可回到出处章节复习。",
+      "score": "答对 {{correct}} / 已答 {{answered}}（共 {{total}} 题）",
+      "wrongOnly": "只看错题 {{count}}",
+      "redo": "重做",
+      "showAnswer": "显示参考答案",
+      "reference": "参考答案：",
+      "gotIt": "答对了",
+      "missed": "没答对",
+      "source": "出处：{{chapter}}"
+    },
+    "ask": {
+      "hint": "只依据本书的章节总结回答；每次提问调用一次模型。",
+      "empty": "试着问：这本书的核心观点是什么？某个概念指什么？",
+      "clear": "清空",
+      "thinking": "思考中…",
+      "aborted": "已取消",
+      "sources": "出处：",
+      "placeholder": "向这本书提问（Enter 发送，Shift+Enter 换行）",
+      "send": "发送"
+    }
   }
 }

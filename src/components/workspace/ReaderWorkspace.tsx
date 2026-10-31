@@ -33,6 +33,13 @@ import { PeoplePanel } from './PeoplePanel'
 import { GraphOptions } from './GraphOptions'
 import { ResizeHandle } from './ResizeHandle'
 import { NavRail } from './NavRail'
+import { AskPanel } from '@/components/study/AskPanel'
+import { DepthSwitch } from '@/components/study/DepthSwitch'
+import { QuizPanel } from '@/components/study/QuizPanel'
+import { StudyKitPanel } from '@/components/study/StudyKitPanel'
+import { applyDepth } from '@/study/depth'
+import { studyKeyOf } from '@/study/persistence'
+import { useStudyStore } from '@/study/studyStore'
 import { useWorkspaceLinking } from './useWorkspaceLinking'
 
 const ResultsSection = lazy(() =>
@@ -133,6 +140,21 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
 
   const chapters = bookSummary.chapters
   const chapterIds = useMemo(() => chapters.map((c) => c.id), [chapters])
+
+  // 学习数据按书的内容指纹绑定；处理中章节还在变，等结果稳定再绑定
+  const studyKey = studyKeyOf(bookSummary)
+  useEffect(() => {
+    if (!processing) void useStudyStore.getState().bind(bookSummary)
+    // 只在指纹变化时重新绑定
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studyKey, processing])
+  const kit = useStudyStore((s) => s.data.kit)
+  const depth = useStudyStore((s) => s.depth)
+  // 阅读深度只改"显示用"的章节总结；实体索引/缓存/导出仍用全文
+  const displaySummary = useMemo(
+    () => (depth === 'full' || !kit ? bookSummary : { ...bookSummary, chapters: applyDepth(bookSummary.chapters, kit, depth, { terms: t('study.depth.terms') }) }),
+    [bookSummary, kit, depth, t]
+  )
   const viewingIndex = chapterIds.indexOf(currentViewingChapter) + 1
 
   // 正文栏 = 滚动容器：登记给命令式跳转，显式传给 spy
@@ -232,6 +254,9 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
           <PeoplePanel linking={link.linking} currentChapterId={currentViewingChapter} onOpenEntity={link.openEntity} />
         ),
       },
+      { id: 'study', label: t('study.tabs.study'), content: <StudyKitPanel bookSummary={bookSummary} onJumpChapter={handleNavClick} /> },
+      { id: 'quiz', label: t('study.tabs.quiz'), content: <QuizPanel bookSummary={bookSummary} currentChapterId={currentViewingChapter} onJumpChapter={handleNavClick} /> },
+      { id: 'ask', label: t('study.tabs.ask'), content: <AskPanel bookSummary={bookSummary} onJumpChapter={handleNavClick} /> },
       {
         id: 'overall',
         label: t('results.tabs.overallSummary'),
@@ -265,16 +290,18 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       })
     }
     return list
-  }, [t, chartPanel, bookSummary.overallSummary, clearOverall, isMobile, source, link.linking, link.openEntity, currentViewingChapter])
+  }, [t, chartPanel, bookSummary, clearOverall, isMobile, source, link.linking, link.openEntity, currentViewingChapter, handleNavClick])
 
   const body = (
+    <>
+      {kit && <DepthSwitch chapters={chapters} className="mb-2" />}
     <Suspense
       fallback={<div className="py-12 text-center text-muted-foreground">{t('progress.loading')}</div>}
     >
       <ResultsSection
         variant="body"
         processingMode="summary"
-        bookSummary={bookSummary}
+        bookSummary={displaySummary}
         bookMindMap={null}
         file={file}
         expandedChapters={expandedChapters}
@@ -287,6 +314,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
         chapterExtras={link.chapterExtras}
       />
     </Suspense>
+    </>
   )
 
   // "返回上一位置"：跳转会打断阅读，这里给一条随时可回的退路

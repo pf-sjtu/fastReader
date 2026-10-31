@@ -1240,5 +1240,64 @@
       "medium": "Med",
       "high": "High"
     }
+  },
+  "study": {
+    "cancel": "Cancel",
+    "noChapters": "No chapter summaries available yet",
+    "failed": "Failed: {{error}}",
+    "tabs": {
+      "study": "Digest",
+      "quiz": "Quiz",
+      "ask": "Ask"
+    },
+    "estimate": {
+      "withCost": "About {{tokens}} tokens, roughly ¥{{cost}} (rough estimate)",
+      "noPrice": "About {{tokens}} tokens (no pricing for this model, cost not estimated)"
+    },
+    "depth": {
+      "label": "Reading depth",
+      "full": "Full",
+      "points": "Key points",
+      "oneliner": "One line",
+      "needKit": "Generate the digest in the Digest tab first",
+      "partial": "{{covered}}/{{total}} chapters have digest cards; the rest stay full",
+      "terms": "Terms"
+    },
+    "kit": {
+      "generate": "Generate digest",
+      "regenerate": "Regenerate",
+      "generating": "Generating…",
+      "progress": "Generating {{done}}/{{total}}",
+      "empty": "The digest condenses each chapter into a one-liner, three key points and key terms for quick review. Click the button above to generate it (calls the model one or more times).",
+      "count": "{{count}} chapters · input ≈ {{tokens}} tokens"
+    },
+    "quiz": {
+      "scope": "Scope",
+      "scopeAll": "Whole book",
+      "scopeChapter": "Current chapter",
+      "count": "Questions",
+      "generate": "Generate quiz",
+      "regenerate": "New quiz",
+      "generating": "Generating…",
+      "empty": "Generates multiple-choice and short-answer questions from the chapter summaries, with links back to the source chapter.",
+      "score": "{{correct}} correct / {{answered}} answered ({{total}} total)",
+      "wrongOnly": "Wrong only {{count}}",
+      "redo": "Redo",
+      "showAnswer": "Show reference answer",
+      "reference": "Reference: ",
+      "gotIt": "Got it",
+      "missed": "Missed it",
+      "source": "Source: {{chapter}}"
+    },
+    "ask": {
+      "hint": "Answers are based only on this book's chapter summaries; each question calls the model once.",
+      "empty": "Try: What is the core argument of this book? What does a given concept mean?",
+      "clear": "Clear",
+      "thinking": "Thinking…",
+      "aborted": "Cancelled",
+      "sources": "Sources:",
+      "placeholder": "Ask this book (Enter to send, Shift+Enter for newline)",
+      "send": "Send"
+    }
   }
 }
