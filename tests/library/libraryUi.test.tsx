@@ -398,6 +398,8 @@ describe('书架：分类 / 排序 / 推荐 / 补全', () => {
   it('排序下拉：按书名后列表顺序变化（最近排序不保证字典序）', () => {
     useLibraryStore.setState({ index: patchEntry(bigIndex(), '/s/书13.epub', { lastOpenedAt: 99 }, 2) })
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
+    // 用搜索关闭「继续阅读/推荐」，网格才是完整列表（否则推荐是随机的，会让首位书不确定）
+    typeInto(mounted.container.querySelector<HTMLInputElement>('input')!, '书')
     const firstGridTitle = () => mounted!.container.querySelectorAll('.grid')[mounted!.container.querySelectorAll('.grid').length - 1].querySelector('button.group span.line-clamp-3')!.textContent
     expect(firstGridTitle()).toBe('书13') // 最近打开的在前
     setSelect('排序', 'name')

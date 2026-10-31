@@ -95,7 +95,7 @@ describe('indexEntityChapters', () => {
     const idx = indexEntityChapters(matcher, chapters)
     const ms = performance.now() - t0
     expect(idx.totals.size).toBe(50)
-    expect(ms).toBeLessThan(150)
+    expect(ms).toBeLessThan(1000) // 并行跑全量测试时 CPU 争用会让它到数百 ms；O(文本×实体) 的退化是数秒级
   })
 })
 
