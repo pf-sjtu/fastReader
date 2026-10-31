@@ -4,7 +4,7 @@ import type { WebDAVFileInfo, WebDAVOperationResult } from '@/services/webdav/ty
 export type ListDir = (dir: string, deep: boolean) => Promise<WebDAVOperationResult<WebDAVFileInfo[]>>
 
 /** 兜底遍历的上限：防止异常目录结构把请求数拖到失控 */
-export const MAX_DIRS = 200
+export const MAX_DIRS = 400
 export const MAX_DEPTH = 8
 
 /**
@@ -12,6 +12,7 @@ export const MAX_DEPTH = 8
  * 优先一次深度列表（`Depth: infinity`，1 次请求）；很多 WebDAV 服务（如 InfiniCLOUD）会对它返回 403，
  * 此时退回逐层 `Depth: 1` 的广度优先遍历。根目录读不出来 = 真失败；子目录读不出来只跳过该目录。
  * 以点开头的目录（`.juhua` 索引与封面）不进兜底遍历：里面没有书。
+ * 兜底遍历超过上限会抛错（不返回残缺列表，避免 GC 误删）。
  */
 export async function listTree(list: ListDir, root: string): Promise<WebDAVFileInfo[]> {
   const deep = await list(root, true)
@@ -35,5 +36,7 @@ export async function listTree(list: ListDir, root: string): Promise<WebDAVFileI
       }
     }
   }
+  // 没遍历完就返回一半会让「没扫到的书」被 GC 当成已删除：宁可明确失败
+  if (queue.length) throw new Error(`目录太多（超过 ${MAX_DIRS} 个），书库没有扫描完整；请缩小书籍目录范围`)
   return files
 }

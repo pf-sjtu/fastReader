@@ -62,7 +62,7 @@ export function BookCard({ entry, opening, disabled, onOpen, caption, showSize =
 
         {/* 底部阴影层：书名 + 作者 */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/55 to-transparent px-2.5 pb-2.5 pt-12 text-white">
-          <span className="font-brand line-clamp-2 text-[13px] font-semibold leading-snug [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">
+          <span className="font-brand line-clamp-3 text-[13px] font-semibold leading-snug [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">
             {entry.title}
           </span>
           {(entry.author || count || showSize) && (

@@ -15,11 +15,15 @@ export function createLibraryIO(): LibraryIO | null {
   const cfg = useConfigStore.getState().webdavConfig
   if (!cfg.enabled || !webdavService.isInitialized()) return null
   const syncPath = cfg.syncPath || '/fastReader'
-  const scopeKey = `${cfg.serverUrl}|${cfg.username ?? ''}|${syncPath}`
+  // 书放在浏览根（如 /EBook），摘要写在同步目录；没配或是根目录就退回同步目录
+  const browse = (cfg.browsePath || '').replace(/\/+$/, '')
+  const booksPath = browse && browse !== syncPath ? browse : undefined
+  const scopeKey = `${cfg.serverUrl}|${cfg.username ?? ''}|${syncPath}|${booksPath ?? ''}`
   const path = libraryIndexPath(syncPath)
   const legacyPath = legacyLibraryIndexPath(syncPath)
 
   return {
+    booksPath,
     scopeKey,
     syncPath,
     readMirror: async () => (await get(scopeKey, store())) ?? null,
@@ -43,8 +47,13 @@ export function createLibraryIO(): LibraryIO | null {
       if (!r.success) throw new Error(r.error ?? '写入书库索引失败')
     },
     listFiles: async () => {
-      const all = await listTree((dir, deep) => webdavService.getDirectoryContents(dir, deep), syncPath)
-      return all
+      const list = (dir: string, deep: boolean) => webdavService.getDirectoryContents(dir, deep)
+      // 书目录 + 同步目录（摘要）；两者重叠（同步目录在书目录里）时按路径去重
+      const roots = booksPath && !syncPath.startsWith(booksPath + '/') ? [booksPath, syncPath] : [booksPath ?? syncPath]
+      const lists = []
+      for (const root of roots) lists.push(await listTree(list, root))
+      const byPath = new Map(lists.flat().map((f) => [f.filename, f]))
+      return [...byPath.values()]
         .filter((f) => f.type === 'file')
         .map((f) => ({ path: f.filename, basename: f.basename, size: f.size, mtime: f.lastmod, etag: f.etag }))
     },

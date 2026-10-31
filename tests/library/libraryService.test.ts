@@ -72,6 +72,23 @@ describe('splitListing', () => {
   })
 })
 
+describe('splitListing：书目录与同步目录分开（书在 /EBook，摘要在 /fastReader）', () => {
+  it('只把书目录里的文件当书；同步目录里的摘要用来判断状态，其余 md 不算书', () => {
+    const at = (dir: string, name: string): ListedFile => ({ path: `${dir}/${name}`, basename: name, size: 10, mtime: 'm' })
+    const { sources, summaryNames } = splitListing(
+      [at('/EBook', '甲 - 作者.epub'), at('/EBook/子目录', '乙.pdf'), at('/fastReader', '高毅_summary.md'), at('/fastReader', '甲 - 作者-完整摘要.md'), at('/EBookShelf', '丙.epub')],
+      '/EBook'
+    )
+    // /EBookShelf 只是前缀相同，不在 /EBook 之下
+    expect(sources.map((s) => s.path)).toEqual(['/EBook/甲 - 作者.epub', '/EBook/子目录/乙.pdf'])
+    expect([...summaryNames]).toEqual(['甲 - 作者-完整摘要.md'])
+  })
+
+  it('没有书目录（缺省）：同步目录里的书照旧都算', () => {
+    expect(splitListing([f('a.epub'), f('b.md')]).sources).toHaveLength(2)
+  })
+})
+
 describe('splitListing：处理产物不是书', () => {
   it('逐章总结 {书名}_chapter_N_summary.md 不进书库；名字里碰巧带 summary 的真书不受影响', () => {
     const { sources } = splitListing([

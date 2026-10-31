@@ -32,6 +32,18 @@ export function titleFromPath(path: string): string {
   return baseName(path).replace(/\.[^/.]+$/, '')
 }
 
+/**
+ * 「书名 - 作者.epub」是电子书库最常见的命名：不下载就能给书架一个干净的书名和作者。
+ * 只对 epub/pdf 生效（md/txt 的「 - 」多半只是标题里的破折号）；真正的元数据补全会覆盖它。
+ */
+export function parseFileName(path: string): { title: string; author?: string } {
+  const stem = titleFromPath(path)
+  if (!/\.(epub|pdf)$/i.test(path)) return { title: stem }
+  const i = stem.lastIndexOf(' - ')
+  if (i <= 0 || i + 3 >= stem.length) return { title: stem }
+  return { title: stem.slice(0, i).trim(), author: stem.slice(i + 3).trim() }
+}
+
 const STATUSES: readonly BookStatus[] = ['unprocessed', 'partial', 'done']
 
 /** 把磁盘/网络上的任意值收敛成合法条目；缺关键字段则丢弃 */
@@ -144,7 +156,7 @@ export function applyScan(index: LibraryIndex, files: ScannedFile[], opts: ScanO
         size: f.size,
         mtime: f.mtime,
         etag: f.etag,
-        title: titleFromPath(f.path),
+        ...parseFileName(f.path),
         status,
         summaryFile,
         stale: true,

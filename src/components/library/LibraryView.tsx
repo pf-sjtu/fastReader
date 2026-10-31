@@ -8,6 +8,7 @@ import { continueReading, listEntries, type LibraryFilter, type LibrarySort } fr
 import { groupEntries, recommendBooks, type GroupBy } from '@/services/library/libraryOrganize'
 import { useLibraryStore } from '@/services/library/libraryStore'
 import type { LibraryEntry } from '@/services/library/types'
+import { isFillable } from '@/services/library/libraryFill'
 import { webdavService } from '@/services/webdavService'
 import { BookCard } from './BookCard'
 import { groupLabel, reasonLabel } from './labels'
@@ -53,7 +54,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
     () => (browsing && total >= 3 ? recommendBooks(index, { seed, count: RECOMMEND_COUNT, exclude: prevBatch, omit: resume.map((e) => e.path) }) : []),
     [index, browsing, total, seed, prevBatch, resume]
   )
-  const staleCount = useMemo(() => Object.values(index.entries).filter((e) => e.stale).length, [index])
+  const staleCount = useMemo(() => Object.values(index.entries).filter((e) => e.stale && isFillable(e.path)).length, [index])
 
   if (unavailable) return null
 
@@ -203,6 +204,13 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
       {entries.length > 0 ? (
         groups.map((g) => (
           <div key={g.key} className="space-y-1.5">
+            {/* 上面有「继续阅读 / 推荐」时，全量网格也要有自己的标题，否则读起来是同一排 */}
+            {group === 'none' && browsing && (resume.length > 0 || recs.length > 0) && (
+              <h3 className="border-b pb-1 text-xs font-medium text-muted-foreground">
+                {t('library.all')}
+                <span className="ml-1.5 font-normal">{g.entries.length}</span>
+              </h3>
+            )}
             {group !== 'none' && (
               <h3 className="border-b pb-1 text-xs font-medium text-muted-foreground">
                 {groupLabel(t, g.key)}

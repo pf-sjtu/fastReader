@@ -7,6 +7,7 @@ import {
   listEntries,
   mergeIndexes,
   migrateIndex,
+  parseFileName,
   patchEntry,
   setStatus,
   titleFromPath,
@@ -20,6 +21,24 @@ const file = (name: string, size = 100, mtime = 'm1', etag?: string): ScannedFil
   size,
   mtime,
   etag,
+})
+
+describe('parseFileName：「书名 - 作者」命名', () => {
+  it('epub/pdf 拆出书名与作者；扫描新增条目时直接带上', () => {
+    expect(parseFileName('/EBook/癌症传 - 穆克吉.epub')).toEqual({ title: '癌症传', author: '穆克吉' })
+    expect(parseFileName('/EBook/2049：未来10000天的可能 - [美] 凯文·凯利.epub')).toEqual({ title: '2049：未来10000天的可能', author: '[美] 凯文·凯利' })
+    // 书名里自带 " - " 时按最后一个分隔（作者在最后）
+    expect(parseFileName('/x/A - B - 作者.pdf')).toEqual({ title: 'A - B', author: '作者' })
+    const e = applyScan(emptyIndex(0), [{ path: '/EBook/癌症传 - 穆克吉.epub', size: 1, mtime: 'm' }], opts(1)).index.entries['/EBook/癌症传 - 穆克吉.epub']
+    expect(e).toMatchObject({ title: '癌症传', author: '穆克吉' })
+  })
+
+  it('没有分隔 / 分隔在两端 / md、txt：整段当书名，不猜作者', () => {
+    expect(parseFileName('/x/门口的野蛮人.epub')).toEqual({ title: '门口的野蛮人' })
+    expect(parseFileName('/x/ - 作者.epub')).toEqual({ title: ' - 作者' })
+    expect(parseFileName('/x/书名 - .epub')).toEqual({ title: '书名 - ' })
+    expect(parseFileName('/x/笔记 - 周报.md')).toEqual({ title: '笔记 - 周报' })
+  })
 })
 
 describe('titleFromPath', () => {

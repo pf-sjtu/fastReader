@@ -593,6 +593,7 @@
     "empty": "同步目录里还没有书。上传一本 EPUB/PDF，或把书放进 WebDAV 同步目录。",
     "noMatch": "没有符合条件的书",
     "stale": "显示的是缓存内容，可能不是最新",
+    "all": "全部书籍",
     "scanFailed": "读取同步目录失败：{{error}}",
     "retry": "重试",
     "continue": "继续阅读",

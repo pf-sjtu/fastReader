@@ -171,11 +171,12 @@ export function FileUploadCard({
           </Button>
           <ConfigDialog processing={processing} file={file} />
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={onClearCache}
             disabled={processing}
-            className="flex items-center gap-1 min-h-9 text-red-500 hover:text-red-700 hover:bg-red-50"
+            // 破坏性操作平时不抢眼，悬停才显色；颜色走语义 token，明暗主题都对
+            className="flex items-center gap-1 min-h-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           >
             <Trash2 className="h-3.5 w-3.5" />
             {t('upload.clearCache')}

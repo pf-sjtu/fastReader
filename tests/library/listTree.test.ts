@@ -51,20 +51,20 @@ describe('listTree', () => {
     expect(fs.calls.map((c) => c.dir)).not.toContain('/s/.juhua')
   })
 
-  it(`层数与目录数有上限（${MAX_DEPTH} 层 / ${MAX_DIRS} 个目录），不会无限请求`, async () => {
-    // 无限深链：每个目录里只有下一层
-    const list = vi.fn<ListDir>(async (d) => ({ success: true, data: d.startsWith('/deep') && d.length > 0 ? [dir(`${d}/n`)] : [] }))
+  it(`层数有上限（${MAX_DEPTH} 层）：无限深的链不会无限请求`, async () => {
+    const list = vi.fn<ListDir>(async (d) => ({ success: true, data: [dir(`${d}/n`)] }))
     const chain: ListDir = async (d, deep) => (deep ? { success: false, error: '403' } : list(d, deep))
     await listTree(chain, '/deep')
     expect(list.mock.calls.length).toBe(MAX_DEPTH + 1)
+  })
 
-    // 超宽目录：根下一万个子目录
+  it(`目录数超过上限（${MAX_DIRS}）：抛错而不是返回残缺列表（残缺会让没扫到的书被 GC 误删）`, async () => {
     const wide: ListDir = async (d, deep) => {
       if (deep) return { success: false, error: '403' }
-      return { success: true, data: d === '/w' ? Array.from({ length: 10_000 }, (_, i) => dir(`/w/d${i}`)) : [] }
+      return { success: true, data: d === '/w' ? Array.from({ length: MAX_DIRS + 50 }, (_, i) => dir(`/w/d${i}`)) : [] }
     }
     const spy = vi.fn(wide)
-    await listTree(spy, '/w')
+    await expect(listTree(spy, '/w')).rejects.toThrow('目录太多')
     expect(spy.mock.calls.filter(([, deep]) => !deep).length).toBeLessThanOrEqual(MAX_DIRS)
   })
 })

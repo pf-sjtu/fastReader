@@ -98,6 +98,26 @@ describe('LibraryView', () => {
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
+  it('「补全书籍信息」只统计 EPUB/PDF：全是 md 时不出现这个空操作按钮', () => {
+    const idx = applyScan(emptyIndex(0), [{ path: '/s/笔记.md', size: 1, mtime: 'm' }], { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index
+    useLibraryStore.setState({ index: idx, fresh: true, error: null })
+    mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    expect(mounted.container.textContent).not.toContain('补全书籍信息')
+    const withEpub = applyScan(idx, [{ path: '/s/笔记.md', size: 1, mtime: 'm' }, { path: '/s/书.epub', size: 1, mtime: 'm' }], { now: 2, summaryNameOf: sum, summaryNames: new Set() }).index
+    useLibraryStore.setState({ index: withEpub })
+    mounted.rerender(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    expect(mounted.container.textContent).toContain('补全书籍信息（1）')
+  })
+
+  it('有推荐时，全量网格有自己的「全部书籍」标题；没有推荐/继续阅读时不加', () => {
+    mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    // 种子索引有 1 本在读（继续阅读）
+    expect(mounted.container.textContent).toContain('全部书籍')
+    useLibraryStore.setState({ index: applyScan(emptyIndex(0), [{ path: '/s/甲.epub', size: 1, mtime: 'm' }], { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index })
+    mounted.rerender(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    expect(mounted.container.textContent).not.toContain('全部书籍')
+  })
+
   it('目录确实是空的（无错误）：才显示「还没有书」', () => {
     useLibraryStore.setState({ index: emptyIndex(0), fresh: true, error: null })
     mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
@@ -289,7 +309,7 @@ describe('书架：分类 / 排序 / 推荐 / 补全', () => {
   it('排序下拉：按书名后列表顺序变化（最近排序不保证字典序）', () => {
     useLibraryStore.setState({ index: patchEntry(bigIndex(), '/s/书13.epub', { lastOpenedAt: 99 }, 2) })
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
-    const firstGridTitle = () => mounted!.container.querySelectorAll('.grid')[mounted!.container.querySelectorAll('.grid').length - 1].querySelector('button.group span.line-clamp-2')!.textContent
+    const firstGridTitle = () => mounted!.container.querySelectorAll('.grid')[mounted!.container.querySelectorAll('.grid').length - 1].querySelector('button.group span.line-clamp-3')!.textContent
     expect(firstGridTitle()).toBe('书13') // 最近打开的在前
     setSelect('排序', 'name')
     expect(firstGridTitle()).toBe('书00')

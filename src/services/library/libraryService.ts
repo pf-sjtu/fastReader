@@ -32,6 +32,8 @@ export interface LibraryIO {
   /** 本次连接的唯一标识（服务器 + 同步目录），镜像按它分开，换账号不串书 */
   scopeKey: string
   syncPath: string
+  /** 书所在目录（WebDAV 浏览根）；缺省 = 同步目录。摘要写在 syncPath，书可以在别处 */
+  booksPath?: string
   readMirror(): Promise<unknown | null>
   writeMirror(index: LibraryIndex | null): Promise<void>
   /** 远端索引原文：null = 不存在；抛错 = 读取失败（和"不存在"必须区分） */
@@ -78,9 +80,10 @@ export interface RefreshResult {
 }
 
 /** 受支持文件分流：真正的"书" vs 我们自己生成的摘要/内部文件 */
-export function splitListing(files: ListedFile[]): { sources: ScannedFile[]; summaryNames: Set<string> } {
+export function splitListing(files: ListedFile[], booksPath?: string): { sources: ScannedFile[]; summaryNames: Set<string> } {
   const summaryNames = new Set<string>()
   const sources: ScannedFile[] = []
+  const root = booksPath ? booksPath.replace(/\/+$/, '') + '/' : null
   for (const f of files) {
     if (f.path.includes(`/${LIBRARY_DIR}/`)) continue
     if (f.basename.endsWith(SUMMARY_SUFFIX)) {
@@ -88,6 +91,7 @@ export function splitListing(files: ListedFile[]): { sources: ScannedFile[]; sum
       continue
     }
     if (!BOOK_EXTENSIONS.some((ext) => f.basename.toLowerCase().endsWith(ext))) continue
+    if (root && !f.path.startsWith(root)) continue // 同步目录里的非摘要文件不是书
     if (GENERATED_ARTIFACT.test(f.basename)) continue
     sources.push({ path: f.path, size: f.size, mtime: f.mtime, etag: f.etag })
   }
@@ -164,7 +168,7 @@ export async function refreshLibrary(io: LibraryIO, opts: RefreshOptions = {}): 
   } catch (e) {
     return { index, scanned: false, error: e instanceof Error ? e.message : String(e), added: [], removed: [] }
   }
-  const { sources, summaryNames } = splitListing(files)
+  const { sources, summaryNames } = splitListing(files, io.booksPath)
   const scan = applyScan(index, sources, { now, summaryNameOf: io.summaryNameOf, summaryNames })
   const before = index
   index = await persistIndex(io, scan.index, scan.removed)
@@ -182,7 +186,7 @@ export async function rebuildLibrary(io: LibraryIO): Promise<RefreshResult> {
   if (oldCovers.length) void io.deleteCovers(oldCovers).catch(() => {})
   await io.writeMirror(null)
   const files = await io.listFiles()
-  const { sources, summaryNames } = splitListing(files)
+  const { sources, summaryNames } = splitListing(files, io.booksPath)
   const scan = applyScan(emptyIndex(io.now()), sources, { now: io.now(), summaryNameOf: io.summaryNameOf, summaryNames })
   await io.writeMirror(scan.index)
   await io.writeRemote(JSON.stringify(scan.index))

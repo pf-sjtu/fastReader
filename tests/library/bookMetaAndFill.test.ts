@@ -225,6 +225,18 @@ describe('fillLibraryMetadata', () => {
     expect(write).toHaveBeenCalledWith('/s/.juhua/covers/' + coverKeyOf('/s/a.epub') + '.webp', expect.any(Blob))
   })
 
+  it('txt/md 没有内嵌元数据：不下载、直接清 stale（不白白下载整本）', async () => {
+    const mirror = await seeded(['/s/笔记.md', '/s/文稿.txt', '/s/书.epub'])
+    const readBinary = vi.fn(async () => new ArrayBuffer(8))
+    const io = fakeIO({ readMirror: async () => mirror, readBinary })
+    const inspect = vi.fn(async (): Promise<Inspection> => ({ meta: { title: 'T' }, thumb: null }))
+    const r = await fillLibraryMetadata(io, Object.values(mirror.entries), { inspect })
+    expect(readBinary.mock.calls.map((c) => c[0])).toEqual(['/s/书.epub'])
+    expect(r.index!.entries['/s/笔记.md'].stale).toBe(false)
+    expect(r.index!.entries['/s/文稿.txt'].stale).toBe(false)
+    expect(r.skipped).toBe(2)
+  })
+
   it('"未知标题/未知作者"占位不覆盖文件名兜底', async () => {
     const mirror = await seeded(['/s/书.epub'])
     const io = fakeIO({ readMirror: async () => mirror })

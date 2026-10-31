@@ -60,6 +60,9 @@ type Update = Parameters<typeof recordMetadataBatch>[1][number]
 /** 书名里的"未知"占位不能覆盖文件名兜底 */
 const usable = (s?: string) => (s && !/^(未知|unknown)/i.test(s) ? s : undefined)
 
+/** 只有 EPUB / PDF 有内嵌元数据可补；txt/md 没有，下载整本也读不出什么 */
+export const isFillable = (path: string) => /\.(epub|pdf)$/i.test(path)
+
 export async function fillLibraryMetadata(io: LibraryIO, entries: readonly LibraryEntry[], opts: FillOptions = {}): Promise<FillResult> {
   const { concurrency = FILL_CONCURRENCY, maxBytes = FILL_MAX_BYTES, signal, inspect = inspectBook } = opts
   const queue = entries.filter((e) => e.stale)
@@ -77,7 +80,7 @@ export async function fillLibraryMetadata(io: LibraryIO, entries: readonly Libra
   }
 
   const one = async (e: LibraryEntry) => {
-    if (e.size > maxBytes) {
+    if (!isFillable(e.path) || e.size > maxBytes) {
       pending.push({ path: e.path, patch: { stale: false } })
       res.skipped++
       return
