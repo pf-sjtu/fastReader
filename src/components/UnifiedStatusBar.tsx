@@ -10,13 +10,12 @@ import {
   ArrowLeft,
   ArrowRight,
   Loader2,
-  History,
-  ExternalLink
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useProcessingHistoryStore } from '@/stores/processingHistory'
 import { useTokenUsage } from '@/stores/configStore'
+import { RecentHistoryMenu } from '@/components/RecentHistoryMenu'
 import { ProcessingHistoryDialog } from '@/components/ProcessingHistoryDialog'
 import type { ProcessingHistoryRecord } from '@/stores/processingHistory'
 import {
@@ -76,10 +75,6 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [loadingFileName, setLoadingFileName] = useState<string | null>(null)
 
-  // 最近 2 条记录
-  const recentRecords = records.slice(0, 2)
-  const hasMore = records.length > 2
-
   const handleHistorySelect = async (record: ProcessingHistoryRecord) => {
     if (!onLoadFromHistory) return
     setLoadingFileName(record.fileName)
@@ -121,11 +116,8 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
   const showRecentHistory =
     currentView === 'config' &&
     !processing &&
-    recentRecords.length > 0 &&
+    records.length > 0 &&
     !!onLoadFromHistory
-
-  // 窄屏只展示最近 1 条历史，避免挤爆
-  const mobileRecentRecords = recentRecords.slice(0, 1)
 
   return (
     <>
@@ -216,59 +208,13 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                   <Progress value={progress} className="h-2" />
                 </div>
               ) : showRecentHistory ? (
-                <div className="flex items-center gap-2 sm:justify-center overflow-x-auto">
-                  <History className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div className="flex items-center gap-1.5 text-sm min-w-0">
-                    {/* 桌面显示 2 条，移动显示 1 条 */}
-                    <div className="hidden sm:flex items-center gap-2">
-                      {recentRecords.map((record) => (
-                        <Button
-                          key={record.fileName}
-                          variant="ghost"
-                          size="sm"
-                          className="h-auto py-0.5 px-2 text-sm text-muted-foreground hover:text-foreground"
-                          onClick={() => handleHistorySelect(record)}
-                          disabled={loadingFileName !== null}
-                        >
-                          {loadingFileName === record.fileName ? (
-                            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                          ) : (
-                            <ExternalLink className="h-3 w-3 mr-1" />
-                          )}
-                          <span className="truncate max-w-[120px]">{record.bookTitle}</span>
-                        </Button>
-                      ))}
-                    </div>
-                    <div className="flex sm:hidden items-center gap-1.5 min-w-0">
-                      {mobileRecentRecords.map((record) => (
-                        <Button
-                          key={record.fileName}
-                          variant="ghost"
-                          size="sm"
-                          className="h-auto py-0.5 px-2 text-sm text-muted-foreground hover:text-foreground min-w-0"
-                          onClick={() => handleHistorySelect(record)}
-                          disabled={loadingFileName !== null}
-                        >
-                          {loadingFileName === record.fileName ? (
-                            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin shrink-0" />
-                          ) : (
-                            <ExternalLink className="h-3 w-3 mr-1 shrink-0" />
-                          )}
-                          <span className="truncate max-w-[8rem]">{record.bookTitle}</span>
-                        </Button>
-                      ))}
-                    </div>
-                    {hasMore && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-auto py-0.5 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
-                        onClick={() => setHistoryDialogOpen(true)}
-                      >
-                        {t('history.viewMore')}
-                      </Button>
-                    )}
-                  </div>
+                <div className="flex min-w-0 justify-center">
+                  <RecentHistoryMenu
+                    records={records}
+                    loadingFileName={loadingFileName}
+                    onSelect={handleHistorySelect}
+                    onViewAll={() => setHistoryDialogOpen(true)}
+                  />
                 </div>
               ) : currentView === 'config' ? (
                 <div className="text-center text-sm text-muted-foreground">

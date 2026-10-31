@@ -692,6 +692,9 @@
   "history": {
     "dialogTitle": "处理历史",
     "viewMore": "更多",
+    "recent": "最近处理",
+    "recentHint": "点一本直接打开已处理的结果",
+    "viewAll": "查看全部（{{count}}）",
     "empty": "暂无处理历史",
     "clearAll": "清除全部",
     "chapters": "章",
