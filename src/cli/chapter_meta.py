@@ -17,6 +17,15 @@ _META_MARK_RE = re.compile(r"<!--\s*juhua:meta\s*-->", re.IGNORECASE)
 MAX_BOLD_PER_CHAPTER = 6
 _BOLD_RE = re.compile(r"(?<!\*)\*\*(?!\*)([^*\n]+?)(?<!\*)\*\*(?!\*)")
 
+# 开头的客套话（带标点的短语）：本地剥掉，不为它付费重写（与前端 GREETING_LINE_RE 一致）
+_GREETING_LINE_RE = re.compile(
+    r"^[ \t]*(?:(?:好的|当然|没问题|收到|可以)[，,！!。.:：][^\n]{0,30}"
+    r"|(?:以下是|下面是)[^。\n]{0,30}(?:总结|摘要)[：:。.]?)[ \t]*\n+"
+)
+# 模型漏写标记、只在末尾给了 ```json 元数据代码块
+_TRAILING_FENCE_RE = re.compile(r"```json\s*(\{[\s\S]*?\})\s*```\s*$", re.IGNORECASE)
+_FENCE_SPLIT_RE = re.compile(r"(```[\s\S]*?```)")
+
 
 def _first_json_object(raw: str) -> Optional[str]:
     text = re.sub(r"```(?:json)?", "", raw, flags=re.IGNORECASE)
@@ -85,14 +94,34 @@ def _coerce_meta(obj) -> Optional[dict]:
     return meta
 
 
+def _split_trailing_fence(s: str) -> tuple[str, Optional[dict]]:
+    """没有标记：末尾若是我们的元数据代码块就识别出来，避免 JSON 留在正文里被上传"""
+    m = _TRAILING_FENCE_RE.search(s)
+    if m:
+        try:
+            meta = _coerce_meta(json.loads(m.group(1)))
+            if meta:
+                return s[:m.start()].rstrip(), meta
+        except (ValueError, TypeError):
+            pass
+    return s.rstrip(), None
+
+
 def split_chapter_meta(raw: str) -> tuple[str, Optional[dict]]:
     """拆出 (正文, 旁路)；永不抛错，旁路损坏时 meta 为 None"""
     s = raw or ""
-    m = _META_MARK_RE.search(s)
-    if not m:
-        return s.rstrip(), None
+    # 取最后一个标记：正文里即使出现标记字样，真正的旁路也在末尾
+    matches = list(_META_MARK_RE.finditer(s))
+    if not matches:
+        return _split_trailing_fence(s)
+    m = matches[-1]
     text = s[:m.start()].rstrip()
-    js = _first_json_object(s[m.end():])
+    after = s[m.end():]
+    js = _first_json_object(after)
+    if not text:
+        # 模型把旁路写在了正文前面：旁路之后剩下的才是正文
+        rest = after.replace(js, "", 1) if js else after
+        text = re.sub(r"```(?:json)?", "", rest, flags=re.IGNORECASE).strip()
     if not js:
         return text, None
     try:
@@ -101,16 +130,22 @@ def split_chapter_meta(raw: str) -> tuple[str, Optional[dict]]:
         return text, None
 
 
-def sanitize_summary(text: str) -> str:
-    """程序化修复 AI 常见的格式违规：标题符号、分割线、加粗斜体、滥用的反引号、超限的加粗"""
-    out = re.sub(r"^[ \t]{0,3}#{1,6}[ \t]+", "", text, flags=re.MULTILINE)
+def _sanitize_prose(part: str) -> str:
+    out = re.sub(r"^[ \t]{0,3}#{1,6}[ \t]+", "", part, flags=re.MULTILINE)
     out = re.sub(r"^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$", "", out, flags=re.MULTILINE)
     out = re.sub(r"\*\*\*([^*\n]+?)\*\*\*", r"**\1**", out)
-    out = re.sub(
+    return re.sub(
         r"`([^`\n]{1,40})`",
         lambda m: m.group(0) if re.search(r"[(){}=;<>/\\]", m.group(1)) else m.group(1),
         out,
     )
+
+
+def sanitize_summary(text: str) -> str:
+    """程序化修复 AI 常见的格式违规：标题符号、分割线、加粗斜体、滥用的反引号、超限的加粗、开头客套话"""
+    # 围栏代码块整体不动：里面的 # 是注释、--- 是内容（与前端按 ``` 切分一致）
+    parts = _FENCE_SPLIT_RE.split(text)
+    out = "".join(p if i % 2 == 1 else _sanitize_prose(p) for i, p in enumerate(parts))
     out = re.sub(r"\n{3,}", "\n\n", out)
 
     bolds = list(_BOLD_RE.finditer(out))
@@ -124,7 +159,7 @@ def sanitize_summary(text: str) -> str:
             return m.group(0) if counter["i"] in keep else m.group(1)
 
         out = _BOLD_RE.sub(repl, out)
-    return out.strip()
+    return _GREETING_LINE_RE.sub("", out, count=1).strip()
 
 
 def clean_chapter_summary(raw: str) -> str:

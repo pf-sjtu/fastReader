@@ -45,15 +45,17 @@ describe('chapterMeta：清理', () => {
 
 describe('chapterMeta：质量判定', () => {
   const long = '字'.repeat(300)
-  it('原文很长而总结极短 → tooShort；短原文不算', () => {
-    expect(checkSummaryQuality('太短', 5000, { expectMeta: false, hasMeta: false })).toContain('tooShort')
-    expect(checkSummaryQuality('太短', 300, { expectMeta: false, hasMeta: false })).toEqual([])
+  it('按了 v3 格式（有旁路）、原文很长而正文极短 → tooShort；短原文不算', () => {
+    expect(checkSummaryQuality('太短', 5000, { expectMeta: true, hasMeta: true })).toContain('tooShort')
+    expect(checkSummaryQuality('太短', 300, { expectMeta: true, hasMeta: true })).toEqual([])
   })
-  it('问候语开头 → greeting', () => {
-    expect(checkSummaryQuality(`好的，以下是总结。${long}`, 5000, { expectMeta: false, hasMeta: true })).toEqual(['greeting'])
+  it('没有旁路的短输出不判「过短」（可能是「无需总结」/译文/自定义格式，不值得付费重写）', () => {
+    expect(checkSummaryQuality('太短', 5000, { expectMeta: false, hasMeta: false })).toEqual([])
+    expect(checkSummaryQuality('No summary needed.', 5000, { expectMeta: true, hasMeta: false })).toEqual(['noMeta'])
   })
-  it('"无需总结" 不判违规；缺旁路只在期望旁路时报 noMeta', () => {
-    expect(checkSummaryQuality('无需总结', 5000, { expectMeta: true, hasMeta: false })).toEqual([])
+  it('「无需总结」带引号/前缀字符也识别；缺旁路只在期望旁路时报 noMeta', () => {
+    expect(checkSummaryQuality('「无需总结」', 5000, { expectMeta: true, hasMeta: true })).toEqual([])
+    expect(checkSummaryQuality('"无需总结"', 5000, { expectMeta: true, hasMeta: true })).toEqual([])
     expect(checkSummaryQuality(long, 5000, { expectMeta: true, hasMeta: false })).toEqual(['noMeta'])
     expect(checkSummaryQuality(long, 5000, { expectMeta: false, hasMeta: false })).toEqual([])
   })
@@ -157,7 +159,7 @@ describe('流水线：旁路、清理、一次定向重写、实体表', () => {
   })
 
   it('过短：恰好重写一次并带说明；重写合格则采用', async () => {
-    const { ai, calls } = makeAI(['太短', body + meta('A'), body + meta('B')])
+    const { ai, calls } = makeAI(['太短' + meta('A'), body + meta('A'), body + meta('B')])
     const r = await run(ai)
     expect(calls.filter((c) => c.hint).length).toBe(1)
     expect(calls[1].hint).toContain('字数不足')
@@ -166,10 +168,74 @@ describe('流水线：旁路、清理、一次定向重写、实体表', () => {
   })
 
   it('重写后仍不合格：保留并标 warn，不再第二次重写', async () => {
-    const { ai, calls } = makeAI(['太短', '还是短', body + meta('B')])
+    const { ai, calls } = makeAI(['太短' + meta('A'), '还是短' + meta('A'), body + meta('B')])
     const r = await run(ai)
     expect(calls.filter((c) => c.hint).length).toBe(1)
     expect(r.chapters[0].quality).toBe('warn')
+  })
+
+  it('没有旁路的短输出（如「无需总结」）：不付费重写', async () => {
+    const { ai, calls } = makeAI(['无需总结', body + meta('B')])
+    const r = await run(ai)
+    expect(calls.every((c) => !c.hint)).toBe(true)
+    expect(r.chapters[0].summary).toBe('无需总结')
+  })
+
+  it('重写抛错（429/网络）：保留首轮结果、标 warn，整章不判失败', async () => {
+    let n = 0
+    const { ai } = makeAI([])
+    ;(ai.summarizeChapter as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
+      n++
+      if ((args[5] as { rewriteHint?: string } | undefined)?.rewriteHint) throw new Error('429 Too Many Requests')
+      return n === 1 ? '太短' + meta('A') : body + meta('B')
+    })
+    const r = await run(ai)
+    expect(r.chapters[0].processed).toBe(true)
+    expect(r.chapters[0].summary).toContain('太短')
+    expect(r.chapters[0].quality).toBe('warn')
+  })
+
+  it('重写前先过限速（afterChapterAI 在重写之前再调一次）', async () => {
+    const order: string[] = []
+    const { ai } = makeAI([])
+    ;(ai.summarizeChapter as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
+      const hinted = !!(args[5] as { rewriteHint?: string } | undefined)?.rewriteHint
+      order.push(hinted ? 'call:rewrite' : 'call:first')
+      return hinted ? body + meta('A') : '太短' + meta('A')
+    })
+    await runBookPipeline({
+      chapters: [chapters[0]], mode: 'summary', ai, bookTitle: '书', bookType: 'non-fiction', concurrency: 1, cache: null as never,
+      afterChapterAI: async () => void order.push('throttle'),
+    })
+    expect(order).toEqual(['call:first', 'throttle', 'call:rewrite', 'throttle'])
+  })
+
+  it('重写期间被取消：抛出取消，而不是吞掉', async () => {
+    const ctrl = new AbortController()
+    const { ai } = makeAI([])
+    ;(ai.summarizeChapter as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
+      if ((args[5] as { rewriteHint?: string } | undefined)?.rewriteHint) {
+        ctrl.abort()
+        throw new DOMException('aborted', 'AbortError')
+      }
+      return '太短' + meta('A')
+    })
+    await expect(
+      runBookPipeline({ chapters: [chapters[0]], mode: 'summary', ai, bookTitle: '书', bookType: 'non-fiction', concurrency: 1, cache: null as never, signal: ctrl.signal })
+    ).rejects.toThrow()
+  })
+
+  it('自定义提示词：不清理（保留标题）、不判质量、不重写', async () => {
+    const calls: unknown[] = []
+    const { ai } = makeAI([])
+    ;(ai.summarizeChapter as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
+      calls.push(args[5])
+      return '# 我要的标题\n一句话。'
+    })
+    const r = await runBookPipeline({ chapters: [chapters[0]], mode: 'summary', ai, bookTitle: '书', bookType: 'non-fiction', concurrency: 1, cache: null as never, customPrompt: '一句话概括' })
+    expect(calls).toHaveLength(1)
+    expect(r.chapters[0].summary).toBe('# 我要的标题\n一句话。')
+    expect(r.chapters[0].quality).toBeUndefined()
   })
 
   it('旁路缺失（模型没按格式）不触发重写，也不使该章失败', async () => {

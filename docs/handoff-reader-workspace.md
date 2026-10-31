@@ -53,7 +53,13 @@ pnpm dlx @fission-ai/openspec validate add-reader-workspace --strict
 - 收尾：更新 `README.md` 与项目 `CLAUDE.md`（书库、学习功能、`.juhua/` 目录约定）；阶段结束后按全局规范 fan out 独立 Reviewer（devils_advocate，需指定模型）。
 
 ### 3.4 生产走查遗留（详见 tasks.md §9.11–9.15）
-字体自托管与正文衬线切换、补全按钮的下载量提示、WebDAV 首屏连接 20 秒+ 的拆解、推荐与全量网格的重复、646 本书的真实封面并发与流量。生产站 `https://read-app.navira.blog`（共享密码，需用户自己登录）；部署由 Cloudflare Pages 自动构建，页脚构建号（`src/buildInfo.ts`）可用来确认线上是哪一版：`curl` 首页取 `assets/index-*.js`，grep `20261031.bN`。
+9.11–9.16 已完成（字体改系统字体栈，不自托管）；9.15 的「真实封面流量」未实测（需先补全 646 本，约 2GB）。后续工作见 §3.5。生产站 `https://read-app.navira.blog`（共享密码，需用户自己登录）；部署由 Cloudflare Pages 自动构建，页脚构建号（`src/buildInfo.ts`）可用来确认线上是哪一版：`curl` 首页取 `assets/index-*.js`，grep `2026MMDD.bN`。
+
+### 3.5 二次走查与 v3（tasks.md §10；规格 ux-audit / prompts-v3 / processing-v3 / design-system）
+- **已完成**：对照栏页签「常驻 图谱/时间线/人物志/问书 + 更多」（取代旧的横向滚动）；书库头部收紧、推荐与网格去重、补全按钮提示下载总量（≥200MB 先确认）；工作台单层页头；已精读书打开时骨架屏；打开已精读书**不再自动调 AI**；目录条目折行+全称；设计系统角色类与守卫；提示词 v3（默认）与 CLI 对应；WebDAV 列目录并行。
+- **未完成（见 tasks.md 10.9–10.12 的「未做」）**：规范实体名接入正文标注/图谱/云端 MD；前端切回 v2 的入口；v2/v3 真实模型评测（规格门槛未满足）；map-reduce 书级步骤与「重试此步」；设计系统的共享组件与按钮高度；图表页签的预估金额与取消。
+- **升级成本**：默认提示词改为 v3 后，旧章节缓存（键含提示词哈希）不会命中，已处理的书重跑会重新付费；已精读的书直接从云端 MD 读，不受影响。
+- **坑（本次踩到）**：① `webdavService.runExclusive` 串行了所有 DAV 操作，单测用假 `list` 的「并行」会被它吃掉——凡是声称并行的 WebDAV 改动，必须用真实 `webdav` 库 + 本地 HTTP 服务测（`tests/webdav/davConcurrentList.test.ts` 是范例）；目前只有「列目录」改成了每次请求自带 headers，其余操作仍串行。② 全量并行跑测试时 wall-clock 性能断言会抖（实体索引用例已放宽到 1s）。③ `uv run` 不带 `--no-sync` 会尝试编译原生依赖（ARM64 上失败），用 `uv run --no-sync pytest`。④ 批量脚本改 className 之后，守卫测试会暴露漏网之鱼（`sky-*`、`purple-*`），先跑守卫再提交。
 
 ## 4. 设计要点与坑（避免重复踩）
 

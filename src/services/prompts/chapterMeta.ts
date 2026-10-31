@@ -98,10 +98,17 @@ function coerceMeta(obj: unknown): ChapterMeta | null {
 /** 拆出正文与旁路；永不抛错，旁路损坏时 meta 为 null 且给出 metaError */
 export function splitChapterMeta(raw: string): SplitResult {
   const s = raw ?? ''
-  const m = META_MARK_RE.exec(s)
-  if (!m) return { text: s.trimEnd(), meta: null }
-  const text = s.slice(0, m.index).trimEnd()
-  const json = firstJsonObject(s.slice(m.index + m[0].length))
+  // 取最后一个标记：正文里即使出现标记字样（如讲 HTML 注释的章节），真正的旁路也在末尾
+  let m: RegExpExecArray | null = null
+  for (const hit of s.matchAll(new RegExp(META_MARK_RE.source, 'gi'))) m = hit
+  if (!m) return splitTrailingFence(s)
+  let text = s.slice(0, m.index).trimEnd()
+  const after = s.slice(m.index + m[0].length)
+  const json = firstJsonObject(after)
+  if (!text) {
+    // 模型把旁路写在了正文前面：旁路之后剩下的才是正文
+    text = (json ? after.replace(json, '') : after).replace(/```(?:json)?/gi, '').trim()
+  }
   if (!json) return { text, meta: null, metaError: '旁路里没有 JSON 对象' }
   try {
     const meta = coerceMeta(JSON.parse(json))
@@ -109,6 +116,21 @@ export function splitChapterMeta(raw: string): SplitResult {
   } catch (e) {
     return { text, meta: null, metaError: `旁路 JSON 解析失败：${e instanceof Error ? e.message : String(e)}` }
   }
+}
+
+/** 模型漏写标记、只在末尾给了 ```json 元数据代码块：识别出来，避免 JSON 原样留在正文里被上传 */
+const TRAILING_FENCE_RE = /```json\s*(\{[\s\S]*?\})\s*```\s*$/i
+function splitTrailingFence(s: string): SplitResult {
+  const m = TRAILING_FENCE_RE.exec(s)
+  if (m) {
+    try {
+      const meta = coerceMeta(JSON.parse(m[1]))
+      if (meta) return { text: s.slice(0, m.index).trimEnd(), meta }
+    } catch {
+      /* 不是我们的元数据：当作正文里的普通代码块 */
+    }
+  }
+  return { text: s.trimEnd(), meta: null }
 }
 
 /** 正文 + 旁路 → 可缓存的单个字符串（读取时再 split） */
@@ -128,12 +150,11 @@ const BOLD_RE = /(?<!\*)\*\*(?!\*)([^*\n]+?)(?<!\*)\*\*(?!\*)/g
  * - 加粗超过上限：保留最短的几处（主旨句通常短），其余去掉加粗
  */
 export function sanitizeSummary(text: string): string {
-  let out = text
-    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
-    .replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm, '')
-    .replace(/\*\*\*([^*\n]+?)\*\*\*/g, '**$1**')
-    // 反引号里没有代码特征（括号/等号/分号/花括号/斜杠）的，当作被滥用的「专有名词标记」
-    .replace(/`([^`\n]{1,40})`/g, (m, inner: string) => (/[(){}=;<>/\\]/.test(inner) ? m : inner))
+  // 围栏代码块（```…```）整体不动：里面的 # 是注释、--- 是内容，不是被滥用的标题/分割线
+  const parts = text.split(/(```[\s\S]*?```)/g)
+  let out = parts
+    .map((part, i) => (i % 2 === 1 ? part : sanitizeProse(part)))
+    .join('')
     .replace(/\n{3,}/g, '\n\n')
 
   const bolds = [...out.matchAll(BOLD_RE)]
@@ -148,20 +169,31 @@ export function sanitizeSummary(text: string): string {
     let idx = -1
     out = out.replace(BOLD_RE, (m, inner: string) => (keep.has(++idx) ? m : inner))
   }
-  return out.trim()
+  return out.replace(GREETING_LINE_RE, '').trim()
 }
 
-export type QualityIssue = 'tooShort' | 'greeting' | 'noMeta'
+export type QualityIssue = 'tooShort' | 'noMeta'
 
-const GREETING_RE = /^\s*(好的|当然|以下是|下面是|这是对|这是本章|没问题|收到)/
+/** 开头的客套话（带标点的短语）：本地剥掉，不为它付费重写 */
+const GREETING_LINE_RE = /^[ \t]*(?:(?:好的|当然|没问题|收到|可以)[，,！!。.:：][^\n]{0,30}|(?:以下是|下面是)[^。\n]{0,30}(?:总结|摘要)[：:。.]?)[ \t]*\n+/
+
+function sanitizeProse(part: string): string {
+  return part
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '')
+    .replace(/^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$/gm, '')
+    .replace(/\*\*\*([^*\n]+?)\*\*\*/g, '**$1**')
+    // 反引号里没有代码特征（括号/等号/分号/花括号/斜杠）的，当作被滥用的「专有名词标记」
+    .replace(/`([^`\n]{1,40})`/g, (m, inner: string) => (/[(){}=;<>/\\]/.test(inner) ? m : inner))
+}
 
 /** 质量判定：inputChars 为送入模型的原文长度（原文很长而总结极短才算过短） */
 export function checkSummaryQuality(text: string, inputChars: number, opts: { expectMeta: boolean; hasMeta: boolean }): QualityIssue[] {
   const issues: QualityIssue[] = []
   const body = text.trim()
-  if (/^无需总结/.test(body)) return issues
-  if (inputChars >= 1500 && body.length < 150) issues.push('tooShort')
-  if (GREETING_RE.test(body)) issues.push('greeting')
+  // 「无需总结」可能带引号/说明/译成英文：没有旁路的短输出一律不当作「过短」——
+  // 只有模型按 v3 格式给了旁路、正文却极短，才是值得付费重写的真问题
+  if (/^[\s"“'「《]*无需总结/.test(body)) return issues
+  if (opts.hasMeta && inputChars >= 1500 && body.length < 150) issues.push('tooShort')
   if (opts.expectMeta && !opts.hasMeta) issues.push('noMeta')
   return issues
 }

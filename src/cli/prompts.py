@@ -187,6 +187,16 @@ class PromptTemplates:
         self.version = version
         self._yaml: Optional[dict] = None
 
+    def _legacy_default(self, prompt_type: str, is_fiction: bool) -> str:
+        """v2 内置默认文本（读不到 v2 文件就当没有，即不会误判为「等于默认」）"""
+        try:
+            data = load_yaml_prompts("v2", self.prompts_dir)
+        except (FileNotFoundError, ValueError):
+            return ""
+        if prompt_type == "chapterSummary":
+            return (data.get("chapterSummary") or {}).get("fiction" if is_fiction else "nonFiction", "") or ""
+        return data.get(prompt_type, "") or ""
+
     def _yaml_prompts(self) -> dict:
         if self._yaml is None:
             self._yaml = load_yaml_prompts(self.version, self.prompts_dir)
@@ -199,13 +209,19 @@ class PromptTemplates:
         versions = getattr(self.prompt_config, "versions", None) or {}
         # 旧配置（v2 时代导出）里的自定义模板只存在 v2 条目下：默认升到 v3 后仍然生效，
         # 它们不含 JSON 旁路，clean_chapter_summary 会照常处理
-        vc = versions.get(self.version) or versions.get("v2")
+        vc = versions.get(self.version)
+        from_legacy = False
+        if vc is None and self.version != "v2":
+            vc = versions.get("v2")
+            from_legacy = vc is not None
         if vc is not None:
             if prompt_type == "chapterSummary":
                 custom = vc.chapterSummary_fiction if is_fiction else vc.chapterSummary_nonFiction
             else:
                 custom = getattr(vc, prompt_type, "")
-            if custom:
+            # 旧导出里没改过的条目就是 v2 默认全文：不算自定义，应跟随当前默认（v3），
+            # 否则 CLI 嘴上说 v3、实际一直在用旧 v2 文本（前端导入时同样按 v2 基线求覆盖项）
+            if custom and not (from_legacy and custom == self._legacy_default(prompt_type, is_fiction)):
                 return custom
         # 2. 共享 YAML
         data = self._yaml_prompts()

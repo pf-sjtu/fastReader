@@ -1,5 +1,5 @@
 import type { FileStat } from 'webdav'
-import { normalizeDavPath } from '../webdavProxyUtils'
+import { encodeDavHeaderPath, normalizeDavPath } from '../webdavProxyUtils'
 import type { DavContext, WebDAVFileInfo, WebDAVOperationResult } from './types'
 import { buildHeaderPath } from './utils'
 
@@ -28,12 +28,21 @@ export function getDirectoryContents(
   path: string,
   deep: boolean
 ): Promise<WebDAVOperationResult<WebDAVFileInfo[]>> {
-  return ctx.runExclusive(async () => {
+  // 不加锁：真实路径放在「这一次请求」自己的头里（webdav 库的 headers 选项会覆盖 client 上的共享头），
+  // 不依赖共享 client 的可变头，所以列目录可以并行（书库兜底遍历 6 路并发靠它）。
+  // 用真实 webdav 库 + 本地 HTTP 服务验证过：并发请求各自带各自的路径（tests/webdav/davConcurrentList.test.ts）。
+  return (async () => {
     try {
       const rawPath = path || ctx.config?.browsePath || '/'
-      ctx.setDavHeader(buildHeaderPath(normalizeDavPath(rawPath)))
+      const headerPath = buildHeaderPath(normalizeDavPath(rawPath))
 
-      const contents = (await ctx.client!.getDirectoryContents('/', { deep })) as FileStat[] | FileStat
+      const contents = (await ctx.client!.getDirectoryContents('/', {
+        deep,
+        headers: {
+          'X-WebDAV-Path': encodeDavHeaderPath(headerPath),
+          'X-Request-Origin': window.location.origin,
+        },
+      })) as FileStat[] | FileStat
       const list = Array.isArray(contents) ? contents : [contents]
 
       const fileList: WebDAVFileInfo[] = list.map((item) => ({
@@ -49,7 +58,7 @@ export function getDirectoryContents(
     } catch (error) {
       return { success: false, error: `获取目录内容失败: ${errMsg(error)}` }
     }
-  })
+  })()
 }
 
 /** 只保留 epub/pdf/txt/md 文件 */

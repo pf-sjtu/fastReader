@@ -68,8 +68,8 @@ export function createLibraryIO(): LibraryIO | null {
       const list = (dir: string, deep: boolean) => webdavService.getDirectoryContents(dir, deep)
       // 书目录 + 同步目录（摘要）；两者重叠（同步目录在书目录里）时按路径去重
       const roots = booksPath && !syncPath.startsWith(booksPath + '/') ? [booksPath, syncPath] : [booksPath ?? syncPath]
-      const lists = []
-      for (const root of roots) lists.push(await listTree(list, root))
+      // 两个根互不依赖：并行扫（每次往返 0.5–2s，串行会白白叠加）
+      const lists = await Promise.all(roots.map((root) => listTree(list, root)))
       const byPath = new Map(lists.flat().map((f) => [f.filename, f]))
       return [...byPath.values()]
         .filter((f) => f.type === 'file')

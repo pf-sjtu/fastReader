@@ -243,3 +243,59 @@ describe('重建与清理', () => {
     expect(Object.keys(r.index.entries)).toHaveLength(1)
   })
 })
+
+describe('refreshLibrary：目录扫描与读远端索引并行（9.13：每次往返 0.5–2s，串行会叠加）', () => {
+  it('远端索引还没读回来时，目录扫描已经发起', async () => {
+    const { io, state } = memoryIO({ files: [f('a.epub')] })
+    const events: string[] = []
+    let releaseRemote!: () => void
+    let reads = 0
+    // 只有第一次（刷新开头那次）被我们按住；写回前的重读（persistIndex）立即返回
+    io.readRemote = () =>
+      ++reads > 1
+        ? Promise.resolve(state.remote)
+        : new Promise((resolve) => {
+            events.push('readRemote:start')
+            releaseRemote = () => {
+              events.push('readRemote:end')
+              resolve(state.remote)
+            }
+          })
+    const origList = io.listFiles
+    io.listFiles = async () => {
+      events.push('listFiles:start')
+      return origList()
+    }
+    const p = refreshLibrary(io)
+    await new Promise((r) => setTimeout(r, 0))
+    expect([...events].sort()).toEqual(['listFiles:start', 'readRemote:start']) // 读远端还没完（没有 end），扫描已经开始
+    releaseRemote()
+    const r = await p
+    expect(r.scanned).toBe(true)
+    expect(Object.keys(r.index.entries)).toEqual([`${SYNC}/a.epub`])
+  })
+
+  it('扫描失败（发生在读远端之后）：与以前一样返回 scanned:false，保留镜像且不 GC', async () => {
+    const { io, state } = memoryIO({ files: [f('a.epub')] })
+    await refreshLibrary(io)
+    state.listFails = true
+    const r = await refreshLibrary(io)
+    expect(r.scanned).toBe(false)
+    expect(r.error).toContain('PROPFIND')
+    expect(Object.keys(r.index.entries)).toEqual([`${SYNC}/a.epub`])
+    expect(r.removed).toEqual([])
+  })
+
+  it('skipScan：不发起目录扫描', async () => {
+    const { io } = memoryIO({ files: [f('a.epub')] })
+    let called = 0
+    const orig = io.listFiles
+    io.listFiles = async () => {
+      called++
+      return orig()
+    }
+    const r = await refreshLibrary(io, { skipScan: true })
+    expect(called).toBe(0)
+    expect(r.scanned).toBe(false)
+  })
+})

@@ -197,6 +197,13 @@
   --sidebar-ring: oklch(0.6650 0.1600 35.0);
 }
 
+/* 主题切换那一帧不做任何过渡（见 ThemeProvider），避免新旧主题色混在一帧里 */
+[data-theme-switching] *,
+[data-theme-switching] *::before,
+[data-theme-switching] *::after {
+  transition: none !important;
+}
+
 @layer components {
   /* 文字角色：全站标题/标签只从这里取，不在业务组件里写零散的字号字重组合 */
   .t-display {

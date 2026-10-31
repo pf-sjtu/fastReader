@@ -170,21 +170,28 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
       const raw = await ai.summarizeChapter(title, content, input.bookType, lang, input.customPrompt, hint ? { ...opts, rewriteHint: hint } : opts)
       const split = splitChapterMeta(raw)
       if (split.metaError) logger.warn(`[pipeline] 「${title}」${split.metaError}`)
+      // 用户自定义了提示词：输出格式由用户说了算（可能要标题/一句话概括），不清理、不判质量、不重写
+      if (input.customPrompt) return { summary: split.text, meta: split.meta, issues: [] as QualityIssue[] }
       const summary = isUsableText(split.text) ? sanitizeSummary(split.text) : split.text
       const issues = isUsableText(summary)
-        ? checkSummaryQuality(summary, content.length, { expectMeta: !input.customPrompt, hasMeta: !!split.meta })
+        ? checkSummaryQuality(summary, content.length, { expectMeta: true, hasMeta: !!split.meta })
         : []
       return { summary, meta: split.meta, issues }
     }
     const blocking = (issues: QualityIssue[]) => issues.filter((i) => i !== 'noMeta')
     let cur = await run()
     if (blocking(cur.issues).length > 0) {
-      const hint = blocking(cur.issues)
-        .map((i) => (i === 'tooShort' ? '正文字数不足，须按要求写足篇幅并覆盖本章全部论点' : '开头出现了问候语或说明性文字，必须直接从正文开始'))
-        .join('；')
+      const hint = '正文字数不足，须按要求写足篇幅并覆盖本章全部论点'
       throwIfAborted()
-      const retry = await run(hint)
-      if (blocking(retry.issues).length <= blocking(cur.issues).length && retry.summary.length >= cur.summary.length * 0.8) cur = retry
+      // 重写是又一次付费调用：同样要过限速，且它失败（429/网络）不能连累已经可用的首轮结果
+      await input.afterChapterAI?.()
+      try {
+        const retry = await run(hint)
+        if (blocking(retry.issues).length <= blocking(cur.issues).length && retry.summary.length >= cur.summary.length * 0.8) cur = retry
+      } catch (err) {
+        rethrowIfAbort(err)
+        logger.warn(`[pipeline] 「${title}」定向重写失败，保留首轮结果:`, err)
+      }
     }
     return { summary: cur.summary, meta: cur.meta, warn: blocking(cur.issues).length > 0 }
   }

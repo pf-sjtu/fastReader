@@ -205,12 +205,15 @@ describe('路径：只用绝对路径，不叠加 browsePath', () => {
       { filename: 'https://dav.example.com/dav/Books/a.epub', basename: 'a.epub', lastmod: 'd', size: 3, type: 'file', etag: null, mime: 'x' },
       { filename: '/Books/sub', basename: 'sub', lastmod: 'd', size: 0, type: 'directory', etag: 'e' }
     ])
+    // 列目录不再改共享头（那会让它必须串行），真实路径在「这一次请求」自己的 headers 里
+    const listed = () => h.client.getDirectoryContents.mock.calls.filter((c) => (c[1] as { headers?: unknown } | undefined)?.headers).map((c) => (c[1] as { headers: Record<string, string> }).headers['X-WebDAV-Path'])
     const r = await svc.getDirectoryContents('/Books')
-    expect(h.client.paths).toEqual(['/Books'])
+    expect(listed()).toEqual(['/Books'])
+    expect(h.client.paths).toEqual([])
     expect(r.data?.map((f) => f.filename)).toEqual(['/Books/a.epub', '/Books/sub'])
     expect(r.data?.[0].etag).toBeUndefined()
     await svc.getDirectoryContents('')
-    expect(h.client.paths.at(-1)).toBe('/Books')
+    expect(listed().at(-1)).toBe('/Books')
     const sup = await svc.getSupportedFiles('/Books')
     expect(sup.data?.map((f) => f.basename)).toEqual(['a.epub'])
   })

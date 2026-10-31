@@ -19,6 +19,11 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
   useEffect(() => {
     const root = window.document.documentElement;
 
+    // 切换主题的那一帧关掉所有过渡：否则带 transition-all/colors 的控件会用 150ms 渐变到新主题，
+    // 其它元素立刻变色，就出现「深色卡片 + 浅色文字」的混合帧
+    root.setAttribute('data-theme-switching', '')
+    const done = requestAnimationFrame(() => requestAnimationFrame(() => root.removeAttribute('data-theme-switching')))
+
     root.classList.remove('light', 'dark');
 
     if (theme === 'system') {
@@ -28,10 +33,11 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
         : 'light';
 
       root.classList.add(systemTheme);
-      return;
+      return () => cancelAnimationFrame(done);
     }
 
     root.classList.add(theme);
+    return () => cancelAnimationFrame(done);
   }, [theme]);
 
   const value = {

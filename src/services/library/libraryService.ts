@@ -147,6 +147,9 @@ export async function refreshLibrary(io: LibraryIO, opts: RefreshOptions = {}): 
     opts.onUpdate?.(index, 'mirror')
   }
 
+  // 目录扫描不依赖镜像/远端索引：提前发起，与下面读远端索引并行（省一次 WebDAV 往返）
+  const scanning = opts.skipScan ? null : io.listFiles().then((f) => ({ ok: true as const, files: f }), (e: unknown) => ({ ok: false as const, e }))
+
   // 2) 远端索引：与镜像合并；无效/高版本 → 丢弃（等扫描后重建）
   let error: string | undefined
   try {
@@ -162,12 +165,12 @@ export async function refreshLibrary(io: LibraryIO, opts: RefreshOptions = {}): 
   if (opts.skipScan) return { index, scanned: false, error, added: [], removed: [] }
 
   // 3) 扫描目录；失败就保留现有索引，不做 GC
-  let files: ListedFile[]
-  try {
-    files = await io.listFiles()
-  } catch (e) {
+  const listed = await scanning!
+  if (!listed.ok) {
+    const e = listed.e
     return { index, scanned: false, error: e instanceof Error ? e.message : String(e), added: [], removed: [] }
   }
+  const files: ListedFile[] = listed.files
   const { sources, summaryNames } = splitListing(files, io.booksPath)
   const scan = applyScan(index, sources, { now, summaryNameOf: io.summaryNameOf, summaryNames })
   const before = index

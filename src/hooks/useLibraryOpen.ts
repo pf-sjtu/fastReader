@@ -46,7 +46,13 @@ export function useLibraryOpen({
         }
         const picked = r.data.name
         setAutoLoad(entry.status === 'done' ? { name: picked, ready: false } : null)
-        await handleWebDAVFileSelect(r.data)
+        try {
+          await handleWebDAVFileSelect(r.data)
+        } catch (e) {
+          // 选文件流程抛错：不能让「正在打开」骨架屏一直挂着
+          setAutoLoad((cur) => (cur?.name === picked ? null : cur))
+          throw e
+        }
         setAutoLoad((cur) => (cur?.name === picked ? { name: picked, ready: true } : cur))
         void markOpened(entry)
       } finally {

@@ -376,6 +376,27 @@ describe('useLibraryOpen', () => {
     expect(load).not.toHaveBeenCalled()
   })
 
+  it('选文件流程抛错：autoOpening 回到假，骨架屏不会一直挂着', async () => {
+    const seen: boolean[] = []
+    downloadFileAsFile.mockResolvedValue({ success: true, data: new File(['x'], '甲.epub') })
+    let open!: (e: LibraryEntry) => Promise<void>
+    let rejectSelect!: (e: Error) => void
+    const select = vi.fn(() => new Promise<void>((_, rej) => (rejectSelect = rej)))
+    mounted = mount(<Harness file={null} cloud={null} checking={false} select={select} load={vi.fn()} expose={(o) => (open = o)} onAuto={(v) => void seen.push(v)} />)
+    let p!: Promise<void>
+    await act(async () => {
+      p = open(entry('done'))
+      p.catch(() => {})
+      await flush(1)
+    })
+    expect(seen.at(-1)).toBe(true) // 选文件进行中：过渡态
+    await act(async () => {
+      rejectSelect(new Error('解析失败'))
+      await p.catch(() => {})
+    })
+    expect(seen.at(-1)).toBe(false) // 出错后必须退出
+  })
+
   it('下载失败：提示错误，不走选文件流程', async () => {
     downloadFileAsFile.mockResolvedValue({ success: false, error: '404' })
     const select = vi.fn()

@@ -45,3 +45,26 @@ def test_v3_is_default_and_v2_still_loads():
     v3 = load_yaml_prompts("v3")["chapterSummary"]["nonFiction"]
     assert v2 != v3
     assert "<!--juhua:meta-->" in v3 and "<!--juhua:meta-->" not in v2
+
+
+def test_legacy_v2_entries_equal_to_v2_default_follow_v3_but_customized_ones_stay():
+    """旧导出里只存在 v2 条目：没改过的（== v2 默认全文）跟随 v3；改过的保持原样（与前端导入的覆盖项语义一致）"""
+    from src.cli.config import PromptConfig, PromptVersionConfig
+    from src.cli.prompts import PromptTemplates
+
+    v2 = load_yaml_prompts("v2")
+    v3 = load_yaml_prompts("v3")
+    cfg = PromptConfig(
+        currentVersion="v3",
+        versions={
+            "v2": PromptVersionConfig(
+                chapterSummary_nonFiction=v2["chapterSummary"]["nonFiction"],  # 未改：等于 v2 默认
+                chapterSummary_fiction="我自己写的小说提示词",  # 改过
+                connectionAnalysis=v2["connectionAnalysis"],
+            )
+        },
+    )
+    t = PromptTemplates(prompt_config=cfg)
+    assert t.get_prompt("chapterSummary", "non-fiction") == v3["chapterSummary"]["nonFiction"]
+    assert t.get_prompt("chapterSummary", "fiction") == "我自己写的小说提示词"
+    assert t.get_prompt("connectionAnalysis") == v3["connectionAnalysis"]
