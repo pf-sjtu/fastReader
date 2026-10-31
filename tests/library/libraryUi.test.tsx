@@ -110,13 +110,57 @@ describe('LibraryView', () => {
     expect(mounted.container.textContent).toContain('补全书籍信息（1）')
   })
 
-  it('有推荐时，全量网格有自己的「全部书籍」标题；没有推荐/继续阅读时不加', () => {
+  it('有推荐/继续阅读时，下面的网格叫「其余书籍」且不重复它们；没有推荐/继续阅读时不加标题', () => {
+    const files = Array.from({ length: 12 }, (_, i) => ({ path: `/s/书${String(i).padStart(2, '0')}.epub`, size: 1, mtime: 'm' }))
+    useLibraryStore.setState({ index: applyScan(emptyIndex(0), files, { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index })
     mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
-    // 种子索引有 1 本在读（继续阅读）
-    expect(mounted.container.textContent).toContain('全部书籍')
+    expect(mounted.container.textContent).toContain('其余书籍')
+    expect(mounted.container.textContent).not.toContain('全部书籍')
+    // 12 本里 6 本推荐 + 6 本在「其余」里：同一本书不会在相邻两个区块各出现一次
+    const titles = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button.group')).map((b) => b.getAttribute('aria-label')?.split('，')[0])
+    expect(titles).toHaveLength(12)
+    expect(new Set(titles).size).toBe(12)
     useLibraryStore.setState({ index: applyScan(emptyIndex(0), [{ path: '/s/甲.epub', size: 1, mtime: 'm' }], { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index })
     mounted.rerender(<LibraryView onOpenBook={() => {}} openingPath={null} />)
-    expect(mounted.container.textContent).not.toContain('全部书籍')
+    expect(mounted.container.textContent).not.toContain('其余书籍')
+  })
+
+  it('书很少、全被「继续阅读/推荐」展示了：网格为空也不报「没有符合条件的书」', () => {
+    mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    expect(mounted.container.textContent).toContain('随机推荐')
+    expect(mounted.container.textContent).not.toContain('没有符合条件')
+    expect(mounted.container.textContent).not.toContain('其余书籍')
+  })
+
+  it('「补全书籍信息」按钮的提示写明要下载的总量；超过 200MB 先确认，取消则不下载', () => {
+    const mb = 1024 * 1024
+    const files = Array.from({ length: 3 }, (_, i) => ({ path: `/s/书${i}.epub`, size: 100 * mb, mtime: 'm' }))
+    const fillMetadata = vi.fn().mockResolvedValue(undefined)
+    useLibraryStore.setState({ index: applyScan(emptyIndex(0), files, { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index, fillMetadata })
+    mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    const btn = mounted.container.querySelector<HTMLButtonElement>('button[title*="将下载"]')!
+    expect(btn.title).toContain('3 本')
+    expect(btn.title).toContain('300 MB')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    click(btn)
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(confirm.mock.calls[0][0]).toContain('300 MB')
+    expect(fillMetadata).not.toHaveBeenCalled()
+    confirm.mockReturnValue(true)
+    click(btn)
+    expect(fillMetadata).toHaveBeenCalledTimes(1)
+    confirm.mockRestore()
+  })
+
+  it('补全总量很小（<200MB）时不弹确认，直接开始', () => {
+    const fillMetadata = vi.fn().mockResolvedValue(undefined)
+    useLibraryStore.setState({ index: applyScan(emptyIndex(0), [{ path: '/s/书.epub', size: 1024, mtime: 'm' }], { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index, fillMetadata })
+    mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    const confirm = vi.spyOn(window, 'confirm')
+    click(mounted.container.querySelector<HTMLButtonElement>('button[title*="将下载"]'))
+    expect(confirm).not.toHaveBeenCalled()
+    expect(fillMetadata).toHaveBeenCalledTimes(1)
+    confirm.mockRestore()
   })
 
   it('连接中且没有镜像：显示「正在连接云端」，不能误报「还没有书」', () => {
@@ -144,14 +188,15 @@ describe('LibraryView', () => {
     }
     const more = () => Array.from(mounted!.container.querySelectorAll('button')).find((b) => b.textContent?.includes('显示更多'))
     expect(gridCount()).toBe(24)
-    expect(more()?.textContent).toContain('还有 76 本')
-    expect(mounted.container.textContent).toContain('全部书籍100') // 标题数量是总数，不是本页数量
+    // 100 本里 6 本在「随机推荐」中，网格是其余 94 本
+    expect(more()?.textContent).toContain('还有 70 本')
+    expect(mounted.container.textContent).toContain('其余书籍94') // 标题数量是总数，不是本页数量
 
     click(more())
     expect(gridCount()).toBe(72)
-    expect(more()?.textContent).toContain('还有 28 本')
+    expect(more()?.textContent).toContain('还有 22 本')
     click(more())
-    expect(gridCount()).toBe(100)
+    expect(gridCount()).toBe(94)
     expect(more()).toBeUndefined()
 
     const sel = mounted.container.querySelector<HTMLSelectElement>('select[aria-label="排序"]')!
@@ -436,6 +481,12 @@ describe('书卡信息布局：常见格式与体积不占位', () => {
 
   it('EPUB 不显示格式标签；PDF 等少数派才有格式小胶囊', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
+    // 分组视图下网格显示全部书（不排除推荐），卡片上是格式胶囊而不是推荐理由
+    const sel = mounted.container.querySelector<HTMLSelectElement>('select[aria-label="分类"]')!
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, 'status')
+      sel.dispatchEvent(new Event('change', { bubbles: true }))
+    })
     expect(cardFor('甲').textContent).not.toContain('EPUB')
     expect(cardFor('丙').textContent).toContain('PDF')
   })

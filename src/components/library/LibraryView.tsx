@@ -9,6 +9,7 @@ import { groupEntries, limitGroups, recommendBooks, type GroupBy } from '@/servi
 import { useLibraryStore } from '@/services/library/libraryStore'
 import type { LibraryEntry } from '@/services/library/types'
 import { isFillable } from '@/services/library/libraryFill'
+import { formatFileSize } from '@/utils/file'
 import { webdavService } from '@/services/webdavService'
 import { BookCard } from './BookCard'
 import { groupLabel, reasonLabel } from './labels'
@@ -24,6 +25,8 @@ const RECOMMEND_COUNT = 6
 /** 首屏书数（6 列 × 4 行）与每次「显示更多」追加的数量；超出的不渲染，别把下面的上传区推到几屏之外 */
 const PAGE_FIRST = 24
 const PAGE_STEP = 48
+/** 补全元数据要下载的总量超过它就先确认（约 200MB） */
+const FILL_CONFIRM_BYTES = 200 * 1024 * 1024
 const SELECT_CLS = 'h-8 rounded-md border bg-background px-2 text-xs focus-visible:outline-2 focus-visible:outline-ring'
 
 export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps) {
@@ -48,14 +51,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
     return webdavService.onInitialized(() => void refresh())
   }, [unavailable, connecting, refresh])
 
-  const entries = useMemo(() => listEntries(index, { query, filter, sort }), [index, query, filter, sort])
-  const groups = useMemo(() => groupEntries(entries, group), [entries, group])
-  // 显示上限：筛选/排序/分组/搜索一变就回到首屏数量
-  const resetKey = `${query}|${filter}|${sort}|${group}`
-  const [page, setPage] = useState({ key: resetKey, n: PAGE_FIRST })
-  const shownCount = page.key === resetKey ? page.n : PAGE_FIRST
-  const pagedGroups = useMemo(() => limitGroups(groups, shownCount), [groups, shownCount])
-  const hiddenCount = entries.length - pagedGroups.reduce((n, g) => n + g.entries.length, 0)
+  const allEntries = useMemo(() => listEntries(index, { query, filter, sort }), [index, query, filter, sort])
   const browsing = !query && filter === 'all'
   const resume = useMemo(() => (browsing ? continueReading(index) : []), [index, browsing])
   const total = Object.keys(index.entries).length
@@ -63,7 +59,29 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
     () => (browsing && total >= 3 ? recommendBooks(index, { seed, count: RECOMMEND_COUNT, exclude: prevBatch, omit: resume.map((e) => e.path) }) : []),
     [index, browsing, total, seed, prevBatch, resume]
   )
-  const staleCount = useMemo(() => Object.values(index.entries).filter((e) => e.stale && isFillable(e.path)).length, [index])
+  // 「继续阅读 / 推荐」已经展示的书不在下面的全量网格里再出现一遍（同一屏相邻重复）；
+  // 分组/排序模式下网格本身就是主视图，不排除
+  const entries = useMemo(() => {
+    if (!browsing || group !== 'none') return allEntries
+    const featured = new Set([...resume.map((e) => e.path), ...recs.map((r) => r.entry.path)])
+    return featured.size ? allEntries.filter((e) => !featured.has(e.path)) : allEntries
+  }, [allEntries, browsing, group, resume, recs])
+  const groups = useMemo(() => groupEntries(entries, group), [entries, group])
+  // 显示上限：筛选/排序/分组/搜索一变就回到首屏数量
+  const resetKey = `${query}|${filter}|${sort}|${group}`
+  const [page, setPage] = useState({ key: resetKey, n: PAGE_FIRST })
+  const shownCount = page.key === resetKey ? page.n : PAGE_FIRST
+  const pagedGroups = useMemo(() => limitGroups(groups, shownCount), [groups, shownCount])
+  const hiddenCount = entries.length - pagedGroups.reduce((n, g) => n + g.entries.length, 0)
+  const staleEntries = useMemo(() => Object.values(index.entries).filter((e) => e.stale && isFillable(e.path)), [index])
+  const staleCount = staleEntries.length
+  // 补全要把整本书下载下来：先告诉用户总量（646 本约几个 GB），超过阈值再确认一次
+  const staleBytes = useMemo(() => staleEntries.reduce((n, e) => n + (e.size || 0), 0), [staleEntries])
+  const sizeText = formatFileSize(staleBytes)
+  const startFill = () => {
+    if (staleBytes >= FILL_CONFIRM_BYTES && !window.confirm(t('library.fill.confirm', { count: staleCount, size: sizeText }))) return
+    void fillMetadata()
+  }
 
   if (unavailable) return null
 
@@ -116,11 +134,30 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
           {t('library.title')}
           {total > 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">{total}</span>}
         </h2>
-        {total > 0 && (
-          <div className="relative w-full sm:w-56">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('library.search')} className="h-9 pl-8" />
-          </div>
+        {/* 补全书籍信息：要下载整本书，由用户触发，且可取消 */}
+        {fillProgress ? (
+          <span className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+            <Loader2 className="size-3.5 animate-spin" />
+            {t('library.fill.running', { done: fillProgress.done, total: fillProgress.total })}
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={cancelFill}>
+              {t('library.fill.cancel')}
+            </Button>
+          </span>
+        ) : (
+          staleCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1 text-xs"
+              onClick={startFill}
+              title={t('library.fill.hintSize', { count: staleCount, size: sizeText })}
+              aria-label={t('library.fill.button', { count: staleCount })}
+            >
+              <Download className="size-3.5" />
+              <span className="hidden sm:inline">{t('library.fill.button', { count: staleCount })}</span>
+              <span className="sm:hidden">{staleCount}</span>
+            </Button>
+          )
         )}
         <Button
           variant="ghost"
@@ -133,6 +170,12 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
         >
           <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
         </Button>
+        {total > 0 && (
+          <div className="relative order-last w-full sm:order-none sm:w-56">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('library.search')} className="h-9 pl-8" />
+          </div>
+        )}
       </header>
 
       {total > 0 && (connecting || error || (!fresh && !refreshing)) && (
@@ -151,7 +194,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
           ))}
           <span className="mx-1 h-4 w-px bg-border" />
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            {t('library.sortBy')}
+            <span className="sr-only sm:not-sr-only">{t('library.sortBy')}</span>
             <select aria-label={t('library.sortBy')} className={SELECT_CLS} value={sort} onChange={(e) => setSort(e.target.value as LibrarySort)}>
               {sorts.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -161,7 +204,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
             </select>
           </label>
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            {t('library.groupBy')}
+            <span className="sr-only sm:not-sr-only">{t('library.groupBy')}</span>
             <select aria-label={t('library.groupBy')} className={SELECT_CLS} value={group} onChange={(e) => setGroup(e.target.value as GroupBy)}>
               {groupOptions.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -170,23 +213,6 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
               ))}
             </select>
           </label>
-          {/* 补全书名/作者/封面：要下载整本书，所以由用户触发，且可取消 */}
-          {fillProgress ? (
-            <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground" role="status">
-              <Loader2 className="size-3.5 animate-spin" />
-              {t('library.fill.running', { done: fillProgress.done, total: fillProgress.total })}
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={cancelFill}>
-                {t('library.fill.cancel')}
-              </Button>
-            </span>
-          ) : (
-            staleCount > 0 && (
-              <Button variant="outline" size="sm" className="ml-auto h-8 gap-1 text-xs" onClick={() => void fillMetadata()} title={t('library.fill.hint')}>
-                <Download className="size-3.5" />
-                {t('library.fill.button', { count: staleCount })}
-              </Button>
-            )
-          )}
         </div>
       )}
 
@@ -210,7 +236,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
         </div>
       )}
 
-      {entries.length > 0 ? (
+      {allEntries.length > 0 ? (
         <>
         {pagedGroups.map((g) => (
           <div key={g.key} className="space-y-1.5">

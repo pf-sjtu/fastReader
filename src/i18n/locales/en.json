@@ -607,7 +607,7 @@
     "loading": "Loading library…",
     "empty": "No books in the sync folder yet. Upload an EPUB/PDF, or put books into your WebDAV sync folder.",
     "noMatch": "No matching books",
-    "all": "All books",
+    "all": "More books",
     "showMore": "Show more ({{count}} more)",
     "connecting": "Connecting to the cloud…",
     "connectingCached": "Connecting to the cloud; showing your last shelf",
@@ -680,7 +680,9 @@
       "button": "Fill in book info ({{count}})",
       "running": "Filling {{done}}/{{total}}",
       "cancel": "Cancel",
-      "hint": "Downloads books to read title, author and cover (uses bandwidth); 2 at a time"
+      "hint": "Downloads books to read title, author and cover (uses bandwidth); 2 at a time",
+      "hintSize": "Downloads {{count}} books, about {{size}} in total, to read title, author and cover; 2 at a time, cancel anytime",
+      "confirm": "This will download {{count}} books, about {{size}} in total, using a lot of bandwidth. Continue?"
     }
   },
   "workspace": {
@@ -692,7 +694,8 @@
     },
     "back": "Back to previous position",
     "dock": {
-      "collapse": "Collapse side panel",
+      "collapse": "Collapse companion panel",
+      "more": "More",
       "expand": "Expand side panel",
       "resize": "Resize side panel"
     },
