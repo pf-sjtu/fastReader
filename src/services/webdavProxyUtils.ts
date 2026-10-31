@@ -1,40 +1,33 @@
+/**
+ * 归一成相对服务器根的绝对路径：先解析 `.`/`..`，再剥掉代理/服务器自带的前缀。
+ * 顺序不能反：webdav 库对 `href=/dav/EBook/x`、客户端基址 `/api/dav` 会给出 `/../../dav/EBook/x`，
+ * 层数不固定，只有先解析 `..` 才能稳定得到 `/dav/EBook/x` 再剥成 `/EBook/x`。
+ */
 export function normalizeDavPath(inputPath: string): string {
   let normalized = inputPath || '/'
+  if (!normalized.startsWith('/')) normalized = '/' + normalized
 
-  if (normalized.startsWith('/api/webdav/')) {
-    normalized = normalized.substring(11)
-  } else if (normalized.startsWith('/webdav/')) {
-    normalized = normalized.substring(7)
-  } else if (normalized.startsWith('/dav/')) {
-    normalized = normalized.substring(4)
-  } else if (normalized === '/dav') {
-    normalized = '/'
-  } else if (normalized.startsWith('/../dav/')) {
-    normalized = normalized.substring(8)
-  } else if (normalized.startsWith('../dav/')) {
-    normalized = normalized.substring(7)
-  }
-
-  if (!normalized.startsWith('/')) {
-    normalized = '/' + normalized
-  }
-
-  const segments = normalized.split('/').filter((segment) => segment !== '')
   const resolved: string[] = []
-
-  for (const segment of segments) {
-    if (segment === '.' || segment === '') {
-      continue
-    }
+  for (const segment of normalized.split('/')) {
+    if (segment === '' || segment === '.') continue
     if (segment === '..') {
       resolved.pop()
       continue
     }
     resolved.push(segment)
   }
+  let rebuilt = '/' + resolved.join('/')
 
-  const rebuilt = '/' + resolved.join('/')
-  return rebuilt === '/' ? '/' : rebuilt
+  if (rebuilt.startsWith('/api/webdav/')) {
+    rebuilt = rebuilt.substring(11)
+  } else if (rebuilt.startsWith('/webdav/')) {
+    rebuilt = rebuilt.substring(7)
+  } else if (rebuilt.startsWith('/dav/')) {
+    rebuilt = rebuilt.substring(4)
+  } else if (rebuilt === '/dav') {
+    rebuilt = '/'
+  }
+  return rebuilt
 }
 
 export function encodeDavHeaderPath(path: string): string {

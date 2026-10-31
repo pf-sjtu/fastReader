@@ -20,6 +20,13 @@ describe('WebDAV proxy URL helpers', () => {
     expect(normalizeDavPath('/../dav/foo')).toBe('/foo')
   })
 
+  it('任意层数的 ../ 前缀都能归一（webdav 库对 href=/dav/EBook/x 会给出 /../../dav/EBook/x）', () => {
+    expect(normalizeDavPath('/../../dav/EBook/癌症传 - 穆克吉.epub')).toBe('/EBook/癌症传 - 穆克吉.epub')
+    expect(normalizeDavPath('/../../dav/EBook')).toBe('/EBook')
+    expect(normalizeDavPath('/../../../dav')).toBe('/')
+    expect(normalizeDavPath('/../../dav/fastReader/a-完整摘要.md')).toBe('/fastReader/a-完整摘要.md')
+  })
+
   it('normalizes missing leading slash', () => {
     expect(normalizeDavPath('foo')).toBe('/foo')
     expect(normalizeDavPath('')).toBe('/')
