@@ -96,6 +96,16 @@ describe('applyScan：GC（连续缺席才删，防网络抖动）', () => {
   })
 })
 
+describe('applyScan：早期误收录的处理产物', () => {
+  it('旧索引里的 _chapter_N_summary.md 条目下次扫描立刻清除（不等两轮），真书保留', () => {
+    const idx0 = applyScan(emptyIndex(0), [file('书_chapter_3_summary.md'), file('书_chapter_4_summary.md'), file('书.epub')], opts(1)).index
+    // 新版本的扫描已不再把产物当书（只传入真书）
+    const r = applyScan(idx0, [file('书.epub')], opts(2))
+    expect(r.removed.sort()).toEqual(['/fastReader/书_chapter_3_summary.md', '/fastReader/书_chapter_4_summary.md'])
+    expect(Object.keys(r.index.entries)).toEqual(['/fastReader/书.epub'])
+  })
+})
+
 describe('migrateIndex：版本与脏数据', () => {
   it('版本不匹配/缺失/结构坏 → null（调用方重建）', () => {
     expect(migrateIndex(null)).toBeNull()

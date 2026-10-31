@@ -72,6 +72,20 @@ describe('splitListing', () => {
   })
 })
 
+describe('splitListing：处理产物不是书', () => {
+  it('逐章总结 {书名}_chapter_N_summary.md 不进书库；名字里碰巧带 summary 的真书不受影响', () => {
+    const { sources } = splitListing([
+      f('高毅资产投资思想_chapter_41_summary.md'),
+      f('高毅资产投资思想_chapter_1_summary.MD'),
+      f('x_chapter_3_mindmap.txt'),
+      f('Annual_Summary.md'), // 没有 _chapter_N_ 结构：当作用户自己的文档
+      f('chapter_notes_summary.md'),
+      f('高毅资产投资思想.epub'),
+    ])
+    expect(sources.map((s) => s.path.split('/').pop())).toEqual(['Annual_Summary.md', 'chapter_notes_summary.md', '高毅资产投资思想.epub'])
+  })
+})
+
 describe('refreshLibrary', () => {
   it('首次：扫描建索引，写镜像与远端（gzip 存于 .juhua/library.json.gz）', async () => {
     const { io, state } = memoryIO({ files: [f('a.epub'), f('b.epub'), f('b-完整摘要.md')] })

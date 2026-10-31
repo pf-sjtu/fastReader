@@ -18,6 +18,12 @@ export const emptyIndex = (now = Date.now()): LibraryIndex => ({
   entries: {},
 })
 
+/**
+ * 处理过程产出的文本文件（不是书）：旧版导出的逐章总结 `{书名}_chapter_N_summary.md` 等。
+ * 它们和书放在同一同步目录里，不排除的话会把真书淹没，还会被当成「待补全元数据」。
+ */
+export const GENERATED_ARTIFACT = /_chapter_\d+_(summary|mindmap)\.(md|txt)$/i
+
 export function baseName(path: string): string {
   return path.split('/').filter(Boolean).pop() ?? path
 }
@@ -167,7 +173,8 @@ export function applyScan(index: LibraryIndex, files: ScannedFile[], opts: ScanO
   for (const [path, e] of Object.entries(index.entries)) {
     if (seen.has(path)) continue
     const missingScans = e.missingScans + 1
-    if (missingScans >= MISSING_SCANS_BEFORE_GC) removed.push(path)
+    // 已识别为处理产物的旧条目（早期版本把它们当书收录过）不必等两轮扫描，直接清掉
+    if (missingScans >= MISSING_SCANS_BEFORE_GC || GENERATED_ARTIFACT.test(baseName(path))) removed.push(path)
     else entries[path] = { ...e, missingScans, updatedAt: opts.now }
   }
 

@@ -11,6 +11,7 @@ import {
   applyScan,
   baseName,
   emptyIndex,
+  GENERATED_ARTIFACT,
   enforceSizeCap,
   mergeIndexes,
   migrateIndex,
@@ -87,6 +88,7 @@ export function splitListing(files: ListedFile[]): { sources: ScannedFile[]; sum
       continue
     }
     if (!BOOK_EXTENSIONS.some((ext) => f.basename.toLowerCase().endsWith(ext))) continue
+    if (GENERATED_ARTIFACT.test(f.basename)) continue
     sources.push({ path: f.path, size: f.size, mtime: f.mtime, etag: f.etag })
   }
   return { sources, summaryNames }
