@@ -106,7 +106,7 @@ function resolvePricing(model: string): { input: number; output: number } | null
  * @param outputTokens 输出 Token 数
  * @returns 费用信息 { costUSD, costRMB }
  */
-function calculateCost(
+export function calculateCost(
   model: string,
   inputTokens: number,
   outputTokens: number

@@ -72,7 +72,9 @@
     "startChapter": "起始章节",
     "selectStartChapter": "选择起始章节",
     "endChapter": "结束章节",
-    "selectEndChapter": "选择结束章节"
+    "selectEndChapter": "选择结束章节",
+    "estimateWithCost": "已选 {{chapters}} 章，预计约 {{tokens}} tokens，费用约 ¥{{cost}}（粗略估计，以实际为准）",
+    "estimateNoPrice": "已选 {{chapters}} 章，预计约 {{tokens}} tokens（该模型无价格信息，不估算费用）"
   },
   "progress": {
     "extractingEpub": "正在解析 EPUB 文件...",
@@ -533,7 +535,11 @@
   "graphLegend": {
     "types": "按类型显示",
     "colors": "实体颜色",
-    "shape": { "circle": "人物", "roundRect": "组织", "diamond": "概念" }
+    "shape": {
+      "circle": "人物",
+      "roundRect": "组织",
+      "diamond": "概念"
+    }
   },
   "graphToolbar": {
     "colorize": "与正文同色",
@@ -579,8 +585,50 @@
     "folded": "简介已折叠（读到更靠后的章节才显示）",
     "untyped": "未分类"
   },
+  "library": {
+    "title": "我的书库",
+    "search": "搜索书名或作者",
+    "refresh": "刷新书库",
+    "loading": "正在读取书库…",
+    "empty": "同步目录里还没有书。上传一本 EPUB/PDF，或把书放进 WebDAV 同步目录。",
+    "noMatch": "没有符合条件的书",
+    "stale": "显示的是缓存内容，可能不是最新",
+    "continue": "继续阅读",
+    "chapters": "{{count}} 章",
+    "status": {
+      "done": "已精读",
+      "partial": "部分"
+    },
+    "filter": {
+      "all": "全部",
+      "done": "已精读",
+      "todo": "未精读"
+    },
+    "sort": {
+      "recent": "最近",
+      "name": "书名",
+      "status": "状态"
+    },
+    "opening": "正在打开《{{title}}》…",
+    "openFailed": "打开失败：{{error}}",
+    "maintenance": {
+      "title": "书库缓存",
+      "hint": "书库索引保存在同步目录的 .juhua/library.json，本地另有一份镜像用于秒开。",
+      "clearLocal": "清空本地缓存",
+      "cleared": "已清空本地书库缓存，下次进入会重新读取",
+      "rebuild": "重建索引",
+      "rebuildTitle": "重建书库索引？",
+      "rebuildWarn": "将丢弃现有索引并重新扫描同步目录。书籍的阅读进度和打开记录会丢失，摘要文件本身不受影响。",
+      "rebuilt": "书库索引已重建"
+    }
+  },
   "workspace": {
-    "nav": { "collapse": "收起目录", "expand": "展开目录", "resize": "调整目录宽度", "progress": "阅读进度" },
+    "nav": {
+      "collapse": "收起目录",
+      "expand": "展开目录",
+      "resize": "调整目录宽度",
+      "progress": "阅读进度"
+    },
     "back": "返回上一位置",
     "dock": {
       "collapse": "收起对照栏",

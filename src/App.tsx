@@ -23,6 +23,8 @@ import { downloadSummaryMarkdown } from '@/utils/exportSummary'
 import { exportMindMap } from '@/utils/mindmapExport'
 import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
+import { useLibraryOpen } from '@/hooks/useLibraryOpen'
+import { LibraryView } from '@/components/library/LibraryView'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -270,6 +272,15 @@ function App() {
     })()
   }, [loadFromCloudCache])
 
+  // 书库：打开一本书 = 下载 + 走选文件流程；已精读的自动进入工作台
+  const { openBook, openingPath } = useLibraryOpen({
+    file,
+    cloudCacheContent,
+    isCheckingCloudCache,
+    handleWebDAVFileSelect,
+    handleLoadFromCloudCache,
+  })
+
   // 按当前配置重新处理（可先在配置页改设置再点）
   const handleRestartProcessing = useCallback(async () => {
     setCurrentStepIndex(2)
@@ -467,6 +478,7 @@ function App() {
           // 配置步骤
           <div className="flex flex-col md:flex-row gap-3 md:gap-4 min-w-0">
             <div className="flex-1 space-y-4 min-w-0">
+              {webdavConfig.enabled && !file && <LibraryView onOpenBook={openBook} openingPath={openingPath} />}
               <FileUploadCard
                 file={file}
                 processing={processing}

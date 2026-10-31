@@ -39,10 +39,10 @@
 - [x] 4.12 图谱渐进模式口径（e≤c）与界面说明
 
 ## 5. 顶栏与书库
-- [ ] 5.1 `AppTopBar`；`App.tsx` 拆分
-- [ ] 5.2 `services/library/`（index/scanner/gc）与 IndexedDB 镜像
-- [ ] 5.3 `LibraryView`、继续阅读、封面墙、`QuickStartSheet`（智能勾选 + 费用预估）
-- [ ] 5.4 设置：重建/清空书库索引
+- [ ] 5.1 `AppTopBar`；`App.tsx` 拆分（推迟：本阶段未重排顶栏与拆分 App.tsx）
+- [x] 5.2 `services/library/`（index/scanner/gc）与 IndexedDB 镜像（未做：真实封面缩略图/孤儿封面清理、空闲时批量补全元数据；现为生成式封面，元数据在打开时补全并清 stale）
+- [x] 5.3 `LibraryView`、继续阅读、封面墙、`QuickStartSheet`（智能勾选 + 费用预估）（QuickStartSheet 以「选章页的用量预估 + 既有智能不勾选/字数筛选」落地，未新增独立抽屉）
+- [x] 5.4 设置：重建/清空书库索引
 
 ## 6. AI 学习功能
 - [ ] 6.1 学习包（studyKit）生成、持久化、三档阅读深度

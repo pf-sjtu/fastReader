@@ -1,6 +1,7 @@
 /**
  * 结果持久化：本地版本化缓存、云端同步、处理历史
  */
+import { syncLibraryStatus } from '@/services/library/libraryStore'
 import { serializeCharts, deserializeCharts, type BookCharts } from '@/charts'
 import type { PromptConfig } from '@/services/ai/types'
 import {
@@ -281,6 +282,8 @@ export function recordHistory(entry: {
 }): void {
   try {
     useProcessingHistoryStore.getState().addRecord(entry)
+    // 书库状态与历史同一处更新：处理完成即标为已处理（失败静默，下次扫描会校正）
+    syncLibraryStatus(entry.fileName, 'done')
   } catch (e) {
     logger.error('[persistence] 记录处理历史失败:', e)
   }

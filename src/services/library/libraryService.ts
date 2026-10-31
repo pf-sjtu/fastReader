@@ -1,0 +1,209 @@
+/**
+ * 书库生命周期编排：镜像（IndexedDB）→ 远端索引（WebDAV）→ 目录扫描 → 合并回写。
+ * IO 通过 LibraryIO 注入：生产用 WebDAV + idb-keyval，单测用内存实现。
+ *
+ * 取舍：
+ * - 先读本地镜像再后台刷新（stale-while-revalidate），避免首屏等 WebDAV 的数秒空白
+ * - 远端写入"先读后合并再写"：WebDAV 没有 CAS，条目级按 updatedAt 合并，偶发覆盖最多丢一次进度
+ * - 扫描失败绝不当作"所有文件都不见了"；GC 只在扫描成功时进行，且需连续两次缺席
+ */
+import {
+  applyScan,
+  baseName,
+  emptyIndex,
+  enforceSizeCap,
+  mergeIndexes,
+  migrateIndex,
+  patchEntry,
+  setStatus,
+} from './libraryIndex'
+import type { BookStatus, LibraryEntry, LibraryIndex, ScannedFile } from './types'
+
+export interface ListedFile {
+  path: string
+  basename: string
+  size: number
+  mtime: string
+  etag?: string
+}
+
+export interface LibraryIO {
+  /** 本次连接的唯一标识（服务器 + 同步目录），镜像按它分开，换账号不串书 */
+  scopeKey: string
+  syncPath: string
+  readMirror(): Promise<unknown | null>
+  writeMirror(index: LibraryIndex | null): Promise<void>
+  /** 远端索引原文：null = 不存在；抛错 = 读取失败（和"不存在"必须区分） */
+  readRemote(): Promise<string | null>
+  writeRemote(text: string): Promise<void>
+  /** 同步目录下所有受支持文件（含摘要 .md）；失败要抛错 */
+  listFiles(): Promise<ListedFile[]>
+  /** 源文件名 → 摘要文件名（cloudCacheService 的命名规则） */
+  summaryNameOf(fileName: string): string
+  now(): number
+}
+
+export const SUMMARY_SUFFIX = '-完整摘要.md'
+/** 与 webdav/browse.ts 的受支持扩展名一致 */
+export const BOOK_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md']
+export const LIBRARY_DIR = '.juhua'
+export const libraryIndexPath = (syncPath: string) => `${syncPath}/${LIBRARY_DIR}/library.json`
+
+export type RefreshPhase = 'mirror' | 'remote' | 'scan'
+export interface RefreshOptions {
+  /** 每个阶段拿到更新后的索引就回调一次，界面可以逐步刷新 */
+  onUpdate?: (index: LibraryIndex, phase: RefreshPhase) => void
+  /** 跳过扫描（只读缓存）：离线或用户只想看已有书库 */
+  skipScan?: boolean
+}
+export interface RefreshResult {
+  index: LibraryIndex
+  /** 扫描是否成功；false 时索引来自缓存，界面应提示"可能不是最新" */
+  scanned: boolean
+  error?: string
+  added: string[]
+  removed: string[]
+}
+
+/** 受支持文件分流：真正的"书" vs 我们自己生成的摘要/内部文件 */
+export function splitListing(files: ListedFile[]): { sources: ScannedFile[]; summaryNames: Set<string> } {
+  const summaryNames = new Set<string>()
+  const sources: ScannedFile[] = []
+  for (const f of files) {
+    if (f.path.includes(`/${LIBRARY_DIR}/`)) continue
+    if (f.basename.endsWith(SUMMARY_SUFFIX)) {
+      summaryNames.add(f.basename)
+      continue
+    }
+    if (!BOOK_EXTENSIONS.some((ext) => f.basename.toLowerCase().endsWith(ext))) continue
+    sources.push({ path: f.path, size: f.size, mtime: f.mtime, etag: f.etag })
+  }
+  return { sources, summaryNames }
+}
+
+async function readRemoteIndex(io: LibraryIO): Promise<{ index: LibraryIndex | null; invalid: boolean }> {
+  const text = await io.readRemote()
+  if (text == null) return { index: null, invalid: false }
+  try {
+    const idx = migrateIndex(JSON.parse(text))
+    return { index: idx, invalid: idx === null }
+  } catch {
+    return { index: null, invalid: true }
+  }
+}
+
+/**
+ * 写回：先重读远端合并（降低覆盖他人写入的概率），再按体积上限裁剪。
+ * removed：本次 GC 删除的路径——必须在合并**之后**剔除，否则远端旧副本会把它们"复活"，GC 永不生效。
+ */
+export async function persistIndex(io: LibraryIO, index: LibraryIndex, removed: readonly string[] = []): Promise<LibraryIndex> {
+  let merged = index
+  try {
+    const remote = await readRemoteIndex(io)
+    if (remote.index) merged = mergeIndexes(remote.index, index)
+  } catch {
+    /* 远端读不到就用本地版本写；写失败由下面的 catch 吞掉，镜像仍然有效 */
+  }
+  if (removed.length) {
+    const entries = { ...merged.entries }
+    for (const path of removed) delete entries[path]
+    merged = { ...merged, entries }
+  }
+  const { index: capped } = enforceSizeCap(merged)
+  await io.writeMirror(capped)
+  try {
+    await io.writeRemote(JSON.stringify(capped))
+  } catch {
+    /* 远端写失败不影响本地使用，下次刷新会再试 */
+  }
+  return capped
+}
+
+export async function refreshLibrary(io: LibraryIO, opts: RefreshOptions = {}): Promise<RefreshResult> {
+  const now = io.now()
+  let index = emptyIndex(now)
+
+  // 1) 本地镜像：立刻可用
+  const mirror = migrateIndex(await io.readMirror().catch(() => null))
+  if (mirror) {
+    index = mirror
+    opts.onUpdate?.(index, 'mirror')
+  }
+
+  // 2) 远端索引：与镜像合并；无效/高版本 → 丢弃（等扫描后重建）
+  let error: string | undefined
+  try {
+    const remote = await readRemoteIndex(io)
+    if (remote.index) {
+      index = mergeIndexes(index, remote.index)
+      opts.onUpdate?.(index, 'remote')
+    }
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e)
+  }
+
+  if (opts.skipScan) return { index, scanned: false, error, added: [], removed: [] }
+
+  // 3) 扫描目录；失败就保留现有索引，不做 GC
+  let files: ListedFile[]
+  try {
+    files = await io.listFiles()
+  } catch (e) {
+    return { index, scanned: false, error: e instanceof Error ? e.message : String(e), added: [], removed: [] }
+  }
+  const { sources, summaryNames } = splitListing(files)
+  const scan = applyScan(index, sources, { now, summaryNameOf: io.summaryNameOf, summaryNames })
+  index = await persistIndex(io, scan.index, scan.removed)
+  opts.onUpdate?.(index, 'scan')
+  return { index, scanned: true, error, added: scan.added, removed: scan.removed }
+}
+
+/** 重建：丢弃镜像与远端索引，从目录重新扫描。已读进度会丢失（设置页要明确提示） */
+export async function rebuildLibrary(io: LibraryIO): Promise<RefreshResult> {
+  await io.writeMirror(null)
+  const files = await io.listFiles()
+  const { sources, summaryNames } = splitListing(files)
+  const scan = applyScan(emptyIndex(io.now()), sources, { now: io.now(), summaryNameOf: io.summaryNameOf, summaryNames })
+  await io.writeMirror(scan.index)
+  await io.writeRemote(JSON.stringify(scan.index))
+  return { index: scan.index, scanned: true, added: scan.added, removed: [] }
+}
+
+/** 只清本地镜像（不动远端索引，换设备也不受影响） */
+export const clearLibraryMirror = (io: LibraryIO) => io.writeMirror(null)
+
+/* ---- 条目级更新：读镜像 → 改一条 → 回写（镜像 + 远端） ---- */
+
+async function mutate(io: LibraryIO, fn: (idx: LibraryIndex) => LibraryIndex): Promise<LibraryIndex | null> {
+  const cur = migrateIndex(await io.readMirror().catch(() => null))
+  if (!cur) return null
+  const next = fn(cur)
+  if (next === cur) return cur
+  return persistIndex(io, next)
+}
+
+/** 打开一本书：记录时间；顺带写入补全的元数据（标题/作者/章数/字数），清除 stale */
+export function recordOpened(
+  io: LibraryIO,
+  path: string,
+  meta?: Partial<Pick<LibraryEntry, 'title' | 'author' | 'chapterCount' | 'wordCount'>>
+) {
+  return mutate(io, (idx) =>
+    patchEntry(idx, path, { ...meta, ...(meta ? { stale: false } : {}), lastOpenedAt: io.now() }, io.now())
+  )
+}
+
+export function recordProgress(io: LibraryIO, path: string, chapterId: string, pct: number) {
+  return mutate(io, (idx) =>
+    patchEntry(idx, path, { readProgress: { chapterId, pct: Math.min(100, Math.max(0, pct)) } }, io.now())
+  )
+}
+
+/** 处理完成 / 清缓存 / 删摘要：状态与摘要文件名一次改完（按源文件名定位条目） */
+export function recordStatusByFileName(io: LibraryIO, fileName: string, status: BookStatus) {
+  return mutate(io, (idx) => {
+    const entry = Object.values(idx.entries).find((e) => baseName(e.path) === fileName)
+    if (!entry) return idx
+    return setStatus(idx, entry.path, status, io.summaryNameOf(fileName), io.now())
+  })
+}

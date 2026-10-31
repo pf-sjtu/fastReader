@@ -72,7 +72,9 @@
     "startChapter": "From",
     "selectStartChapter": "Choose the first chapter",
     "endChapter": "To",
-    "selectEndChapter": "Choose the last chapter"
+    "selectEndChapter": "Choose the last chapter",
+    "estimateWithCost": "{{chapters}} chapters selected, about {{tokens}} tokens, roughly ¥{{cost}} (rough estimate)",
+    "estimateNoPrice": "{{chapters}} chapters selected, about {{tokens}} tokens (no pricing for this model, cost not estimated)"
   },
   "progress": {
     "extractingEpub": "Parsing EPUB file...",
@@ -524,7 +526,11 @@
   "graphLegend": {
     "types": "Show by type",
     "colors": "Entity colors",
-    "shape": { "circle": "People", "roundRect": "Orgs", "diamond": "Concepts" }
+    "shape": {
+      "circle": "People",
+      "roundRect": "Orgs",
+      "diamond": "Concepts"
+    }
   },
   "graphToolbar": {
     "colorize": "Match body colors",
@@ -570,8 +576,50 @@
     "folded": "Description hidden until you read further",
     "untyped": "Uncategorised"
   },
+  "library": {
+    "title": "My library",
+    "search": "Search title or author",
+    "refresh": "Refresh library",
+    "loading": "Loading library…",
+    "empty": "No books in the sync folder yet. Upload an EPUB/PDF, or put books into your WebDAV sync folder.",
+    "noMatch": "No matching books",
+    "stale": "Showing cached data; it may be out of date",
+    "continue": "Continue reading",
+    "chapters": "{{count}} chapters",
+    "status": {
+      "done": "Read",
+      "partial": "Partial"
+    },
+    "filter": {
+      "all": "All",
+      "done": "Read",
+      "todo": "Unread"
+    },
+    "sort": {
+      "recent": "Recent",
+      "name": "Title",
+      "status": "Status"
+    },
+    "opening": "Opening “{{title}}”…",
+    "openFailed": "Failed to open: {{error}}",
+    "maintenance": {
+      "title": "Library cache",
+      "hint": "The library index lives in .juhua/library.json in your sync folder, with a local mirror for instant loading.",
+      "clearLocal": "Clear local cache",
+      "cleared": "Local library cache cleared; it will be re-read next time",
+      "rebuild": "Rebuild index",
+      "rebuildTitle": "Rebuild the library index?",
+      "rebuildWarn": "This discards the current index and rescans the sync folder. Reading progress and open history will be lost; summary files are not affected.",
+      "rebuilt": "Library index rebuilt"
+    }
+  },
   "workspace": {
-    "nav": { "collapse": "Collapse contents", "expand": "Expand contents", "resize": "Resize contents", "progress": "Reading progress" },
+    "nav": {
+      "collapse": "Collapse contents",
+      "expand": "Expand contents",
+      "resize": "Resize contents",
+      "progress": "Reading progress"
+    },
     "back": "Back to previous position",
     "dock": {
       "collapse": "Collapse side panel",

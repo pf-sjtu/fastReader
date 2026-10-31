@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '../../stores/configStore'
 import { webdavService } from '../../services/webdavService'
+import { LibraryMaintenance } from '../library/LibraryMaintenance'
 import { useWebDAVClient, isWebDAVConfigComplete } from './webdav/useWebDAVClient'
 
 const AUTO_TEST_DELAY_MS = 1000
@@ -239,6 +240,8 @@ export function WebDAVConfig() {
                   </Button>
                 </div>
               </div>
+
+              <LibraryMaintenance />
 
               {testResult && (
                 <Alert className={testResult.success ? 'border-green-200' : 'border-red-200'}>

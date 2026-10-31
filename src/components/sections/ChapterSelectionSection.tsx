@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { useConfigStore } from '@/stores/configStore'
 import type { ChapterData } from '@/services/epubProcessor'
 import { memo, useState, useMemo } from 'react'
+import { estimateRun, formatCount } from '@/services/runEstimate'
 
 interface ChapterSelectionSectionProps {
   extractedChapters: ChapterData[]
@@ -47,11 +48,18 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
   // 密钥只在服务端：这里看「当前模型是否有可用凭据」，而不是明文 apiKey
   const hasCredentials = useConfigStore(state => state.aiConfig.hasCredentials === true && Boolean(state.aiConfig.model))
 
+  const model = useConfigStore(state => state.aiConfig.model)
+
   // 全选模式：'all' = 全选所有, 'filter' = 按字符数筛选, 'range' = 定义首尾章节
   const [selectAllMode, setSelectAllMode] = useState<'all' | 'filter' | 'range'>('all')
   const [rawThreshold, setCharThreshold] = useState(0)
   const [startChapterId, setStartChapterId] = useState<string>('')
   const [endChapterId, setEndChapterId] = useState<string>('')
+
+  const estimate = useMemo(
+    () => estimateRun(extractedChapters.filter(c => selectedChapters.has(c.id)).map(c => c.content ?? ''), model),
+    [extractedChapters, selectedChapters, model]
+  )
 
   // 计算每个章节的字符数
   const chapterCharCounts = useMemo(() => {
@@ -340,6 +348,21 @@ export const ChapterSelectionSection = memo(function ChapterSelectionSection({
             {t('chapters.customPromptDescription')}
           </p>
         </div>
+
+        {selectedChapters.size > 0 && (
+          <p className="text-xs text-muted-foreground" data-testid="run-estimate">
+            {estimate.costRMB !== null
+              ? t('chapters.estimateWithCost', {
+                  chapters: estimate.chapters,
+                  tokens: formatCount(estimate.inputTokens + estimate.outputTokens),
+                  cost: estimate.costRMB < 0.01 ? '<0.01' : estimate.costRMB.toFixed(2),
+                })
+              : t('chapters.estimateNoPrice', {
+                  chapters: estimate.chapters,
+                  tokens: formatCount(estimate.inputTokens + estimate.outputTokens),
+                })}
+          </p>
+        )}
 
         <Button
           onClick={handleStartProcessing}
