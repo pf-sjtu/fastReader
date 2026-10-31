@@ -1,40 +1,24 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { Core, EventObject } from 'cytoscape'
-import type { BookCharts, EntityGraphNode } from '../../types'
+import type { Core, EventObject, NodeSingular } from 'cytoscape'
+import type { ChartPluginProps, EntityGraphNode } from '../../types'
 import { getEntityGraph } from '../../types'
 import { toCytoscapeElements, forceLayoutOptions, compactScale } from './toCytoscape'
-import { readChartTheme, subscribeThemeChange, type ChartThemeColors } from '../../theme'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+import { readChartTheme, subscribeThemeChange } from '../../theme'
+import { shapeForType, type EntityShape } from '../../linking/entityColors'
+import { buildStyles, FIT_PADDING } from './graphStyles'
+import { applyEntityStyle, applyGraphFocus, centerOnNode, nodeAnchor } from './graphFocus'
+import { GraphLegend, type LegendEntity } from './GraphLegend'
+import { GraphNodeSheet, type SelectedNode } from './GraphNodeSheet'
 import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Maximize2, RefreshCw } from 'lucide-react'
-
-interface Props {
-  charts: BookCharts
-}
-
-const FIT_PADDING = 40
-
-interface SelectedNode {
-  node: EntityGraphNode
-  edges: {
-    relation: string
-    otherName: string
-    direction: 'in' | 'out'
-    description?: string
-  }[]
-}
+import { Maximize2, RefreshCw, SlidersHorizontal } from 'lucide-react'
 
 const DEFAULT_FORCE = 55
 const FORCE_STORAGE_KEY = 'fastreader.entityGraph.forceStrength'
+const SHAPE_ORDER: EntityShape[] = ['circle', 'round-rect', 'diamond']
+const EMPTY_SET: ReadonlySet<string> = new Set()
 
 function readStoredForce(): number {
   if (typeof window === 'undefined') return DEFAULT_FORCE
@@ -58,94 +42,15 @@ function writeStoredForce(value: number) {
   }
 }
 
-// cytoscape 样式：名字居中写在球上
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildStyles(theme: ChartThemeColors): any[] {
-  const nodeFill = theme.primary
-  const onNodeText = theme.primaryForeground
-  const edgeColor = theme.mutedForeground
-  const labelBg = theme.card
-  const edgeLabelColor = theme.foreground
-
-  return [
-    {
-      selector: 'node',
-      style: {
-        // label 已在 toCytoscape 中按宽度拆行，保证落在圆内
-        label: 'data(label)',
-        'text-valign': 'center',
-        'text-halign': 'center',
-        'text-margin-y': 0,
-        'background-color': nodeFill,
-        'background-opacity': 1,
-        color: onNodeText,
-        'font-size': (ele: { data: (k: string) => number }) =>
-          ele.data('fontSize') || 10,
-        'font-weight': 600,
-        'text-wrap': 'wrap',
-        'text-max-width': (ele: { data: (k: string) => number }) =>
-          ele.data('textMaxWidth') || 36,
-        'text-outline-width': 0,
-        'text-background-opacity': 0,
-        width: (ele: { data: (k: string) => number }) => ele.data('size') || 64,
-        height: (ele: { data: (k: string) => number }) => ele.data('size') || 64,
-        'border-width': 2,
-        'border-color': theme.border,
-        'border-opacity': 1,
-        'min-zoomed-font-size': 4,
-      },
-    },
-    {
-      selector: 'node:selected',
-      style: {
-        'background-color': theme.accent,
-        'border-color': onNodeText,
-        'border-width': 3,
-        color: theme.accentForeground,
-      },
-    },
-    {
-      selector: 'node:active',
-      style: {
-        'overlay-opacity': 0.12,
-        'overlay-color': theme.primary,
-      },
-    },
-    {
-      selector: 'edge',
-      style: {
-        width: 1.5,
-        'line-color': edgeColor,
-        'target-arrow-color': edgeColor,
-        'target-arrow-shape': 'triangle',
-        'arrow-scale': 0.85,
-        'curve-style': 'bezier',
-        label: 'data(label)',
-        'font-size': 10,
-        'font-weight': 500,
-        color: edgeLabelColor,
-        'text-rotation': 'autorotate',
-        'text-margin-y': -8,
-        'text-background-color': labelBg,
-        'text-background-opacity': 0.92,
-        'text-background-padding': '2px',
-        'text-background-shape': 'roundrectangle',
-        opacity: 0.88,
-      },
-    },
-    {
-      selector: 'edge:selected',
-      style: {
-        width: 2.5,
-        'line-color': theme.primary,
-        'target-arrow-color': theme.primary,
-        opacity: 1,
-      },
-    },
-  ]
-}
-
-export function PersonGraphChart({ charts }: Props) {
+export function PersonGraphChart({
+  charts,
+  focus,
+  active = true,
+  onEntitySelect,
+  onEntityDoubleClick,
+  styleOf,
+  colorize = false,
+}: ChartPluginProps) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
@@ -154,6 +59,10 @@ export function PersonGraphChart({ charts }: Props) {
   const [selected, setSelected] = useState<SelectedNode | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [themeTick, setThemeTick] = useState(0)
+  /** cy 实例创建后自增，让依赖实例的 effect 重新执行 */
+  const [cyTick, setCyTick] = useState(0)
+  const [hiddenGroups, setHiddenGroups] = useState<ReadonlySet<string>>(EMPTY_SET)
+  const [showForce, setShowForce] = useState(false)
   /** 力导向强度 0–100；localStorage 持久化（浏览器级记忆） */
   const [force, setForce] = useState(readStoredForce)
   const forceRef = useRef(force)
@@ -161,15 +70,30 @@ export function PersonGraphChart({ charts }: Props) {
   /** 用户手动缩放/平移过之后不再自动 fit，避免和用户抢画布 */
   const userMovedRef = useRef(false)
 
+  // 事件处理器注册在 cy 上一次，之后通过 ref 读取最新回调，避免因回调身份变化重建图
+  const handlersRef = useRef({ onEntitySelect, onEntityDoubleClick })
+  handlersRef.current = { onEntitySelect, onEntityDoubleClick }
+
+  const elements = useMemo(() => (graph ? toCytoscapeElements(graph) : []), [graph])
+
+  const shapeOf = useCallback(
+    (id: string): EntityShape => {
+      const s = styleOf?.(id)
+      if (s) return s.shape
+      return shapeForType(graph?.nodes.find((n) => n.id === id)?.type)
+    },
+    [styleOf, graph]
+  )
+
   /** 容器有尺寸时重算画布并（若用户没动过视角）把全部节点收进画布 */
-  const fitIfAllowed = useCallback((force = false) => {
+  const fitIfAllowed = useCallback((forceFit = false) => {
     const cy = cyRef.current
     const el = containerRef.current
     if (!cy || !el || el.clientWidth <= 0 || el.clientHeight <= 0) return
     cy.resize()
-    if (force || !userMovedRef.current) {
+    if (forceFit || !userMovedRef.current) {
       userMovedRef.current = false
-      cy.fit(undefined, FIT_PADDING)
+      cy.fit(cy.nodes(':visible'), FIT_PADDING)
     }
   }, [])
 
@@ -203,23 +127,14 @@ export function PersonGraphChart({ charts }: Props) {
     writeStoredForce(v)
   }, [])
 
-  const elements = useMemo(
-    () => (graph ? toCytoscapeElements(graph) : []),
-    [graph]
-  )
-
   const runForceLayout = useCallback((cy: Core, forceValue: number, randomize = false) => {
     try {
       layoutRef.current?.stop?.()
     } catch {
       /* ignore */
     }
-    const opts = {
-      ...forceLayoutOptions(forceValue),
-      randomize,
-    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const layout = cy.layout(opts as any)
+    const layout = cy.layout({ ...forceLayoutOptions(forceValue), randomize } as any)
     layoutRef.current = layout
     layout.run()
   }, [])
@@ -227,14 +142,10 @@ export function PersonGraphChart({ charts }: Props) {
   const applyTheme = useCallback((cy: Core) => {
     const theme = readChartTheme()
     cy.style().fromJson(buildStyles(theme)).update()
-    if (containerRef.current) {
-      containerRef.current.style.backgroundColor = theme.card
-    }
+    if (containerRef.current) containerRef.current.style.backgroundColor = theme.card
   }, [])
 
-  useEffect(() => {
-    return subscribeThemeChange(() => setThemeTick((n) => n + 1))
-  }, [])
+  useEffect(() => subscribeThemeChange(() => setThemeTick((n) => n + 1)), [])
 
   // 页签切回（display:none → 可见）或对照栏被拖宽时：resize + fit。
   // 根因：fcose 在 0×0 的隐藏容器里跑完布局并 fit，之后容器变大只 resize 不 fit，节点就溢出画布。
@@ -257,18 +168,40 @@ export function PersonGraphChart({ charts }: Props) {
     }
   }, [graph, fitIfAllowed])
 
+  // 主题切换：重建样式表，随后下面的着色 effect 会按新主题重新解析实体色
   useEffect(() => {
     const cy = cyRef.current
     if (cy) applyTheme(cy)
   }, [themeTick, applyTheme])
 
+  // 与正文同色：开关 / 样式表 / 主题变化时重新写入节点颜色
+  useEffect(() => {
+    const cy = cyRef.current
+    if (cy) applyEntityStyle(cy, styleOf, colorize)
+  }, [cyTick, themeTick, styleOf, colorize])
+
+  // 本章高亮 / 渐进模式 / 类型过滤：只改样式，不移动视角
+  useEffect(() => {
+    const cy = cyRef.current
+    if (cy) applyGraphFocus(cy, { focus, hiddenGroups, groupOf: shapeOf })
+  }, [cyTick, focus, hiddenGroups, shapeOf])
+
+  // 跳转到达：被聚焦的实体居中。nonce 保证连续两次跳到同一实体仍会重新定位；
+  // 页签隐藏时不动画（容器 0×0），切回后由 active 变化补上
+  const handledNonce = useRef<number | undefined>(undefined)
+  const focusedId = focus?.focusedEntityId ?? null
+  const nonce = focus?.jumpNonce
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy || !active || !focusedId || nonce === handledNonce.current) return
+    if (centerOnNode(cy, focusedId)) handledNonce.current = nonce
+  }, [cyTick, active, focusedId, nonce])
+
   // 滑块变化：防抖后重跑力导向，节点散开/收拢
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
-    const timer = window.setTimeout(() => {
-      runForceLayout(cy, force, false)
-    }, 180)
+    const timer = window.setTimeout(() => runForceLayout(cy, force, false), 180)
     return () => window.clearTimeout(timer)
   }, [force, runForceLayout])
 
@@ -289,7 +222,6 @@ export function PersonGraphChart({ charts }: Props) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ;(cytoscape as any).__fcoseRegistered = true
         }
-
         if (cancelled || !containerRef.current) return
 
         const theme = readChartTheme()
@@ -303,9 +235,7 @@ export function PersonGraphChart({ charts }: Props) {
           // 下限要低于"全图 fit"所需缩放，否则 fit 被夹住、节点仍在画布外
           minZoom: 0.1,
           maxZoom: 3.5,
-          // 0.25 默认 → 曾 ×3=0.75 → 再 ×2 ≈ 1.5
           wheelSensitivity: 1.5,
-          // 可拖节点；松开后保持位置（力再跑时会重新散开）
           autoungrabify: false,
           boxSelectionEnabled: false,
         })
@@ -316,14 +246,18 @@ export function PersonGraphChart({ charts }: Props) {
         cy.on('userzoom userpan', () => {
           userMovedRef.current = true
         })
-        // 布局结束：压紧 + 对齐画布（此时容器可能已经变过尺寸）
         cy.on('layoutstop', () => compactAndFit())
-        // 初次：略随机种子 + 力导向散开
         runForceLayout(cy, forceRef.current, true)
 
+        // 单击：只选中并交给宿主展开卡片（不跳转，防误触）；没有宿主回调时退回旧版详情抽屉
         cy.on('tap', 'node', (evt: EventObject) => {
-          const n = evt.target
+          const n: NodeSingular = evt.target
           const id = n.id()
+          const select = handlersRef.current.onEntitySelect
+          if (select) {
+            select(id, nodeAnchor(n, containerRef.current!))
+            return
+          }
           const nodeData: EntityGraphNode = {
             id,
             name: n.data('name') || n.data('label'),
@@ -332,43 +266,40 @@ export function PersonGraphChart({ charts }: Props) {
             importance: n.data('importance'),
           }
           const edges: SelectedNode['edges'] = []
-          n.connectedEdges().forEach(
-            (edge: {
-              data: (k: string) => string
-              source: () => { id: () => string }
-              target: () => { id: () => string }
-            }) => {
-              const src = edge.source().id()
-              const tgt = edge.target().id()
-              const otherId = src === id ? tgt : src
-              const other = cy!.getElementById(otherId)
-              edges.push({
-                relation: edge.data('relation') || edge.data('label'),
-                otherName: other.data('name') || other.data('label') || otherId,
-                direction: src === id ? 'out' : 'in',
-                description: edge.data('description') || undefined,
-              })
-            }
-          )
+          n.connectedEdges().forEach((edge) => {
+            const src = edge.source().id()
+            const otherId = src === id ? edge.target().id() : src
+            const other = cy!.getElementById(otherId)
+            edges.push({
+              relation: edge.data('relation') || edge.data('label'),
+              otherName: other.data('name') || other.data('label') || otherId,
+              direction: src === id ? 'out' : 'in',
+              description: edge.data('description') || undefined,
+            })
+          })
           setSelected({ node: nodeData, edges })
+        })
+        cy.on('dbltap', 'node', (evt: EventObject) => handlersRef.current.onEntityDoubleClick?.(evt.target.id()))
+        // 点空白处：取消选中并收起卡片
+        cy.on('tap', (evt: EventObject) => {
+          if (evt.target === cy) {
+            cy!.nodes().unselect()
+            handlersRef.current.onEntitySelect?.(null)
+          }
         })
 
         // 拖完节点后轻微再平衡（保持 Obsidian 感）
         cy.on('dragfree', 'node', () => {
-          if (!cy) return
           window.setTimeout(() => {
-            // 卸载后 cy / cyRef 均为 null：两者相等也不能直接跑布局
+            // 卸载后 cyRef 为 null：两者相等也不能直接跑布局
             const current = cyRef.current
-            if (current && current === cy) {
-              runForceLayout(current, forceRef.current, false)
-            }
+            if (current && current === cy) runForceLayout(current, forceRef.current, false)
           }, 80)
         })
+        setCyTick((n) => n + 1)
       } catch (err) {
         console.error('[PersonGraphChart]', err)
-        if (!cancelled) {
-          setLoadError(err instanceof Error ? err.message : 'load failed')
-        }
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'load failed')
       }
     })()
 
@@ -382,14 +313,34 @@ export function PersonGraphChart({ charts }: Props) {
       if (cy) cy.destroy()
       cyRef.current = null
     }
-  }, [graph, elements, runForceLayout, fitIfAllowed, compactAndFit])
+  }, [graph, elements, runForceLayout, compactAndFit])
+
+  const legendGroups = useMemo(() => {
+    const counts = new Map<EntityShape, number>()
+    for (const n of graph?.nodes ?? []) counts.set(shapeOf(n.id), (counts.get(shapeOf(n.id)) ?? 0) + 1)
+    return SHAPE_ORDER.filter((s) => counts.has(s)).map((shape) => ({ shape, count: counts.get(shape)! }))
+  }, [graph, shapeOf])
+
+  const legendEntities = useMemo<LegendEntity[]>(() => {
+    if (!colorize || !styleOf || !graph) return []
+    const out: (LegendEntity & { slot: number })[] = []
+    for (const n of graph.nodes) {
+      const s = styleOf(n.id)
+      if (s?.slot) out.push({ id: n.id, name: n.name, cssVar: s.cssVar, shape: s.shape, slot: s.slot })
+    }
+    return out.sort((a, b) => a.slot - b.slot)
+  }, [graph, styleOf, colorize])
+
+  const toggleGroup = useCallback((shape: EntityShape) => {
+    setHiddenGroups((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(shape)) next.add(shape)
+      return next
+    })
+  }, [])
 
   if (!graph || (graph.nodes?.length ?? 0) === 0) {
-    return (
-      <div className="text-sm text-muted-foreground py-8 text-center">
-        {t('results.charts.noEntityGraph')}
-      </div>
-    )
+    return <div className="text-sm text-muted-foreground py-8 text-center">{t('results.charts.noEntityGraph')}</div>
   }
 
   if (loadError) {
@@ -402,118 +353,64 @@ export function PersonGraphChart({ charts }: Props) {
 
   return (
     <>
-      <div className="relative w-full">
-        <div
-          ref={containerRef}
-          className="w-full h-[min(60vh,640px)] min-h-[280px] border border-border rounded-lg bg-card"
-        />
-        {/* 右下角设置浮层：相互作用力（localStorage 记忆） */}
-        <div
-          className="absolute bottom-3 right-3 z-10 flex flex-col gap-2 rounded-lg border border-border/80 bg-card/95 backdrop-blur-sm shadow-md px-3 py-2.5 max-w-[min(100%-1.5rem,17rem)]"
-          onPointerDown={(e) => e.stopPropagation()}
-          onWheel={(e) => e.stopPropagation()}
+      {/* 工具条在画布上方，不再用浮层遮住节点 */}
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => fitIfAllowed(true)}>
+          <Maximize2 className="h-3 w-3 mr-1" />
+          {t('results.charts.fitView')}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => cyRef.current && runForceLayout(cyRef.current, force, true)}
         >
-          <div className="flex items-center justify-between gap-2">
-            <Label
-              htmlFor="graph-force"
-              className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap"
-            >
+          <RefreshCw className="h-3 w-3 mr-1" />
+          {t('results.charts.relayout')}
+        </Button>
+        <Button
+          type="button"
+          variant={showForce ? 'secondary' : 'outline'}
+          size="sm"
+          className="h-8 text-xs"
+          aria-expanded={showForce}
+          onClick={() => setShowForce((v) => !v)}
+        >
+          <SlidersHorizontal className="h-3 w-3 mr-1" />
+          {t('results.charts.forceStrength')}
+          <span className="ml-1 tabular-nums text-muted-foreground">{force}</span>
+        </Button>
+        {showForce && (
+          <div className="flex min-w-[10rem] flex-1 items-center gap-2 px-1">
+            <Label htmlFor="graph-force" className="sr-only">
               {t('results.charts.forceStrength')}
             </Label>
-            <span className="text-[11px] tabular-nums text-muted-foreground">
-              {force}
-            </span>
+            <Slider
+              id="graph-force"
+              className="w-full"
+              min={0}
+              max={100}
+              step={1}
+              value={[force]}
+              onValueChange={(v) => updateForce(v[0] ?? DEFAULT_FORCE)}
+            />
           </div>
-          <Slider
-            id="graph-force"
-            className="w-full min-w-[9rem]"
-            min={0}
-            max={100}
-            step={1}
-            value={[force]}
-            onValueChange={(v) => updateForce(v[0] ?? DEFAULT_FORCE)}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs w-full"
-            onClick={() => {
-              const cy = cyRef.current
-              if (cy) runForceLayout(cy, force, true)
-            }}
-          >
-            <RefreshCw className="h-3 w-3 mr-1" />
-            {t('results.charts.relayout')}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs w-full"
-            onClick={() => fitIfAllowed(true)}
-          >
-            <Maximize2 className="h-3 w-3 mr-1" />
-            {t('results.charts.fitView')}
-          </Button>
-        </div>
+        )}
       </div>
-      <p className="text-xs text-muted-foreground mt-2">
-        {t('results.charts.entityGraphHint')}
-      </p>
-
-      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent
-          side="right"
-          className="sm:max-w-md p-0 gap-0 flex flex-col h-full max-h-dvh overflow-hidden"
-        >
-          <SheetHeader className="shrink-0 pr-12 border-b border-border">
-            <SheetTitle className="pr-2 break-words">
-              {selected?.node.name}
-            </SheetTitle>
-            <SheetDescription>
-              {[
-                selected?.node.type,
-                selected?.node.importance != null
-                  ? t('results.charts.importance', { value: selected.node.importance })
-                  : '',
-              ]
-                .filter(Boolean)
-                .join(' · ') || ' '}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 space-y-3 text-sm">
-            {selected?.node.description && (
-              <p className="leading-relaxed break-words">
-                {selected.node.description}
-              </p>
-            )}
-            {selected?.edges && selected.edges.length > 0 && (
-              <div>
-                <div className="text-muted-foreground mb-2 sticky top-0 bg-background/95 backdrop-blur-sm py-1">
-                  {t('results.charts.relations')}
-                </div>
-                <ul className="space-y-2 pb-6">
-                  {selected.edges.map((e, i) => (
-                    <li key={i} className="border rounded-md p-2">
-                      <span className="font-medium">{e.relation}</span>
-                      <span className="text-muted-foreground">
-                        {' '}
-                        {e.direction === 'out' ? '→' : '←'} {e.otherName}
-                      </span>
-                      {e.description && (
-                        <p className="text-xs text-muted-foreground mt-1 break-words">
-                          {e.description}
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
+      <div
+        ref={containerRef}
+        className="w-full h-[min(60vh,640px)] min-h-[280px] border border-border rounded-lg bg-card"
+      />
+      <GraphLegend
+        groups={legendGroups}
+        hidden={hiddenGroups}
+        onToggleGroup={toggleGroup}
+        entities={legendEntities}
+        onEntityClick={onEntitySelect}
+      />
+      <p className="text-xs text-muted-foreground mt-2">{t('results.charts.entityGraphHint')}</p>
+      <GraphNodeSheet selected={selected} onClose={() => setSelected(null)} />
     </>
   )
 }

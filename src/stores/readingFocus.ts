@@ -52,22 +52,33 @@ const safeStorage: StateStorage = {
 
 interface ReadingFocusState {
   focusedEntityId: string | null
+  /** 时间线上被聚焦的事件（从事件卡片/实体卡片跳来） */
+  focusedEventId: string | null
+  /**
+   * 每次"跳转"自增。连续两次跳到同一个实体/事件时 id 不变，图表靠它重新触发定位与高亮。
+   */
+  jumpNonce: number
   companionTab: CompanionTab
   companionOpen: boolean
   companionWidth: number
   /** 正文实体标注开关 */
   annotateEntities: boolean
+  /** 图谱节点是否使用与正文一致的实体色 */
+  colorizeGraph: boolean
   /** 图谱「截至本章」渐进模式 */
   progressiveGraph: boolean
   /** 专注模式：收起目录与对照栏（会话内状态，不持久化） */
   focusMode: boolean
 
   /** 聚焦实体；reveal（默认）会同时展开对照栏并切到图谱，并退出专注模式 */
-  focusEntity: (id: string | null, opts?: { reveal?: boolean }) => void
+  focusEntity: (id: string | null, opts?: { reveal?: boolean; tab?: CompanionTab }) => void
+  /** 聚焦时间线事件：展开对照栏并切到时间线 */
+  focusEvent: (id: string) => void
   setCompanionTab: (tab: CompanionTab) => void
   setCompanionOpen: (open: boolean) => void
   setCompanionWidth: (width: number) => void
   setAnnotateEntities: (on: boolean) => void
+  setColorizeGraph: (on: boolean) => void
   setProgressiveGraph: (on: boolean) => void
   toggleFocusMode: () => void
 }
@@ -76,23 +87,42 @@ export const useReadingFocusStore = create<ReadingFocusState>()(
   persist(
     (set) => ({
       focusedEntityId: null,
+      focusedEventId: null,
+      jumpNonce: 0,
       companionTab: 'graph',
       companionOpen: true,
       companionWidth: COMPANION_DEFAULT_WIDTH,
       annotateEntities: true,
+      colorizeGraph: true,
       progressiveGraph: false,
       focusMode: false,
 
       focusEntity: (id, opts) =>
-        set(
+        set((s) =>
           id && opts?.reveal !== false
-            ? { focusedEntityId: id, companionTab: 'graph', companionOpen: true, focusMode: false }
+            ? {
+                focusedEntityId: id,
+                focusedEventId: null,
+                companionTab: opts?.tab ?? 'graph',
+                companionOpen: true,
+                focusMode: false,
+                jumpNonce: s.jumpNonce + 1,
+              }
             : { focusedEntityId: id }
         ),
+      focusEvent: (id) =>
+        set((s) => ({
+          focusedEventId: id,
+          companionTab: 'timeline',
+          companionOpen: true,
+          focusMode: false,
+          jumpNonce: s.jumpNonce + 1,
+        })),
       setCompanionTab: (companionTab) => set({ companionTab }),
       setCompanionOpen: (companionOpen) => set({ companionOpen }),
       setCompanionWidth: (w) => set({ companionWidth: clampCompanionWidth(w) }),
       setAnnotateEntities: (annotateEntities) => set({ annotateEntities }),
+      setColorizeGraph: (colorizeGraph) => set({ colorizeGraph }),
       setProgressiveGraph: (progressiveGraph) => set({ progressiveGraph }),
       toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
     }),
@@ -104,6 +134,7 @@ export const useReadingFocusStore = create<ReadingFocusState>()(
         companionOpen: s.companionOpen,
         companionWidth: s.companionWidth,
         annotateEntities: s.annotateEntities,
+        colorizeGraph: s.colorizeGraph,
         progressiveGraph: s.progressiveGraph,
       }),
       // 存档里的宽度可能被手改或来自旧版本：载入时再夹一次

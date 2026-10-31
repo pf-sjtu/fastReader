@@ -50,6 +50,31 @@ const FALLBACK_DARK: ChartThemeColors = {
   isDark: true,
 }
 
+let probeCtx: CanvasRenderingContext2D | null | undefined
+
+function canvasColorToHex(css: string): string | null {
+  try {
+    if (probeCtx === undefined) {
+      const c = document.createElement('canvas')
+      c.width = c.height = 1
+      probeCtx = c.getContext('2d', { willReadFrequently: true })
+    }
+    const ctx = probeCtx
+    if (!ctx) return null
+    // 非法颜色会被 fillStyle 忽略并保留上一次的值：先写入一个哨兵色再比较，避免误读
+    ctx.fillStyle = '#010203'
+    ctx.fillStyle = css
+    ctx.clearRect(0, 0, 1, 1)
+    ctx.fillRect(0, 0, 1, 1)
+    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data
+    if (a === 0) return null
+    if (r === 1 && g === 2 && b === 3) return null
+    return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`
+  } catch {
+    return null
+  }
+}
+
 /**
  * 任意 CSS 颜色 → #rrggbb（cytoscape / canvas 可用）
  * 通过临时 DOM 让浏览器解析 oklch / var() 等
@@ -63,6 +88,12 @@ export function cssColorToHex(input: string, fallback = '#666666'): string {
     return `#${r}${r}${g}${g}${b}${b}`.toLowerCase()
   }
   if (typeof document === 'undefined') return fallback
+
+  // 首选 canvas：现代浏览器的 getComputedStyle 会保留 oklch()/color-mix() 原样，
+  // 下面的 rgb() 正则就匹配不上；把颜色画到 1×1 画布再读像素，得到的一定是 sRGB。
+  // jsdom 没有 canvas（getContext 返回 null），自然退回 DOM 解析。
+  const viaCanvas = canvasColorToHex(raw)
+  if (viaCanvas) return viaCanvas
 
   const el = document.createElement('div')
   el.style.color = ''
@@ -95,6 +126,29 @@ function readCssVarAsHex(
   if (!v) return fallbackHex
   // 自定义属性常是 oklch(...)，需经浏览器解析
   return cssColorToHex(v, fallbackHex)
+}
+
+/**
+ * 把 `var(--entity-3)` 这类 CSS 变量引用（或任意 CSS 颜色）解析成 #rrggbb。
+ * canvas 库（cytoscape）不认 CSS 变量/oklch，而实体色唯一来源是 index.css 的 --entity-N，
+ * 所以在运行时按当前明/暗主题解析，主题切换后重新调用即可。
+ */
+export function resolveCssVarColor(value: string, fallback = '#666666'): string {
+  const m = value.trim().match(/^var\(\s*(--[\w-]+)\s*\)$/)
+  if (!m || typeof document === 'undefined') return cssColorToHex(value, fallback)
+  return readCssVarAsHex(getComputedStyle(document.documentElement), m[1], fallback)
+}
+
+/** 在给定底色上该用深字还是浅字（WCAG 相对亮度，阈值取使两侧对比度大致相等的 ≈0.179） */
+export function readableTextOn(hex: string, dark = '#1f1a16', light = '#ffffff'): string {
+  const m = hex.replace('#', '').match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
+  if (!m) return light
+  const lin = (v: string) => {
+    const c = parseInt(v, 16) / 255
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+  }
+  const L = 0.2126 * lin(m[1]) + 0.7152 * lin(m[2]) + 0.0722 * lin(m[3])
+  return L > 0.179 ? dark : light
 }
 
 /** 在浏览器中读取当前主题；全部输出 #rrggbb。主题变量定义在 :root / .dark，统一从 root 读取 */

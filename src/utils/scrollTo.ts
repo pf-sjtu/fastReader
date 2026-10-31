@@ -63,3 +63,50 @@ export function scrollToChapterWithRetry(chapterId: string, opts: ScrollToChapte
 export function scrollContainerToTop(container?: HTMLElement | null) {
   resolveScrollContainer(container)?.scrollTo({ top: 0, behavior: 'smooth' })
 }
+
+/** 把任意元素滚到容器上沿下方 offset 处（实体标注这类没有固定 id 的目标） */
+export function scrollContainerToElement(
+  el: HTMLElement,
+  { container, offset = 120, behavior = 'smooth' }: { container?: HTMLElement | null; offset?: number; behavior?: ScrollBehavior } = {}
+): void {
+  const box = resolveScrollContainer(container)
+  if (!box) {
+    el.scrollIntoView({ behavior, block: 'center' })
+    return
+  }
+  const top = box.scrollTop + (el.getBoundingClientRect().top - box.getBoundingClientRect().top) - offset
+  box.scrollTo({ top: Math.max(0, top), behavior })
+}
+
+/** 到达高亮：给元素加 .link-flash（≤2s，reduced-motion 下是静态描边），到点自动移除。返回取消函数 */
+export function flashElement(el: Element, ms = 1700): () => void {
+  el.classList.remove('link-flash')
+  // 强制回流：连续两次对同一元素闪烁时，动画才会重新开始
+  void (el as HTMLElement).offsetWidth
+  el.classList.add('link-flash')
+  const timer = setTimeout(() => el.classList.remove('link-flash'), ms)
+  return () => {
+    clearTimeout(timer)
+    el.classList.remove('link-flash')
+  }
+}
+
+/**
+ * 等某个元素出现（折叠的章节卡展开后才渲染正文）。用 setTimeout 轮询而不是 rAF：
+ * 后台标签页里 rAF 会被暂停，轮询仍然工作。
+ */
+export function waitForElement(
+  find: () => HTMLElement | null,
+  { timeoutMs = 1200, intervalMs = 40 }: { timeoutMs?: number; intervalMs?: number } = {}
+): Promise<HTMLElement | null> {
+  return new Promise((resolve) => {
+    const start = Date.now()
+    const tick = () => {
+      const el = find()
+      if (el) return resolve(el)
+      if (Date.now() - start >= timeoutMs) return resolve(null)
+      setTimeout(tick, intervalMs)
+    }
+    tick()
+  })
+}

@@ -148,7 +148,7 @@
       "noEntityGraph": "暂无实体关系数据",
       "noTimeline": "暂无时间线数据",
       "personGraphHint": "滚轮缩放 · 拖动画布/节点 · 点击实体查看详情",
-      "entityGraphHint": "滚轮缩放 · 拖动画布/节点 · 点击实体查看详情 · 右下角调节斥力（浏览器记忆）",
+      "entityGraphHint": "滚轮缩放 · 拖动画布/节点 · 点击实体展开卡片 · 双击定位到正文 · 斥力在上方工具条调节",
       "forceStrength": "相互作用力",
       "relayout": "重新排布",
       "fitView": "适应画布",
@@ -530,7 +530,57 @@
     "preview": "预览",
     "previewDescription": "查看章节原文内容"
   },
+  "graphLegend": {
+    "types": "按类型显示",
+    "colors": "实体颜色",
+    "shape": { "circle": "人物", "roundRect": "组织", "diamond": "概念" }
+  },
+  "graphToolbar": {
+    "colorize": "与正文同色",
+    "progressive": "截至本章",
+    "progressiveNote": "只显示读到本章为止已出场的实体。注意：此处含本章，而实体卡片的「之前」不含本章，因为卡片要防剧透。"
+  },
+  "entityCard": {
+    "aria": "实体卡片",
+    "firstHere": "首次出场于本章",
+    "relations": "关系",
+    "events": "重要事件",
+    "appearances": "在正文出现",
+    "moreRelations": "另 {{count}} 条关系",
+    "moreEvents": "另 {{count}} 个事件",
+    "moreChapters": "另 {{count}} 章",
+    "nthOccurrence": "跳到「{{chapter}}」中的第 {{n}} 次出现",
+    "spoilerFold": "本章及之后的信息（{{count}} 条）",
+    "spoilerWarn": "以下内容来自本章或之后，可能含剧透",
+    "expand": "展开",
+    "collapse": "收起",
+    "unknownChapter": "无法判断出现章节",
+    "jumpTimeline": "在时间线中查看",
+    "jumpGraph": "在图谱中定位"
+  },
+  "eventCard": {
+    "aria": "事件卡片",
+    "folded": "该事件已折叠",
+    "foldedHint": "该事件发生在本章或之后（防剧透）",
+    "unknownHint": "无法判断该事件所在章节（按可能剧透处理）",
+    "entities": "涉及实体",
+    "jumpChapter": "跳到对应章节",
+    "noChapter": "无法定位到章节"
+  },
+  "entityStrip": {
+    "label": "本章出场",
+    "more": "另 {{count}} 个"
+  },
+  "people": {
+    "tab": "人物志",
+    "search": "搜索人物/实体",
+    "empty": "暂无实体数据，请先生成关键图表。",
+    "noMatch": "没有匹配的实体",
+    "folded": "简介已折叠（读到更靠后的章节才显示）",
+    "untyped": "未分类"
+  },
   "workspace": {
+    "back": "返回上一位置",
     "dock": {
       "collapse": "收起对照栏",
       "expand": "展开对照栏",

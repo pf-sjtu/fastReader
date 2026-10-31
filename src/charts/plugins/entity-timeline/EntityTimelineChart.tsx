@@ -1,8 +1,9 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { BookCharts } from '../../types'
+import type { ChartPluginProps } from '../../types'
 import { layoutEntityTimeline } from './layout'
-import { readChartTheme, subscribeThemeChange } from '../../theme'
+import { readChartTheme, readableTextOn, resolveCssVarColor, subscribeThemeChange } from '../../theme'
+import { flashElement } from '@/utils/scrollTo'
 import {
   Sheet,
   SheetContent,
@@ -17,11 +18,20 @@ import {
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-interface Props {
-  charts: BookCharts
+const rectOf = (el: Element) => {
+  const r = el.getBoundingClientRect()
+  return { x: r.x, y: r.y, width: r.width, height: r.height }
 }
 
-export function EntityTimelineChart({ charts }: Props) {
+export function EntityTimelineChart({
+  charts,
+  focus,
+  active = true,
+  onEntitySelect,
+  onEventSelect,
+  styleOf,
+  colorize = false,
+}: ChartPluginProps) {
   const { t } = useTranslation()
   const data = charts.entityTimeline
   const [themeTick, setThemeTick] = useState(0)
@@ -51,6 +61,41 @@ export function EntityTimelineChart({ charts }: Props) {
         : null,
     [data, theme.palette]
   )
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  /** 某实体当前该用的颜色：开启"同色"时取统一 token（CSS 变量，DOM 里可直接用） */
+  const colorOf = (id: string, fallback: string): string =>
+    (colorize ? styleOf?.(id)?.cssVar : undefined) ?? fallback
+
+  /** 色块上的字色：按解析后的实际底色取深/浅，保证暗色主题下也读得清 */
+  const textOn = (bg: string): string => {
+    void themeTick
+    return readableTextOn(resolveCssVarColor(bg, theme.primary))
+  }
+
+  const hitEvents = focus?.chapterEventIds
+  const hasHit = !!hitEvents && hitEvents.size > 0
+  const focusedEventId = focus?.focusedEventId ?? null
+  const focusedEntityId = focus?.focusedEntityId ?? null
+  const nonce = focus?.jumpNonce
+
+  // 跳转到达：把被聚焦的事件（或实体首个事件）滚到视野中央并闪烁；页签隐藏时不动，切回后补上
+  const handledNonce = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    const box = scrollRef.current
+    if (!box || !active || nonce === handledNonce.current) return
+    const sel = focusedEventId
+      ? `[data-event-id="${CSS.escape(focusedEventId)}"]`
+      : focusedEntityId
+        ? `[data-entity-col="${CSS.escape(focusedEntityId)}"]`
+        : null
+    const el = sel ? box.querySelector<HTMLElement>(sel) : null
+    if (!el) return
+    handledNonce.current = nonce
+    el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' })
+    return flashElement(el)
+  }, [active, nonce, focusedEventId, focusedEntityId, layout])
 
   const selected = useMemo(() => {
     if (!selectedId || !data) return null
@@ -82,7 +127,10 @@ export function EntityTimelineChart({ charts }: Props) {
 
   return (
     <>
-      <div className="w-full max-h-[min(70vh,720px)] overflow-auto border border-border rounded-lg bg-card relative">
+      <div
+        ref={scrollRef}
+        className="w-full max-h-[min(70vh,720px)] overflow-auto border border-border rounded-lg bg-card relative"
+      >
         <div className="min-w-max" style={{ width: Math.max(layout.width, 320) }}>
           {/* 表头行：纵向 sticky；「时间」角格同时横向 sticky */}
           <div
@@ -99,7 +147,7 @@ export function EntityTimelineChart({ charts }: Props) {
               {t('results.charts.timelineTime')}
             </div>
             {entities.map((ent) => {
-              const color = entityColor.get(ent.id) || theme.palette[0]
+              const color = colorOf(ent.id, entityColor.get(ent.id) || theme.palette[0])
               const blurb =
                 ent.description?.trim() ||
                 ent.type?.trim() ||
@@ -116,7 +164,27 @@ export function EntityTimelineChart({ charts }: Props) {
                 <Tooltip key={ent.id} delayDuration={200}>
                   <TooltipTrigger asChild>
                     <div
-                      className="shrink-0 px-1.5 py-1.5 flex flex-col items-center justify-center text-center border-r border-border/50 last:border-r-0 cursor-default"
+                      data-entity-col={ent.id}
+                      role={onEntitySelect ? 'button' : undefined}
+                      tabIndex={onEntitySelect ? 0 : undefined}
+                      onClick={onEntitySelect ? (e) => onEntitySelect(ent.id, rectOf(e.currentTarget)) : undefined}
+                      onKeyDown={
+                        onEntitySelect
+                          ? (e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                onEntitySelect(ent.id, rectOf(e.currentTarget))
+                              }
+                            }
+                          : undefined
+                      }
+                      className={cn(
+                        'shrink-0 px-1.5 py-1.5 flex flex-col items-center justify-center text-center border-r border-border/50 last:border-r-0',
+                        onEntitySelect
+                          ? 'cursor-pointer hover:brightness-95 focus-visible:outline-2 focus-visible:outline-ring'
+                          : 'cursor-default',
+                        focusedEntityId === ent.id && 'ring-2 ring-inset ring-foreground/60'
+                      )}
                       style={{
                         width: config.colWidth,
                         background: headerBg,
@@ -164,7 +232,7 @@ export function EntityTimelineChart({ charts }: Props) {
                   </span>
                 </div>
                 {entities.map((ent, col) => {
-                  const color = entityColor.get(ent.id) || theme.palette[0]
+                  const color = colorOf(ent.id, entityColor.get(ent.id) || theme.palette[0])
                   const cellItems = rowItems.filter((it) => it.col === col)
                   return (
                     <div
@@ -175,33 +243,41 @@ export function EntityTimelineChart({ charts }: Props) {
                         background: `color-mix(in oklab, ${color} 8%, transparent)`,
                       }}
                     >
-                      {cellItems.map((item) => (
+                      {cellItems.map((item) => {
+                        const bg = colorOf(item.entityId, item.color)
+                        const isHit = hasHit && hitEvents.has(item.event.id)
+                        const isFocused = focusedEventId === item.event.id
+                        return (
                         <button
                           key={`${item.event.id}-${item.entityId}`}
                           type="button"
-                          onClick={() => setSelectedId(item.event.id)}
+                          data-event-id={item.event.id}
+                          aria-current={isHit ? 'true' : undefined}
+                          onClick={(e) =>
+                            onEventSelect
+                              ? onEventSelect(item.event.id, rectOf(e.currentTarget))
+                              : setSelectedId(item.event.id)
+                          }
                           title={
                             item.event.description
                               ? `${item.event.label}\n${item.event.description}`
                               : item.event.label
                           }
                           className={cn(
-                            'w-full rounded-md px-1.5 py-1.5 text-left transition-opacity hover:opacity-100 opacity-95',
+                            'w-full rounded-md px-1.5 py-1.5 text-left transition-opacity hover:opacity-100',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                            'text-white'
+                            // 本章事件保持醒目，其余淡化（不隐藏：全局脉络仍可见）
+                            hasHit && !isHit && !isFocused ? 'opacity-55' : 'opacity-95',
+                            (isHit || isFocused) && 'ring-2 ring-foreground/70 ring-offset-1 ring-offset-card'
                           )}
-                          style={{
-                            backgroundColor: item.color,
-                            textShadow: theme.isDark
-                              ? '0 1px 2px rgba(0,0,0,0.65)'
-                              : '0 1px 1px rgba(0,0,0,0.4)',
-                          }}
+                          style={{ backgroundColor: bg, color: textOn(bg) }}
                         >
                           <span className="block text-[11px] font-medium leading-snug break-words whitespace-normal">
                             {item.event.label}
                           </span>
                         </button>
-                      ))}
+                        )
+                      })}
                     </div>
                   )
                 })}

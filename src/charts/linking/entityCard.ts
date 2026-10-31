@@ -8,6 +8,7 @@
  */
 import {
   earliestRank,
+  entityChapterList,
   eventsOfEntity,
   type EntityLinking,
   type LinkEdge,
@@ -40,6 +41,13 @@ export interface CardEvent {
   chapterId: string | null
 }
 
+export interface CardAppearance {
+  chapterId: string
+  title: string
+  /** 该章出现次数 */
+  count: number
+}
+
 export interface CardSection {
   description?: string
   relations: CardRelationGroup[]
@@ -47,6 +55,8 @@ export interface CardSection {
   moreRelations: number
   events: CardEvent[]
   moreEvents: number
+  /** 「在正文出现」的章节列表 */
+  appearances: CardAppearance[]
 }
 
 export interface EntityCardModel {
@@ -58,7 +68,7 @@ export interface EntityCardModel {
   /** 实体最早就在当前章出场：简介/关系/事件都应折叠 */
   firstAppearsHere: boolean
   visible: CardSection
-  hidden: { description: number; relations: number; events: number; total: number }
+  hidden: { description: number; relations: number; events: number; appearances: number; total: number }
   /** 仅 reveal=true 时给出：被折叠的内容，带章节归属 */
   revealed: CardSection | null
 }
@@ -151,19 +161,28 @@ export function buildEntityCardModel(
 
   const descHidden = !!profile?.description && !isVisibleRank(entRank, curRank)
 
+  // 「在正文出现」本身也是剧透途径（"出现在第 20 章"）：本章及之前可见（本章正文就在屏幕上），之后折叠。
+  // 当前章未知时一律折叠。
+  const hasCurrent = !!currentChapterId && l.chapterRank.has(currentChapterId)
+  const appearances = entityChapterList(l, entityId)
+  const visibleApps = appearances.filter((a) => hasCurrent && (l.chapterRank.get(a.chapterId) ?? Infinity) <= curRank)
+  const hiddenApps = appearances.filter((a) => !visibleApps.includes(a))
+
   const visible: CardSection = {
     description: !descHidden ? profile?.description : undefined,
     relations: visibleGroups.slice(0, CARD_MAX_RELATION_GROUPS),
     moreRelations: visibleGroups.slice(CARD_MAX_RELATION_GROUPS).reduce((n, g) => n + g.neighbors.length, 0),
     events: shownEvents,
     moreEvents: visibleEvents.length - shownEvents.length,
+    appearances: visibleApps,
   }
 
   const hidden = {
     description: descHidden ? 1 : 0,
     relations: hiddenEdges.length,
     events: hiddenEvents.length,
-    total: (descHidden ? 1 : 0) + hiddenEdges.length + hiddenEvents.length,
+    appearances: hiddenApps.length,
+    total: (descHidden ? 1 : 0) + hiddenEdges.length + hiddenEvents.length + hiddenApps.length,
   }
 
   const revealed: CardSection | null = reveal
@@ -173,6 +192,7 @@ export function buildEntityCardModel(
         moreRelations: 0,
         events: hiddenEvents.slice(0, CARD_MAX_REVEALED),
         moreEvents: Math.max(0, hiddenEvents.length - CARD_MAX_REVEALED),
+        appearances: hiddenApps,
       }
     : null
 

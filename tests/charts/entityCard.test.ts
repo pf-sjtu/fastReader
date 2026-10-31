@@ -15,7 +15,7 @@ const chapters = [
   { id: 'c1', title: '第1章 序幕', text: '罗斯·约翰逊担任纳贝斯克的首席执行官。' },
   { id: 'c2', title: '第2章 私有化', text: '罗斯·约翰逊提出私有化方案。' },
   { id: 'c3', title: '第3章 KKR 登场', text: 'KKR开始关注纳贝斯克。' },
-  { id: 'c4', title: '第4章 对立', text: '罗斯·约翰逊与KKR正面对立。' },
+  { id: 'c4', title: '第4章 摊牌', text: '罗斯·约翰逊与KKR正面对立。' },
   { id: 'c5', title: '第5章 出价', text: 'KKR再次出价。' },
   { id: 'c6', title: '第6章 结局', text: '薛利先生见证罗斯·约翰逊败给KKR。' },
 ]
@@ -156,7 +156,24 @@ describe('buildEntityCardModel：剧透折叠', () => {
     expect(m.visible.events.map((e) => e.id)).toEqual(['e1'])
     expect(m.hidden.events).toBe(3) // e2(c4) e3(c6) e4(无法判断)
     expect(m.visible.description).toBe('纳贝斯克CEO，私有化发起人')
-    expect(m.hidden.total).toBe(3 + 3)
+    // 出场章节 c1 c2 c4 c6：≤c4 的三章可见，c6 折叠 → 关系 3 + 事件 3 + 出场 1
+    expect(m.hidden.total).toBe(3 + 3 + 1)
+  })
+
+  it('「在正文出现」列表：本章及之前可见，之后折叠且不进模型', () => {
+    const m = model('ross', 'c4')
+    expect(m.visible.appearances.map((a) => a.chapterId)).toEqual(['c1', 'c2', 'c4'])
+    expect(m.hidden.appearances).toBe(1)
+    expect(JSON.stringify(m)).not.toContain('第6章 结局') // 标题也不能泄露
+    const r = model('ross', 'c4', true)
+    expect(r.revealed!.appearances.map((a) => a.chapterId)).toEqual(['c6'])
+    expect(r.revealed!.appearances[0].title).toBe('第6章 结局')
+  })
+
+  it('当前章未知时「在正文出现」也全部折叠', () => {
+    const m = model('ross', undefined)
+    expect(m.visible.appearances).toEqual([])
+    expect(m.hidden.appearances).toBe(4)
   })
 
   it('折叠的内容不会出现在模型里（防止 DOM/复制/读屏泄露）', () => {

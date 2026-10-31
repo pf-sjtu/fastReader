@@ -3,6 +3,7 @@
  * 图谱 / 时间线 / 人物志 / 关联卡片 / 正文标注都只查这张表，保证口径一致。
  */
 import {
+  edgeKey,
   getEntityGraph,
   type BookCharts,
   type TimelineEvent,
@@ -37,6 +38,8 @@ export interface EntityProfile {
 /** 关系边 + 它归属的章节集合（多对多；空数组 = 无法判断，按"可能剧透"处理） */
 export interface LinkEdge {
   id: string
+  /** 与图谱元素共用的稳定键（见 types.edgeKey） */
+  key: string
   source: string
   target: string
   relation: string
@@ -128,7 +131,7 @@ export function buildEntityLinking(
       const a = new Set((index.entityToChapters.get(e.source) ?? []).map((x) => x.chapterId))
       chapters = byRank((index.entityToChapters.get(e.target) ?? []).map((x) => x.chapterId).filter((c) => a.has(c)))
     }
-    return { id: `edge-${i}`, source: e.source, target: e.target, relation: e.relation, description: e.description, chapters }
+    return { id: `edge-${i}`, key: edgeKey(e), source: e.source, target: e.target, relation: e.relation, description: e.description, chapters }
   })
 
   return {

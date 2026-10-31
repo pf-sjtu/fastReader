@@ -147,7 +147,7 @@
       "noEntityGraph": "No entity graph data",
       "noTimeline": "No timeline data",
       "personGraphHint": "Scroll to zoom · drag canvas/nodes · click an entity for details",
-      "entityGraphHint": "Scroll to zoom · drag canvas/nodes · click entity · force slider (bottom-right, remembered)",
+      "entityGraphHint": "Scroll to zoom · drag canvas/nodes · click an entity for its card · double-click to find it in the text · force slider in the toolbar above",
       "forceStrength": "Force",
       "relayout": "Relayout",
       "fitView": "Fit to view",
@@ -521,7 +521,57 @@
     "preview": "Preview",
     "previewDescription": "View original chapter content"
   },
+  "graphLegend": {
+    "types": "Show by type",
+    "colors": "Entity colors",
+    "shape": { "circle": "People", "roundRect": "Orgs", "diamond": "Concepts" }
+  },
+  "graphToolbar": {
+    "colorize": "Match body colors",
+    "progressive": "Up to this chapter",
+    "progressiveNote": "Shows only entities that have appeared up to and including this chapter. Entity cards exclude the current chapter on purpose, to avoid spoilers."
+  },
+  "entityCard": {
+    "aria": "Entity card",
+    "firstHere": "First appears in this chapter",
+    "relations": "Relations",
+    "events": "Key events",
+    "appearances": "Appears in",
+    "moreRelations": "{{count}} more relations",
+    "moreEvents": "{{count}} more events",
+    "moreChapters": "{{count}} more chapters",
+    "nthOccurrence": "Jump to occurrence {{n}} in \"{{chapter}}\"",
+    "spoilerFold": "This chapter and later ({{count}})",
+    "spoilerWarn": "The following is from this chapter or later and may contain spoilers",
+    "expand": "Show",
+    "collapse": "Hide",
+    "unknownChapter": "Chapter unknown",
+    "jumpTimeline": "View on timeline",
+    "jumpGraph": "Locate in graph"
+  },
+  "eventCard": {
+    "aria": "Event card",
+    "folded": "Event hidden",
+    "foldedHint": "This event happens in this chapter or later (spoiler guard)",
+    "unknownHint": "Chapter of this event is unknown (treated as a possible spoiler)",
+    "entities": "Entities involved",
+    "jumpChapter": "Go to chapter",
+    "noChapter": "Can't locate a chapter"
+  },
+  "entityStrip": {
+    "label": "In this chapter",
+    "more": "{{count}} more"
+  },
+  "people": {
+    "tab": "Who's who",
+    "search": "Search people / entities",
+    "empty": "No entity data yet. Generate the key charts first.",
+    "noMatch": "No matching entities",
+    "folded": "Description hidden until you read further",
+    "untyped": "Uncategorised"
+  },
   "workspace": {
+    "back": "Back to previous position",
     "dock": {
       "collapse": "Collapse side panel",
       "expand": "Expand side panel",

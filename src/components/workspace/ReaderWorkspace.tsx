@@ -7,7 +7,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { ChevronUp, Layers, List, Minimize2, PanelRightOpen } from 'lucide-react'
+import { ChevronUp, Layers, List, Minimize2, PanelRightOpen, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -26,7 +26,10 @@ import {
 } from '@/stores/readingFocus'
 import type { BookSummary } from '@/hooks/useBookProcessing'
 import { CompanionDock, type DockTab } from './CompanionDock'
+import { PeoplePanel } from './PeoplePanel'
+import { GraphOptions } from './GraphOptions'
 import { ResizeHandle } from './ResizeHandle'
+import { useWorkspaceLinking } from './useWorkspaceLinking'
 
 const ResultsSection = lazy(() =>
   import('@/components/sections/ResultsSection').then((m) => ({ default: m.ResultsSection }))
@@ -147,6 +150,17 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     },
     [lockScrollSpy, onNavigateChapter]
   )
+  const expandChapter = useCallback((id: string) => onChapterExpandChange(id, true), [onChapterExpandChange])
+
+  // 联动：实体表、正文标注、章节条、图表入参、悬浮卡片、跳转历史
+  const link = useWorkspaceLinking({
+    bookSummary,
+    processing,
+    bodyEl,
+    currentChapterId: currentViewingChapter,
+    navigateChapter: handleNavClick,
+    expandChapter,
+  })
 
   // 点「读原文」后：桌面端自动展开对照栏并切到原文页签
   useEffect(() => {
@@ -181,16 +195,30 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
           onRegenerate={onRegenerateKeyCharts}
           canRegenerate={canRegenerate}
           onlyPlugin={plugin}
+          pluginProps={link.pluginProps}
         />
       </ErrorBoundary>
     ),
-    [t, bookSummary.charts, bookSummary.chartsError, chartsGenerating, clearCharts, onRegenerateKeyCharts, canRegenerate]
+    [t, bookSummary.charts, bookSummary.chartsError, chartsGenerating, clearCharts, onRegenerateKeyCharts, canRegenerate, link.pluginProps]
   )
 
   const tabs = useMemo<DockTab[]>(() => {
     const list: DockTab[] = [
-      { id: 'graph', label: t('results.charts.entityGraph'), keepMounted: true, content: chartPanel('entity-graph') },
+      { id: 'graph', label: t('results.charts.entityGraph'), keepMounted: true, content: (
+          <>
+            <GraphOptions />
+            {chartPanel('entity-graph')}
+          </>
+        ),
+      },
       { id: 'timeline', label: t('results.charts.timeline'), keepMounted: true, content: chartPanel('entity-timeline') },
+      {
+        id: 'people',
+        label: t('people.tab'),
+        content: (
+          <PeoplePanel linking={link.linking} currentChapterId={currentViewingChapter} onOpenEntity={link.openEntity} />
+        ),
+      },
       {
         id: 'overall',
         label: t('results.tabs.overallSummary'),
@@ -224,7 +252,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       })
     }
     return list
-  }, [t, chartPanel, bookSummary.overallSummary, clearOverall, isMobile, source])
+  }, [t, chartPanel, bookSummary.overallSummary, clearOverall, isMobile, source, link.linking, link.openEntity, currentViewingChapter])
 
   const body = (
     <Suspense
@@ -243,9 +271,23 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
         onReadChapter={onReadChapter}
         onDownloadAllMarkdown={onDownloadAllMarkdown}
         totalChapters={totalChapters}
+        chapterExtras={link.chapterExtras}
       />
     </Suspense>
   )
+
+  // "返回上一位置"：跳转会打断阅读，这里给一条随时可回的退路
+  const backChip = link.canBack ? (
+    <Button
+      variant="secondary"
+      size="sm"
+      className="fixed bottom-6 left-20 z-30 gap-1.5 rounded-full shadow-lg"
+      onClick={link.back}
+    >
+      <Undo2 className="size-4" />
+      {t('workspace.back')}
+    </Button>
+  ) : null
 
   const nav = (variant: 'sidebar' | 'sheet') => (
     <ChapterSummaryNavigation
@@ -275,9 +317,11 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
             {t('workspace.mobile.dock')}
           </Button>
         </div>
-        <main ref={setBodyEl} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <main ref={setBodyEl} className="min-h-0 flex-1 overflow-y-auto overscroll-contain" {...link.bodyHandlers}>
           {body}
         </main>
+        {link.floating}
+        {backChip}
 
         <Sheet open={navOpen} onOpenChange={setNavOpen}>
           <SheetContent side="left" className="w-[min(100%,20rem)] gap-0 p-0">
@@ -306,7 +350,14 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     <div className="flex h-full min-h-0 w-full">
       {!focusMode && <aside className="hidden w-52 shrink-0 pr-3 md:block">{nav('sidebar')}</aside>}
 
-      <main ref={setBodyEl} className="relative min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
+      {link.floating}
+      {backChip}
+
+      <main
+        ref={setBodyEl}
+        className="relative min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
+        {...link.bodyHandlers}
+      >
         {body}
         {focusMode && (
           <Button

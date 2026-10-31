@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Trash2, RefreshCw } from 'lucide-react'
-import type { BookCharts } from './types'
+import type { BookCharts, ChartPluginProps } from './types'
 import { getSortedPlugins } from './registry'
 import { cn } from '@/lib/utils'
 
@@ -18,6 +18,8 @@ export interface ChartsPanelProps {
   canRegenerate?: boolean
   /** 只渲染该插件（不显示内层页签）：对照栏每个图表占一个页签时使用 */
   onlyPlugin?: string
+  /** 联动入参（焦点/回调/配色），原样透传给插件；不传则插件只做展示 */
+  pluginProps?: Omit<ChartPluginProps, 'charts'>
 }
 
 export function ChartsPanel({
@@ -28,6 +30,7 @@ export function ChartsPanel({
   onRegenerate,
   canRegenerate = false,
   onlyPlugin,
+  pluginProps,
 }: ChartsPanelProps) {
   const { t } = useTranslation()
   const plugins = useMemo(() => getSortedPlugins(), [])
@@ -140,7 +143,7 @@ export function ChartsPanel({
     return (
       <div className="space-y-3 min-w-0">
         {toolbar}
-        <Comp charts={charts} />
+        <Comp charts={charts} {...pluginProps} />
       </div>
     )
   }
@@ -180,7 +183,7 @@ export function ChartsPanel({
                 activePlugin !== p.id && 'hidden'
               )}
             >
-              <Comp charts={charts} />
+              <Comp charts={charts} {...pluginProps} active={activePlugin === p.id} />
             </TabsContent>
           )
         })}

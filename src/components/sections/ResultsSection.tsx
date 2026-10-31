@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Download, BookOpen, Network } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FontSizeControl } from '@/components/FontSizeControl'
-import { MarkdownCard } from '@/components/MarkdownCard'
+import { MarkdownCard, type RemarkPlugins } from '@/components/MarkdownCard'
 import { MindMapCard } from '@/components/MindMapCard'
 import { UploadToWebDAVButton } from '@/components/UploadToWebDAVButton'
 import { ChartsPanel } from '@/charts'
@@ -38,6 +38,14 @@ interface ResultsSectionProps {
    * body：阅读工作台的正文栏——只留「章节总结 / 章节关联」，综述与图表在对照栏
    */
   variant?: 'full' | 'body'
+  /**
+   * 章节卡的联动扩展（工作台提供）：实体标注插件 + 「本章出场」条。
+   * 对象本身必须 useMemo 稳定，否则每次渲染都会让所有章节卡重算 Markdown。
+   */
+  chapterExtras?: {
+    remarkPlugins?: RemarkPlugins
+    renderStrip?: (chapterId: string) => React.ReactNode
+  }
 }
 
 export const ResultsSection = memo(function ResultsSection({
@@ -56,6 +64,7 @@ export const ResultsSection = memo(function ResultsSection({
   chartsGenerating = false,
   totalChapters = 0,
   variant = 'full',
+  chapterExtras,
 }: ResultsSectionProps) {
   const isBody = variant === 'body'
   const { t } = useTranslation()
@@ -160,6 +169,8 @@ export const ResultsSection = memo(function ResultsSection({
                   onExpandChange={handleExpandChange}
                   onClearCache={onClearChapterCache}
                   onReadChapter={onReadChapter}
+                  extraRemarkPlugins={chapterExtras?.remarkPlugins}
+                  headerExtra={chapterExtras?.renderStrip?.(chapter.id)}
                 />
               ))}
             </TabsContent>

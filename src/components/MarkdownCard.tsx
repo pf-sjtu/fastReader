@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react'
+import React, { memo, useMemo, useState, type ReactNode } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { type Options as MarkdownOptions } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkCjkFriendly from "remark-cjk-friendly";
 import { prepareMarkdownForRender } from '@/lib/markdown'
@@ -20,6 +20,8 @@ import { cn } from '@/lib/utils'
 
 // 模块级常量：避免每次渲染新建插件数组导致 ReactMarkdown 重新处理
 const REMARK_PLUGINS = [remarkGfm, remarkCjkFriendly]
+
+export type RemarkPlugins = NonNullable<MarkdownOptions['remarkPlugins']>
 
 interface MarkdownCardProps {
   /** 章节ID */
@@ -52,6 +54,13 @@ interface MarkdownCardProps {
   isExpanded?: boolean
   /** 章节展开状态变化的回调（第二参数为章节ID，便于父组件传稳定引用） */
   onExpandChange?: (expanded: boolean, chapterId: string) => void
+  /**
+   * 追加的 remark 插件（如实体标注）。调用方必须保持引用稳定（useMemo），
+   * 否则每次渲染都会让这张卡的 Markdown 重新处理。
+   */
+  extraRemarkPlugins?: RemarkPlugins
+  /** 正文上方的插槽（如「本章出场」实体条）；仅展开时显示 */
+  headerExtra?: ReactNode
 }
 
 export const MarkdownCard = memo(function MarkdownCard({
@@ -70,9 +79,15 @@ export const MarkdownCard = memo(function MarkdownCard({
   defaultCollapsed = false,
   isExpanded,
   onExpandChange,
+  extraRemarkPlugins,
+  headerExtra,
 }: MarkdownCardProps) {
   const { t } = useTranslation()
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed)
+  const remarkPlugins = useMemo(
+    () => (extraRemarkPlugins?.length ? [...REMARK_PLUGINS, ...extraRemarkPlugins] : REMARK_PLUGINS),
+    [extraRemarkPlugins]
+  )
 
   // 使用外部控制的展开状态，外部控制优先级更高
   const actualIsCollapsed = isExpanded !== undefined ? !isExpanded : isCollapsed
@@ -195,12 +210,13 @@ export const MarkdownCard = memo(function MarkdownCard({
       </CardHeader>
       {!actualIsCollapsed && (
         <CardContent className="min-w-0 px-2.5 sm:px-4 pt-0">
+          {headerExtra}
           <div className="markdown-card-content prose prose-sm max-w-none overflow-x-auto">
             {/*
               强调作用域：micromark (CommonMark delimiter run) + remark-cjk-friendly
               预处理只清 AI 脏源文（内侧空格、段中 >），不手写配对。
             */}
-            <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>
+            <ReactMarkdown remarkPlugins={remarkPlugins}>
               {renderedMarkdown}
             </ReactMarkdown>
           </div>

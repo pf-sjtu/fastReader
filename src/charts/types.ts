@@ -94,9 +94,31 @@ export interface ChartFocus {
   /** 当前章对应的时间线事件 id */
   chapterEventIds?: ReadonlySet<string>
   focusedEntityId?: string | null
+  focusedEventId?: string | null
+  /** 渐进模式（截至本章，含本章）：只有这些实体可见；undefined = 不过滤 */
+  visibleEntityIds?: ReadonlySet<string>
+  /** 渐进模式下可见的关系边（key 见 edgeKey）；undefined = 不过滤 */
+  visibleEdgeKeys?: ReadonlySet<string>
+  /** 每次"跳转"自增：连续两次跳到同一对象时靠它重新触发定位与高亮 */
+  jumpNonce?: number
+}
+
+/** 视口坐标下的锚点矩形（卡片据此定位） */
+export interface ChartAnchor {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** 关系边在图表数据里的稳定键（图谱元素、联动查询表、渐进模式过滤共用） */
+export function edgeKey(e: { source: string; target: string; relation: string }): string {
+  return `${e.source}\u0001${e.target}\u0001${e.relation}`
 }
 
 export interface ChartEntityStyle {
+  /** 色槽 1..10；null = 中性色（未分到独立色） */
+  slot?: number | null
   cssVar: string
   shape: 'circle' | 'round-rect' | 'diamond'
 }
@@ -110,13 +132,20 @@ export interface ChartPluginProps {
   focus?: ChartFocus
   /** 所在页签是否可见；隐藏时不做 fit / 高亮动画 */
   active?: boolean
-  onEntitySelect?: (id: string | null) => void
+  /** 单击实体：只选中并交给宿主展开卡片，不跳转 */
+  onEntitySelect?: (id: string | null, anchor?: ChartAnchor) => void
+  /** 双击实体：可选快捷——定位到正文中的下一次出现 */
+  onEntityDoubleClick?: (id: string) => void
+  /** 单击时间线事件：同样只展开卡片 */
+  onEventSelect?: (id: string, anchor?: ChartAnchor) => void
   onChapterJump?: (chapterId: string) => void
   /** 实体出现在哪些章节（用于详情里的"出场章节"列表） */
   resolveEntityChapters?: (id: string) => { chapterId: string; title: string; count: number }[]
   /** 事件 → 章节（映射不上为 null，UI 置灰） */
   resolveEventChapter?: (eventId: string) => string | null
   styleOf?: (id: string) => ChartEntityStyle | undefined
+  /** 图谱/时间线是否使用与正文一致的实体色（默认 false = 旧的单色外观） */
+  colorize?: boolean
 }
 
 export interface ChartPlugin {
