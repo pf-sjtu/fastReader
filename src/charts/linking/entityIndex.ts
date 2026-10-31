@@ -131,12 +131,34 @@ export function findEntityMatches(matcher: EntityMatcher, text: string): EntityM
   return out
 }
 
+/** 某实体在某章的第 ordinal 次出现（1 起）；snippet 是去掉 Markdown 记号后的前后文摘录 */
+export interface EntityOccurrence {
+  chapterId: string
+  ordinal: number
+  start: number
+  end: number
+  snippet: string
+}
+
 export interface EntityChapterIndex {
   /** 实体 → 出现的章节（按章节顺序）与次数 */
   entityToChapters: Map<string, { chapterId: string; count: number }[]>
   chapterToEntities: Map<string, Set<string>>
+  /** 实体 → 全部出现位置（章节顺序 + 章内顺序），关联卡片据此精确跳转 */
+  occurrences: Map<string, EntityOccurrence[]>
   /** 实体在全书的总出现次数（供配色排序） */
   totals: Map<string, number>
+}
+
+export const SNIPPET_CONTEXT = 18
+
+/** 摘录：取命中前后各约 SNIPPET_CONTEXT 字，去掉 Markdown 记号并折叠空白 */
+export function makeSnippet(text: string, start: number, end: number, context = SNIPPET_CONTEXT): string {
+  const clean = (s: string) => s.replace(/[*_`#>~|]+/g, '').replace(/\s+/g, ' ')
+  const before = clean(text.slice(Math.max(0, start - context), start))
+  const hit = clean(text.slice(start, end))
+  const after = clean(text.slice(end, end + context))
+  return `${start - context > 0 ? '…' : ''}${before}${hit}${after}${end + context < text.length ? '…' : ''}`
 }
 
 export function indexEntityChapters(
@@ -145,12 +167,23 @@ export function indexEntityChapters(
 ): EntityChapterIndex {
   const entityToChapters = new Map<string, { chapterId: string; count: number }[]>()
   const chapterToEntities = new Map<string, Set<string>>()
+  const occurrences = new Map<string, EntityOccurrence[]>()
   const totals = new Map<string, number>()
 
   for (const ch of chapters) {
     const counts = new Map<string, number>()
     for (const m of findEntityMatches(matcher, ch.text)) {
-      counts.set(m.entityId, (counts.get(m.entityId) ?? 0) + 1)
+      const ordinal = (counts.get(m.entityId) ?? 0) + 1
+      counts.set(m.entityId, ordinal)
+      const list = occurrences.get(m.entityId) ?? []
+      list.push({
+        chapterId: ch.id,
+        ordinal,
+        start: m.start,
+        end: m.end,
+        snippet: makeSnippet(ch.text, m.start, m.end),
+      })
+      occurrences.set(m.entityId, list)
     }
     chapterToEntities.set(ch.id, new Set(counts.keys()))
     for (const [id, count] of counts) {
@@ -160,7 +193,7 @@ export function indexEntityChapters(
       totals.set(id, (totals.get(id) ?? 0) + count)
     }
   }
-  return { entityToChapters, chapterToEntities, totals }
+  return { entityToChapters, chapterToEntities, occurrences, totals }
 }
 
 /* ---------------- chapterHint → 章节 ---------------- */

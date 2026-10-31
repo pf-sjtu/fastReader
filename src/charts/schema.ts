@@ -7,6 +7,7 @@ const entityNodeSchema = z.object({
   type: z.string().optional(),
   description: z.string().optional(),
   importance: z.coerce.number().min(0).max(10).optional(),
+  chapterHint: z.string().optional(),
 })
 
 const entityEdgeSchema = z.object({
@@ -14,6 +15,7 @@ const entityEdgeSchema = z.object({
   target: z.coerce.string().min(1),
   relation: z.coerce.string().min(1),
   description: z.string().optional(),
+  chapterHint: z.string().optional(),
 })
 
 const entityGraphSchema = z.object({

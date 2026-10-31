@@ -12,6 +12,8 @@ export interface EntityGraphNode {
   description?: string
   /** 1–10，越高越核心 */
   importance?: number
+  /** 可选：首次出场的章节提示（章节标题或序号）。缺省由客户端按章节总结里的出现位置推导 */
+  chapterHint?: string
 }
 
 export interface EntityGraphEdge {
@@ -19,6 +21,8 @@ export interface EntityGraphEdge {
   target: string
   relation: string
   description?: string
+  /** 可选：该关系成立/首次出现的章节提示。缺省取两端实体共同出现的章节 */
+  chapterHint?: string
 }
 
 /** 实体关系图（原 personGraph，兼容旧缓存字段） */

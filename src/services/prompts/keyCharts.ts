@@ -17,10 +17,10 @@ export function getKeyChartsPrompt(): string {
   "version": 1,
   "entityGraph": {
     "nodes": [
-      { "id": "e1", "name": "实体名", "type": "人物|概念|理论|物种|物质|组织|地点|技术|作品|事件|其他", "description": "一句话作用/定义", "importance": 8 }
+      { "id": "e1", "name": "实体名", "type": "人物|概念|理论|物种|物质|组织|地点|技术|作品|事件|其他", "description": "一句话作用/定义", "importance": 8, "chapterHint": "首次出场的章节标题或序号（可选）" }
     ],
     "edges": [
-      { "source": "e1", "target": "e2", "relation": "短关系词", "description": "关系简述" }
+      { "source": "e1", "target": "e2", "relation": "短关系词", "description": "关系简述", "chapterHint": "该关系成立/首次出现的章节标题或序号（可选）" }
     ]
   },
   "entityTimeline": {
@@ -70,5 +70,9 @@ export function getKeyChartsPrompt(): string {
 6. entityGraph 与 entityTimeline 的 **id 尽量一致**，便于对照；时间线 description 可与节点 description 呼应
 7. 硬上限：nodes≤40、edges≤80、entities≤12、events≤50
 8. 若某类信息不足可省略对应字段，但至少提供一类有意义的数据
-9. 不要输出 personGraph 字段（除非你无法使用 entityGraph；此时 personGraph 结构相同亦可）`
+9. 不要输出 personGraph 字段（除非你无法使用 entityGraph；此时 personGraph 结构相同亦可）
+10. **章节归属 chapterHint（节点 / 关系边 / 事件，均可选）**：阅读器用它做「防剧透」——读到第 N 章时，只默认展示第 N 章之前的信息
+    - 节点：该实体**首次出场**的章节；关系边：该关系**首次成立或首次被写到**的章节；事件：事件发生所在章节
+    - 写章节标题原文或「第 N 章」均可；**拿不准就省略**，不要猜（省略时阅读器会按正文出现位置自行推断）
+    - 同一对实体的关系若在后文发生了根本变化，请拆成多条边并分别标注章节`
 }

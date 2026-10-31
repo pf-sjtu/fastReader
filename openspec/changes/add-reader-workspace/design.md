@@ -34,6 +34,25 @@ remark 插件（手写递归遍历，不新增 `unist-util-visit` 依赖）把 t
 - "本章"同步高亮只改样式、不动滚动，避免正文滚动时图谱/时间线跟着乱跑。
 - 图谱「与正文同色」是 `readingFocus` 里的布尔偏好；关闭时回到中性单色，图例始终可见。
 
+### 5c. 防剧透与信息项的章节归属（spec: entity-card）
+- **每个信息项都挂章节集合**（多对多），这是防剧透的前提：
+  | 信息项 | 章节集合来源（优先 → 兜底） |
+  |---|---|
+  | 节点 | 可选 `chapterHint` → 其在章节总结中出现过的章节（`entityToChapters`） |
+  | 关系边 | 可选 `chapterHint` → **两端实体共现的章节**（集合交） |
+  | 事件 | `chapterHint` → `timeLabel` 里的章节序号（`indexEventChapters`） |
+  `chapterHint` 在节点/边/事件上均为可选字段（schema + prompt 增加，旧缓存不含也能解析，全部走推导）；推导不发起 AI 请求。
+- **剧透判定**：设当前章下标为 c，信息项最早归属章下标为 e：`e < c` 才默认可见；`e ≥ c` 或无归属（未知）默认折叠。宁可多折叠，不赌"应该没事"。
+- 折叠区只给**条数**（"本章及之后的信息（n 条）"），内容在点击前**不进 DOM**（不是 CSS 隐藏——避免被 DevTools/复制/屏幕阅读器泄露）。展开状态属于卡片实例，关闭即复位。
+- "当前章"的取法：正文悬停取被悬停标注所在的 `#chapter-summary-*`；图谱/时间线/人物志取 scroll spy 的当前阅读章。
+- 图谱「截至本章」渐进模式口径是 `e ≤ c`（含本章，因为本章正文在屏幕上），与卡片的 `e < c` 不同；界面上写明，避免用户困惑。
+- 卡片内容是纯函数 `buildEntityCardModel(linking, entityId, currentChapterId, chapterOrder)` 的输出：`{ visible: {description, relations[], events[]}, hidden: {count, firstChapter} }`，UI 只负责渲染，便于单测"折叠区不含被隐藏文字"。
+- 关系概括：直接邻居按关系类型归并（`领导 → A、B`），邻居按重要度排序，最多 6 组；重要事件最多 5 条，按叙事顺序。
+
+### 5d. 阅读进度栏折叠与调宽
+- 目录栏复用 `ResizeHandle`（加 `edge="left"`：手柄在栏右缘，向右拖变宽，范围 160–360px），折叠状态与宽度进 `readingFocus`（`navWidth/navCollapsed`，持久化）。
+- 折叠态是 28px 竖条：纵向进度条 + 当前/总数 + 展开按钮，整条可点击展开；折叠不卸载目录组件（保持 scroll spy 与列表滚动位置）。
+
 ### 6. 书库索引的生命周期
 `{syncPath}/.juhua/library.json`（schemaVersion 1）+ `.juhua/covers/<sha1(path)>.webp`（≈200px，≤30KB）。
 - 失效：PROPFIND 的 size/mtime/etag 变化 → 条目标 stale。
