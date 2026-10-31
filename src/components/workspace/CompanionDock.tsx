@@ -55,7 +55,7 @@ export function CompanionDock({ tabs, active, onActiveChange, onCollapse, classN
         <div className="min-w-0 flex-1">
           <TabsList className="h-9 w-full justify-start">
             {visible.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id} className="min-w-0 flex-1 px-2 text-sm">
+              <TabsTrigger key={tab.id} value={tab.id} className="min-w-0 flex-auto px-2.5 text-sm">
                 <span className="truncate">{tab.label}</span>
               </TabsTrigger>
             ))}

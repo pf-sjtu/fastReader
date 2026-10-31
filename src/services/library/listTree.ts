@@ -6,6 +6,8 @@ export type ListDir = (dir: string, deep: boolean) => Promise<WebDAVOperationRes
 /** 兜底遍历的上限：防止异常目录结构把请求数拖到失控 */
 export const MAX_DIRS = 400
 export const MAX_DEPTH = 8
+/** 兜底遍历的并发数：够快，又不至于把服务端的限流打出来 */
+export const CONCURRENCY = 6
 
 /**
  * 列出同步目录下的全部文件。
@@ -19,24 +21,41 @@ export async function listTree(list: ListDir, root: string): Promise<WebDAVFileI
   if (deep.success && deep.data) return deep.data
 
   const files: WebDAVFileInfo[] = []
-  const queue: { dir: string; depth: number }[] = [{ dir: root, depth: 0 }]
+  let level: { dir: string; depth: number }[] = [{ dir: root, depth: 0 }]
   let visited = 0
-  while (queue.length && visited < MAX_DIRS) {
-    const { dir, depth } = queue.shift()!
-    visited++
-    const r = await list(dir, false)
-    if (!r.success || !r.data) {
-      if (dir === root) throw new Error(r.error ?? deep.error ?? '读取目录失败')
-      continue
-    }
-    for (const f of r.data) {
-      if (f.type === 'file') files.push(f)
-      else if (f.type === 'directory' && depth < MAX_DEPTH && !f.basename.startsWith('.') && f.filename !== dir) {
-        queue.push({ dir: f.filename, depth: depth + 1 })
+  // 逐层并行：同一层的目录互不依赖，6 路并发（原先串行，646 本书的库要 16 秒）；
+  // 结果按队列顺序合并，所以输出顺序与串行遍历一致
+  while (level.length && visited < MAX_DIRS) {
+    const batch = level.slice(0, MAX_DIRS - visited)
+    const rest = level.slice(batch.length)
+    visited += batch.length
+    const results: Awaited<ReturnType<ListDir>>[] = new Array(batch.length)
+    let next = 0
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, batch.length) }, async () => {
+        while (next < batch.length) {
+          const i = next++
+          results[i] = await list(batch[i].dir, false)
+        }
+      })
+    )
+    const nextLevel: { dir: string; depth: number }[] = []
+    batch.forEach(({ dir, depth }, i) => {
+      const r = results[i]
+      if (!r.success || !r.data) {
+        if (dir === root) throw new Error(r.error ?? deep.error ?? '读取目录失败')
+        return
       }
-    }
+      for (const f of r.data) {
+        if (f.type === 'file') files.push(f)
+        else if (f.type === 'directory' && depth < MAX_DEPTH && !f.basename.startsWith('.') && f.filename !== dir) {
+          nextLevel.push({ dir: f.filename, depth: depth + 1 })
+        }
+      }
+    })
+    level = [...rest, ...nextLevel]
   }
   // 没遍历完就返回一半会让「没扫到的书」被 GC 当成已删除：宁可明确失败
-  if (queue.length) throw new Error(`目录太多（超过 ${MAX_DIRS} 个），书库没有扫描完整；请缩小书籍目录范围`)
+  if (level.length) throw new Error(`目录太多（超过 ${MAX_DIRS} 个），书库没有扫描完整；请缩小书籍目录范围`)
   return files
 }

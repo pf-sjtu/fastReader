@@ -173,7 +173,7 @@ uv run python -m src.cli.main batch -c ebook-to-mindmap-config-v2.yaml --dry-run
 CLI 会自动：
 - 解析嵌套的配置结构
 - 支持多 AI 提供商配置
-- 从配置获取 Prompt 模板（v2）
+- 从配置获取 Prompt 模板（默认 v3，v2 仍可用）
 - 同时读取 1.0.0（`aiConfigManager.providers[]`，一模型一条）与 2.0.0（`ai.providers[].models[]`，服务商化）两种结构
 
 ## 📁 项目结构
@@ -451,7 +451,9 @@ promptVersionConfig:
 currentPromptVersion: v2
 ```
 
-如未配置 Prompt，CLI 会使用内置的默认模板（只保留 v2；读到旧配置声明的 `v1` 会告警并回退 v2）。
+如未配置 Prompt，CLI 会使用内置的默认模板（默认 v3；读到旧配置声明的 `v1` 会告警并回退默认版本）。
+旧配置里只存在 `v2` 条目的自定义提示词，在 v3 默认下仍然生效。
+v3 的章节输出带 `<!--juhua:meta-->` JSON 旁路，CLI 会自动剥离并清理格式，输出文件里只有正文。
 
 ### 环境变量支持
 

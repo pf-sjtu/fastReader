@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { listTree, MAX_DEPTH, MAX_DIRS, type ListDir } from '@/services/library/listTree'
+import { CONCURRENCY, listTree, MAX_DEPTH, MAX_DIRS, type ListDir } from '@/services/library/listTree'
 import type { WebDAVFileInfo } from '@/services/webdav/types'
 
 const file = (path: string): WebDAVFileInfo => ({ filename: path, basename: path.split('/').pop()!, lastmod: 'm', size: 1, type: 'file' })
@@ -66,5 +66,34 @@ describe('listTree', () => {
     const spy = vi.fn(wide)
     await expect(listTree(spy, '/w')).rejects.toThrow('目录太多')
     expect(spy.mock.calls.filter(([, deep]) => !deep).length).toBeLessThanOrEqual(MAX_DIRS)
+  })
+  it(`兜底遍历并行：同层目录同时在飞，但不超过 ${CONCURRENCY} 路；输出顺序与串行一致`, async () => {
+    const dirs = Array.from({ length: 20 }, (_, i) => `/s/d${String(i).padStart(2, '0')}`)
+    const children: Record<string, WebDAVFileInfo[]> = { '/s': dirs.map(dir) }
+    for (const d of dirs) children[d] = [file(`${d}/b.epub`)]
+    let inFlight = 0
+    let peak = 0
+    const order: string[] = []
+    const list: ListDir = async (d, deep) => {
+      if (deep) return { success: false, error: '403' }
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      order.push(d)
+      // 越靠前的目录越慢：并行下完成顺序会反过来，输出仍必须按目录顺序
+      await new Promise((r) => setTimeout(r, d === '/s' ? 0 : 30 - Number(d.slice(-2))))
+      inFlight--
+      return { success: true, data: children[d] ?? [] }
+    }
+    const out = await listTree(list, '/s')
+    expect(CONCURRENCY).toBeGreaterThanOrEqual(4) // 常量本身不能被悄悄改回串行
+    expect(peak).toBe(CONCURRENCY)
+    expect(out.map((f) => f.filename)).toEqual(dirs.map((d) => `${d}/b.epub`))
+    expect(order[0]).toBe('/s')
+  })
+
+  it('并行下某个子目录失败：只跳过它；根目录失败照样抛错', async () => {
+    const fs = fakeFs({ '/s': [dir('/s/a'), dir('/s/b'), dir('/s/c')], '/s/a': [file('/s/a/1.epub')], '/s/b': [file('/s/b/2.epub')], '/s/c': [file('/s/c/3.epub')] }, { deepFails: true, failDirs: ['/s/b'] })
+    const out = await listTree(fs.list, '/s')
+    expect(out.map((f) => f.filename)).toEqual(['/s/a/1.epub', '/s/c/3.epub'])
   })
 })
