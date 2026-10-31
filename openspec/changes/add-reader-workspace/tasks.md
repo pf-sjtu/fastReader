@@ -39,7 +39,7 @@
 - [x] 4.12 图谱渐进模式口径（e≤c）与界面说明
 
 ## 5. 顶栏与书库
-- [ ] 5.1 `AppTopBar`；`App.tsx` 拆分（推迟：本阶段未重排顶栏与拆分 App.tsx）
+- [x] 5.1 `App.tsx` 拆分（695→369 行）：`components/app/{AppHeader,ConfigStep,ClassicResults,MobileSheets}`、`hooks/{useAppExports,useAppShell}`，行为不变，由 `tests/appShell.test.tsx` 冒烟锁定；顶栏单行化（`AppTopBar` 分段导航）仍未做
 - [x] 5.2 `services/library/`（index/scanner/gc）与 IndexedDB 镜像（索引 gzip 单文件一次加载；真实封面（EPUB 内嵌 / PDF 首页）缩成 webp，懒加载、并发 2；补全元数据由用户触发、并发 2、可取消；孤儿封面随 GC 清理。未做：空闲自动补全）
 - [x] 5.3 `LibraryView`、继续阅读、封面墙、`QuickStartSheet`（智能勾选 + 费用预估）（QuickStartSheet 以「选章页的用量预估 + 既有智能不勾选/字数筛选」落地，未新增独立抽屉）
 - [x] 5.4 设置：重建/清空书库索引

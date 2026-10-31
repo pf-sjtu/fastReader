@@ -22,7 +22,7 @@
 ## 2. 验证命令（交接后先跑一遍）
 
 ```bash
-pnpm test            # 1294 通过（entityLinking 的 300 章耗时断言在全量并行时偶发超时，单跑稳定） / 21 跳过
+pnpm test            # 1296 通过（entityLinking 的 300 章耗时断言在全量并行时偶发超时，单跑稳定） / 21 跳过
 pnpm exec tsc -b
 pnpm lint
 pnpm build
@@ -44,7 +44,7 @@ pnpm dlx @fission-ai/openspec validate add-reader-workspace --strict
 划线/批注（锚点 = 章节 id + 片段 + 前后文）、`{name}-笔记.json`、Markdown 导出、离线 HTML、命令面板 Ctrl/⌘+K、j/k 等快捷键、断点续读。**尚未开始**。
 
 ### 3.3 阶段 8 与遗留
-- **5.1 顶栏单行化与 `App.tsx` 拆分**（现约 700 行，超出 400 行准则）。
+- **5.1 顶栏单行化**（`AppTopBar` 分段导航「书库 · 阅读」+ 处理进度胶囊）未做。`App.tsx` 拆分已完成（369 行；子视图在 `src/components/app/`，副作用在 `src/hooks/useApp*.ts`）；拆分只在 jsdom 冒烟 + tsc/lint/build 下验证，**移动端抽屉与工作台模式没在真实浏览器里走过**。
 - 「暂无内容可上传」已修：从云缓存/历史/书库打开的书没有本地 `File`，上传按钮改为此时不渲染（`UploadToWebDAVButton`）。
 - 时间线未做「读到此处之后」的未来事件变淡；章节卡（`LinkCard` 的章节变体）未做。
 - 触控目标：书架筛选 chip 高 32px，< 40px 标准；亮色主题下图谱/卡片、手机底部抽屉里的卡片未走查。

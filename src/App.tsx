@@ -1,51 +1,32 @@
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet'
-import { Brain, ChevronUp, List, Eye } from 'lucide-react'
-import { BrandMark } from '@/components/BrandMark'
+import { ChevronUp, List, Eye } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
-import { toast } from 'sonner'
-import type { MindElixirInstance } from 'mind-elixir'
 import { useShallow } from 'zustand/react/shallow'
 
-import { webdavService } from '@/services/webdavService'
 import { scrollToTop } from '@/utils/index'
-import { downloadSummaryMarkdown } from '@/utils/exportSummary'
-import { exportMindMap } from '@/utils/mindmapExport'
 import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
 import { useLibraryOpen } from '@/hooks/useLibraryOpen'
-import { LibraryView } from '@/components/library/LibraryView'
+import { useAppExports } from '@/hooks/useAppExports'
+import { useBackToTop, useWebDAVAutoConnect } from '@/hooks/useAppShell'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import type { ProcessingHistoryRecord } from '@/stores/processingHistory'
 
 import { BUILD_VERSION } from '@/buildInfo'
-import { LanguageSwitcher } from '@/components/LanguageSwitcher'
-import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { UnifiedStatusBar } from '@/components/UnifiedStatusBar'
-import { SyncStatusIndicator } from '@/components/SyncStatusIndicator'
-import { TimelineNavigation } from '@/components/TimelineNavigation'
 import { ReaderWorkspace } from '@/components/workspace/ReaderWorkspace'
-
-import { FileUploadCard } from '@/components/sections/FileUploadCard'
-import { ChapterSelectionSection } from '@/components/sections/ChapterSelectionSection'
 import { PreviewPanel } from '@/components/sections/PreviewPanel'
+import { AppHeader } from '@/components/app/AppHeader'
+import { ConfigStep } from '@/components/app/ConfigStep'
+import { ClassicResults } from '@/components/app/ClassicResults'
+import { MobileNavSheet, MobilePreviewSheet } from '@/components/app/MobileSheets'
 
 // 重型面板懒加载，降低首屏解析体积
-const ResultsSection = lazy(() =>
-  import('@/components/sections/ResultsSection').then((m) => ({ default: m.ResultsSection }))
-)
 const WebDAVFileBrowser = lazy(() =>
   import('@/components/project/WebDAVFileBrowser').then((m) => ({ default: m.WebDAVFileBrowser }))
 )
@@ -64,173 +45,46 @@ function PanelSkeleton() {
   )
 }
 
+/**
+ * 应用壳：持有「配置 / 结果」步骤状态，把 useBookProcessing 的结果分发给各视图。
+ * 视图本身在 components/app/（配置步、经典结果、移动端抽屉、页头），副作用在 hooks/useApp*.ts。
+ */
 function App() {
   const { t } = useTranslation()
   // selector 订阅：tokenUsage 等高频字段变化不触发 App 重渲染
-  const { aiConfig, processingOptions, webdavConfig } = useConfigStore(
-    useShallow((s) => ({
-      aiConfig: s.aiConfig,
-      processingOptions: s.processingOptions,
-      webdavConfig: s.webdavConfig,
-    }))
-  )
+  const webdavConfig = useConfigStore(useShallow((s) => s.webdavConfig))
   const isMobile = useIsMobile()
 
   // 页面步骤状态 (1: 配置, 2: 结果)
   const [currentStepIndex, setCurrentStepIndex] = useState(1)
-  const [showBackToTop, setShowBackToTop] = useState(false)
   const [navSheetOpen, setNavSheetOpen] = useState(false)
   const [previewSheetOpen, setPreviewSheetOpen] = useState(false)
 
-  // 使用 book processing hook
+  const book = useBookProcessing()
   const {
-    // 状态
     file,
     processing,
-    extractingChapters,
     progress,
     currentStep,
-    currentProcessingChapter,
     extractedChapters,
-    bookData,
     selectedChapters,
-    customPrompt,
     bookSummary,
     bookMindMap,
-    expandedChapters,
-    cloudCacheMetadata,
-    isCheckingCloudCache,
-    cloudCacheContent,
-    cloudChartsFileFound,
-    cloudCacheIsPartial,
-    cloudCacheStatusUnknown,
     rightPanelContent,
-    currentViewingChapterSummary,
-    previewFontSize,
-    isPreviewFullscreen,
-    isWebDAVBrowserOpen,
     processingMode,
-    fullBookData,
-
-    // 动作
-    handleFileSelect,
-    extractChapters,
-    processBook,
-    cancelProcessing,
-    restartProcessing,
-    handleChapterSelect,
-    handleSelectAll,
-    handleViewChapterContent,
-    handleCloseRightPanel,
-    handleChapterExpandChange,
-    clearChapterCache,
-    clearSpecificCache,
-    regenerateKeyCharts,
+    isWebDAVBrowserOpen,
+    currentProcessingChapter,
+    currentViewingChapterSummary,
+    expandedChapters,
     chartsGenerating,
-    clearBookCache,
-    increasePreviewFontSize,
-    decreasePreviewFontSize,
-    togglePreviewFullscreen,
-    loadFromCloudCache,
-    handleWebDAVFileSelect,
-    openWebDAVBrowser,
-    handleChapterSummaryNavigation,
-    handleChapterNavigation,
-    loadFromHistoryRecord,
+  } = book
 
-    // 设置器
-    setCustomPrompt,
-    setSelectedChapters,
-    setIsWebDAVBrowserOpen,
-    setCurrentViewingChapterSummary,
-  } = useBookProcessing()
-
-  // 监听滚动事件
-  useEffect(() => {
-    const scrollContainer = document.querySelector('.scroll-container')
-    if (!scrollContainer) return
-
-    const handleScroll = () => {
-      setShowBackToTop(scrollContainer.scrollTop > 300)
-    }
-
-    scrollContainer.addEventListener('scroll', handleScroll)
-    return () => scrollContainer.removeEventListener('scroll', handleScroll)
-  }, [])
-
-  // WebDAV 自动连接：配置一变就（重新）连接，而不是只在挂载后 3 秒试一次
-  useEffect(() => {
-    if (
-      !webdavConfig.enabled ||
-      !webdavConfig.serverUrl ||
-      !webdavConfig.username ||
-      !webdavConfig.password?.hasSecret ||
-      webdavService.isInitialized()
-    ) {
-      return
-    }
-
-    let cancelled = false
-    void (async () => {
-      try {
-        const initResult = await webdavService.initialize(webdavConfig)
-        if (!cancelled && initResult.success) {
-          toast.success(t('webdav.autoConnected'))
-        }
-      } catch (error) {
-        console.error('App: WebDAV 自动连接异常:', error)
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [webdavConfig, t])
-
-  // 下载完整 Markdown（不依赖本地 File：历史/云缓存加载后也可导出）
-  const downloadAllMarkdown = useCallback(() => {
-    if (!bookSummary) {
-      toast.error(t('download.noContent'))
-      return
-    }
-    try {
-      downloadSummaryMarkdown({
-        bookSummary,
-        fileName: file?.name,
-        model: aiConfig.model,
-        chapterDetectionMode: processingOptions.chapterDetectionMode,
-        chapterNamingMode: processingOptions.chapterNamingMode,
-        epubTocDepth: processingOptions.epubTocDepth,
-      })
-      toast.success(t('download.markdownDownloaded'))
-    } catch (error) {
-      console.error('Markdown 下载失败:', error)
-      toast.error(t('download.downloadFailed'))
-    }
-  }, [
-    bookSummary,
-    file,
-    aiConfig.model,
-    processingOptions.chapterDetectionMode,
-    processingOptions.chapterNamingMode,
-    processingOptions.epubTocDepth,
-    t,
-  ])
-
-  // 导出思维导图：按用户选择的格式导出（PNG/JPEG/WEBP/SVG/HTML/JSON/Markdown）
-  const downloadMindMap = useCallback((instance: MindElixirInstance, title: string, format: string) => {
-    void (async () => {
-      try {
-        const { filename } = await exportMindMap(instance, title, format)
-        toast.success(t('download.fileDownloaded', { filename }))
-      } catch (error) {
-        console.error('思维导图导出失败:', error)
-        toast.error(t('download.downloadFailed'))
-      }
-    })()
-  }, [t])
+  const showBackToTop = useBackToTop()
+  useWebDAVAutoConnect(webdavConfig)
+  const { downloadAllMarkdown, downloadMindMap } = useAppExports(bookSummary, file?.name)
 
   // 开始处理并切换到结果页
+  const { processBook, cancelProcessing, restartProcessing, loadFromCloudCache, loadFromHistoryRecord } = book
   const handleStartProcessing = useCallback(async () => {
     setCurrentStepIndex(2)
     await processBook()
@@ -247,6 +101,7 @@ function App() {
     setCurrentStepIndex((step) => (step === 1 ? 2 : 1))
   }, [])
 
+  const { setSelectedChapters, handleViewChapterContent, handleChapterNavigation, setIsWebDAVBrowserOpen } = book
   const handleSetSelection = useCallback(
     (chapterIds: string[]) => setSelectedChapters(new Set(chapterIds)),
     [setSelectedChapters]
@@ -260,10 +115,7 @@ function App() {
     [extractedChapters, handleViewChapterContent]
   )
 
-  const handleCloseWebDAVBrowser = useCallback(
-    () => setIsWebDAVBrowserOpen(false),
-    [setIsWebDAVBrowserOpen]
-  )
+  const handleCloseWebDAVBrowser = useCallback(() => setIsWebDAVBrowserOpen(false), [setIsWebDAVBrowserOpen])
 
   const handleLoadFromCloudCache = useCallback(() => {
     void (async () => {
@@ -275,9 +127,9 @@ function App() {
   // 书库：打开一本书 = 下载 + 走选文件流程；已精读的自动进入工作台
   const { openBook, openingPath } = useLibraryOpen({
     file,
-    cloudCacheContent,
-    isCheckingCloudCache,
-    handleWebDAVFileSelect,
+    cloudCacheContent: book.cloudCacheContent,
+    isCheckingCloudCache: book.isCheckingCloudCache,
+    handleWebDAVFileSelect: book.handleWebDAVFileSelect,
     handleLoadFromCloudCache,
   })
 
@@ -288,13 +140,14 @@ function App() {
   }, [restartProcessing])
 
   // 从历史记录加载云端缓存
-  const handleLoadFromHistory = useCallback(async (record: ProcessingHistoryRecord): Promise<boolean> => {
-    const success = await loadFromHistoryRecord(record.fileName)
-    if (success) {
-      setCurrentStepIndex(2)
-    }
-    return success
-  }, [loadFromHistoryRecord])
+  const handleLoadFromHistory = useCallback(
+    async (record: ProcessingHistoryRecord): Promise<boolean> => {
+      const success = await loadFromHistoryRecord(record.fileName)
+      if (success) setCurrentStepIndex(2)
+      return success
+    },
+    [loadFromHistoryRecord]
+  )
 
   // 移动端：打开原文预览时自动弹出预览 Sheet
   useEffect(() => {
@@ -310,24 +163,20 @@ function App() {
     setNavSheetOpen(false)
   }, [currentStepIndex])
 
-  const handleMobileChapterNavClick = useCallback((chapterId: string) => {
-    handleChapterNavigation(chapterId)
-    setNavSheetOpen(false)
-  }, [handleChapterNavigation])
-
-  // 关闭 Sheet 时保留 rightPanelContent，便于「预览」按钮再次打开
-  const handlePreviewSheetOpenChange = useCallback((open: boolean) => {
-    setPreviewSheetOpen(open)
-  }, [])
+  const handleMobileChapterNavClick = useCallback(
+    (chapterId: string) => {
+      handleChapterNavigation(chapterId)
+      setNavSheetOpen(false)
+    },
+    [handleChapterNavigation]
+  )
 
   const mindmapNavChapters = useMemo(() => bookMindMap?.chapters || [], [bookMindMap])
   // 总结模式一旦有结果就进入阅读工作台（目录、scroll spy、对照栏都在工作台内部）；
   // 导图模式与"尚无结果"仍用经典布局
   const workspaceMode = currentStepIndex === 2 && processingMode === 'summary' && !!bookSummary
   const showMindmapNav =
-    currentStepIndex === 2 &&
-    processingMode !== 'summary' &&
-    (processing || mindmapNavChapters.length > 0)
+    currentStepIndex === 2 && processingMode !== 'summary' && (processing || mindmapNavChapters.length > 0)
   const showMobileNavTrigger = isMobile && showMindmapNav
 
   // 移动端角标：导图模式 = 处理进度
@@ -340,13 +189,13 @@ function App() {
         chapter={rightPanelContent.chapter}
         title={rightPanelContent.title}
         fileName={file?.name || ''}
-        bookData={fullBookData}
-        fontSize={previewFontSize}
-        isFullscreen={isPreviewFullscreen}
-        onClose={handleCloseRightPanel}
-        onIncreaseFontSize={increasePreviewFontSize}
-        onDecreaseFontSize={decreasePreviewFontSize}
-        onToggleFullscreen={togglePreviewFullscreen}
+        bookData={book.fullBookData}
+        fontSize={book.previewFontSize}
+        isFullscreen={book.isPreviewFullscreen}
+        onClose={book.handleCloseRightPanel}
+        onIncreaseFontSize={book.increasePreviewFontSize}
+        onDecreaseFontSize={book.decreasePreviewFontSize}
+        onToggleFullscreen={book.togglePreviewFullscreen}
         variant={variant}
       />
     ) : null
@@ -368,7 +217,7 @@ function App() {
           <WebDAVFileBrowser
             isOpen={isWebDAVBrowserOpen}
             onClose={handleCloseWebDAVBrowser}
-            onFileSelect={handleWebDAVFileSelect}
+            onFileSelect={book.handleWebDAVFileSelect}
           />
         </Suspense>
       </ErrorBoundary>
@@ -380,41 +229,7 @@ function App() {
           workspaceMode ? 'max-w-full 2xl:max-w-[110rem] flex flex-col min-h-0 !space-y-0 gap-2' : 'max-w-full xl:max-w-7xl'
         )}
       >
-        {/* Header：工作台里压成单行（品牌 + 工具），把高度让给阅读 */}
-        {workspaceMode ? (
-          <div className="flex shrink-0 items-center justify-between gap-2">
-            <h1 className="min-w-0">
-              <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" />
-            </h1>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <SyncStatusIndicator />
-              <LanguageSwitcher />
-              <DarkModeToggle />
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2 sm:block sm:relative sm:space-y-2 sm:text-center">
-            <div className="flex items-center justify-between gap-2 sm:absolute sm:top-0 sm:right-0 sm:justify-end">
-              <div className="sm:hidden flex-1 min-w-0">
-                <h1 className="min-w-0">
-                  <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" />
-                </h1>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <SyncStatusIndicator />
-                <LanguageSwitcher />
-                <DarkModeToggle />
-              </div>
-            </div>
-            <div className="hidden sm:flex flex-col items-center gap-3 pt-1">
-              <h1>
-                <BrandMark name={t('app.title')} latin={t('app.latin')} />
-              </h1>
-              <p className="font-brand text-sm text-muted-foreground">{t('app.description')}</p>
-            </div>
-            <p className="sm:hidden font-brand text-sm text-muted-foreground">{t('app.description')}</p>
-          </div>
-        )}
+        <AppHeader compact={workspaceMode} />
 
         {/* 统一状态栏 */}
         <UnifiedStatusBar
@@ -426,11 +241,7 @@ function App() {
           onToggleView={handleToggleView}
           onLoadFromHistory={handleLoadFromHistory}
           onCancelProcessing={cancelProcessing}
-          onRestartProcessing={
-            file && extractedChapters && selectedChapters.size > 0
-              ? handleRestartProcessing
-              : undefined
-          }
+          onRestartProcessing={file && extractedChapters && selectedChapters.size > 0 ? handleRestartProcessing : undefined}
           onAbortToConfig={handleAbortToConfig}
         />
 
@@ -445,12 +256,7 @@ function App() {
         {(showMobileNavTrigger || (isMobile && rightPanelContent)) && (
           <div className="flex items-center gap-2 md:hidden">
             {showMobileNavTrigger && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="min-h-9 flex-1 justify-center gap-2"
-                onClick={() => setNavSheetOpen(true)}
-              >
+              <Button variant="outline" size="sm" className="min-h-9 flex-1 justify-center gap-2" onClick={() => setNavSheetOpen(true)}>
                 <List className="h-4 w-4" />
                 {t('mobile.chapters')}
                 {totalNavCount > 0 && (
@@ -461,12 +267,7 @@ function App() {
               </Button>
             )}
             {isMobile && rightPanelContent && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="min-h-9 flex-1 justify-center gap-2"
-                onClick={() => setPreviewSheetOpen(true)}
-              >
+              <Button variant="outline" size="sm" className="min-h-9 flex-1 justify-center gap-2" onClick={() => setPreviewSheetOpen(true)}>
                 <Eye className="h-4 w-4" />
                 {t('mobile.preview')}
               </Button>
@@ -475,49 +276,16 @@ function App() {
         )}
 
         {currentStepIndex === 1 ? (
-          // 配置步骤
-          <div className="flex flex-col md:flex-row gap-3 md:gap-4 min-w-0">
-            <div className="flex-1 space-y-4 min-w-0">
-              {webdavConfig.enabled && !file && <LibraryView onOpenBook={openBook} openingPath={openingPath} />}
-              <FileUploadCard
-                file={file}
-                processing={processing}
-                extractingChapters={extractingChapters}
-                isCheckingCloudCache={isCheckingCloudCache}
-                cloudCacheMetadata={cloudCacheMetadata}
-                cloudCacheContent={cloudCacheContent}
-                cloudChartsFileFound={cloudChartsFileFound}
-                cloudCacheIsPartial={cloudCacheIsPartial}
-                cloudCacheStatusUnknown={cloudCacheStatusUnknown}
-                webdavEnabled={webdavConfig.enabled}
-                webdavInitialized={webdavService.isInitialized()}
-                onFileSelect={handleFileSelect}
-                onExtractChapters={extractChapters}
-                onClearCache={clearBookCache}
-                onOpenWebDAVBrowser={openWebDAVBrowser}
-                onLoadFromCloudCache={handleLoadFromCloudCache}
-              />
-
-              {extractedChapters && bookData && (
-                <ChapterSelectionSection
-                  extractedChapters={extractedChapters}
-                  bookData={bookData}
-                  selectedChapters={selectedChapters}
-                  customPrompt={customPrompt}
-                  processing={processing}
-                  extractingChapters={extractingChapters}
-                  onChapterSelect={handleChapterSelect}
-                  onSelectAll={handleSelectAll}
-                  onSetSelection={handleSetSelection}
-                  onCustomPromptChange={setCustomPrompt}
-                  onViewChapterContent={handleViewChapterContent}
-                  onStartProcessing={handleStartProcessing}
-                />
-              )}
-            </div>
-
-            {desktopPreview}
-          </div>
+          <ConfigStep
+            book={book}
+            webdavEnabled={webdavConfig.enabled}
+            onOpenBook={openBook}
+            openingPath={openingPath}
+            onLoadFromCloudCache={handleLoadFromCloudCache}
+            onStartProcessing={handleStartProcessing}
+            onSetSelection={handleSetSelection}
+            preview={desktopPreview}
+          />
         ) : workspaceMode && bookSummary ? (
           // 结果步骤（总结模式）：阅读工作台
           <div className="min-h-0 flex-1">
@@ -534,138 +302,44 @@ function App() {
                 chartsGenerating={chartsGenerating}
                 source={dockPreview}
                 sourceKey={rightPanelContent?.chapter.id}
-                onNavigateChapter={handleChapterSummaryNavigation}
-                onViewingChapterChange={setCurrentViewingChapterSummary}
-                onClearChapterCache={clearChapterCache}
-                onClearSpecificCache={clearSpecificCache}
-                onChapterExpandChange={handleChapterExpandChange}
+                onNavigateChapter={book.handleChapterSummaryNavigation}
+                onViewingChapterChange={book.setCurrentViewingChapterSummary}
+                onClearChapterCache={book.clearChapterCache}
+                onClearSpecificCache={book.clearSpecificCache}
+                onChapterExpandChange={book.handleChapterExpandChange}
                 onReadChapter={handleReadChapter}
                 onDownloadAllMarkdown={downloadAllMarkdown}
-                onRegenerateKeyCharts={regenerateKeyCharts}
+                onRegenerateKeyCharts={book.regenerateKeyCharts}
               />
             </ErrorBoundary>
           </div>
         ) : (
           // 结果步骤（导图模式 / 尚无结果）：经典布局
-          <div className="flex flex-col md:flex-row gap-3 md:gap-4 min-w-0">
-            {/* 桌面：左侧导航 */}
-            {!isMobile && processingMode !== 'summary' && (
-              <TimelineNavigation
-                chapters={mindmapNavChapters}
-                currentStepIndex={currentStepIndex}
-                processingMode={processingMode}
-                onChapterClick={handleChapterNavigation}
-                processing={processing}
-                currentProcessingChapter={currentProcessingChapter}
-                variant="sidebar"
-              />
-            )}
-
-            {/* 中间结果展示 */}
-            <div className="flex-1 min-w-0">
-              {(bookSummary || bookMindMap) ? (
-                <ErrorBoundary section={t('results.title')}>
-                  <Suspense
-                    fallback={
-                      <Card>
-                        <CardContent className="py-12 text-center text-muted-foreground">
-                          {t('progress.loading')}
-                        </CardContent>
-                      </Card>
-                    }
-                  >
-                    <ResultsSection
-                      processingMode={processingMode}
-                      bookSummary={bookSummary}
-                      bookMindMap={bookMindMap}
-                      file={file}
-                      expandedChapters={expandedChapters}
-                      onClearChapterCache={clearChapterCache}
-                      onClearSpecificCache={clearSpecificCache}
-                      onChapterExpandChange={handleChapterExpandChange}
-                      onReadChapter={handleReadChapter}
-                      onDownloadAllMarkdown={downloadAllMarkdown}
-                      onDownloadMindMap={downloadMindMap}
-                      onRegenerateKeyCharts={regenerateKeyCharts}
-                      chartsGenerating={chartsGenerating}
-                      totalChapters={selectedChapters.size}
-                    />
-                  </Suspense>
-                </ErrorBoundary>
-              ) : (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <Brain className="h-12 w-12 text-muted-foreground/70 mx-auto mb-4" />
-                    <p className="text-muted-foreground">
-                      {t('results.noResults')}
-                    </p>
-                    <Button
-                      variant="outline"
-                      className="mt-4"
-                      onClick={() => setCurrentStepIndex(1)}
-                    >
-                      {t('common.backToConfig')}
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {desktopPreview}
-          </div>
+          <ClassicResults
+            book={book}
+            isMobile={isMobile}
+            currentStepIndex={currentStepIndex}
+            navChapters={mindmapNavChapters}
+            onChapterNavigate={handleChapterNavigation}
+            onReadChapter={handleReadChapter}
+            onDownloadAllMarkdown={downloadAllMarkdown}
+            onDownloadMindMap={downloadMindMap}
+            onBackToConfig={() => setCurrentStepIndex(1)}
+            preview={desktopPreview}
+          />
         )}
 
-        {/* 移动端：章节导航 Sheet */}
-        <Sheet open={navSheetOpen} onOpenChange={setNavSheetOpen}>
-          <SheetContent side="left" className="w-[min(100%,20rem)] p-0 gap-0">
-            <SheetHeader className="sr-only">
-              <SheetTitle>{t('mobile.chapters')}</SheetTitle>
-              <SheetDescription>{t('mobile.chaptersDescription')}</SheetDescription>
-            </SheetHeader>
-            <div className="h-full pt-2">
-              <TimelineNavigation
-                chapters={mindmapNavChapters}
-                currentStepIndex={currentStepIndex}
-                processingMode={processingMode}
-                onChapterClick={handleMobileChapterNavClick}
-                processing={processing}
-                currentProcessingChapter={currentProcessingChapter}
-                variant="sheet"
-              />
-            </div>
-          </SheetContent>
-        </Sheet>
-
-        {/* 移动端：原文预览 Sheet */}
-        <Sheet
-          open={isMobile && previewSheetOpen && !!rightPanelContent}
-          onOpenChange={handlePreviewSheetOpenChange}
-        >
-          <SheetContent
-            side="right"
-            className="w-full sm:max-w-md p-0 gap-0 flex flex-col"
-          >
-            <SheetHeader className="sr-only">
-              <SheetTitle>{rightPanelContent?.title || t('mobile.preview')}</SheetTitle>
-              <SheetDescription>{t('mobile.previewDescription')}</SheetDescription>
-            </SheetHeader>
-            {rightPanelContent && (
-              <PreviewPanel
-                chapter={rightPanelContent.chapter}
-                title={rightPanelContent.title}
-                fileName={file?.name || ''}
-                bookData={fullBookData}
-                fontSize={previewFontSize}
-                isFullscreen={isPreviewFullscreen}
-                onClose={() => handlePreviewSheetOpenChange(false)}
-                onIncreaseFontSize={increasePreviewFontSize}
-                onDecreaseFontSize={decreasePreviewFontSize}
-                onToggleFullscreen={togglePreviewFullscreen}
-                variant="sheet"
-              />
-            )}
-          </SheetContent>
-        </Sheet>
+        <MobileNavSheet
+          open={navSheetOpen}
+          onOpenChange={setNavSheetOpen}
+          chapters={mindmapNavChapters}
+          currentStepIndex={currentStepIndex}
+          processingMode={processingMode}
+          processing={processing}
+          currentProcessingChapter={currentProcessingChapter}
+          onChapterClick={handleMobileChapterNavClick}
+        />
+        <MobilePreviewSheet open={isMobile && previewSheetOpen} onOpenChange={setPreviewSheetOpen} book={book} />
 
         {/* 页脚：构建号（YYYYMMDD.bN，提交前自动 bump）；典故已在页头副标题里，这里不重复 */}
         {!workspaceMode && (
