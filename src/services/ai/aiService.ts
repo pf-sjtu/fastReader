@@ -18,12 +18,16 @@ import {
   getChapterConnectionsAnalysisPrompt,
   getOverallSummaryPrompt,
   getKeyChartsPrompt,
+  getStudyKitPrompt,
+  getQuizPrompt,
+  getAskBookPrompt,
   getTestConnectionPrompt,
   getChapterMindMapPrompt,
   getMindMapArrowPrompt,
   getCombinedMindMapPrompt
 } from '../prompts'
 import { parseCharts, type BookCharts } from '../../charts'
+import { parseQuiz, parseStudyKit, type Quiz, type StudyChapter, type StudyKit } from '../../study/schema'
 import { getLanguageInstruction } from '../prompts/utils'
 import { createAIProvider } from './factory'
 import { RESULT_PREFIX } from '../../utils/resultStatus'
@@ -34,6 +38,9 @@ import {
   combinedMindMapVars,
   connectionVars,
   keyChartsVars,
+  studyKitVars,
+  quizVars,
+  askVars,
   overallVars,
   prepareChapterSummariesForPostProcess,
   truncateText,
@@ -398,6 +405,86 @@ export class AIService {
       throw new Error('关键图表 JSON 解析失败或无有效数据')
     }
     return charts
+  }
+
+  /**
+   * 速读包：每章一句话 + 3 要点 + 术语。章节多时按批请求（单次输出过长会被截断），按章合并。
+   * 某一批解析失败只丢这一批；全部失败才抛错，调用方 soft-fail。
+   */
+  async generateStudyKit(
+    bookTitle: string,
+    chapters: Chapter[],
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions & { onBatch?: (done: number, total: number) => void }
+  ): Promise<StudyKit> {
+    const limits = this.postProcessLimits()
+    const usable = prepareChapterSummariesForPostProcess(usableChapters(chapters), limits.chapters)
+    if (usable.length === 0) throw new Error('没有可用的章节摘要，无法生成速读包。')
+    const refs = usableChapters(chapters).map((c) => ({ id: c.id, title: c.title }))
+    const basePrompt = getStudyKitPrompt()
+    const BATCH = 30
+    const merged: StudyChapter[] = []
+    const batches = Math.ceil(usable.length / BATCH)
+    let lastError = ''
+    for (let b = 0; b < batches; b++) {
+      const slice = usable.slice(b * BATCH, (b + 1) * BATCH).map(({ title, summary }) => ({ title, summary }))
+      try {
+        const response = await this.generateContent(
+          renderPrompt(basePrompt, studyKitVars(bookTitle, slice)),
+          outputLanguage,
+          opts
+        )
+        const kit = parseStudyKit(response, refs)
+        if (kit) merged.push(...kit.chapters)
+        else lastError = '速读包 JSON 解析失败或无有效数据'
+      } catch (e) {
+        if (opts?.signal?.aborted) throw e
+        lastError = e instanceof Error ? e.message : String(e)
+      }
+      opts?.onBatch?.(b + 1, batches)
+    }
+    if (!merged.length) throw new Error(lastError || '速读包生成失败')
+    return { version: 1, chapters: merged }
+  }
+
+  /** 自测题：scope 为空 = 全书；否则只用这些章节（按章自测） */
+  async generateQuiz(
+    bookTitle: string,
+    chapters: Chapter[],
+    count: number,
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions
+  ): Promise<Quiz> {
+    const limits = this.postProcessLimits()
+    const usable = usableChapters(chapters)
+    const prepared = prepareChapterSummariesForPostProcess(usable, limits.chapters).map(({ title, summary }) => ({ title, summary }))
+    if (prepared.length === 0) throw new Error('没有可用的章节摘要，无法出题。')
+    const response = await this.generateContent(
+      renderPrompt(getQuizPrompt(), quizVars(bookTitle, count, prepared)),
+      outputLanguage,
+      opts
+    )
+    const quiz = parseQuiz(response, usable.map((c) => ({ id: c.id, title: c.title })))
+    if (!quiz) throw new Error('自测题 JSON 解析失败或无有效题目')
+    return quiz
+  }
+
+  /** 问书：材料（全书总结 + 检索出的章节）由调用方组装好；返回原始回答文本（含【章节】引用） */
+  async askBook(
+    bookTitle: string,
+    overallSummary: string,
+    context: string,
+    history: string,
+    question: string,
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions
+  ): Promise<string> {
+    const limits = this.postProcessLimits()
+    const prompt = renderPrompt(
+      getAskBookPrompt(),
+      askVars(bookTitle, truncateText(overallSummary || '', Math.floor(limits.connections / 2)), context, history, question)
+    )
+    return (await this.generateContent(prompt, outputLanguage, opts)).trim()
   }
 
   /**

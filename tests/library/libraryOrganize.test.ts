@@ -152,3 +152,14 @@ describe('recommendBooks（乱序推荐）', () => {
     expect(recommendBooks(done, { seed: 1 })).toEqual([])
   })
 })
+
+describe('recommendBooks omit（硬排除）', () => {
+  it('omit 的书任何种子下都不会出现，即使候选不足也不回填', () => {
+    const idx = build([{ path: '/s/a.epub' }, { path: '/s/b.epub' }, { path: '/s/c.epub' }])
+    for (let seed = 0; seed < 30; seed++) {
+      const r = recommendBooks(idx, { seed, count: 3, omit: ['/s/a.epub'] }).map((x) => x.entry.path)
+      expect(r).not.toContain('/s/a.epub')
+      expect(r).toHaveLength(2)
+    }
+  })
+})

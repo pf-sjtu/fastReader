@@ -43,8 +43,8 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
   const resume = useMemo(() => (browsing ? continueReading(index) : []), [index, browsing])
   const total = Object.keys(index.entries).length
   const recs = useMemo(
-    () => (browsing && total >= 3 ? recommendBooks(index, { seed, count: RECOMMEND_COUNT, exclude: prevBatch }) : []),
-    [index, browsing, total, seed, prevBatch]
+    () => (browsing && total >= 3 ? recommendBooks(index, { seed, count: RECOMMEND_COUNT, exclude: prevBatch, omit: resume.map((e) => e.path) }) : []),
+    [index, browsing, total, seed, prevBatch, resume]
   )
   const staleCount = useMemo(() => Object.values(index.entries).filter((e) => e.stale).length, [index])
 
@@ -77,7 +77,15 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
       active && 'bg-primary text-primary-foreground hover:bg-primary/90'
     )
   const card = (e: LibraryEntry, caption?: string) => (
-    <BookCard key={e.path} entry={e} opening={openingPath === e.path} disabled={!!openingPath} onOpen={() => onOpenBook(e)} caption={caption} />
+    <BookCard
+      key={e.path}
+      entry={e}
+      opening={openingPath === e.path}
+      disabled={!!openingPath}
+      onOpen={() => onOpenBook(e)}
+      caption={caption}
+      showSize={sort === 'size'}
+    />
   )
   const shuffle = () => {
     setPrevBatch(recs.map((r) => r.entry.path))

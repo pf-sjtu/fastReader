@@ -43,11 +43,12 @@
 - [x] 5.2 `services/library/`（index/scanner/gc）与 IndexedDB 镜像（索引 gzip 单文件一次加载；真实封面（EPUB 内嵌 / PDF 首页）缩成 webp，懒加载、并发 2；补全元数据由用户触发、并发 2、可取消；孤儿封面随 GC 清理。未做：空闲自动补全）
 - [x] 5.3 `LibraryView`、继续阅读、封面墙、`QuickStartSheet`（智能勾选 + 费用预估）（QuickStartSheet 以「选章页的用量预估 + 既有智能不勾选/字数筛选」落地，未新增独立抽屉）
 - [x] 5.4 设置：重建/清空书库索引
+- [x] 5.5 书架组织：分类（状态/格式/作者/目录）、排序（+作者/进度/大小/更新时间）、带种子的加权随机推荐（可换一批、避开上一批、与「继续阅读」去重）、书卡信息布局（书名/作者/章数在封面内部底部阴影层，EPUB 与体积不占位）、元数据补全（用户触发，并发 2）、真实封面懒加载（队列并发 2）
 
 ## 6. AI 学习功能
-- [ ] 6.1 学习包（studyKit）生成、持久化、三档阅读深度
-- [ ] 6.2 自测与闪卡
-- [ ] 6.3 问书
+- [ ] 6.1 学习包（studyKit）生成、持久化、三档阅读深度（**已完成**：提示词、zod 解析、`AIService.generateStudyKit`（30 章一批）；**未做**：本地持久化(IndexedDB)、`{name}-学习包.json` 云同步、对照栏「学习」页签 UI、三档阅读深度切换。见 docs/handoff-reader-workspace.md §3）
+- [ ] 6.2 自测与闪卡（**已完成**：提示词、`parseQuiz` 逐题过滤、`AIService.generateQuiz`；**未做**：答题界面、错题本、闪卡、持久化）
+- [ ] 6.3 问书（**已完成**：`retrieveChapters`（CJK 二元组+TF·IDF）、`extractCitations`、提示词、`AIService.askBook`；**未做**：对话界面、引用跳转、会话内存管理。注意：provider 层目前无流式接口，问书为非流式）
 
 ## 7. 笔记与导出
 - [ ] 7.1 划线/批注、锚点重定位、`{name}-笔记.json` 同步

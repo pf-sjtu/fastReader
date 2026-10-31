@@ -71,7 +71,7 @@ describe('LibraryView', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     expect(useLibraryStore.getState().refresh).toHaveBeenCalled()
     const text = mounted.container.textContent ?? ''
-    for (const t of ['甲', '乙', '丙', '已精读', '12 章', 'EPUB · 2.0 MB', 'PDF · 2.0 MB']) expect(text).toContain(t)
+    for (const t of ['甲', '乙', '丙', '已精读', '12 章']) expect(text).toContain(t)
     expect(mounted.container.querySelector('[style*="width: 40%"]')).not.toBeNull()
   })
 
@@ -302,5 +302,68 @@ describe('书架：分类 / 排序 / 推荐 / 补全', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     expect(mounted.container.textContent).not.toContain('补全书籍信息')
     expect(mounted.container.textContent).toContain('某作者')
+  })
+})
+
+describe('monogramOf（生成式封面的装饰首字）', () => {
+  it('跳过书名号/引号/空白取第一个字；英文转大写；空串兜底为"书"', async () => {
+    const { monogramOf } = await import('@/components/library/coverSlot')
+    expect(monogramOf('《门口的野蛮人》')).toBe('门')
+    expect(monogramOf('  “三体”')).toBe('三')
+    expect(monogramOf("the Innovator's Dilemma")).toBe('T')
+    expect(monogramOf('2049')).toBe('2')
+    expect(monogramOf('')).toBe('书')
+    expect(monogramOf('《》')).toBe('书')
+  })
+})
+
+describe('书卡信息布局：常见格式与体积不占位', () => {
+  // 同一本书可能同时出现在推荐行和主列表：取主列表（最后一个）里的那张，不受推荐理由胶囊影响
+  const cardFor = (title: string) =>
+    Array.from(mounted!.container.querySelectorAll<HTMLButtonElement>('button.group')).filter((b) => b.textContent?.includes(title)).pop()!
+  beforeEach(() => {
+    useLibraryStore.setState({
+      index: seededIndex(),
+      refreshing: false,
+      fresh: true,
+      error: null,
+      unavailable: false,
+      refresh: vi.fn().mockResolvedValue(undefined),
+    })
+  })
+
+  it('EPUB 不显示格式标签；PDF 等少数派才有格式小胶囊', () => {
+    mounted = mount(<LibraryView onOpenBook={() => {}} />)
+    expect(cardFor('甲').textContent).not.toContain('EPUB')
+    expect(cardFor('丙').textContent).toContain('PDF')
+  })
+
+  it('体积默认不显示在卡片上，只在悬停提示里；章数显示在卡片上', () => {
+    mounted = mount(<LibraryView onOpenBook={() => {}} />)
+    const yi = cardFor('乙')
+    expect(yi.textContent).not.toContain('MB')
+    expect(yi.textContent).toContain('12 章')
+    expect(yi.title).toContain('2.0 MB')
+    expect(yi.title).toContain('EPUB')
+    expect(yi.title).toContain('12 章')
+    expect(yi.getAttribute('aria-label')).toContain('2.0 MB')
+  })
+
+  it('按"大小"排序时体积才直接显示在卡片上', () => {
+    mounted = mount(<LibraryView onOpenBook={() => {}} />)
+    const sel = mounted.container.querySelector<HTMLSelectElement>('select[aria-label="排序"]')!
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, 'size')
+      sel.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(cardFor('甲').textContent).toContain('2.0 MB')
+  })
+
+  it('推荐理由胶囊优先于格式胶囊（同一位置只放一个）', () => {
+    useLibraryStore.setState({ index: applyScan(emptyIndex(0), Array.from({ length: 8 }, (_, i) => ({ path: `/s/b${i}.pdf`, size: 1000, mtime: 'm' })), { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index })
+    mounted = mount(<LibraryView onOpenBook={() => {}} />)
+    const rec = mounted.container.querySelector('[aria-label="随机推荐"] button.group')!
+    expect(rec.textContent).toMatch(/还没翻开|打开过|你读过的作者|回头再看/)
+    expect(rec.textContent).not.toContain('PDF')
   })
 })

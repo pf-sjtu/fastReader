@@ -125,13 +125,15 @@ export interface RecommendOptions {
   count?: number
   /** 上一批的路径：「换一批」时尽量避开（候选不够时才允许重复） */
   exclude?: readonly string[]
+  /** 硬排除：这些书永远不进推荐（例如已显示在「继续阅读」里的，避免同屏重复） */
+  omit?: readonly string[]
 }
 
 /**
  * 加权无放回随机抽样。同一 seed + 同一书库 → 同一结果；换 seed 即「换一批」。
  * 候选少于 count 时全部返回；避开上一批后不足 count 才回填上一批的书。
  */
-export function recommendBooks(index: LibraryIndex, { seed, count = 6, exclude = [] }: RecommendOptions): Recommendation[] {
+export function recommendBooks(index: LibraryIndex, { seed, count = 6, exclude = [], omit = [] }: RecommendOptions): Recommendation[] {
   const rand = seededRandom(seed)
   const skip = new Set(exclude)
   const pick = (pool: Weighted[], n: number): Weighted[] => {
@@ -149,7 +151,8 @@ export function recommendBooks(index: LibraryIndex, { seed, count = 6, exclude =
     }
     return chosen
   }
-  const all = weigh(index)
+  const hidden = new Set(omit)
+  const all = weigh(index).filter((w) => !hidden.has(w.entry.path))
   const fresh = all.filter((w) => !skip.has(w.entry.path))
   let chosen = pick(fresh, count)
   if (chosen.length < count) chosen = chosen.concat(pick(all.filter((w) => skip.has(w.entry.path)), count - chosen.length))

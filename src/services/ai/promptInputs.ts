@@ -108,3 +108,35 @@ export function arrowVars(chapters: unknown[]): PromptVar[] {
 export function combinedMindMapVars(bookTitle: string, chapters: unknown[]): PromptVar[] {
   return [bookTitleVar(bookTitle), { name: 'chapterSummaries', label: '章节列表', value: JSON.stringify(chapters) }]
 }
+
+
+/** 速读包：{{bookTitle}} {{chapterSummaries}} */
+export function studyKitVars(bookTitle: string, chapters: unknown[]): PromptVar[] {
+  return [bookTitleVar(bookTitle), { name: 'chapterSummaries', label: '章节总结', value: JSON.stringify(chapters) }]
+}
+
+/** 自测：{{bookTitle}} {{count}} {{chapterSummaries}} */
+export function quizVars(bookTitle: string, count: number, chapters: unknown[]): PromptVar[] {
+  return [
+    bookTitleVar(bookTitle),
+    { name: 'count', label: '题目数量', value: String(count), inline: true },
+    { name: 'chapterSummaries', label: '章节总结', value: JSON.stringify(chapters) },
+  ]
+}
+
+/** 问书：{{bookTitle}} {{overallSummary}} {{context}} {{history}} {{question}} */
+export function askVars(
+  bookTitle: string,
+  overallSummary: string,
+  context: string,
+  history: string,
+  question: string
+): PromptVar[] {
+  return [
+    bookTitleVar(bookTitle),
+    { name: 'overallSummary', label: '全书总结', value: overallSummary || '（无）' },
+    { name: 'context', label: '相关章节', value: context || '（没有检索到相关章节）' },
+    { name: 'history', label: '此前对话', value: history || '（无）' },
+    { name: 'question', label: '读者的问题', value: question },
+  ]
+}

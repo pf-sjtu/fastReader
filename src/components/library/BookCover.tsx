@@ -1,28 +1,42 @@
 import { cn } from '@/lib/utils'
-import { coverSlot } from './coverSlot'
+import { coverSlot, monogramOf } from './coverSlot'
 
 interface BookCoverProps {
+  /** 只用来取装饰用的首字；书名文字由卡片底部的阴影层统一承载，避免和真实封面一样重复印两遍 */
   title: string
   seed: string
   className?: string
 }
 
 /**
- * 生成式封面：没有真实封面时也要"像一本书"。色块取自实体色 token，
- * 书脊条 + 衬线书名；底色只占 22%，文字用前景色，保证明暗主题下的对比。
+ * 生成式封面：没有真实封面时也要像一本书——
+ * 实体色渐变 + 左侧书脊（带高光线）+ 大号衬线首字做肌理 + 内描边。
+ * 不放书名：文字交给底部阴影层，与真实封面完全一致。
  */
 export function BookCover({ title, seed, className }: BookCoverProps) {
-  const color = `var(--entity-${coverSlot(seed)})`
+  const c = `var(--entity-${coverSlot(seed)})`
   return (
     <div
       aria-hidden="true"
-      className={cn('relative flex aspect-[3/4] w-full overflow-hidden rounded-md border bg-card shadow-sm', className)}
-      style={{ background: `color-mix(in oklab, ${color} 22%, var(--card))` }}
+      className={cn('relative size-full overflow-hidden', className)}
+      style={{
+        background: `linear-gradient(155deg, color-mix(in oklab, ${c} 82%, white) 0%, ${c} 38%, color-mix(in oklab, ${c} 55%, black) 100%)`,
+      }}
     >
-      <span className="w-2 shrink-0" style={{ background: color }} />
-      <span className="font-brand flex min-w-0 flex-1 items-center px-2.5 py-3 text-sm font-semibold leading-snug text-foreground">
-        <span className="line-clamp-5 break-words">{title}</span>
+      {/* 书脊 */}
+      <span
+        className="absolute inset-y-0 left-0 w-[7%] min-w-1.5"
+        style={{
+          background: `linear-gradient(90deg, color-mix(in oklab, ${c} 50%, black), color-mix(in oklab, ${c} 78%, black))`,
+          boxShadow: 'inset -1px 0 0 rgb(255 255 255 / 0.22)',
+        }}
+      />
+      {/* 首字肌理 */}
+      <span className="font-brand pointer-events-none absolute right-[10%] top-[8%] select-none text-[5.5rem] font-bold leading-none text-white/20">
+        {monogramOf(title)}
       </span>
+      {/* 内描边 */}
+      <span className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/15" />
     </div>
   )
 }
