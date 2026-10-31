@@ -1,8 +1,15 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { Trash2, RefreshCw } from 'lucide-react'
+import { Trash2, RefreshCw, MoreHorizontal } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import type { BookCharts, ChartPluginProps } from './types'
 import { getSortedPlugins } from './registry'
 import { cn } from '@/lib/utils'
@@ -20,6 +27,8 @@ export interface ChartsPanelProps {
   onlyPlugin?: string
   /** 联动入参（焦点/回调/配色），原样透传给插件；不传则插件只做展示 */
   pluginProps?: Omit<ChartPluginProps, 'charts'>
+  /** 工具栏左侧的插槽（如图谱的联动开关）：和图表操作菜单同一行，不再各占一行 */
+  toolbarSlot?: ReactNode
 }
 
 export function ChartsPanel({
@@ -31,6 +40,7 @@ export function ChartsPanel({
   canRegenerate = false,
   onlyPlugin,
   pluginProps,
+  toolbarSlot,
 }: ChartsPanelProps) {
   const { t } = useTranslation()
   const plugins = useMemo(() => getSortedPlugins(), [])
@@ -66,33 +76,39 @@ export function ChartsPanel({
     }
   }
 
-  const toolbar = (
-    <div className="flex items-center justify-end gap-2 flex-wrap">
-      {canRegenerate && onRegenerate && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs"
-          disabled={regenBusy || generating}
-          onClick={handleRegenerate}
-        >
-          <RefreshCw className={`h-3.5 w-3.5 mr-1 ${regenBusy ? 'animate-spin' : ''}`} />
-          {t('results.charts.regenerate')}
-        </Button>
-      )}
-      {onClearCache && charts && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs"
-          onClick={onClearCache}
-        >
-          <Trash2 className="h-3.5 w-3.5 mr-1" />
-          {t('results.charts.clearCache')}
-        </Button>
-      )}
-    </div>
-  )
+  // 数据级操作（重新生成 / 清除缓存）低频且有破坏性：收进一个「⋯」菜单，不再是两枚常驻的文字按钮
+  const canRegen = canRegenerate && !!onRegenerate
+  const canClear = !!onClearCache && !!charts
+  const toolbar =
+    toolbarSlot || canRegen || canClear ? (
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">{toolbarSlot}</div>
+        {(canRegen || canClear) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 w-8 shrink-0 p-0" aria-label={t('results.charts.moreActions')} title={t('results.charts.moreActions')}>
+                {regenBusy || generating ? <RefreshCw className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {canRegen && (
+                <DropdownMenuItem disabled={regenBusy || generating} onSelect={() => void handleRegenerate()}>
+                  <RefreshCw className="size-4" />
+                  {t('results.charts.regenerate')}
+                </DropdownMenuItem>
+              )}
+              {canRegen && canClear && <DropdownMenuSeparator />}
+              {canClear && (
+                <DropdownMenuItem variant="destructive" onSelect={onClearCache}>
+                  <Trash2 className="size-4" />
+                  {t('results.charts.clearCache')}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+    ) : null
 
   if (generating && !charts) {
     return (

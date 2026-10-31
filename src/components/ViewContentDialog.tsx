@@ -17,9 +17,12 @@ interface ViewContentDialogProps {
   content: string
   chapterIndex: number
   contentType?: 'text' | 'markdown' | 'html'
+  /** 受控模式：由外部（如更多菜单）打开，不渲染自带的触发按钮 */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function ViewContentDialog({ title, content, chapterIndex, contentType = 'text' }: ViewContentDialogProps) {
+export function ViewContentDialog({ title, content, chapterIndex, contentType = 'text', open, onOpenChange }: ViewContentDialogProps) {
   const { t } = useTranslation()
   
   const renderContent = () => {
@@ -49,17 +52,19 @@ export function ViewContentDialog({ title, content, chapterIndex, contentType = 
   }
   
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label={t('viewContent.originalText')}
-          title={t('viewContent.originalText')}
-        >
-          <Eye className="h-4 w-4 " />
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open === undefined && (
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label={t('viewContent.originalText')}
+            title={t('viewContent.originalText')}
+          >
+            <Eye className="h-4 w-4 " />
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-[95vw] md:max-w-4xl max-h-[90vh] w-full flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-wrap break-words">{title} - {t('viewContent.originalText')}</DialogTitle>

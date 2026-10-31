@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -19,6 +19,8 @@ interface ChapterSummaryNavigationProps {
   currentViewingChapter?: string
   /** sidebar: 桌面侧栏；sheet: 移动端抽屉内全高 */
   variant?: 'sidebar' | 'sheet'
+  /** 放在进度头右侧的操作（如「收起目录」），和进度同一行，不另占一行 */
+  headerAction?: ReactNode
   className?: string
 }
 
@@ -31,6 +33,7 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
   currentProcessingChapter,
   currentViewingChapter,
   variant = 'sidebar',
+  headerAction,
   className
 }: ChapterSummaryNavigationProps) {
   const { t } = useTranslation()
@@ -95,12 +98,14 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
       style={isSheet ? undefined : { maxHeight: 'calc(100vh - 8rem)' }}
     >
       {/* 进度头部：处理中=处理进度，完成后=阅读进度 */}
-      <div className="px-3 py-2.5 border-b shrink-0 space-y-1.5">
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>{progressLabel}</span>
+      {/* 抽屉里右上角有 Sheet 自带的关闭按钮（绝对定位），头部右侧要让出位置，否则会压在 1/26 上 */}
+      <div className={cn('px-3 py-2.5 border-b shrink-0 space-y-1.5', isSheet && 'pr-12')}>
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate">{progressLabel}</span>
           <span className="tabular-nums">
             {progressCurrent}/{progressTotal}
           </span>
+          {headerAction}
         </div>
         <div className="h-1 bg-muted rounded-full overflow-hidden">
           <div

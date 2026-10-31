@@ -1,19 +1,19 @@
 import React, { memo, useMemo, useState, type ReactNode } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Trash2, BookOpen, ChevronDown, ChevronUp, MoreHorizontal } from 'lucide-react'
+import { Trash2, BookOpen, ChevronDown, Copy, Eye, MoreHorizontal } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import ReactMarkdown, { type Options as MarkdownOptions } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkCjkFriendly from "remark-cjk-friendly";
+import { toast } from 'sonner'
 import { prepareMarkdownForRender } from '@/lib/markdown'
-import { CopyButton } from '@/components/ui/copy-button'
 import { ViewContentDialog } from './ViewContentDialog'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -34,6 +34,8 @@ interface MarkdownCardProps {
   markdownContent: string
   /** 章节索引 */
   index: number
+  /** 是否显示序号（全书关联、全书总结这类单张卡不需要） */
+  showIndex?: boolean
   /** 清除缓存的回调函数 */
   onClearCache?: (chapterId: string) => void
   /** 阅读章节的回调函数（参数为章节ID，便于父组件传稳定引用） */
@@ -63,12 +65,19 @@ interface MarkdownCardProps {
   headerExtra?: ReactNode
 }
 
+/**
+ * 章节卡。设计原则：标题是最重要的信息，不被按钮挤占。
+ * - 折叠态只有「序号 + 衬线标题 + 箭头」，整行都是点击区（读屏：一个带 aria-expanded 的按钮）
+ * - 操作（复制 / 阅读原文 / 更多）只在展开后，作为内容上方一条轻量工具栏出现
+ * - 无阴影；折叠态悬停才有底色，展开态保持安静
+ */
 export const MarkdownCard = memo(function MarkdownCard({
   id,
   title,
   content,
   markdownContent,
   index,
+  showIndex = true,
   onClearCache,
   onReadChapter,
   showClearCache = true,
@@ -84,6 +93,7 @@ export const MarkdownCard = memo(function MarkdownCard({
 }: MarkdownCardProps) {
   const { t } = useTranslation()
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed)
+  const [viewOpen, setViewOpen] = useState(false)
   const remarkPlugins = useMemo(
     () => (extraRemarkPlugins?.length ? [...REMARK_PLUGINS, ...extraRemarkPlugins] : REMARK_PLUGINS),
     [extraRemarkPlugins]
@@ -112,104 +122,79 @@ export const MarkdownCard = memo(function MarkdownCard({
   // 预处理只依赖内容：流式更新其他章节时不重复计算
   const renderedMarkdown = useMemo(() => prepareMarkdownForRender(markdownContent), [markdownContent])
 
+  const canClear = showClearCache && !!onClearCache
+  const canRead = showReadButton && !!onReadChapter
+  const hasMenu = showViewContent || canClear
+  const hasToolbar = showCopyButton || canRead || hasMenu
+
+  const copy = () => {
+    if (!markdownContent) return
+    void navigator.clipboard.writeText(markdownContent)
+    toast.success(t('common.copiedToClipboard'), { duration: 2000, position: 'top-center' })
+  }
+
+  const toggleLabel = actualIsCollapsed ? t('common.expand') : t('common.collapse')
+
   return (
     <Card
       id={`chapter-summary-${id}`}
-      className={cn('gap-2 min-w-0 py-2 sm:py-4', className)}
+      className={cn('min-w-0 gap-0 overflow-hidden py-0 shadow-none transition-colors', actualIsCollapsed && 'hover:bg-accent/30', className)}
     >
-      <CardHeader className="space-y-2 px-2.5 sm:px-4">
-        <CardTitle className="text-base sm:text-lg flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <Badge variant="outline" className="shrink-0"># {index + 1}</Badge>
-            <div className="truncate min-w-0 flex-1" title={title}>
-              {title}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleToggleCollapse}
-              className="shrink-0 h-8 w-8 p-0 sm:hidden"
-              title={actualIsCollapsed ? t('common.expand') : t('common.collapse')}
-              aria-label={actualIsCollapsed ? t('common.expand') : t('common.collapse')}
-              aria-expanded={!actualIsCollapsed}
-            >
-              {actualIsCollapsed ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronUp className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            {showCopyButton && (
-              <CopyButton
-                content={markdownContent}
-                successMessage={t('common.copiedToClipboard')}
-                title={t('common.copyChapterSummary')}
-              />
-            )}
-            {/* 破坏性的次要操作收进菜单：少一个常驻按钮，也避免手滑清掉缓存 */}
-            {showClearCache && onClearCache && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    title={t('common.moreActions')}
-                    aria-label={t('common.moreActions')}
-                    className="h-8 w-8 p-0"
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem variant="destructive" onSelect={() => onClearCache(id)}>
-                    <Trash2 className="h-4 w-4" />
-                    {t('common.clearCache')}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {showReadButton && onReadChapter && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onReadChapter(id)}
-                className="h-8 w-8 p-0"
-                title={t('common.readChapter')}
-                aria-label={t('common.readChapter')}
-              >
-                <BookOpen className="h-3 w-3" />
-              </Button>
-            )}
-            {showViewContent && (
-              <ViewContentDialog
-                title={title}
-                content={content}
-                chapterIndex={index}
-                contentType="text"
-              />
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleToggleCollapse}
-              className="hidden sm:inline-flex h-8 w-8 p-0"
-              title={actualIsCollapsed ? t('common.expand') : t('common.collapse')}
-              aria-label={actualIsCollapsed ? t('common.expand') : t('common.collapse')}
-              aria-expanded={!actualIsCollapsed}
-            >
-              {actualIsCollapsed ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronUp className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </CardTitle>
-      </CardHeader>
+      <button
+        type="button"
+        onClick={handleToggleCollapse}
+        aria-expanded={!actualIsCollapsed}
+        aria-label={`${toggleLabel}：${title}`}
+        title={toggleLabel}
+        className="flex w-full items-start gap-3 px-3 py-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:px-4"
+      >
+        {showIndex && <span className="mt-[0.3em] w-5 shrink-0 text-xs tabular-nums text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>}
+        <span className="font-brand min-w-0 flex-1 text-base font-semibold leading-snug sm:text-[17px]">{title}</span>
+        <ChevronDown className={cn('mt-[0.3em] size-4 shrink-0 text-muted-foreground transition-transform', !actualIsCollapsed && 'rotate-180')} aria-hidden="true" />
+      </button>
+
       {!actualIsCollapsed && (
-        <CardContent className="min-w-0 px-2.5 sm:px-4 pt-0">
+        <CardContent className="min-w-0 px-3 pb-4 pt-0 sm:px-4">
+          {hasToolbar && (
+            <div className="-ml-2 mb-2 flex flex-wrap items-center gap-0.5 text-muted-foreground" role="toolbar" aria-label={title}>
+              {showCopyButton && (
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs" onClick={copy} disabled={!markdownContent} title={t('common.copyChapterSummary')}>
+                  <Copy className="size-3.5" />
+                  {t('common.copy')}
+                </Button>
+              )}
+              {canRead && (
+                <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs" onClick={() => onReadChapter!(id)} title={t('common.readChapter')}>
+                  <BookOpen className="size-3.5" />
+                  {t('common.readChapter')}
+                </Button>
+              )}
+              {hasMenu && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" title={t('common.moreActions')} aria-label={t('common.moreActions')} className="h-8 w-8 p-0">
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {showViewContent && (
+                      <DropdownMenuItem onSelect={() => setViewOpen(true)}>
+                        <Eye className="size-4" />
+                        {t('viewContent.originalText')}
+                      </DropdownMenuItem>
+                    )}
+                    {showViewContent && canClear && <DropdownMenuSeparator />}
+                    {canClear && (
+                      <DropdownMenuItem variant="destructive" onSelect={() => onClearCache!(id)}>
+                        <Trash2 className="size-4" />
+                        {t('common.clearCache')}
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          )}
           {headerExtra}
           <div className="markdown-card-content prose prose-sm max-w-none overflow-x-auto">
             {/*
@@ -221,6 +206,10 @@ export const MarkdownCard = memo(function MarkdownCard({
             </ReactMarkdown>
           </div>
         </CardContent>
+      )}
+
+      {showViewContent && (
+        <ViewContentDialog title={title} content={content} chapterIndex={index} contentType="text" open={viewOpen} onOpenChange={setViewOpen} />
       )}
     </Card>
   )

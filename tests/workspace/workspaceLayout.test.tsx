@@ -161,3 +161,47 @@ describe('ReaderWorkspace 布局', () => {
     expect(mounted.container.querySelectorAll('aside').length).toBe(0)
   })
 })
+
+describe('ReaderWorkspace 进入即有内容可读', () => {
+  const withSummaries = (summaries: string[]) =>
+    ({ ...book, chapters: summaries.map((summary, i) => ({ id: `c${i + 1}`, title: `第${i + 1}章`, content: '', processed: true, summary })) }) as unknown as BookSummary
+
+  it('章节卡是外部受控的：没有已展开章节时，自动展开第一个有可用总结的章节（跳过失败/空的）', async () => {
+    setViewport(1440)
+    const onChapterExpandChange = vi.fn()
+    mounted = mount(<ReaderWorkspace {...props} bookSummary={withSummaries(['【处理失败】超时', '', '第3章总结', '第4章总结'])} onChapterExpandChange={onChapterExpandChange} />)
+    await flush()
+    expect(onChapterExpandChange).toHaveBeenCalledTimes(1)
+    expect(onChapterExpandChange).toHaveBeenCalledWith('c3', true)
+  })
+
+  it('已经有展开的章节（用户操作过 / 从别处恢复）：不再干预', async () => {
+    setViewport(1440)
+    const onChapterExpandChange = vi.fn()
+    mounted = mount(<ReaderWorkspace {...props} expandedChapters={new Set(['c2'])} onChapterExpandChange={onChapterExpandChange} />)
+    await flush()
+    expect(onChapterExpandChange).not.toHaveBeenCalled()
+  })
+
+  it('每本书只自动展开一次：用户之后把它折叠起来，不会又被展开', async () => {
+    setViewport(1440)
+    const onChapterExpandChange = vi.fn()
+    mounted = mount(<ReaderWorkspace {...props} onChapterExpandChange={onChapterExpandChange} />)
+    await flush()
+    expect(onChapterExpandChange).toHaveBeenCalledTimes(1)
+    mounted.rerender(<ReaderWorkspace {...props} expandedChapters={new Set()} onChapterExpandChange={onChapterExpandChange} />)
+    await flush()
+    expect(onChapterExpandChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('还没有任何可用总结（处理刚开始）：不动；总结出现后再展开', async () => {
+    setViewport(1440)
+    const onChapterExpandChange = vi.fn()
+    mounted = mount(<ReaderWorkspace {...props} bookSummary={withSummaries(['', ''])} onChapterExpandChange={onChapterExpandChange} />)
+    await flush()
+    expect(onChapterExpandChange).not.toHaveBeenCalled()
+    mounted.rerender(<ReaderWorkspace {...props} bookSummary={withSummaries(['第1章总结', ''])} onChapterExpandChange={onChapterExpandChange} />)
+    await flush()
+    expect(onChapterExpandChange).toHaveBeenCalledWith('c1', true)
+  })
+})

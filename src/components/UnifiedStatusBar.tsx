@@ -214,15 +214,7 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                   onViewAll={() => setHistoryDialogOpen(true)}
                 />
               </div>
-            ) : currentView === 'config' ? (
-              <div className="text-center text-sm text-muted-foreground">
-                {t('statusBar.readyToProcess')}
-              </div>
-            ) : (
-              <div className="text-center text-sm text-muted-foreground">
-                {t('statusBar.viewingResults')}
-              </div>
-            )}
+            ) : null /* 没有进度也没有历史时留白：「准备就绪 / 查看处理结果」这类复述界面状态的文字没有信息量 */}
           </div>
 
           {/* 右侧：模式 / Key / 模型（桌面） */}

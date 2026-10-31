@@ -4,7 +4,8 @@
  * - 对照栏：图谱 / 时间线 / 综述 / 原文，宽度可拖拽、可收起、浏览器级记忆
  * - 移动端：目录为左抽屉，对照栏为底部抽屉
  */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { usableSummaryChapters } from '@/utils/chapterResults'
 import { useTranslation } from 'react-i18next'
 import { useViewportWidth } from '@/hooks/useViewportWidth'
 import { containerWidth, fitColumns, isCompactWidth } from './columns'
@@ -144,6 +145,17 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
   const [navOpen, setNavOpen] = useState(false)
   const [dockSheetOpen, setDockSheetOpen] = useState(false)
 
+  // 进来先有东西可读：章节卡是外部受控的，从历史/云缓存打开时 expandedChapters 为空，
+  // 26 章全是只有标题的空壳。每本书自动展开第一个有可用总结的章节（只做一次，之后听用户的）
+  const autoExpandedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (autoExpandedFor.current === bookSummary.title || expandedChapters.size > 0) return
+    const first = usableSummaryChapters(bookSummary.chapters)[0]
+    if (!first) return
+    autoExpandedFor.current = bookSummary.title
+    onChapterExpandChange(first.id, true)
+  }, [bookSummary.title, bookSummary.chapters, expandedChapters, onChapterExpandChange])
+
   const chapters = bookSummary.chapters
   const chapterIds = useMemo(() => chapters.map((c) => c.id), [chapters])
 
@@ -228,9 +240,10 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
   const canRegenerate = isUsableText(bookSummary.overallSummary) && chapters.length > 0
 
   const chartPanel = useCallback(
-    (plugin: string) => (
+    (plugin: string, toolbarSlot?: ReactNode) => (
       <ErrorBoundary section={t('results.tabs.keyCharts')}>
         <ChartsPanel
+          toolbarSlot={toolbarSlot}
           charts={bookSummary.charts}
           chartsError={bookSummary.chartsError}
           generating={chartsGenerating}
@@ -248,10 +261,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
   const tabs = useMemo<DockTab[]>(() => {
     const list: DockTab[] = [
       { id: 'graph', label: t('results.charts.entityGraph'), keepMounted: true, content: (
-          <>
-            <GraphOptions />
-            {chartPanel('entity-graph')}
-          </>
+          chartPanel('entity-graph', <GraphOptions />)
         ),
       },
       { id: 'timeline', label: t('results.charts.timeline'), keepMounted: true, content: chartPanel('entity-timeline') },
@@ -338,7 +348,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     </Button>
   ) : null
 
-  const nav = (variant: 'sidebar' | 'sheet') => (
+  const nav = (variant: 'sidebar' | 'sheet', headerAction?: ReactNode) => (
     <ChapterSummaryNavigation
       chapters={chapters}
       totalChapters={totalChapters}
@@ -349,6 +359,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       currentProcessingChapter={currentProcessingChapter}
       currentViewingChapter={currentViewingChapter}
       variant={variant}
+      headerAction={headerAction}
       className={variant === 'sidebar' ? 'static h-full' : undefined}
     />
   )
@@ -415,20 +426,23 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
           >
             {navCollapsed && <NavRail chapters={chapters} current={viewingIndex} onExpand={() => setNavCollapsed(false)} />}
             <div className={navCollapsed ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}>
-              <div className="flex shrink-0 justify-end pb-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                  onClick={() => setNavCollapsed(true)}
-                  aria-label={t('workspace.nav.collapse')}
-                  title={t('workspace.nav.collapse')}
-                >
-                  <ChevronsLeft className="size-4" />
-                </Button>
+              <div className="min-h-0 flex-1">
+                {nav(
+                  'sidebar',
+                  // 收起目录和阅读进度同一行，不再单独占一行空白
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="-mr-1.5 size-6 shrink-0"
+                    onClick={() => setNavCollapsed(true)}
+                    aria-label={t('workspace.nav.collapse')}
+                    title={t('workspace.nav.collapse')}
+                  >
+                    <ChevronsLeft className="size-4" />
+                  </Button>
+                )}
               </div>
-              <div className="min-h-0 flex-1">{nav('sidebar')}</div>
             </div>
           </aside>
           {!navCollapsed && (

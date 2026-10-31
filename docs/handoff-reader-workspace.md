@@ -22,7 +22,7 @@
 ## 2. 验证命令（交接后先跑一遍）
 
 ```bash
-pnpm test            # 1296 通过（entityLinking 的 300 章耗时断言在全量并行时偶发超时，单跑稳定） / 21 跳过
+pnpm test            # 1362 通过（entityLinking 的 300 章耗时断言在全量并行时偶发超时，单跑稳定） / 21 跳过
 pnpm exec tsc -b
 pnpm lint
 pnpm build
@@ -52,7 +52,14 @@ pnpm dlx @fission-ai/openspec validate add-reader-workspace --strict
 - **端到端未测**：真实 WebDAV 上的书库刷新/补全/封面同步（只有内存 IO + 夹具页验证）；学习功能没有真实模型调用验证。
 - 收尾：更新 `README.md` 与项目 `CLAUDE.md`（书库、学习功能、`.juhua/` 目录约定）；阶段结束后按全局规范 fan out 独立 Reviewer（devils_advocate，需指定模型）。
 
+### 3.4 生产走查遗留（详见 tasks.md §9.11–9.15）
+字体自托管与正文衬线切换、补全按钮的下载量提示、WebDAV 首屏连接 20 秒+ 的拆解、推荐与全量网格的重复、646 本书的真实封面并发与流量。生产站 `https://read-app.navira.blog`（共享密码，需用户自己登录）；部署由 Cloudflare Pages 自动构建，页脚构建号（`src/buildInfo.ts`）可用来确认线上是哪一版：`curl` 首页取 `assets/index-*.js`，grep `20261031.bN`。
+
 ## 4. 设计要点与坑（避免重复踩）
+
+- **用真实数据走查才能发现的两类问题**：（1）内存假 IO 测不出服务端行为——InfiniCLOUD 对 `Depth: infinity` 返回 403、书在 `browsePath=/EBook` 而摘要在 `syncPath=/fastReader`；（2）`webdav` 库对 `href=/dav/EBook/x` 返回 `/../../dav/EBook/x`，`normalizeDavPath` 必须**先解析 `..` 再剥前缀**。新增依赖路径形态的逻辑时，用 `node` 起本地 HTTP 回放真实 XML 去验库的输出（做法见 git 历史里 9.3 的排查），不要只信手写的理想路径。
+- **jsdom 缺滚动 API**：挂载含目录/页签的组件时测试里要补 `Element.prototype.scrollBy/scrollTo/scrollIntoView`。
+- **布局类 bug 要在窄窗口复核**：桌面断点 768 与「三栏够不够宽」是两回事；工作台现在用 `columns.ts`（紧凑阈值 1000、正文最小 420）。
 
 - **防剧透口径**：严格 `e < c`（当前章及之后折叠；章节未知=折叠）。图谱渐进模式是 `e ≤ c`（含当前章），界面上有说明。折叠内容必须不进模型/DOM（测试有泄漏断言）。
 - **书库 GC**：写回时先与远端合并，**合并之后**再剔除 `removed`，否则远端旧副本会让 GC 失效（有回归测试）。扫描失败绝不 GC。

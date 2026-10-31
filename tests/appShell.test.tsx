@@ -46,6 +46,7 @@ describe('App 外壳', () => {
     expect(text()).toContain('把一本书，咀嚼成一页知识')
     expect(document.querySelector('input[type="file"]')).toBeTruthy()
     expect(document.querySelector('footer')?.textContent).toContain(BUILD_VERSION)
+    expect(text()).not.toContain('准备就绪') // 同上：没有历史时留白，不复述界面状态
   })
 
   it('尚无结果时切到结果步：显示空状态，点「返回配置」回到配置步', async () => {
@@ -54,6 +55,7 @@ describe('App 外壳', () => {
     click(buttonByText(/结果/))
     await flush()
     expect(text()).toContain('暂无处理结果')
+    expect(text()).not.toContain('查看处理结果') // 状态栏不复述「你正在看结果」
     expect(document.querySelector('input[type="file"]')).toBeFalsy()
     click(buttonByText(/^返回配置$/))
     await flush()

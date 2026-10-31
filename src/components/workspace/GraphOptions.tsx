@@ -16,7 +16,7 @@ export function GraphOptions() {
   const setProgressive = useReadingFocusStore((s) => s.setProgressiveGraph)
 
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-1">
       <div className="flex items-center gap-1.5">
         <Checkbox id={`${id}-colorize`} checked={colorize} onCheckedChange={(v) => setColorize(v === true)} />
         <Label htmlFor={`${id}-colorize`} className="min-h-6 cursor-pointer text-xs">
