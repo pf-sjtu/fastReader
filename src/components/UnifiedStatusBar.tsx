@@ -1,6 +1,5 @@
 import { memo, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { ModelSwitcher } from './ModelSwitcher'
 import { Badge } from '@/components/ui/badge'
@@ -121,129 +120,127 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
 
   return (
     <>
-      {/* Card 默认带 py-4，状态栏再叠 p-4 会虚高；此处 py-0 + 紧凑内边距 */}
-      <Card className={cn('w-full min-w-0 gap-0 py-0 shadow-sm', className)}>
-        <CardContent className="px-3 py-2 sm:px-4 sm:py-2">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-            {/* 切换按钮 + 模型信息（移动端同一行） */}
-            <div className="flex items-center justify-between gap-2 sm:justify-start sm:gap-3 shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleToggleView}
-                className="flex items-center gap-1.5 h-8 min-h-8"
-              >
-                {currentView === 'config' ? (
-                  <>
-                    <Brain className="h-4 w-4 shrink-0" />
-                    <span className="hidden sm:inline">{t('statusBar.enterProcessing')}</span>
-                    <span className="sm:hidden">{t('statusBar.enterProcessingShort')}</span>
-                    <ArrowRight className="h-4 w-4 shrink-0" />
-                  </>
-                ) : (
-                  <>
-                    <ArrowLeft className="h-4 w-4 shrink-0" />
-                    <span className="hidden sm:inline">{t('statusBar.backToConfig')}</span>
-                    <span className="sm:hidden">{t('statusBar.backToConfigShort')}</span>
-                    <Settings className="h-4 w-4 shrink-0" />
-                  </>
-                )}
-              </Button>
-
-              <div className="flex items-center gap-2 sm:hidden">
-                {/* 模型徽章即切换器：换模型 / 调思考强度 都在这里 */}
-                <ModelSwitcher disabled={processing} tokenUsage={tokenUsage} className="max-w-[11rem]" />
-                {processing && (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                )}
-              </div>
-            </div>
-
-            {/* 中间：进度条 / 最近历史 / 状态信息 */}
-            <div className="flex-1 min-w-0 mx-0 sm:mx-6">
-              {showProgress ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-muted-foreground truncate min-w-0">
-                      {processing ? currentStep : t('statusBar.completed')}
-                    </span>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-muted-foreground tabular-nums">
-                        {Math.round(progress)}%
-                      </span>
-                      {processing && onCancelProcessing && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
-                          onClick={() => setPendingAction('abort')}
-                        >
-                          {t('progress.abort')}
-                        </Button>
-                      )}
-                      {processing && onAbortToConfig && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs hidden sm:inline-flex"
-                          onClick={() => setPendingAction('abortToConfig')}
-                          title={t('progress.abortAndEditSettings')}
-                        >
-                          {t('progress.abortAndEditSettingsShort')}
-                        </Button>
-                      )}
-                      {!processing && onRestartProcessing && (
-                        <Button
-                          // 未完成（中断）时强调为主操作；已完成时降为次要
-                          variant={progress < 100 ? 'default' : 'outline'}
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={onRestartProcessing}
-                        >
-                          {t('progress.restart')}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                  <Progress value={progress} className="h-2" />
-                </div>
-              ) : showRecentHistory ? (
-                <div className="flex min-w-0 justify-center">
-                  <RecentHistoryMenu
-                    records={records}
-                    loadingFileName={loadingFileName}
-                    onSelect={handleHistorySelect}
-                    onViewAll={() => setHistoryDialogOpen(true)}
-                  />
-                </div>
-              ) : currentView === 'config' ? (
-                <div className="text-center text-sm text-muted-foreground">
-                  {t('statusBar.readyToProcess')}
-                </div>
+      {/* 无卡片外框：它只是一条工具行，框起来会和下面真正的内容卡片（书库、上传）抢层级 */}
+      <div data-slot="status-bar" className={cn('w-full min-w-0 px-0.5 py-1 sm:px-1', className)}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          {/* 切换按钮 + 模型信息（移动端同一行） */}
+          <div className="flex items-center justify-between gap-2 sm:justify-start sm:gap-3 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleToggleView}
+              className="flex items-center gap-1.5 h-8 min-h-8"
+            >
+              {currentView === 'config' ? (
+                <>
+                  <Brain className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">{t('statusBar.enterProcessing')}</span>
+                  <span className="sm:hidden">{t('statusBar.enterProcessingShort')}</span>
+                  <ArrowRight className="h-4 w-4 shrink-0" />
+                </>
               ) : (
-                <div className="text-center text-sm text-muted-foreground">
-                  {t('statusBar.viewingResults')}
-                </div>
+                <>
+                  <ArrowLeft className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">{t('statusBar.backToConfig')}</span>
+                  <span className="sm:hidden">{t('statusBar.backToConfigShort')}</span>
+                  <Settings className="h-4 w-4 shrink-0" />
+                </>
               )}
-            </div>
+            </Button>
 
-            {/* 右侧：模式 / Key / 模型（桌面） */}
-            <div className="hidden sm:flex items-center gap-2 shrink-0">
-              {processingMode && (
-                <Badge variant="outline" className="text-xs font-normal">
-                  {MODE_LABEL_KEY[processingMode] ? t(MODE_LABEL_KEY[processingMode]) : processingMode}
-                </Badge>
-              )}
-              {/* 未配置密钥时切换器本身会标红并显示提示，不再单独放一个红色徽章 */}
-              <ModelSwitcher disabled={processing} tokenUsage={tokenUsage} />
-
+            <div className="flex items-center gap-2 sm:hidden">
+              {/* 模型徽章即切换器：换模型 / 调思考强度 都在这里 */}
+              <ModelSwitcher disabled={processing} tokenUsage={tokenUsage} className="max-w-[11rem]" />
               {processing && (
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* 中间：进度条 / 最近历史 / 状态信息 */}
+          <div className="flex-1 min-w-0 mx-0 sm:mx-6">
+            {showProgress ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground truncate min-w-0">
+                    {processing ? currentStep : t('statusBar.completed')}
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-muted-foreground tabular-nums">
+                      {Math.round(progress)}%
+                    </span>
+                    {processing && onCancelProcessing && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
+                        onClick={() => setPendingAction('abort')}
+                      >
+                        {t('progress.abort')}
+                      </Button>
+                    )}
+                    {processing && onAbortToConfig && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs hidden sm:inline-flex"
+                        onClick={() => setPendingAction('abortToConfig')}
+                        title={t('progress.abortAndEditSettings')}
+                      >
+                        {t('progress.abortAndEditSettingsShort')}
+                      </Button>
+                    )}
+                    {!processing && onRestartProcessing && (
+                      <Button
+                        // 未完成（中断）时强调为主操作；已完成时降为次要
+                        variant={progress < 100 ? 'default' : 'outline'}
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={onRestartProcessing}
+                      >
+                        {t('progress.restart')}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <Progress value={progress} className="h-2" />
+              </div>
+            ) : showRecentHistory ? (
+              <div className="flex min-w-0 justify-center">
+                <RecentHistoryMenu
+                  records={records}
+                  loadingFileName={loadingFileName}
+                  onSelect={handleHistorySelect}
+                  onViewAll={() => setHistoryDialogOpen(true)}
+                />
+              </div>
+            ) : currentView === 'config' ? (
+              <div className="text-center text-sm text-muted-foreground">
+                {t('statusBar.readyToProcess')}
+              </div>
+            ) : (
+              <div className="text-center text-sm text-muted-foreground">
+                {t('statusBar.viewingResults')}
+              </div>
+            )}
+          </div>
+
+          {/* 右侧：模式 / Key / 模型（桌面） */}
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
+            {processingMode && (
+              <Badge variant="outline" className="text-xs font-normal">
+                {MODE_LABEL_KEY[processingMode] ? t(MODE_LABEL_KEY[processingMode]) : processingMode}
+              </Badge>
+            )}
+            {/* 未配置密钥时切换器本身会标红并显示提示，不再单独放一个红色徽章 */}
+            <ModelSwitcher disabled={processing} tokenUsage={tokenUsage} />
+
+            {processing && (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+          </div>
+        </div>
+      </div>
 
       <AlertDialog
         open={pendingAction !== null}
