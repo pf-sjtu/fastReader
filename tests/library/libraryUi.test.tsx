@@ -280,8 +280,9 @@ describe('useLibraryOpen', () => {
     select: (f: File) => Promise<void>
     load: () => void
     expose: (open: (e: LibraryEntry) => Promise<void>) => void
+    onAuto?: (autoOpening: boolean) => void
   }) {
-    const { openBook } = useLibraryOpen({
+    const { openBook, autoOpening } = useLibraryOpen({
       file: props.file,
       cloudCacheContent: props.cloud,
       isCheckingCloudCache: props.checking,
@@ -289,6 +290,7 @@ describe('useLibraryOpen', () => {
       handleLoadFromCloudCache: props.load,
     })
     props.expose(openBook)
+    props.onAuto?.(autoOpening)
     return null
   }
 
@@ -321,6 +323,42 @@ describe('useLibraryOpen', () => {
     const { load, select } = await run('done', { cloud: '# 摘要' })
     expect(select).toHaveBeenCalledTimes(1)
     expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('autoOpening：已精读的书在「选文件 → 缓存检查」期间为真（界面显示骨架），结束后为假', async () => {
+    const seen: boolean[] = []
+    const file = new File(['x'], '甲.epub')
+    downloadFileAsFile.mockResolvedValue({ success: true, data: file })
+    let open!: (e: LibraryEntry) => Promise<void>
+    let resolveSelect!: () => void
+    const select = vi.fn(() => new Promise<void>((r) => (resolveSelect = r)))
+    const base = { select, load: vi.fn(), expose: (o: typeof open) => (open = o), onAuto: (v: boolean) => void seen.push(v) }
+    mounted = mount(<Harness {...base} file={null} cloud={null} checking={false} />)
+    expect(seen.at(-1)).toBe(false)
+    let p!: Promise<void>
+    await act(async () => {
+      p = open(entry('done'))
+      await flush(1)
+    })
+    expect(seen.at(-1)).toBe(true)
+    mounted.rerender(<Harness {...base} file={file} cloud="# 摘要" checking={false} />)
+    await act(async () => {
+      resolveSelect()
+      await p
+    })
+    expect(seen.at(-1)).toBe(false)
+  })
+
+  it('autoOpening：未处理的书不进入过渡态（走正常的选章节流程）', async () => {
+    const seen: boolean[] = []
+    downloadFileAsFile.mockResolvedValue({ success: true, data: new File(['x'], '甲.epub') })
+    let open!: (e: LibraryEntry) => Promise<void>
+    const base = { select: vi.fn(async () => {}), load: vi.fn(), expose: (o: typeof open) => (open = o), onAuto: (v: boolean) => void seen.push(v) }
+    mounted = mount(<Harness {...base} file={null} cloud={null} checking={false} />)
+    await act(async () => {
+      await open(entry('unprocessed'))
+    })
+    expect(seen.every((v) => v === false)).toBe(true)
   })
 
   it('已精读但云缓存没读到：不自动进入，停在选章节页', async () => {

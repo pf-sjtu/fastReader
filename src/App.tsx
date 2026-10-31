@@ -126,7 +126,7 @@ function App() {
   }, [loadFromCloudCache])
 
   // 书库：打开一本书 = 下载 + 走选文件流程；已精读的自动进入工作台
-  const { openBook, openingPath } = useLibraryOpen({
+  const { openBook, openingPath, autoOpening } = useLibraryOpen({
     file,
     cloudCacheContent: book.cloudCacheContent,
     isCheckingCloudCache: book.isCheckingCloudCache,
@@ -204,6 +204,21 @@ function App() {
   const desktopPreview = !isMobile && !workspaceMode ? previewPanel('sidebar') : null
   const dockPreview = !isMobile && workspaceMode ? previewPanel('dock') : null
 
+  const statusBar = (
+    <UnifiedStatusBar
+      currentView={currentStepIndex === 1 ? 'config' : 'processing'}
+      processing={processing}
+      progress={progress}
+      currentStep={currentStep}
+      processingMode={processingMode}
+      onToggleView={handleToggleView}
+      onLoadFromHistory={handleLoadFromHistory}
+      onCancelProcessing={cancelProcessing}
+      onRestartProcessing={file && extractedChapters && selectedChapters.size > 0 ? handleRestartProcessing : undefined}
+      onAbortToConfig={handleAbortToConfig}
+    />
+  )
+
   return (
     <div
       className={cn(
@@ -230,21 +245,9 @@ function App() {
           workspaceMode ? 'max-w-full 2xl:max-w-[110rem] flex flex-col min-h-0 !space-y-0 gap-2' : 'max-w-full xl:max-w-7xl'
         )}
       >
-        <AppHeader compact={workspaceMode} />
-
-        {/* 统一状态栏 */}
-        <UnifiedStatusBar
-          currentView={currentStepIndex === 1 ? 'config' : 'processing'}
-          processing={processing}
-          progress={progress}
-          currentStep={currentStep}
-          processingMode={processingMode}
-          onToggleView={handleToggleView}
-          onLoadFromHistory={handleLoadFromHistory}
-          onCancelProcessing={cancelProcessing}
-          onRestartProcessing={file && extractedChapters && selectedChapters.size > 0 ? handleRestartProcessing : undefined}
-          onAbortToConfig={handleAbortToConfig}
-        />
+        {/* 工作台里页头与状态栏合成一行（单层页头）；其余页面状态栏仍在页头下方 */}
+        <AppHeader compact={workspaceMode}>{workspaceMode ? statusBar : null}</AppHeader>
+        {!workspaceMode && statusBar}
 
         {/* 批量处理队列面板 */}
         <ErrorBoundary section={t('errorBoundary.batchQueue')}>
@@ -282,6 +285,7 @@ function App() {
             webdavEnabled={webdavConfig.enabled}
             onOpenBook={openBook}
             openingPath={openingPath}
+            autoOpening={autoOpening}
             onLoadFromCloudCache={handleLoadFromCloudCache}
             onStartProcessing={handleStartProcessing}
             onSetSelection={handleSetSelection}

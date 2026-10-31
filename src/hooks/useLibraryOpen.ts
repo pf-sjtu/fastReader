@@ -19,6 +19,7 @@ interface Params {
  * 从书库打开一本书：下载 → 走与「选文件」相同的流程（云缓存检查 + 提取章节）。
  * 已精读的书不再让用户多点一次「使用云端缓存」：缓存检查完成后自动进入工作台。
  * 只对"这一次从书库打开的这个文件"生效（按文件名匹配），不会误伤之后手动选的文件。
+ * autoOpening：已精读的书正在自动进入工作台（界面应显示骨架屏而不是「文件上传与配置」卡）。
  */
 export function useLibraryOpen({
   file,
@@ -67,5 +68,5 @@ export function useLibraryOpen({
     if (cloudCacheContent) handleLoadFromCloudCache()
   }, [autoLoad, file, cloudCacheContent, isCheckingCloudCache, handleLoadFromCloudCache])
 
-  return { openBook, openingPath }
+  return { openBook, openingPath, autoOpening: autoLoad !== null }
 }

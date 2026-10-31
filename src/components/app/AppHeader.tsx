@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BrandMark } from '@/components/BrandMark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
@@ -16,19 +17,22 @@ function HeaderTools() {
 }
 
 /**
- * 页头。compact（阅读工作台）压成单行：品牌 + 工具，把高度让给阅读；
- * 否则是带副标题的完整页头（桌面居中、手机左对齐）。
+ * 页头。compact（阅读工作台）压成单行：品牌 + 状态栏（children）+ 工具，把高度让给阅读；
+ * 窄屏时 children 另起一行。否则是带副标题的完整页头（桌面居中、手机左对齐），children 不在这里渲染。
  */
-export function AppHeader({ compact }: { compact: boolean }) {
+export function AppHeader({ compact, children }: { compact: boolean; children?: ReactNode }) {
   const { t } = useTranslation()
 
   if (compact) {
     return (
-      <div className="flex shrink-0 items-center justify-between gap-2">
-        <h1 className="min-w-0">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <h1 className="shrink-0">
           <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" />
         </h1>
-        <HeaderTools />
+        {children && <div className="order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-0">{children}</div>}
+        <div className="ml-auto sm:ml-0">
+          <HeaderTools />
+        </div>
       </div>
     )
   }
