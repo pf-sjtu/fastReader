@@ -25,7 +25,7 @@ const SELECT_CLS = 'h-8 rounded-md border bg-background px-2 text-xs focus-visib
 
 export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps) {
   const { t } = useTranslation()
-  const { index, refreshing, fresh, error, unavailable, refresh, fillProgress, fillMetadata, cancelFill } = useLibraryStore()
+  const { index, refreshing, fresh, error, unavailable, connecting, refresh, fillProgress, fillMetadata, cancelFill } = useLibraryStore()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<LibraryFilter>('all')
   const [sort, setSort] = useState<LibrarySort>('recent')
@@ -41,9 +41,9 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
 
   // 进来时 WebDAV 可能还在自动连接：连上之后补刷一次，否则 unavailable 会让书库永远不出现
   useEffect(() => {
-    if (!unavailable) return
+    if (!unavailable && !connecting) return
     return webdavService.onInitialized(() => void refresh())
-  }, [unavailable, refresh])
+  }, [unavailable, connecting, refresh])
 
   const entries = useMemo(() => listEntries(index, { query, filter, sort }), [index, query, filter, sort])
   const groups = useMemo(() => groupEntries(entries, group), [entries, group])
@@ -126,10 +126,10 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
         </Button>
       </header>
 
-      {total > 0 && (error || (!fresh && !refreshing)) && (
+      {total > 0 && (connecting || error || (!fresh && !refreshing)) && (
         <p role="status" className="text-xs text-muted-foreground">
-          {t('library.stale')}
-          {error ? `（${error}）` : ''}
+          {connecting ? t('library.connectingCached') : t('library.stale')}
+          {!connecting && error ? `（${error}）` : ''}
         </p>
       )}
 
@@ -232,7 +232,15 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
               </Button>
             </>
           ) : (
-            <p>{refreshing && total === 0 ? t('library.loading') : total === 0 ? t('library.empty') : t('library.noMatch')}</p>
+            <p>
+              {connecting && total === 0
+                ? t('library.connecting')
+                : refreshing && total === 0
+                  ? t('library.loading')
+                  : total === 0
+                    ? t('library.empty')
+                    : t('library.noMatch')}
+            </p>
           )}
         </div>
       )}

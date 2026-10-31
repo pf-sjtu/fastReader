@@ -70,6 +70,7 @@ describe('LibraryView', () => {
       fresh: true,
       error: null,
       unavailable: false,
+      connecting: false,
       refresh: vi.fn().mockResolvedValue(undefined),
     })
   })
@@ -116,6 +117,21 @@ describe('LibraryView', () => {
     useLibraryStore.setState({ index: applyScan(emptyIndex(0), [{ path: '/s/甲.epub', size: 1, mtime: 'm' }], { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index })
     mounted.rerender(<LibraryView onOpenBook={() => {}} openingPath={null} />)
     expect(mounted.container.textContent).not.toContain('全部书籍')
+  })
+
+  it('连接中且没有镜像：显示「正在连接云端」，不能误报「还没有书」', () => {
+    useLibraryStore.setState({ index: emptyIndex(0), connecting: true, fresh: false, error: null })
+    mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    expect(mounted.container.textContent).toContain('正在连接云端')
+    expect(mounted.container.textContent).not.toContain('还没有书')
+  })
+
+  it('连接中但有镜像：先显示上次的书架，并提示正在连接', () => {
+    useLibraryStore.setState({ connecting: true, fresh: false })
+    mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    expect(cards().length).toBeGreaterThan(0)
+    expect(mounted.container.textContent).toContain('正在连接云端，先显示上次的书架')
+    expect(mounted.container.textContent).not.toContain('显示的是缓存内容')
   })
 
   it('目录确实是空的（无错误）：才显示「还没有书」', () => {

@@ -10,15 +10,33 @@ import { gunzipToText, gzipText, isGzip } from './gzip'
 let kv: ReturnType<typeof createStore> | null = null
 const store = () => (kv ??= createStore('juhua-library', 'index'))
 
-/** 无可用 WebDAV 时返回 null：书库本身依赖云端目录 */
-export function createLibraryIO(): LibraryIO | null {
-  const cfg = useConfigStore.getState().webdavConfig
-  if (!cfg.enabled || !webdavService.isInitialized()) return null
+type DavCfg = ReturnType<typeof useConfigStore.getState>['webdavConfig']
+
+/** 同步目录 / 书目录 / 镜像分区键：镜像按它分开，换账号或换目录不串书 */
+function scopeOf(cfg: DavCfg) {
   const syncPath = cfg.syncPath || '/fastReader'
   // 书放在浏览根（如 /EBook），摘要写在同步目录；没配或是根目录就退回同步目录
   const browse = (cfg.browsePath || '').replace(/\/+$/, '')
   const booksPath = browse && browse !== syncPath ? browse : undefined
   const scopeKey = `${cfg.serverUrl}|${cfg.username ?? ''}|${syncPath}|${booksPath ?? ''}`
+  return { syncPath, booksPath, scopeKey }
+}
+
+/**
+ * 读本地镜像：只要启用了 WebDAV 就能读，不必等连接建好。
+ * 首屏连接要几十秒（先登录、加载共享状态、再连云），这段时间先把上次的书架摆出来。
+ */
+export async function readLibraryMirror(): Promise<unknown | null> {
+  const cfg = useConfigStore.getState().webdavConfig
+  if (!cfg.enabled) return null
+  return (await get(scopeOf(cfg).scopeKey, store())) ?? null
+}
+
+/** 无可用 WebDAV 时返回 null：书库本身依赖云端目录 */
+export function createLibraryIO(): LibraryIO | null {
+  const cfg = useConfigStore.getState().webdavConfig
+  if (!cfg.enabled || !webdavService.isInitialized()) return null
+  const { syncPath, booksPath, scopeKey } = scopeOf(cfg)
   const path = libraryIndexPath(syncPath)
   const legacyPath = legacyLibraryIndexPath(syncPath)
 

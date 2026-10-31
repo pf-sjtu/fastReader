@@ -594,6 +594,8 @@
     "noMatch": "没有符合条件的书",
     "stale": "显示的是缓存内容，可能不是最新",
     "all": "全部书籍",
+    "connecting": "正在连接云端…",
+    "connectingCached": "正在连接云端，先显示上次的书架",
     "scanFailed": "读取同步目录失败：{{error}}",
     "retry": "重试",
     "continue": "继续阅读",

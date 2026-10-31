@@ -1,9 +1,10 @@
 /** 书库的界面状态：只放"当前看到的索引"和刷新状态，生命周期规则全部在 libraryService */
 import { create } from 'zustand'
 import { logger } from '@/lib/logger'
-import { createLibraryIO } from './libraryIO'
+import { createLibraryIO, readLibraryMirror } from './libraryIO'
+import { useConfigStore } from '@/stores/configStore'
 import { rebuildLibrary, recordOpened, recordStatusByFileName, refreshLibrary } from './libraryService'
-import { emptyIndex } from './libraryIndex'
+import { emptyIndex, migrateIndex } from './libraryIndex'
 import { fillLibraryMetadata, type FillResult } from './libraryFill'
 import type { BookStatus, LibraryEntry, LibraryIndex } from './types'
 
@@ -14,8 +15,10 @@ interface LibraryState {
   /** 上次扫描是否成功；false = 展示的是缓存，可能不是最新 */
   fresh: boolean
   error: string | null
-  /** WebDAV 未启用/未初始化 */
+  /** WebDAV 未启用 */
   unavailable: boolean
+  /** WebDAV 已启用但还在连接：先显示本地镜像，连上后由界面再触发一次刷新 */
+  connecting: boolean
   refresh: () => Promise<void>
   rebuild: () => Promise<void>
   markOpened: (entry: LibraryEntry, meta?: Parameters<typeof recordOpened>[2]) => Promise<void>
@@ -35,6 +38,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
   fresh: false,
   error: null,
   unavailable: false,
+  connecting: false,
   fillProgress: null,
 
   // 并发调用合并成一次（切回页面、手动点刷新可能同时触发）
@@ -42,10 +46,19 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
     if (inflight) return inflight
     const io = createLibraryIO()
     if (!io) {
-      set({ unavailable: true })
-      return Promise.resolve()
+      if (!useConfigStore.getState().webdavConfig.enabled) {
+        set({ unavailable: true, connecting: false })
+        return Promise.resolve()
+      }
+      set({ unavailable: false, connecting: true })
+      return readLibraryMirror()
+        .then((m) => {
+          const cached = migrateIndex(m)
+          if (cached && Object.keys(get().index.entries).length === 0) set({ index: cached, fresh: false })
+        })
+        .catch(() => {})
     }
-    set({ refreshing: true, unavailable: false })
+    set({ refreshing: true, unavailable: false, connecting: false })
     inflight = refreshLibrary(io, { onUpdate: (index) => set({ index }) })
       .then((r) => set({ index: r.index, fresh: r.scanned, error: r.error ?? null }))
       .catch((e) => {

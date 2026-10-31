@@ -584,6 +584,8 @@
     "empty": "No books in the sync folder yet. Upload an EPUB/PDF, or put books into your WebDAV sync folder.",
     "noMatch": "No matching books",
     "all": "All books",
+    "connecting": "Connecting to the cloud…",
+    "connectingCached": "Connecting to the cloud; showing your last shelf",
     "scanFailed": "Couldn't read the sync folder: {{error}}",
     "retry": "Retry",
     "stale": "Showing cached data; it may be out of date",
