@@ -47,6 +47,11 @@ function memoryIO(initial: { files?: ListedFile[]; remote?: string | null; mirro
       return state.files
     },
     summaryNameOf: (n) => `${n.replace(/\.[^/.]+$/, '')}-完整摘要.md`,
+    readBinary: async () => new ArrayBuffer(0),
+    writeBinary: async () => {},
+    getLocalCover: async () => null,
+    putLocalCover: async () => {},
+    deleteCovers: async () => {},
     now: () => ++state.clock,
   }
   return { io, state }
@@ -68,7 +73,7 @@ describe('splitListing', () => {
 })
 
 describe('refreshLibrary', () => {
-  it('首次：扫描建索引，写镜像与远端（路径在 .juhua/library.json）', async () => {
+  it('首次：扫描建索引，写镜像与远端（gzip 存于 .juhua/library.json.gz）', async () => {
     const { io, state } = memoryIO({ files: [f('a.epub'), f('b.epub'), f('b-完整摘要.md')] })
     const r = await refreshLibrary(io)
     expect(r.scanned).toBe(true)
@@ -76,7 +81,7 @@ describe('refreshLibrary', () => {
     expect(r.index.entries[`${SYNC}/b.epub`].status).toBe('done')
     expect(state.remoteWrites).toBe(1)
     expect(migrateIndex(JSON.parse(state.remote!))!.entries[`${SYNC}/a.epub`]).toBeDefined()
-    expect(libraryIndexPath(SYNC)).toBe('/fastReader/.juhua/library.json')
+    expect(libraryIndexPath(SYNC)).toBe('/fastReader/.juhua/library.json.gz')
   })
 
   it('分阶段回调：镜像先于扫描，界面可先画出旧数据', async () => {

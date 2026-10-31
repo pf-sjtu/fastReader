@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, RefreshCw, Search } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { Download, Loader2, RefreshCw, Search, Shuffle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { continueReading, listEntries, type LibraryFilter, type LibrarySort } from '@/services/library/libraryIndex'
+import { groupEntries, recommendBooks, type GroupBy } from '@/services/library/libraryOrganize'
 import { useLibraryStore } from '@/services/library/libraryStore'
 import type { LibraryEntry } from '@/services/library/types'
-import { BookCover } from './BookCover'
+import { BookCard } from './BookCard'
+import { groupLabel, reasonLabel } from './labels'
 
 interface LibraryViewProps {
   onOpenBook: (entry: LibraryEntry) => void
@@ -16,53 +17,20 @@ interface LibraryViewProps {
   openingPath?: string | null
 }
 
-const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
-const extOf = (path: string) => (path.split('.').pop() ?? '').toUpperCase()
 const GRID = 'grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6'
-
-function BookCard({ entry, opening, disabled, onOpen }: { entry: LibraryEntry; opening: boolean; disabled: boolean; onOpen: () => void }) {
-  const { t } = useTranslation()
-  const pct = entry.readProgress?.pct ?? 0
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      disabled={disabled}
-      className="group flex min-h-11 flex-col gap-1.5 rounded-lg p-1.5 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-    >
-      <div className="relative">
-        <BookCover title={entry.title} seed={entry.path} className="transition-transform group-hover:-translate-y-0.5" />
-        {entry.status !== 'unprocessed' && (
-          <Badge className="absolute right-1.5 top-1.5 bg-primary text-primary-foreground">
-            {entry.status === 'done' ? t('library.status.done') : t('library.status.partial')}
-          </Badge>
-        )}
-        {opening && (
-          <span className="absolute inset-0 flex items-center justify-center rounded-md bg-background/70">
-            <Loader2 className="size-5 animate-spin" />
-          </span>
-        )}
-        {pct > 0 && pct < 100 && (
-          <span className="absolute inset-x-0 bottom-0 h-1 bg-border">
-            <span className="block h-full bg-primary" style={{ width: `${pct}%` }} />
-          </span>
-        )}
-      </div>
-      <span className="line-clamp-2 text-sm font-medium leading-snug">{entry.title}</span>
-      <span className="text-xs text-muted-foreground">
-        {extOf(entry.path)} · {fmtSize(entry.size)}
-        {entry.chapterCount ? ` · ${t('library.chapters', { count: entry.chapterCount })}` : ''}
-      </span>
-    </button>
-  )
-}
+const RECOMMEND_COUNT = 6
+const SELECT_CLS = 'h-8 rounded-md border bg-background px-2 text-xs focus-visible:outline-2 focus-visible:outline-ring'
 
 export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps) {
   const { t } = useTranslation()
-  const { index, refreshing, fresh, error, unavailable, refresh } = useLibraryStore()
+  const { index, refreshing, fresh, error, unavailable, refresh, fillProgress, fillMetadata, cancelFill } = useLibraryStore()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<LibraryFilter>('all')
   const [sort, setSort] = useState<LibrarySort>('recent')
+  const [group, setGroup] = useState<GroupBy>('none')
+  // 推荐：种子决定结果；"换一批"换种子并避开上一批。初始种子取当前时间，每次进入书架都是新的一批
+  const [seed, setSeed] = useState(() => Date.now() % 1_000_000)
+  const [prevBatch, setPrevBatch] = useState<string[]>([])
 
   // 进入书库就刷新：先显示本地镜像，再后台扫描（见 libraryService 的分阶段回调）
   useEffect(() => {
@@ -70,8 +38,15 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
   }, [refresh])
 
   const entries = useMemo(() => listEntries(index, { query, filter, sort }), [index, query, filter, sort])
-  const resume = useMemo(() => (query || filter !== 'all' ? [] : continueReading(index)), [index, query, filter])
+  const groups = useMemo(() => groupEntries(entries, group), [entries, group])
+  const browsing = !query && filter === 'all'
+  const resume = useMemo(() => (browsing ? continueReading(index) : []), [index, browsing])
   const total = Object.keys(index.entries).length
+  const recs = useMemo(
+    () => (browsing && total >= 3 ? recommendBooks(index, { seed, count: RECOMMEND_COUNT, exclude: prevBatch }) : []),
+    [index, browsing, total, seed, prevBatch]
+  )
+  const staleCount = useMemo(() => Object.values(index.entries).filter((e) => e.stale).length, [index])
 
   if (unavailable) return null
 
@@ -83,16 +58,31 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
   const sorts: { id: LibrarySort; label: string }[] = [
     { id: 'recent', label: t('library.sort.recent') },
     { id: 'name', label: t('library.sort.name') },
+    { id: 'author', label: t('library.sort.author') },
     { id: 'status', label: t('library.sort.status') },
+    { id: 'progress', label: t('library.sort.progress') },
+    { id: 'size', label: t('library.sort.size') },
+    { id: 'modified', label: t('library.sort.modified') },
+  ]
+  const groupOptions: { id: GroupBy; label: string }[] = [
+    { id: 'none', label: t('library.group.none') },
+    { id: 'status', label: t('library.group.status') },
+    { id: 'format', label: t('library.group.format') },
+    { id: 'author', label: t('library.group.author') },
+    { id: 'folder', label: t('library.group.folder') },
   ]
   const chip = (active: boolean) =>
     cn(
       'min-h-8 rounded-full border px-3 text-xs transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring',
       active && 'bg-primary text-primary-foreground hover:bg-primary/90'
     )
-  const card = (e: LibraryEntry) => (
-    <BookCard key={e.path} entry={e} opening={openingPath === e.path} disabled={!!openingPath} onOpen={() => onOpenBook(e)} />
+  const card = (e: LibraryEntry, caption?: string) => (
+    <BookCard key={e.path} entry={e} opening={openingPath === e.path} disabled={!!openingPath} onOpen={() => onOpenBook(e)} caption={caption} />
   )
+  const shuffle = () => {
+    setPrevBatch(recs.map((r) => r.entry.path))
+    setSeed((s) => s + 1)
+  }
 
   return (
     <section aria-label={t('library.title')} className="space-y-3 rounded-xl border bg-card p-3 sm:p-4">
@@ -135,23 +125,78 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
             </button>
           ))}
           <span className="mx-1 h-4 w-px bg-border" />
-          {sorts.map((s) => (
-            <button key={s.id} type="button" aria-pressed={sort === s.id} className={chip(sort === s.id)} onClick={() => setSort(s.id)}>
-              {s.label}
-            </button>
-          ))}
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            {t('library.sortBy')}
+            <select aria-label={t('library.sortBy')} className={SELECT_CLS} value={sort} onChange={(e) => setSort(e.target.value as LibrarySort)}>
+              {sorts.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            {t('library.groupBy')}
+            <select aria-label={t('library.groupBy')} className={SELECT_CLS} value={group} onChange={(e) => setGroup(e.target.value as GroupBy)}>
+              {groupOptions.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* 补全书名/作者/封面：要下载整本书，所以由用户触发，且可取消 */}
+          {fillProgress ? (
+            <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground" role="status">
+              <Loader2 className="size-3.5 animate-spin" />
+              {t('library.fill.running', { done: fillProgress.done, total: fillProgress.total })}
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={cancelFill}>
+                {t('library.fill.cancel')}
+              </Button>
+            </span>
+          ) : (
+            staleCount > 0 && (
+              <Button variant="outline" size="sm" className="ml-auto h-8 gap-1 text-xs" onClick={() => void fillMetadata()} title={t('library.fill.hint')}>
+                <Download className="size-3.5" />
+                {t('library.fill.button', { count: staleCount })}
+              </Button>
+            )
+          )}
         </div>
       )}
 
       {resume.length > 0 && (
         <div className="space-y-1.5">
           <h3 className="text-xs font-medium text-muted-foreground">{t('library.continue')}</h3>
-          <div className={GRID}>{resume.map(card)}</div>
+          <div className={GRID}>{resume.map((e) => card(e))}</div>
+        </div>
+      )}
+
+      {recs.length > 0 && (
+        <div className="space-y-1.5" aria-label={t('library.recommend.title')}>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xs font-medium text-muted-foreground">{t('library.recommend.title')}</h3>
+            <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={shuffle}>
+              <Shuffle className="size-3.5" />
+              {t('library.recommend.shuffle')}
+            </Button>
+          </div>
+          <div className={GRID}>{recs.map((r) => card(r.entry, reasonLabel(t, r.reason)))}</div>
         </div>
       )}
 
       {entries.length > 0 ? (
-        <div className={GRID}>{entries.map(card)}</div>
+        groups.map((g) => (
+          <div key={g.key} className="space-y-1.5">
+            {group !== 'none' && (
+              <h3 className="border-b pb-1 text-xs font-medium text-muted-foreground">
+                {groupLabel(t, g.key)}
+                <span className="ml-1.5 font-normal">{g.entries.length}</span>
+              </h3>
+            )}
+            <div className={GRID}>{g.entries.map((e) => card(e))}</div>
+          </div>
+        ))
       ) : (
         <p className="py-6 text-center text-sm text-muted-foreground">
           {refreshing && total === 0 ? t('library.loading') : total === 0 ? t('library.empty') : t('library.noMatch')}

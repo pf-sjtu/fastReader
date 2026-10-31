@@ -44,6 +44,8 @@ function sanitizeEntry(raw: unknown): LibraryEntry | null {
     author: typeof r.author === 'string' ? r.author : undefined,
     chapterCount: typeof r.chapterCount === 'number' ? r.chapterCount : undefined,
     wordCount: typeof r.wordCount === 'number' ? r.wordCount : undefined,
+    pages: typeof r.pages === 'number' ? r.pages : undefined,
+    coverKey: typeof r.coverKey === 'string' ? r.coverKey : undefined,
     status: STATUSES.includes(r.status as BookStatus) ? (r.status as BookStatus) : 'unprocessed',
     summaryFile: typeof r.summaryFile === 'string' ? r.summaryFile : undefined,
     stale: r.stale === true,
@@ -218,7 +220,7 @@ export function enforceSizeCap(index: LibraryIndex, maxBytes = LIBRARY_MAX_BYTES
   return { index: cur, evicted }
 }
 
-export type LibrarySort = 'recent' | 'name' | 'status'
+export type LibrarySort = 'recent' | 'name' | 'author' | 'status' | 'size' | 'modified' | 'progress'
 export type LibraryFilter = 'all' | 'done' | 'todo'
 
 const STATUS_RANK: Record<BookStatus, number> = { partial: 0, unprocessed: 1, done: 2 }
@@ -236,7 +238,16 @@ export function listEntries(
   })
   const byName = (a: LibraryEntry, b: LibraryEntry) => a.title.localeCompare(b.title, 'zh')
   const recency = (e: LibraryEntry) => e.lastOpenedAt ?? 0
+  // 没有作者的排最后（避免空串排到最前面把有用信息挤下去）
+  const byAuthor = (a: LibraryEntry, b: LibraryEntry) =>
+    (a.author ? 0 : 1) - (b.author ? 0 : 1) || (a.author ?? '').localeCompare(b.author ?? '', 'zh') || byName(a, b)
+  const mtime = (e: LibraryEntry) => (Number.isFinite(Date.parse(e.mtime)) ? Date.parse(e.mtime) : 0)
+  const pct = (e: LibraryEntry) => (e.status === 'done' ? 100 : 0) + (e.readProgress?.pct ?? 0)
   if (sort === 'name') return list.sort(byName)
+  if (sort === 'author') return list.sort(byAuthor)
+  if (sort === 'size') return list.sort((a, b) => b.size - a.size || byName(a, b))
+  if (sort === 'modified') return list.sort((a, b) => mtime(b) - mtime(a) || byName(a, b))
+  if (sort === 'progress') return list.sort((a, b) => pct(b) - pct(a) || byName(a, b))
   if (sort === 'status') return list.sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || byName(a, b))
   // 最近：打开过的在前（按打开时间），没打开过的按名称
   return list.sort((a, b) => recency(b) - recency(a) || byName(a, b))

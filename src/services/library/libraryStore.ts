@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger'
 import { createLibraryIO } from './libraryIO'
 import { rebuildLibrary, recordOpened, recordStatusByFileName, refreshLibrary } from './libraryService'
 import { emptyIndex } from './libraryIndex'
+import { fillLibraryMetadata, type FillResult } from './libraryFill'
 import type { BookStatus, LibraryEntry, LibraryIndex } from './types'
 
 interface LibraryState {
@@ -18,7 +19,13 @@ interface LibraryState {
   refresh: () => Promise<void>
   rebuild: () => Promise<void>
   markOpened: (entry: LibraryEntry, meta?: Parameters<typeof recordOpened>[2]) => Promise<void>
+  /** 补全元数据（书名/作者/封面）的进度；null = 没在补全 */
+  fillProgress: { done: number; total: number } | null
+  fillMetadata: () => Promise<FillResult | null>
+  cancelFill: () => void
 }
+
+let fillAbort: AbortController | null = null
 
 let inflight: Promise<void> | null = null
 
@@ -28,6 +35,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
   fresh: false,
   error: null,
   unavailable: false,
+  fillProgress: null,
 
   // 并发调用合并成一次（切回页面、手动点刷新可能同时触发）
   refresh: () => {
@@ -64,6 +72,31 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
       set({ refreshing: false })
     }
   },
+
+  // 要下载整本书（流量不小），只在用户点击时运行；并发 2、可取消
+  fillMetadata: async () => {
+    const io = createLibraryIO()
+    if (!io || get().fillProgress) return null
+    const stale = Object.values(get().index.entries).filter((e) => e.stale)
+    if (!stale.length) return null
+    fillAbort = new AbortController()
+    set({ fillProgress: { done: 0, total: stale.length } })
+    try {
+      const r = await fillLibraryMetadata(io, stale, {
+        signal: fillAbort.signal,
+        onProgress: (done, total) => set({ fillProgress: { done, total } }),
+      })
+      if (r.index) set({ index: r.index })
+      return r
+    } catch (e) {
+      logger.error('[library] 补全元数据失败', e)
+      return null
+    } finally {
+      fillAbort = null
+      set({ fillProgress: null })
+    }
+  },
+  cancelFill: () => fillAbort?.abort(),
 
   markOpened: async (entry, meta) => {
     const io = createLibraryIO()

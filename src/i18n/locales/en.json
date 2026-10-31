@@ -598,7 +598,11 @@
     "sort": {
       "recent": "Recent",
       "name": "Title",
-      "status": "Status"
+      "status": "Status",
+      "author": "Author",
+      "progress": "Progress",
+      "size": "Size",
+      "modified": "Modified"
     },
     "opening": "Opening “{{title}}”…",
     "openFailed": "Failed to open: {{error}}",
@@ -611,6 +615,42 @@
       "rebuildTitle": "Rebuild the library index?",
       "rebuildWarn": "This discards the current index and rescans the sync folder. Reading progress and open history will be lost; summary files are not affected.",
       "rebuilt": "Library index rebuilt"
+    },
+    "sortBy": "Sort",
+    "groupBy": "Group",
+    "pages": "{{count}} pages",
+    "group": {
+      "none": "No grouping",
+      "status": "By status",
+      "format": "By format",
+      "author": "By author",
+      "folder": "By folder",
+      "all": "All"
+    },
+    "groupLabel": {
+      "reading": "Reading",
+      "partial": "Partly read",
+      "unprocessed": "Unread",
+      "done": "Read",
+      "unknownAuthor": "Unknown author",
+      "root": "Root folder"
+    },
+    "recommend": {
+      "title": "Shuffle picks",
+      "shuffle": "Shuffle",
+      "reason": {
+        "resume": "Pick up where you left off",
+        "sameAuthor": "An author you read",
+        "fresh": "Not opened yet",
+        "retry": "Opened, not read yet",
+        "revisit": "Worth a revisit"
+      }
+    },
+    "fill": {
+      "button": "Fill in book info ({{count}})",
+      "running": "Filling {{done}}/{{total}}",
+      "cancel": "Cancel",
+      "hint": "Downloads books to read title, author and cover (uses bandwidth); 2 at a time"
     }
   },
   "workspace": {

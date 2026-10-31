@@ -607,7 +607,11 @@
     "sort": {
       "recent": "最近",
       "name": "书名",
-      "status": "状态"
+      "status": "状态",
+      "author": "作者",
+      "progress": "进度",
+      "size": "大小",
+      "modified": "更新时间"
     },
     "opening": "正在打开《{{title}}》…",
     "openFailed": "打开失败：{{error}}",
@@ -620,6 +624,42 @@
       "rebuildTitle": "重建书库索引？",
       "rebuildWarn": "将丢弃现有索引并重新扫描同步目录。书籍的阅读进度和打开记录会丢失，摘要文件本身不受影响。",
       "rebuilt": "书库索引已重建"
+    },
+    "sortBy": "排序",
+    "groupBy": "分类",
+    "pages": "{{count}} 页",
+    "group": {
+      "none": "不分组",
+      "status": "按状态",
+      "format": "按格式",
+      "author": "按作者",
+      "folder": "按目录",
+      "all": "全部"
+    },
+    "groupLabel": {
+      "reading": "在读",
+      "partial": "部分精读",
+      "unprocessed": "未精读",
+      "done": "已精读",
+      "unknownAuthor": "未知作者",
+      "root": "根目录"
+    },
+    "recommend": {
+      "title": "随机推荐",
+      "shuffle": "换一批",
+      "reason": {
+        "resume": "接着读",
+        "sameAuthor": "你读过的作者",
+        "fresh": "还没翻开",
+        "retry": "打开过，尚未精读",
+        "revisit": "回头再看"
+      }
+    },
+    "fill": {
+      "button": "补全书籍信息（{{count}}）",
+      "running": "正在补全 {{done}}/{{total}}",
+      "cancel": "取消",
+      "hint": "下载书籍以读取书名、作者与封面，会消耗流量；每次同时只处理 2 本"
     }
   },
   "workspace": {

@@ -27,6 +27,10 @@ export interface LibraryEntry {
   author?: string
   chapterCount?: number
   wordCount?: number
+  /** PDF 页数 */
+  pages?: number
+  /** 封面缩略图键（路径哈希）：本地 IndexedDB 与 .juhua/covers/{key}.webp 共用 */
+  coverKey?: string
   status: BookStatus
   /** 摘要文件名（status≠unprocessed 时有） */
   summaryFile?: string

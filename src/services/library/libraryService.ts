@@ -40,6 +40,14 @@ export interface LibraryIO {
   listFiles(): Promise<ListedFile[]>
   /** 源文件名 → 摘要文件名（cloudCacheService 的命名规则） */
   summaryNameOf(fileName: string): string
+  /** 二进制文件读写（封面/补全元数据用）；readBinary 失败要抛错，writeBinary 尽力而为 */
+  readBinary(path: string): Promise<ArrayBuffer>
+  writeBinary(path: string, data: Blob): Promise<void>
+  /** 本地封面缓存（IndexedDB） */
+  getLocalCover(key: string): Promise<Blob | null>
+  putLocalCover(key: string, blob: Blob): Promise<void>
+  /** 删除封面（本地 + 远端，尽力而为）：条目被 GC / 重建时清理孤儿封面 */
+  deleteCovers(keys: string[]): Promise<void>
   now(): number
 }
 
@@ -47,7 +55,10 @@ export const SUMMARY_SUFFIX = '-完整摘要.md'
 /** 与 webdav/browse.ts 的受支持扩展名一致 */
 export const BOOK_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md']
 export const LIBRARY_DIR = '.juhua'
-export const libraryIndexPath = (syncPath: string) => `${syncPath}/${LIBRARY_DIR}/library.json`
+export const coverRemotePath = (syncPath: string, key: string) => `${syncPath}/${LIBRARY_DIR}/covers/${key}.webp`
+/** 索引以 gzip 存放（一次请求读完全部文字元数据）；旧版明文 library.json 仅作读取兜底 */
+export const libraryIndexPath = (syncPath: string) => `${syncPath}/${LIBRARY_DIR}/library.json.gz`
+export const legacyLibraryIndexPath = (syncPath: string) => `${syncPath}/${LIBRARY_DIR}/library.json`
 
 export type RefreshPhase = 'mirror' | 'remote' | 'scan'
 export interface RefreshOptions {
@@ -153,13 +164,20 @@ export async function refreshLibrary(io: LibraryIO, opts: RefreshOptions = {}): 
   }
   const { sources, summaryNames } = splitListing(files)
   const scan = applyScan(index, sources, { now, summaryNameOf: io.summaryNameOf, summaryNames })
+  const before = index
   index = await persistIndex(io, scan.index, scan.removed)
+  // 条目被 GC 后其封面成了孤儿：一并清理（失败无所谓，下次不会再被引用）
+  const orphan = scan.removed.map((p) => before.entries[p]?.coverKey).filter((k): k is string => !!k)
+  if (orphan.length) void io.deleteCovers(orphan).catch(() => {})
   opts.onUpdate?.(index, 'scan')
   return { index, scanned: true, error, added: scan.added, removed: scan.removed }
 }
 
 /** 重建：丢弃镜像与远端索引，从目录重新扫描。已读进度会丢失（设置页要明确提示） */
 export async function rebuildLibrary(io: LibraryIO): Promise<RefreshResult> {
+  const old = migrateIndex(await io.readMirror().catch(() => null))
+  const oldCovers = Object.values(old?.entries ?? {}).map((e) => e.coverKey).filter((k): k is string => !!k)
+  if (oldCovers.length) void io.deleteCovers(oldCovers).catch(() => {})
   await io.writeMirror(null)
   const files = await io.listFiles()
   const { sources, summaryNames } = splitListing(files)
@@ -190,6 +208,16 @@ export function recordOpened(
 ) {
   return mutate(io, (idx) =>
     patchEntry(idx, path, { ...meta, ...(meta ? { stale: false } : {}), lastOpenedAt: io.now() }, io.now())
+  )
+}
+
+/** 批量写入补全的元数据（不动 lastOpenedAt）；一次读-改-写，避免补全几十本书写几十次远端 */
+export function recordMetadataBatch(
+  io: LibraryIO,
+  updates: { path: string; patch: Partial<Pick<LibraryEntry, 'title' | 'author' | 'pages' | 'chapterCount' | 'coverKey' | 'stale'>> }[]
+) {
+  return mutate(io, (idx) =>
+    updates.reduce((acc, u) => patchEntry(acc, u.path, u.patch, io.now()), idx)
   )
 }
 
