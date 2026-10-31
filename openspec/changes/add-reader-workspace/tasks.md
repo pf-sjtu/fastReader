@@ -93,3 +93,4 @@
 - [ ] 10.9 提示词 v3（`v3-prompts.yaml`）：章节「正文 + 旁路 JSON」、规范实体名、去掉内心推理/安抚话术、强调系统收敛（加粗 ≤6/章，取消加粗斜体与专名反引号）、fiction 补齐；覆盖项带版本并提供迁移
 - [ ] 10.10 处理机制 v3：书级上下文（实体表快照）、提示词缓存友好排序、map-reduce 书级步骤、步骤独立重试/续跑、预估与账单、质量闸 + 定向重写
 - [ ] 10.11 v2/v3 评测样例集与评分脚本；达标前不切默认；前端与 CLI 共用契约样例
+- [ ] 10.12 设计系统收敛（规格 design-system）：现状审计——标题角色散乱（`h3 text-lg` / `text-base font-medium` / `h4 text-sm` / `h3 text-xs muted` / CardTitle 默认或 `text-base` / 仅部分用 `font-brand`）；硬编码调色板色（`text-red-500`×8、`green`/`amber` 等）；圆角 `rounded-lg 42 / md 40 / 裸 rounded 35 / sm 7 / xl 3 / 2xl 2`；图标 12/14/16/20px 并存；字号 `text-xs 228 / sm 157`（xs 过多）。步骤：① index.css 定义文字角色 + 状态色 token + 圆角刻度 ② `SectionHeading`/`PanelTitle`/`EmptyState` 组件并改 `ui/` 默认值 ③ 逐目录迁移（设置 → 书库 → 工作台 → 对照栏 → 弹窗/抽屉）④ `tests/designSystem.test.ts` 守卫，违规清单清零后转为强制
