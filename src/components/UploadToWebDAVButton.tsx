@@ -203,8 +203,9 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
     }
   }, [remotePath])
 
-  // 如果WebDAV未启用，不显示按钮
-  if (!webdavConfig.enabled) {
+  // WebDAV 未启用，或没有本地源文件（书是从云缓存/历史/书库打开的：云端文件名与元数据都以源文件为准，
+  // 且内容本就来自云端）时不显示按钮，免得点了只得到一句「暂无内容可上传」
+  if (!webdavConfig.enabled || !file) {
     return null
   }
 

@@ -22,7 +22,7 @@
 ## 2. 验证命令（交接后先跑一遍）
 
 ```bash
-pnpm test            # 1293 通过 / 21 跳过
+pnpm test            # 1294 通过（entityLinking 的 300 章耗时断言在全量并行时偶发超时，单跑稳定） / 21 跳过
 pnpm exec tsc -b
 pnpm lint
 pnpm build
@@ -45,7 +45,7 @@ pnpm dlx @fission-ai/openspec validate add-reader-workspace --strict
 
 ### 3.3 阶段 8 与遗留
 - **5.1 顶栏单行化与 `App.tsx` 拆分**（现约 700 行，超出 400 行准则）。
-- 排查「结果页点上传提示『暂无内容可上传』」（未调查）。
+- 「暂无内容可上传」已修：从云缓存/历史/书库打开的书没有本地 `File`，上传按钮改为此时不渲染（`UploadToWebDAVButton`）。
 - 时间线未做「读到此处之后」的未来事件变淡；章节卡（`LinkCard` 的章节变体）未做。
 - 触控目标：书架筛选 chip 高 32px，< 40px 标准；亮色主题下图谱/卡片、手机底部抽屉里的卡片未走查。
 - 防误触守卫（触屏不开悬停卡 / 框选文字不开卡）只测了判断函数，事件接线无集成测试。

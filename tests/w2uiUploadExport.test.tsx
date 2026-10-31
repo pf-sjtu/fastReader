@@ -54,6 +54,12 @@ describe('UploadToWebDAVButton', () => {
     expect(m.container.innerHTML).toBe('')
   })
 
+  it('没有本地源文件（从云缓存/历史/书库打开）时不渲染，避免点了只提示「暂无内容可上传」', () => {
+    m = mount(<UploadToWebDAVButton bookSummary={summary()} file={null} />)
+    expect(m.container.innerHTML).toBe('')
+    expect(existsStatus).not.toHaveBeenCalled()
+  })
+
   it('挂载时探测云端文件：已存在则提示覆盖，确认后强制上传', async () => {
     existsStatus.mockResolvedValue('exists')
     uploadFile.mockResolvedValue({ success: true })
