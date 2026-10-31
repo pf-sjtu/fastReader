@@ -393,10 +393,10 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
         <>
           {/* 目录：可拖宽、可折叠成竖向进度条。折叠时目录仍保持挂载（只是隐藏），展开不丢滚动位置 */}
           <aside
-            className={`hidden shrink-0 md:flex md:flex-col ${navCollapsed ? 'mr-2' : ''}`}
-            style={{ width: navCollapsed ? 24 : navWidth }}
+            className={`hidden shrink-0 md:flex md:flex-col ${navCollapsed ? 'mr-3' : ''}`}
+            style={{ width: navCollapsed ? 14 : navWidth }}
           >
-            {navCollapsed && <NavRail current={viewingIndex} total={chapters.length} onExpand={() => setNavCollapsed(false)} />}
+            {navCollapsed && <NavRail chapters={chapters} current={viewingIndex} onExpand={() => setNavCollapsed(false)} />}
             <div className={navCollapsed ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}>
               <div className="flex shrink-0 justify-end pb-1">
                 <Button

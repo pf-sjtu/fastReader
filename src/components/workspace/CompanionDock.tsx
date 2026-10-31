@@ -2,7 +2,7 @@
  * 对照栏：一排页签 + 内容区。纯展示——不认识图谱/原文，页签内容由工作台拼装传入，
  * 以后新增「人物志 / 问书 / 自测 / 笔记」只需往 tabs 里加一项。
  */
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { PanelRightClose } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -29,9 +29,16 @@ interface CompanionDockProps {
 
 export function CompanionDock({ tabs, active, onActiveChange, onCollapse, className }: CompanionDockProps) {
   const { t } = useTranslation()
-  if (tabs.length === 0) return null
+  const listWrap = useRef<HTMLDivElement>(null)
   // 存档里的页签可能在当前书里不可用（如无图表数据）：回落到第一个
-  const current = tabs.some((x) => x.id === active) ? active : tabs[0].id
+  const current = tabs.length === 0 || tabs.some((x) => x.id === active) ? active : tabs[0].id
+
+  // 页签很多时，切到靠右的页签要让它自动滚入可见区（滚动条本身已隐藏，用户看不到还有没露出的页签）
+  useEffect(() => {
+    listWrap.current?.querySelector<HTMLElement>('[role="tab"][data-state="active"]')?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' })
+  }, [current])
+
+  if (tabs.length === 0) return null
 
   return (
     <Tabs
@@ -41,7 +48,7 @@ export function CompanionDock({ tabs, active, onActiveChange, onCollapse, classN
     >
       <div className="flex shrink-0 items-center gap-1">
         {/* 页签多时横向滚动，不换行挤占高度 */}
-        <div className="min-w-0 flex-1 overflow-x-auto">
+        <div ref={listWrap} className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <TabsList className="h-9 w-max">
             {tabs.map((tab) => (
               <TabsTrigger key={tab.id} value={tab.id} className="px-3 text-xs sm:text-sm">

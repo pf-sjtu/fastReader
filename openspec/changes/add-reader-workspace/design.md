@@ -51,7 +51,7 @@ remark 插件（手写递归遍历，不新增 `unist-util-visit` 依赖）把 t
 
 ### 5d. 阅读进度栏折叠与调宽
 - 目录栏复用 `ResizeHandle`（加 `edge="left"`：手柄在栏右缘，向右拖变宽，范围 160–360px），折叠状态与宽度进 `readingFocus`（`navWidth/navCollapsed`，持久化）。
-- 折叠态是 28px 竖条：纵向进度条 + 当前/总数 + 展开按钮，整条可点击展开；折叠不卸载目录组件（保持 scroll spy 与列表滚动位置）。
+- 折叠态是 14px 极窄竖条（圆点模式）：轨道 + 每章一个点（读过/当前/未读三态）+ 已读填充，无文字无图标，整条可点击展开；折叠不卸载目录组件（保持 scroll spy 与列表滚动位置）。
 
 ### 6. 书库索引的生命周期
 `{syncPath}/.juhua/library.json`（schemaVersion 1）+ `.juhua/covers/<sha1(path)>.webp`（≈200px，≤30KB）。

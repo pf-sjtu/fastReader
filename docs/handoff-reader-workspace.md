@@ -11,7 +11,7 @@
 | 工作台 | 目录 / 正文 / 可拖拽对照栏三栏独立滚动；专注模式 `\`；移动端抽屉 | `src/components/workspace/` |
 | 联动 | 悬停(300ms)/单击展开实体卡、事件卡；**防剧透折叠（折叠内容不进 DOM）**；跳转到正文第 N 次出现/时间线/图谱，到达闪烁，「返回上一位置」 | `useArtifactNavigation.ts`、`EntityCard.tsx`、`charts/linking/entityCard.ts` |
 | 图谱/时间线 | 与正文同色、类型图例过滤、本章高亮、「截至本章」渐进模式、点击展开卡片 | `charts/plugins/person-graph/*`、`entity-timeline/` |
-| 目录栏 | 拖宽 160–360、折叠为竖向进度条、状态持久化 | `NavRail.tsx`、`ResizeHandle.tsx`(`edge`) |
+| 目录栏 | 拖宽 160–360、折叠为 14px 竖向圆点进度条（每章一点；>40 章只画线）、状态持久化；对照栏页签过多时横向滚动并自动滚入当前页签（`CompanionDock`） | `NavRail.tsx`、`ResizeHandle.tsx`(`edge`) |
 | 书库 | WebDAV 索引全生命周期（迁移/合并/失效/GC/体积上限/镜像 SWR）、封面墙、继续阅读、已精读书一键直达 | `src/services/library/*`、`src/components/library/*`、`src/hooks/useLibraryOpen.ts` |
 | 书架组织 | 分类/排序/带种子随机推荐/换一批/与继续阅读去重 | `libraryOrganize.ts`、`LibraryView.tsx` |
 | 书卡设计 | 书名·作者·章数在封面内部底部阴影层；EPUB 与体积不占位 | `BookCard.tsx`、`BookCover.tsx` |
@@ -22,7 +22,7 @@
 ## 2. 验证命令（交接后先跑一遍）
 
 ```bash
-pnpm test            # 1258 通过 / 21 跳过
+pnpm test            # 1293 通过 / 21 跳过
 pnpm exec tsc -b
 pnpm lint
 pnpm build
