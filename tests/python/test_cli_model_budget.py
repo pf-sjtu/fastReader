@@ -307,6 +307,9 @@ def test_quirk_store_monotonic_merge():
         "outputCap": 40_000, "noTemperature": True}
     assert merge_quirk({"tokenParam": "max_completion_tokens"}, {"tokenParam": "max_tokens"}) == {
         "tokenParam": "max_completion_tokens"}
+    # 结构化输出降级标志（浏览器学到）：只开不关，CLI 不丢
+    assert merge_quirk({"noJsonSchema": True}, {"noJsonSchema": False, "noStructured": True}) == {
+        "noJsonSchema": True, "noStructured": True}
 
 
 def test_loaded_archive_applies_on_first_request():

@@ -125,6 +125,10 @@ export interface LearnedParams {
   tokenParam?: 'max_tokens' | 'max_completion_tokens' | null
   noTemperature?: boolean
   noReasoning?: boolean
+  /** 不接受 json_schema：只能用「合法 JSON」模式 */
+  noJsonSchema?: boolean
+  /** 连 JSON 模式也不接受：不带任何格式参数 */
+  noStructured?: boolean
 }
 const learned = new Map<string, LearnedParams>()
 export function learnedParamsKey(providerId: string | undefined, apiUrl: string | undefined, model: string): string {
@@ -150,11 +154,15 @@ function mergeLearned(key: string, patch: LearnedParams): boolean {
   if (patch.tokenParam !== undefined && rankOf(patch.tokenParam) > rankOf(prev.tokenParam)) next.tokenParam = patch.tokenParam
   if (patch.noTemperature) next.noTemperature = true
   if (patch.noReasoning) next.noReasoning = true
+  if (patch.noJsonSchema) next.noJsonSchema = true
+  if (patch.noStructured) next.noStructured = true
   const changed =
     next.outputCap !== prev.outputCap ||
     next.tokenParam !== prev.tokenParam ||
     next.noTemperature !== prev.noTemperature ||
-    next.noReasoning !== prev.noReasoning
+    next.noReasoning !== prev.noReasoning ||
+    next.noJsonSchema !== prev.noJsonSchema ||
+    next.noStructured !== prev.noStructured
   if (changed) learned.set(key, next)
   return changed
 }

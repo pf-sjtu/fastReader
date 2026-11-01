@@ -4,7 +4,7 @@
  * @deprecated 请从 @/types 导入
  */
 
-import type { AIProvider, GenerateContentRequest, GenerateContentResponse } from '../../types/ai'
+import type { AIProvider, GenerateContentRequest, GenerateContentResponse, StructuredFormat } from '../../types/ai'
 
 // 从统一类型定义重新导出，保持向后兼容
 export type {
@@ -38,6 +38,8 @@ export interface AICallOptions {
   rewriteHint?: string
   /** 全书实体表（各章旁路合并）：书级步骤要求模型沿用其中的规范名与别名 */
   entityTable?: string
+  /** 格式化请求（输出必须是 JSON）：provider 按上游最新的结构化输出标准发送 */
+  format?: StructuredFormat
 }
 
 /** provider 返回：在通用响应上补充截断标记 */

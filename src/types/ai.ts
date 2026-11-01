@@ -175,6 +175,15 @@ export interface GenerateContentRequest {
   systemPrompt?: string
   temperature?: number
   outputLanguage?: SupportedLanguage
+  /** 格式化输出：有 schema = 上游结构化输出（json_schema）；无 schema = 仅要求合法 JSON。不认识的上游会逐档降级 */
+  format?: StructuredFormat
+}
+
+/** 结构化输出的格式声明（见 services/ai/structured.ts） */
+export interface StructuredFormat {
+  name: string
+  /** JSON Schema；strict 模式要求对象 additionalProperties:false 且属性全部 required */
+  schema?: Record<string, unknown>
 }
 
 /**

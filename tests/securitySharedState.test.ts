@@ -467,12 +467,16 @@ describe('追加型数据', () => {
       'openai|o5': { tokenParam: 'max_tokens', noTemperature: false },
     })
     await append({ 'sensenova|deepseek-v4-flash': { outputCap: 300000 } })
+    // 结构化输出降级标志：只开不关
+    await append({ 'openai|o5': { noJsonSchema: true } })
+    await append({ 'openai|o5': { noJsonSchema: false, noStructured: true } })
 
     const body = await (await call(stateHandler, '/api/state/modelQuirks', env, { cookie })).json()
     const e = body.value.data.entries
     expect(e['sensenova|deepseek-v4-flash']).toMatchObject({ outputCap: 300000, noTemperature: true })
     expect(e['openai|o5'].tokenParam).toBe('max_completion_tokens')
     expect(e['openai|o5'].noTemperature).toBeUndefined()
+    expect(e['openai|o5']).toMatchObject({ noJsonSchema: true, noStructured: true })
   })
 
   it('modelQuirks 拒绝异常值：过小上限 / 非法参数名 / 超长键', async () => {

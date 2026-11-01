@@ -36,6 +36,10 @@ def merge_quirk(prev: dict, patch: dict) -> dict:
         nxt["noTemperature"] = True
     if patch.get("noReasoning") is True:
         nxt["noReasoning"] = True
+    # 结构化输出：CLI 暂无 JSON 输出请求，只保留并回传浏览器学到的标志，不丢失
+    for flag in ("noJsonSchema", "noStructured"):
+        if patch.get(flag) is True:
+            nxt[flag] = True
     return nxt
 
 

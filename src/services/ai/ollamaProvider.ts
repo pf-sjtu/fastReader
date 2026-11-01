@@ -6,7 +6,8 @@
 import type { AICallOptions, AIGenerateResult, GenerateContentRequest } from './types'
 import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
-import { estimatePromptTokens } from './outputBudget'
+import { estimatePromptTokens, type LearnedParams } from './outputBudget'
+import { isStructuredFormatError } from './structured'
 import { isEventStream, parseOllamaStream } from './streamParse'
 
 export class OllamaProvider extends BaseAIProvider {
@@ -35,7 +36,7 @@ export class OllamaProvider extends BaseAIProvider {
     request: GenerateContentRequest,
     opts?: AICallOptions
   ): Promise<AIGenerateResult> {
-    const { prompt, systemPrompt, temperature } = request
+    const { prompt, systemPrompt, temperature, format } = request
 
     const messages: Array<{ role: 'system' | 'user'; content: string }> = []
 
@@ -67,21 +68,42 @@ export class OllamaProvider extends BaseAIProvider {
     // 且不超过模型上下文（meta.context）；未知上下文则不发，保持 Ollama 默认
     const ctx = this.config.contextWindow
     const numCtx = ctx ? Math.min(ctx, promptTokens + (maxTokens ?? 0) + 1024) : undefined
-    const response = await this.fetchWithProxy(url, {
-      method: 'POST',
-      headers: requestHeaders,
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        stream: true,
-        options: {
-          ...(this.wantsTemperature ? { temperature: temperature ?? this.temperature } : {}),
-          ...(maxTokens ? { num_predict: maxTokens } : {}),
-          ...(numCtx ? { num_ctx: numCtx } : {})
-        }
-      }),
-      signal: opts?.signal
-    })
+    // 格式化请求：format 取 JSON Schema（结构化输出）→ 'json' → 不带，逐档降级
+    let fmt: 'schema' | 'json' | null = !format || this.learned.noStructured ? null : format.schema && !this.learned.noJsonSchema ? 'schema' : 'json'
+    const tentative: LearnedParams = {}
+    const send = () =>
+      this.fetchWithProxy(url, {
+        method: 'POST',
+        headers: requestHeaders,
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          stream: true,
+          ...(fmt === 'schema' && format?.schema ? { format: format.schema } : fmt === 'json' ? { format: 'json' } : {}),
+          options: {
+            ...(this.wantsTemperature ? { temperature: temperature ?? this.temperature } : {}),
+            ...(maxTokens ? { num_predict: maxTokens } : {}),
+            ...(numCtx ? { num_ctx: numCtx } : {})
+          }
+        }),
+        signal: opts?.signal
+      })
+    let response = await send()
+    for (let attempt = 0; attempt < 3 && !response.ok && fmt; attempt++) {
+      const body = await response.clone().text().catch(() => '')
+      if (!isStructuredFormatError(response.status, body)) break
+      if (fmt === 'schema') {
+        fmt = 'json'
+        tentative.noJsonSchema = true
+        logger.warn(`[Ollama] ${this.model} 不接受 JSON Schema 格式，退回 format:"json" 重试`)
+      } else {
+        fmt = null
+        tentative.noStructured = true
+        logger.warn(`[Ollama] ${this.model} 不接受格式参数，退回纯提示词约束重试`)
+      }
+      response = await send()
+    }
+    if (response.ok && Object.keys(tentative).length > 0) this.remember(tentative)
 
     if (!response.ok) {
       const error = await this.createHttpError(response, 'Ollama')

@@ -75,6 +75,8 @@ function mergeQuirks(current, patch) {
     }
     if (value.noTemperature === true) next.noTemperature = true
     if (value.noReasoning === true) next.noReasoning = true
+    if (value.noJsonSchema === true) next.noJsonSchema = true
+    if (value.noStructured === true) next.noStructured = true
     next.updatedAt = new Date().toISOString()
     entries[key] = next
   }

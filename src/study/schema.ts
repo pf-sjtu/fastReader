@@ -75,9 +75,9 @@ export function parseStudyKit(raw: string, chapters: readonly { id: string; titl
 const rawQuestion = z.object({
   type: z.enum(['choice', 'short']),
   question: text(400),
-  options: z.array(z.string().trim().min(1).max(200)).optional(),
-  answerIndex: z.number().int().optional(),
-  answer: z.string().trim().max(600).optional(),
+  options: z.array(z.string().trim().min(1).max(200)).nullish(),
+  answerIndex: z.number().int().nullish(),
+  answer: z.string().trim().max(600).nullish(),
   explanation: z.string().trim().max(600).optional(),
   chapterTitle: z.string().trim().max(200).optional(),
 })
@@ -121,16 +121,16 @@ export function parseQuiz(raw: string, chapters: readonly { id: string; title: s
     const q = r.data
     if (q.type === 'choice') {
       const n = q.options?.length ?? 0
-      if (n < 2 || n > 6 || q.answerIndex === undefined || q.answerIndex < 0 || q.answerIndex >= n) continue
+      if (n < 2 || n > 6 || q.answerIndex == null || q.answerIndex < 0 || q.answerIndex >= n) continue
     } else if (!q.answer) continue
     const chapterTitle = q.chapterTitle ?? ''
     questions.push({
       id: `q${questions.length + 1}`,
       type: q.type,
       question: q.question,
-      options: q.type === 'choice' ? q.options : undefined,
-      answerIndex: q.type === 'choice' ? q.answerIndex : undefined,
-      answer: q.answer,
+      options: q.type === 'choice' ? (q.options ?? undefined) : undefined,
+      answerIndex: q.type === 'choice' ? (q.answerIndex ?? undefined) : undefined,
+      answer: q.answer ?? undefined,
       explanation: q.explanation ?? '',
       chapterId: matchChapterHint(chapterTitle, chapters),
       chapterTitle,

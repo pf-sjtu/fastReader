@@ -16,6 +16,7 @@ import { isEventStream, isStreamUnsupportedError, parseOpenAIStream } from './st
 import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
 import { isUnsupportedParamError, openAIReasoningParams } from './reasoning'
+import { isStructuredFormatError } from './structured'
 import {
   MAX_CAP_BACKOFFS,
   estimatePromptTokens,
@@ -56,7 +57,7 @@ export class OpenAIProvider extends BaseAIProvider {
     request: GenerateContentRequest,
     opts?: AICallOptions
   ): Promise<AIGenerateResult> {
-    const { prompt, systemPrompt, temperature } = request
+    const { prompt, systemPrompt, temperature, format } = request
 
     const messages: Array<{ role: 'system' | 'user'; content: string }> = []
 
@@ -74,7 +75,15 @@ export class OpenAIProvider extends BaseAIProvider {
     // 不认识它的网关会在下面的降级循环里去掉重试。
     let streaming = true
     let includeUsage = true
-    const send = (withReasoning: boolean, tokenParam: TokenParam, noTemperature: boolean) =>
+    // 格式化请求：json_schema(strict) → json_object → 不带，逐档降级（本会话 / 存档里学到的档位直接沿用）
+    let fmt: 'schema' | 'json' | null = !format || this.learned.noStructured ? null : format.schema && !this.learned.noJsonSchema ? 'schema' : 'json'
+    const responseFormat = () =>
+      fmt === 'schema' && format?.schema
+        ? { response_format: { type: 'json_schema', json_schema: { name: format.name, strict: true, schema: format.schema } } }
+        : fmt === 'json'
+          ? { response_format: { type: 'json_object' } }
+          : {}
+    const send =(withReasoning: boolean, tokenParam: TokenParam, noTemperature: boolean) =>
       this.fetchWithProxy(url, {
         method: 'POST',
         headers: {
@@ -87,6 +96,7 @@ export class OpenAIProvider extends BaseAIProvider {
           ...(this.wantsTemperature && !noTemperature ? { temperature: temperature ?? this.temperature } : {}),
           ...(tokenParam && maxTokens ? { [tokenParam]: maxTokens } : {}),
           ...(withReasoning ? openAIReasoningParams(this.effectiveReasoningEffort) : {}),
+          ...responseFormat(),
           ...(streaming ? { stream: true } : {}),
           ...(streaming && includeUsage ? { stream_options: { include_usage: true } } : {})
         }),
@@ -106,7 +116,7 @@ export class OpenAIProvider extends BaseAIProvider {
     // 参数不被接受时逐个降级重试，而不是让整章失败：
     // 输出上限超限 → 报错里的上限，读不出则 ×0.8（最多 3 次）；max_tokens → max_completion_tokens → 省略；
     // temperature → 省略；reasoning_effort → 省略
-    for (let attempt = 0; attempt < 8 && !response.ok; attempt++) {
+    for (let attempt = 0; attempt < 10 && !response.ok; attempt++) {
       const body = await response.clone().text().catch(() => '')
       const cap =
         tokenParam && maxTokens && capBackoffs < MAX_CAP_BACKOFFS
@@ -132,6 +142,17 @@ export class OpenAIProvider extends BaseAIProvider {
       } else if (streaming && isStreamUnsupportedError(response.status, body)) {
         streaming = false
         logger.warn(`[${this.name}] ${this.model} 不支持流式，退回一次性响应`)
+      } else if (fmt && isStructuredFormatError(response.status, body)) {
+        // 放在思考参数之前：isUnsupportedParamError 的 unsupported/unknown 太宽，会把这类 400 误判成「不支持思考」
+        if (fmt === 'schema') {
+          fmt = 'json'
+          tentative.noJsonSchema = true
+          logger.warn(`[${this.name}] ${this.model} 不支持 json_schema，退回 json_object 重试`)
+        } else {
+          fmt = null
+          tentative.noStructured = true
+          logger.warn(`[${this.name}] ${this.model} 不支持结构化输出参数，退回纯提示词约束重试`)
+        }
       } else if (withReasoning && isUnsupportedParamError(response.status, body)) {
         withReasoning = false
         tentative.noReasoning = true

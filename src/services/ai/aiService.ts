@@ -29,6 +29,7 @@ import {
 } from '../prompts'
 import { parseCharts, type BookCharts } from '../../charts'
 import { extractJsonObject } from '../../charts/parseCharts'
+import { JSON_MODE, QUIZ_FORMAT, RICH_REPAIR_FORMAT, STUDY_KIT_FORMAT } from './structured'
 import { parseQuiz, parseStudyKit, type Quiz, type StudyChapter, type StudyKit } from '../../study/schema'
 import { getLanguageInstruction } from '../prompts/utils'
 import { createAIProvider } from './factory'
@@ -228,7 +229,8 @@ export class AIService {
       {
         prompt,
         systemPrompt,
-        outputLanguage: language
+        outputLanguage: language,
+        ...(opts?.format ? { format: opts.format } : {})
       },
       opts
     )
@@ -456,7 +458,7 @@ export class AIService {
       [...keyChartsVars(bookTitle, processedChapters, connectionsText, overallText), ...entityTableVars(opts?.entityTable)]
     )
 
-    const response = await this.generateContent(prompt, outputLanguage, opts)
+    const response = await this.generateContent(prompt, outputLanguage, { ...opts, format: JSON_MODE })
     const charts = parseCharts(response)
     if (!charts) {
       throw new Error('关键图表 JSON 解析失败或无有效数据')
@@ -489,7 +491,7 @@ export class AIService {
         const response = await this.generateContent(
           renderPrompt(basePrompt, studyKitVars(bookTitle, slice)),
           outputLanguage,
-          opts
+          { ...opts, format: STUDY_KIT_FORMAT }
         )
         const kit = parseStudyKit(response, refs)
         if (kit) merged.push(...kit.chapters)
@@ -519,7 +521,7 @@ export class AIService {
     const response = await this.generateContent(
       renderPrompt(getQuizPrompt(), quizVars(bookTitle, count, prepared)),
       outputLanguage,
-      opts
+      { ...opts, format: QUIZ_FORMAT }
     )
     const quiz = parseQuiz(response, usable.map((c) => ({ id: c.id, title: c.title })))
     if (!quiz) throw new Error('自测题 JSON 解析失败或无有效题目')
@@ -532,7 +534,7 @@ export class AIService {
     outputLanguage?: SupportedLanguage,
     opts?: AICallOptions
   ): Promise<{ id: number; code: string | null }[]> {
-    const response = await this.generateContent(renderPrompt(getRichRepairPrompt(), richRepairVars(items)), outputLanguage, opts)
+    const response = await this.generateContent(renderPrompt(getRichRepairPrompt(), richRepairVars(items)), outputLanguage, { ...opts, format: RICH_REPAIR_FORMAT })
     const json = extractJsonObject(response)
     if (!json) return []
     try {
@@ -591,7 +593,7 @@ export class AIService {
 
     const prompt = renderPrompt(basePrompt, chapterVars(chapterTitle, content))
 
-    const response = await this.generateContent(prompt, outputLanguage, opts)
+    const response = await this.generateContent(prompt, outputLanguage, { ...opts, format: JSON_MODE })
     return parseJsonMatch<MindElixirData>(response, /\{[\s\S]*\}/, '思维导图')
   }
 
@@ -644,7 +646,7 @@ export class AIService {
 
     const prompt = renderPrompt(basePrompt, combinedMindMapVars(bookTitle, processedChapters))
 
-    const response = await this.generateContent(prompt, outputLanguage, opts)
+    const response = await this.generateContent(prompt, outputLanguage, { ...opts, format: JSON_MODE })
     return parseJsonMatch<MindElixirData>(response, /\{[\s\S]*\}/, '思维导图')
   }
 

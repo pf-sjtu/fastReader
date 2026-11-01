@@ -10,6 +10,7 @@ import { logger } from '../../lib/logger'
 import { stripThinking } from './stripThinking'
 import { anthropicReasoningParams, isUnsupportedParamError } from './reasoning'
 import { isEventStream, parseAnthropicStream } from './streamParse'
+import { isStructuredFormatError } from './structured'
 import { MAX_CAP_BACKOFFS, estimatePromptTokens, isTemperatureParamError, nextOutputCap, type LearnedParams } from './outputBudget'
 
 /** Anthropic 要求显式 max_tokens：模型元数据缺失时的保底值 */
@@ -34,8 +35,10 @@ export class AnthropicProvider extends BaseAIProvider {
   }
 
   protected async doGenerateContent(request: GenerateContentRequest, opts?: AICallOptions): Promise<AIGenerateResult> {
-    const { prompt, systemPrompt, temperature } = request
+    const { prompt, systemPrompt, temperature, format } = request
     const url = `${this.apiUrl}/messages`
+    // 结构化输出（GA）：output_config.format；Anthropic 没有「纯 JSON 模式」，只有带 schema 的才发
+    let structured = !!format?.schema && !this.learned.noStructured
 
     let maxTokens = this.resolveOutputCap(estimatePromptTokens(prompt, systemPrompt)) ?? DEFAULT_MAX_TOKENS
     const thinkingOn = Object.keys(anthropicReasoningParams(this.effectiveReasoningEffort, maxTokens).params).length > 0
@@ -64,6 +67,7 @@ export class AnthropicProvider extends BaseAIProvider {
               ? { temperature: temperature ?? this.temperature }
               : {}),
           ...(withThinking ? reasoning.params : {}),
+          ...(structured && format?.schema ? { output_config: { format: { type: 'json_schema', schema: format.schema } } } : {}),
         }),
         signal: opts?.signal,
       })
@@ -74,7 +78,7 @@ export class AnthropicProvider extends BaseAIProvider {
     let capBackoffs = 0
     let response = await send(withThinking)
     // 参数被拒时逐个降级：输出上限超限 → 报错上限，读不出则 ×0.8（最多 3 次）；temperature → 省略；thinking → 关闭
-    for (let attempt = 0; attempt < 6 && !response.ok && (response.status === 400 || response.status === 422); attempt++) {
+    for (let attempt = 0; attempt < 8 && !response.ok && (response.status === 400 || response.status === 422); attempt++) {
       const body = await response.clone().text().catch(() => '')
       // thinking 开启时实际发出的是 thinking 的 max_tokens，退避要以它为基准
       const sent = withThinking
@@ -91,6 +95,10 @@ export class AnthropicProvider extends BaseAIProvider {
         noTemperature = true
         tentative.noTemperature = true
         logger.warn(`[${this.name}] ${this.model} 不支持自定义温度，已按服务商默认重试`)
+      } else if (structured && isStructuredFormatError(response.status, body)) {
+        structured = false
+        tentative.noStructured = true
+        logger.warn(`[${this.name}] ${this.model} 不支持结构化输出（output_config.format），退回纯提示词约束重试`)
       } else if (withThinking && isUnsupportedParamError(response.status, body) && /thinking|budget_tokens/i.test(body)) {
         // 只认「thinking 不被支持」：不能把超上限之类的其他 400 也当成它
         withThinking = false

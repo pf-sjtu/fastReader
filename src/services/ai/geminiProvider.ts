@@ -8,7 +8,8 @@ import type { AICallOptions, AIGenerateResult, GenerateContentRequest } from './
 import { BaseAIProvider } from './baseProvider'
 import { logger } from '../../lib/logger'
 import { geminiReasoningParams, isUnsupportedParamError } from './reasoning'
-import { estimatePromptTokens } from './outputBudget'
+import { estimatePromptTokens, type LearnedParams } from './outputBudget'
+import { isStructuredFormatError } from './structured'
 import { isEventStream, isStreamUnsupportedError, parseGeminiStream } from './streamParse'
 
 const DEFAULT_MODEL = 'gemini-2.5-flash'
@@ -31,7 +32,7 @@ export class GeminiProvider extends BaseAIProvider {
     request: GenerateContentRequest,
     opts?: AICallOptions
   ): Promise<AIGenerateResult> {
-    const { prompt, systemPrompt, temperature } = request
+    const { prompt, systemPrompt, temperature, format } = request
 
     // Gemini 没有 system 角色（0.24 SDK 时代的兼容行为：合并到用户提示尾部）
     const finalPrompt = systemPrompt ? `${prompt}\n\n**${systemPrompt}**` : prompt
@@ -42,6 +43,9 @@ export class GeminiProvider extends BaseAIProvider {
     const thinkingOn = Object.keys(thinking).length > 0
     // 默认流式（SSE）：Cloudflare 同源代理 100 秒无响应即 524，长章节非流式必然踩线
     let streaming = true
+    // 格式化请求：responseMimeType + responseJsonSchema（标准 JSON Schema）→ 仅 responseMimeType → 不带
+    let fmt: 'schema' | 'json' | null = !format || this.learned.noStructured ? null : format.schema && !this.learned.noJsonSchema ? 'schema' : 'json'
+    const tentative: LearnedParams = {}
     const url = () =>
       `${base}/models/${encodeURIComponent(this.model)}:${streaming ? 'streamGenerateContent?alt=sse' : 'generateContent'}`
     const send = (withThinking: boolean) =>
@@ -54,22 +58,40 @@ export class GeminiProvider extends BaseAIProvider {
             ...(this.wantsTemperature ? { temperature: temperature ?? this.temperature } : {}),
             ...(maxTokens ? { maxOutputTokens: maxTokens } : {}),
             ...(withThinking ? thinking : {}),
+            ...(fmt ? { responseMimeType: 'application/json' } : {}),
+            ...(fmt === 'schema' && format?.schema ? { responseJsonSchema: format.schema } : {}),
           },
         }),
         signal: opts?.signal,
       })
 
-    let response = await send(thinkingOn)
-    if (!response.ok) {
+    let withThinking = thinkingOn
+    let response = await send(withThinking)
+    // 参数不被接受时逐个降级重试：流式 → 一次性；schema → 仅 JSON MIME；思考参数 → 去掉
+    for (let attempt = 0; attempt < 5 && !response.ok; attempt++) {
       const body = await response.clone().text().catch(() => '')
       if (streaming && isStreamUnsupportedError(response.status, body)) {
         streaming = false
         logger.warn(`[${this.name}] ${this.model} 不支持流式，退回一次性响应`)
-        response = await send(thinkingOn)
-      } else if (thinkingOn && isUnsupportedParamError(response.status, body)) {
-        response = await send(false)
+      } else if (fmt && isStructuredFormatError(response.status, body)) {
+        if (fmt === 'schema') {
+          fmt = 'json'
+          tentative.noJsonSchema = true
+          logger.warn(`[${this.name}] ${this.model} 不支持 responseJsonSchema，退回仅 JSON MIME 重试`)
+        } else {
+          fmt = null
+          tentative.noStructured = true
+          logger.warn(`[${this.name}] ${this.model} 不支持 JSON 输出参数，退回纯提示词约束重试`)
+        }
+      } else if (withThinking && isUnsupportedParamError(response.status, body)) {
+        withThinking = false
+      } else {
+        break
       }
+      response = await send(withThinking)
     }
+    // 降级后成功才记住并存档
+    if (response.ok && Object.keys(tentative).length > 0) this.remember(tentative)
 
     if (!response.ok) {
       const error = await this.createHttpError(response, this.name)
