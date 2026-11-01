@@ -42,6 +42,19 @@ export interface LibraryEntry {
   readProgress?: ReadProgress
   /** 条目最后一次被修改的时间（合并时以此为准） */
   updatedAt: number
+
+  /* ---- 以下来自云端书目（Cloudflare KV），渲染时叠加，不写进 WebDAV 的 library.json ---- */
+  /** 分类标签（EPUB 的 dc:subject，如 Business / History） */
+  subjects?: string[]
+  /** 简介 */
+  desc?: string
+  publisher?: string
+  year?: number
+  lang?: string
+  /** 对应的云端书目 id（书架叠加时匹配得到） */
+  catalogId?: string
+  /** 虚拟条目：只有云端 metadata，尚未在 WebDAV 上确认存在；点开时才去 WebDAV 解析真实路径 */
+  virtual?: boolean
 }
 
 export interface LibraryIndex {

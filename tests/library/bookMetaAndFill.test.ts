@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { gunzipToText, gzipText, isGzip, pipeBytes } from '@/services/library/gzip'
 import { findCoverHref, listZipEntries, parseOpfMeta, readEpubMeta, resolveZipPath } from '@/services/library/bookMeta'
 import { thumbSize } from '@/services/library/coverThumb'
-import { createCoverLoader } from '@/services/library/coverLoader'
-import { coverKeyOf, fillLibraryMetadata, type Inspection } from '@/services/library/libraryFill'
+import { CLOUD_COVER_CONCURRENCY, COVER_FETCH_CONCURRENCY, createCoverLoader } from '@/services/library/coverLoader'
+import { coverKeyOf, FILL_CONCURRENCY, fillLibraryMetadata, type Inspection } from '@/services/library/libraryFill'
 import { bookIdOf } from '@/services/library/bookId'
 import { applyScan, emptyIndex } from '@/services/library/libraryIndex'
 import { refreshLibrary, type LibraryIO } from '@/services/library/libraryService'
@@ -144,6 +144,39 @@ function fakeIO(over: Partial<LibraryIO> = {}): LibraryIO {
   }
 }
 
+describe('createCoverLoader：WebDAV 未连接时', () => {
+  it('云端封面（bk_）照常取：书架不依赖 WebDAV；不写本地缓存也不报错', async () => {
+    const img = new Blob(['img'])
+    const fetchCloud = vi.fn(async () => img)
+    const loader = createCoverLoader({ getIO: () => null, fetchCloud })
+    expect(await loader.load('bk_abcdef')).toBe(img)
+    expect(fetchCloud).toHaveBeenCalledWith('bk_abcdef')
+  })
+
+  it('WebDAV 封面（旧的路径哈希键）仍然必须有 IO：没有就返回 null，且不记失败（连上后可重试）', async () => {
+    let io: LibraryIO | null = null
+    const readBinary = vi.fn(async () => new ArrayBuffer(4))
+    const loader = createCoverLoader({ getIO: () => io })
+    expect(await loader.load('legacykey')).toBeNull()
+    io = fakeIO({ readBinary })
+    expect(await loader.load('legacykey')).not.toBeNull() // 连上后同一个键能取到：之前的 null 没被当成失败缓存
+    expect(readBinary).toHaveBeenCalledTimes(1)
+  })
+
+  it('有 IO 时本地命中仍优先（云端封面不重复请求）', async () => {
+    const local = new Blob(['cached'])
+    const fetchCloud = vi.fn()
+    const loader = createCoverLoader({ getIO: () => fakeIO({ getLocalCover: async () => local }), fetchCloud })
+    expect(await loader.load('bk_abcdef')).toBe(local)
+    expect(fetchCloud).not.toHaveBeenCalled()
+  })
+
+  it('本地缓存写入失败不影响拿到封面', async () => {
+    const loader = createCoverLoader({ getIO: () => fakeIO({ putLocalCover: async () => Promise.reject(new Error('quota')) }), fetchCloud: async () => new Blob(['x']) })
+    expect(await loader.load('bk_abcdef')).not.toBeNull()
+  })
+})
+
 describe('createCoverLoader（懒加载 + 并发限制）', () => {
   it('并发不超过上限：10 个不同封面同时请求，任一时刻在途 ≤ 2', async () => {
     let inFlight = 0
@@ -163,7 +196,8 @@ describe('createCoverLoader（懒加载 + 并发限制）', () => {
     expect(peak).toBe(2)
   })
 
-  it('云端封面键（bk_ 前缀）走云端取图：独立并发上限 6、不碰 WebDAV；取到写本地；取不到记失败不重试', async () => {
+  it('云端封面键（bk_ 前缀）走云端取图：独立并发上限、不碰 WebDAV；取到写本地；取不到记失败不重试', async () => {
+    const N = CLOUD_COVER_CONCURRENCY + 6 // 比上限多，才能测出「到顶且不超」
     let inFlight = 0
     let peak = 0
     const fetchCloud = vi.fn(async (id: string) => {
@@ -176,10 +210,11 @@ describe('createCoverLoader（懒加载 + 并发限制）', () => {
     const readBinary = vi.fn(async () => new ArrayBuffer(4))
     const put = vi.fn(async () => {})
     const loader = createCoverLoader({ getIO: () => fakeIO({ readBinary, putLocalCover: put }), fetchCloud })
-    await Promise.all(Array.from({ length: 14 }, (_, i) => loader.load(`bk_${i}aaaaaa`)))
-    expect(peak).toBe(6)
+    await Promise.all(Array.from({ length: N }, (_, i) => loader.load(`bk_${i}aaaaaa`)))
+    expect(peak).toBe(CLOUD_COVER_CONCURRENCY)
+    expect(CLOUD_COVER_CONCURRENCY).toBeGreaterThan(COVER_FETCH_CONCURRENCY) // 云端取图不该被 WebDAV 的保守并发拖住
     expect(readBinary).not.toHaveBeenCalled() // 云端封面不占 WebDAV
-    expect(put).toHaveBeenCalledTimes(14)
+    expect(put).toHaveBeenCalledTimes(N)
     expect(await loader.load('bk_missing')).toBeNull()
     expect(await loader.load('bk_missing')).toBeNull()
     expect(fetchCloud.mock.calls.filter((c) => c[0] === 'bk_missing')).toHaveLength(1)
@@ -295,8 +330,8 @@ describe('fillLibraryMetadata', () => {
     expect(r.index!.entries['/s/huge.epub'].stale).toBe(false)
   })
 
-  it('并发 ≤ 2、可取消：取消后不再启动新的下载', async () => {
-    const paths = Array.from({ length: 8 }, (_, i) => `/s/b${i}.epub`)
+  it('并发不超过 FILL_CONCURRENCY 且确实并行、可取消：取消后不再启动新的下载', async () => {
+    const paths = Array.from({ length: FILL_CONCURRENCY * 4 }, (_, i) => `/s/b${i}.epub`)
     const mirror = await seeded(paths)
     let inFlight = 0
     let peak = 0
@@ -308,16 +343,17 @@ describe('fillLibraryMetadata', () => {
         started++
         inFlight++
         peak = Math.max(peak, inFlight)
-        if (started === 3) ac.abort()
+        if (started === FILL_CONCURRENCY + 1) ac.abort()
         await new Promise((r) => setTimeout(r, 5))
         inFlight--
         return new ArrayBuffer(4)
       },
     })
     const r = await fillLibraryMetadata(io, Object.values(mirror.entries), { signal: ac.signal, inspect: async () => ({ meta: {}, thumb: null }) })
-    expect(peak).toBeLessThanOrEqual(2)
+    expect(peak).toBeLessThanOrEqual(FILL_CONCURRENCY)
+    expect(peak).toBeGreaterThan(1) // 没被意外串行化
     expect(r.cancelled).toBe(true)
-    expect(started).toBeLessThan(8)
+    expect(started).toBeLessThan(paths.length)
   })
 
   it('只处理 stale 条目；进度回调逐本触发', async () => {

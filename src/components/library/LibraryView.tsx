@@ -4,15 +4,19 @@ import { Download, Loader2, RefreshCw, Search, Shuffle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { useConfigStore } from '@/stores/configStore'
 import { continueReading, listEntries, type LibraryFilter, type LibrarySort } from '@/services/library/libraryIndex'
 import { groupEntries, limitGroups, recommendBooks, type GroupBy } from '@/services/library/libraryOrganize'
+import { buildShelf, categoryCounts, virtualEntries } from '@/services/library/cloudCatalog'
 import { useLibraryStore } from '@/services/library/libraryStore'
 import type { LibraryEntry } from '@/services/library/types'
 import { isFillable } from '@/services/library/libraryFill'
 import { formatFileSize } from '@/utils/file'
-import { webdavService } from '@/services/webdavService'
 import { useGridColumns } from './useGridColumns'
 import { BookCard } from './BookCard'
+import { BookDetailDialog } from './BookInfo'
+import { LibraryToolbar } from './LibraryToolbar'
+import { MissingBookDialog, OrphanNotice } from './MissingBookDialogs'
 import { groupLabel, reasonLabel } from './labels'
 
 interface LibraryViewProps {
@@ -30,39 +34,41 @@ const PAGE_FIRST = 24
 const PAGE_STEP = 48
 /** 补全元数据要下载的总量超过它就先确认（约 200MB） */
 const FILL_CONFIRM_BYTES = 200 * 1024 * 1024
-const SELECT_CLS = 'h-8 rounded-md border bg-background px-2 text-xs focus-visible:outline-2 focus-visible:outline-ring'
 
 export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps) {
   const { t } = useTranslation()
-  const { index, refreshing, fresh, error, unavailable, connecting, refresh, fillProgress, fillMetadata, cancelFill } = useLibraryStore()
+  const { index, catalog, catalogLoaded, refreshing, fresh, error, unavailable, refresh, loadCatalog, loadMirror, fillProgress, fillMetadata, cancelFill } =
+    useLibraryStore()
+  const davEnabled = useConfigStore((s) => s.webdavConfig.enabled)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<LibraryFilter>('all')
   const [sort, setSort] = useState<LibrarySort>('recent')
   const [group, setGroup] = useState<GroupBy>('none')
+  const [category, setCategory] = useState<string | null>(null)
+  const [info, setInfo] = useState<LibraryEntry | null>(null)
   // 推荐：种子决定结果；"换一批"换种子并避开上一批。初始种子取当前时间，每次进入书架都是新的一批
   const cols = useGridColumns()
   const recommendCount = cols * RECOMMEND_ROWS
   const [seed, setSeed] = useState(() => Date.now() % 1_000_000)
   const [prevBatch, setPrevBatch] = useState<string[]>([])
 
-  // 进入书库就刷新：先显示本地镜像，再后台扫描（见 libraryService 的分阶段回调）
+  // 进入书库只读「云端书目」和「本地镜像」，都不碰 WebDAV：书架立刻可用，
+  // 直到用户真正点开一本书（或手动刷新）才去连 WebDAV。
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    void loadCatalog()
+    void loadMirror()
+  }, [loadCatalog, loadMirror, davEnabled])
 
-  // 进来时 WebDAV 可能还在自动连接：连上之后补刷一次，否则 unavailable 会让书库永远不出现
-  useEffect(() => {
-    if (!unavailable && !connecting) return
-    return webdavService.onInitialized(() => void refresh())
-  }, [unavailable, connecting, refresh])
-
-  const allEntries = useMemo(() => listEntries(index, { query, filter, sort }), [index, query, filter, sort])
-  const browsing = !query && filter === 'all'
-  const resume = useMemo(() => (browsing ? continueReading(index, cols) : []), [index, browsing, cols])
-  const total = Object.keys(index.entries).length
+  // 书架 = WebDAV 书库索引 ∪ 云端书目（云端有而 WebDAV 暂无记录的书是「虚拟条目」）
+  const shelf = useMemo(() => buildShelf(index, catalog), [index, catalog])
+  const allEntries = useMemo(() => listEntries(shelf, { query, filter, sort, category }), [shelf, query, filter, sort, category])
+  const categories = useMemo(() => categoryCounts(Object.values(shelf.entries)), [shelf])
+  const browsing = !query && filter === 'all' && !category
+  const resume = useMemo(() => (browsing ? continueReading(shelf, cols) : []), [shelf, browsing, cols])
+  const total = Object.keys(shelf.entries).length
   const recs = useMemo(
-    () => (browsing && total >= 3 ? recommendBooks(index, { seed, count: recommendCount, exclude: prevBatch, omit: resume.map((e) => e.path) }) : []),
-    [index, browsing, total, seed, prevBatch, resume, recommendCount]
+    () => (browsing && total >= 3 ? recommendBooks(shelf, { seed, count: recommendCount, exclude: prevBatch, omit: resume.map((e) => e.path) }) : []),
+    [shelf, browsing, total, seed, prevBatch, resume, recommendCount]
   )
   // 「继续阅读 / 推荐」已经展示的书不在下面的全量网格里再出现一遍（同一屏相邻重复）；
   // 分组/排序模式下网格本身就是主视图，不排除
@@ -76,12 +82,12 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
   const collapsed = browsing && group === 'none' && sort === 'recent' && !expanded && resume.length + recs.length > 0
   const groups = useMemo(() => groupEntries(entries, group), [entries, group])
   // 显示上限：筛选/排序/分组/搜索一变就回到首屏数量
-  const resetKey = `${query}|${filter}|${sort}|${group}`
+  const resetKey = `${query}|${filter}|${sort}|${group}|${category}`
   const [page, setPage] = useState({ key: resetKey, n: PAGE_FIRST })
   const shownCount = page.key === resetKey ? page.n : PAGE_FIRST
   const pagedGroups = useMemo(() => limitGroups(groups, shownCount), [groups, shownCount])
   const hiddenCount = entries.length - pagedGroups.reduce((n, g) => n + g.entries.length, 0)
-  const staleEntries = useMemo(() => Object.values(index.entries).filter((e) => e.stale && isFillable(e.path)), [index])
+  const staleEntries = useMemo(() => Object.values(shelf.entries).filter((e) => e.stale && !e.virtual && isFillable(e.path)), [shelf])
   const staleCount = staleEntries.length
   // 补全要把整本书下载下来：先告诉用户总量（646 本约几个 GB），超过阈值再确认一次
   const staleBytes = useMemo(() => staleEntries.reduce((n, e) => n + (e.size || 0), 0), [staleEntries])
@@ -90,35 +96,15 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
     if (staleBytes >= FILL_CONFIRM_BYTES && !window.confirm(t('library.fill.confirm', { count: staleCount, size: sizeText }))) return
     void fillMetadata()
   }
+  // 云端有、WebDAV 没有的书：只有「本次会话成功扫描过、且确实扫到了书」才可信（目录配错时扫到 0 本，不能据此断定书被删了）
+  const orphans = useMemo(
+    () => (fresh && !refreshing && Object.values(index.entries).some((e) => !e.virtual) ? virtualEntries(shelf) : []),
+    [fresh, refreshing, index, shelf]
+  )
 
-  if (unavailable) return null
+  // 没有 WebDAV、也没有云端书目 → 没什么可显示的，整块不渲染（和以前 WebDAV 未启用时一致）
+  if (unavailable && catalogLoaded && total === 0) return null
 
-  const filters: { id: LibraryFilter; label: string }[] = [
-    { id: 'all', label: t('library.filter.all') },
-    { id: 'done', label: t('library.filter.done') },
-    { id: 'todo', label: t('library.filter.todo') },
-  ]
-  const sorts: { id: LibrarySort; label: string }[] = [
-    { id: 'recent', label: t('library.sort.recent') },
-    { id: 'name', label: t('library.sort.name') },
-    { id: 'author', label: t('library.sort.author') },
-    { id: 'status', label: t('library.sort.status') },
-    { id: 'progress', label: t('library.sort.progress') },
-    { id: 'size', label: t('library.sort.size') },
-    { id: 'modified', label: t('library.sort.modified') },
-  ]
-  const groupOptions: { id: GroupBy; label: string }[] = [
-    { id: 'none', label: t('library.group.none') },
-    { id: 'status', label: t('library.group.status') },
-    { id: 'format', label: t('library.group.format') },
-    { id: 'author', label: t('library.group.author') },
-    { id: 'folder', label: t('library.group.folder') },
-  ]
-  const chip = (active: boolean) =>
-    cn(
-      'min-h-8 rounded-full border px-3 text-xs transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring',
-      active && 'bg-primary text-primary-foreground hover:bg-primary/90'
-    )
   const card = (e: LibraryEntry, caption?: string) => (
     <BookCard
       key={e.path}
@@ -126,6 +112,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
       opening={openingPath === e.path}
       disabled={!!openingPath}
       onOpen={() => onOpenBook(e)}
+      onInfo={() => setInfo(e)}
       caption={caption}
       showSize={sort === 'size'}
       compact
@@ -168,17 +155,19 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
             </Button>
           )
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-9"
-          onClick={() => void refresh()}
-          disabled={refreshing}
-          aria-label={t('library.refresh')}
-          title={t('library.refresh')}
-        >
-          <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
-        </Button>
+        {davEnabled && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-9"
+            onClick={() => void refresh()}
+            disabled={refreshing}
+            aria-label={t('library.refresh')}
+            title={t('library.refresh')}
+          >
+            <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
+          </Button>
+        )}
         {total > 0 && (
           <div className="relative order-last w-full sm:order-none sm:w-56">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -187,42 +176,28 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
         )}
       </header>
 
-      {total > 0 && (connecting || error || (!fresh && !refreshing)) && (
+      {/* 安静的一行：说清楚数据从哪来、WebDAV 什么时候才会被访问 */}
+      {total > 0 && davEnabled && (error || !fresh) && (
         <p role="status" className="text-xs text-muted-foreground">
-          {connecting ? t('library.connectingCached') : t('library.stale')}
-          {!connecting && error ? `（${error}）` : ''}
+          {t('library.sync.cached')}
+          {error ? `（${error}）` : ''}
         </p>
       )}
 
+      <OrphanNotice orphans={orphans} />
+
       {total > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {filters.map((f) => (
-            <button key={f.id} type="button" aria-pressed={filter === f.id} className={chip(filter === f.id)} onClick={() => setFilter(f.id)}>
-              {f.label}
-            </button>
-          ))}
-          <span className="mx-1 h-4 w-px bg-border" />
-          <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            <span className="sr-only sm:not-sr-only">{t('library.sortBy')}</span>
-            <select aria-label={t('library.sortBy')} className={SELECT_CLS} value={sort} onChange={(e) => setSort(e.target.value as LibrarySort)}>
-              {sorts.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            <span className="sr-only sm:not-sr-only">{t('library.groupBy')}</span>
-            <select aria-label={t('library.groupBy')} className={SELECT_CLS} value={group} onChange={(e) => setGroup(e.target.value as GroupBy)}>
-              {groupOptions.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <LibraryToolbar
+          filter={filter}
+          onFilter={setFilter}
+          sort={sort}
+          onSort={setSort}
+          group={group}
+          onGroup={setGroup}
+          category={category}
+          onCategory={setCategory}
+          categories={categories}
+        />
       )}
 
       {resume.length > 0 && (
@@ -255,38 +230,38 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
         )
       ) : allEntries.length > 0 ? (
         <>
-        {expanded && browsing && group === 'none' && sort === 'recent' && (
-          <div className="flex justify-end">
-            <Button variant="ghost" size="xs" onClick={() => setExpanded(false)}>
-              {t('library.collapseRest')}
-            </Button>
-          </div>
-        )}
-        {pagedGroups.map((g) => (
-          <div key={g.key} className="space-y-1.5">
-            {/* 上面有「继续阅读 / 推荐」时，全量网格也要有自己的标题，否则读起来是同一排 */}
-            {group === 'none' && browsing && (resume.length > 0 || recs.length > 0) && (
-              <h3 className="border-b pb-1 t-label">
-                {t('library.all')}
-                <span className="ml-1.5 font-normal">{g.total}</span>
-              </h3>
-            )}
-            {group !== 'none' && (
-              <h3 className="border-b pb-1 t-label">
-                {groupLabel(t, g.key)}
-                <span className="ml-1.5 font-normal">{g.total}</span>
-              </h3>
-            )}
-            <div className={GRID}>{g.entries.map((e) => card(e))}</div>
-          </div>
-        ))}
-        {hiddenCount > 0 && (
-          <div className="flex justify-center pt-1">
-            <Button variant="outline" size="sm" onClick={() => setPage({ key: resetKey, n: shownCount + PAGE_STEP })}>
-              {t('library.showMore', { count: hiddenCount })}
-            </Button>
-          </div>
-        )}
+          {expanded && browsing && group === 'none' && sort === 'recent' && (
+            <div className="flex justify-end">
+              <Button variant="ghost" size="xs" onClick={() => setExpanded(false)}>
+                {t('library.collapseRest')}
+              </Button>
+            </div>
+          )}
+          {pagedGroups.map((g) => (
+            <div key={g.key} className="space-y-1.5">
+              {/* 上面有「继续阅读 / 推荐」时，全量网格也要有自己的标题，否则读起来是同一排 */}
+              {group === 'none' && browsing && (resume.length > 0 || recs.length > 0) && (
+                <h3 className="border-b pb-1 t-label">
+                  {t('library.all')}
+                  <span className="ml-1.5 font-normal">{g.total}</span>
+                </h3>
+              )}
+              {group !== 'none' && (
+                <h3 className="border-b pb-1 t-label">
+                  {groupLabel(t, g.key, group)}
+                  <span className="ml-1.5 font-normal">{g.total}</span>
+                </h3>
+              )}
+              <div className={GRID}>{g.entries.map((e) => card(e))}</div>
+            </div>
+          ))}
+          {hiddenCount > 0 && (
+            <div className="flex justify-center pt-1">
+              <Button variant="outline" size="sm" onClick={() => setPage({ key: resetKey, n: shownCount + PAGE_STEP })}>
+                {t('library.showMore', { count: hiddenCount })}
+              </Button>
+            </div>
+          )}
         </>
       ) : (
         <div className="space-y-2 py-6 text-center text-sm text-muted-foreground">
@@ -300,18 +275,23 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
               </Button>
             </>
           ) : (
-            <p>
-              {connecting && total === 0
-                ? t('library.connecting')
-                : refreshing && total === 0
-                  ? t('library.loading')
-                  : total === 0
-                    ? t('library.empty')
-                    : t('library.noMatch')}
-            </p>
+            <p>{total === 0 ? (catalogLoaded && !refreshing ? t('library.empty') : t('library.loading')) : t('library.noMatch')}</p>
           )}
         </div>
       )}
+
+      <BookDetailDialog
+        entry={info}
+        onClose={() => setInfo(null)}
+        onOpen={onOpenBook}
+        onPickCategory={(name) => {
+          setCategory(name)
+          setQuery('')
+          setFilter('all')
+        }}
+        disabled={!!openingPath}
+      />
+      <MissingBookDialog />
     </section>
   )
 }

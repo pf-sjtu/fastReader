@@ -12,9 +12,20 @@ export interface CoverItem {
   author?: string
   pages?: number
   chapterCount?: number
+  /** 源文件名（含扩展名）与字节数：书架显示格式 / 点开后判断书是否变了 */
+  file?: string
+  size?: number
+  subjects?: string[]
+  desc?: string
+  publisher?: string
+  year?: number
+  lang?: string
   cover?: 1
+  updatedAt?: number
 }
 export type CoverIndex = Record<string, CoverItem>
+/** 写入时提交的元数据（cover / updatedAt 由服务端维护） */
+export type CoverMeta = Omit<CoverItem, 'cover' | 'updatedAt'>
 
 export const CLOUD_COVER_PREFIX = 'bk_'
 export const isCloudCoverKey = (key: string | undefined): key is string => !!key && key.startsWith(CLOUD_COVER_PREFIX)
@@ -45,20 +56,52 @@ export async function fetchCoverBlob(id: string, fetchImpl: FetchLike = fetch): 
   }
 }
 
-/** 上传一张封面（可选）与元数据；失败只返回 false，由调用方决定是否忽略 */
-export async function uploadCover(id: string, meta: Omit<CoverItem, 'cover'>, blob: Blob, fetchImpl: FetchLike = fetch): Promise<boolean> {
+/**
+ * 上传元数据与（可选）封面；失败只返回 false，由调用方决定是否忽略。
+ * blob 缺省 = 只更新元数据；replace = 源文件变了，用新封面覆盖旧的。
+ */
+export async function uploadCover(
+  id: string,
+  meta: CoverMeta,
+  blob?: Blob | null,
+  fetchImpl: FetchLike = fetch,
+  opts: { replace?: boolean } = {}
+): Promise<boolean> {
   try {
-    const r = await fetchImpl(cloudCoverUrl(id), {
+    const r = await fetchImpl(cloudCoverUrl(id) + (opts.replace ? '?replace=1' : ''), {
       method: 'PUT',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'image/webp', 'X-Book-Meta': encodeURIComponent(JSON.stringify(meta)) },
-      body: blob,
+      body: blob ?? undefined,
     })
     return r.ok
   } catch {
     return false
   }
 }
+
+/** 删除云端书目条目（封面 + 元数据）。只在用户确认「WebDAV 上已找不到」后调用；返回成功删除（含本来就不存在）的 id */
+export async function deleteCovers(ids: readonly string[], fetchImpl: FetchLike = fetch): Promise<string[]> {
+  const done: string[] = []
+  for (let i = 0; i < ids.length; i += DELETE_BATCH) {
+    const batch = ids.slice(i, i + DELETE_BATCH)
+    try {
+      const r = await fetchImpl('/api/covers/delete', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: batch }),
+      })
+      if (!r.ok) continue
+      const { results } = (await r.json()) as { results: { id: string; status: string }[] }
+      for (const x of results) if (x.status === 'deleted') done.push(x.id)
+    } catch {
+      /* 这一批失败：留在云端，用户下次还会看到提示 */
+    }
+  }
+  return done
+}
+const DELETE_BATCH = 200
 
 /** 字符二元组 Dice 系数（0–1）：对「少几个字 / 多个括号后缀」这类差异不敏感 */
 export function dice(a: string, b: string): number {

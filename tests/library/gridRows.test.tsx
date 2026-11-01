@@ -47,7 +47,7 @@ beforeEach(() => {
   })
 })
 
-const recCount = () => mounted!.container.querySelectorAll('[aria-label="随机推荐"] button.group').length
+const recCount = () => mounted!.container.querySelectorAll('[aria-label="随机推荐"] button[data-book-card]').length
 
 describe('书库首屏：推荐总是整行（数量 = 列数 × 2）', () => {
   it.each([

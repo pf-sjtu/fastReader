@@ -7,7 +7,7 @@ export type ListDir = (dir: string, deep: boolean) => Promise<WebDAVOperationRes
 export const MAX_DIRS = 400
 export const MAX_DEPTH = 8
 /** 兜底遍历的并发数：够快，又不至于把服务端的限流打出来 */
-export const CONCURRENCY = 6
+export const CONCURRENCY = 10
 
 /**
  * 列出同步目录下的全部文件。

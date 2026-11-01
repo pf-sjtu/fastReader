@@ -7,9 +7,9 @@ import { coverRemotePath, type LibraryIO } from './libraryService'
 import { fetchCoverBlob, isCloudCoverKey } from './cloudCovers'
 
 /** WebDAV 旧封面（路径哈希键）对并发敏感：2 */
-export const COVER_FETCH_CONCURRENCY = 2
+export const COVER_FETCH_CONCURRENCY = 4
 /** 云端封面（KV，几 KB，边缘缓存）：可以放心多取几张 */
-export const CLOUD_COVER_CONCURRENCY = 6
+export const CLOUD_COVER_CONCURRENCY = 16
 
 interface Options {
   getIO: () => LibraryIO | null
@@ -50,11 +50,12 @@ export function createCoverLoader({ getIO, concurrency = COVER_FETCH_CONCURRENCY
     cloudWaiting.shift()?.()
   }
 
-  async function fetchCloudCover(io: LibraryIO, id: string): Promise<Blob | null> {
+  /** io 可为空：云端封面不依赖 WebDAV（书架在 WebDAV 连上之前就要显示）；此时不写本地缓存，交给浏览器的 HTTP 缓存（不可变资源） */
+  async function fetchCloudCover(io: LibraryIO | null, id: string): Promise<Blob | null> {
     await cloudAcquire()
     try {
       const blob = await fetchCloud(id)
-      if (blob) await io.putLocalCover(id, blob)
+      if (blob && io) await io.putLocalCover(id, blob).catch(() => {})
       return blob
     } finally {
       cloudRelease()
@@ -79,13 +80,15 @@ export function createCoverLoader({ getIO, concurrency = COVER_FETCH_CONCURRENCY
     load(coverKey: string | undefined): Promise<Blob | null> {
       if (!coverKey || failed.has(coverKey)) return Promise.resolve(null)
       const io = getIO()
-      if (!io) return Promise.resolve(null)
+      const cloud = isCloudCoverKey(coverKey)
+      // WebDAV 封面必须有 IO；云端封面没有也能取
+      if (!io && !cloud) return Promise.resolve(null)
       const cached = inflight.get(coverKey)
       if (cached) return cached
       const p = (async () => {
-        const local = await io.getLocalCover(coverKey).catch(() => null)
+        const local = io ? await io.getLocalCover(coverKey).catch(() => null) : null
         if (local) return local
-        const remote = isCloudCoverKey(coverKey) ? await fetchCloudCover(io, coverKey) : await fetchRemote(io, coverKey)
+        const remote = cloud ? await fetchCloudCover(io, coverKey) : await fetchRemote(io!, coverKey)
         if (!remote) failed.add(coverKey)
         return remote
       })().finally(() => inflight.delete(coverKey))

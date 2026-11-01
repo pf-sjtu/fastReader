@@ -3,7 +3,7 @@
  */
 import type { LibraryEntry, LibraryIndex } from './types'
 
-export type GroupBy = 'none' | 'status' | 'format' | 'author' | 'folder'
+export type GroupBy = 'none' | 'status' | 'format' | 'author' | 'folder' | 'category' | 'year' | 'publisher'
 
 export interface BookGroup {
   /** 稳定键：用于 React key 与折叠状态记忆 */
@@ -25,6 +25,13 @@ export function groupKeyOf(e: LibraryEntry, by: Exclude<GroupBy, 'none'>): strin
       // 同步目录下的直接文件归 root；子目录取其直接父目录名
       return parts.length > 2 ? `d:${parts[parts.length - 2]}` : 'root'
     }
+    // 一本书可能有多个标签，分组时只算主分类（第一个），避免同一本书在几个组里重复出现
+    case 'category':
+      return e.subjects?.[0] ? `c:${e.subjects[0]}` : 'unknown'
+    case 'year':
+      return e.year ? `y:${e.year}` : 'unknown'
+    case 'publisher':
+      return e.publisher ? `p:${e.publisher}` : 'unknown'
   }
 }
 
@@ -49,6 +56,8 @@ export function groupEntries(entries: readonly LibraryEntry[], by: GroupBy): Boo
       const oa = GROUP_ORDER[a.key]
       const ob = GROUP_ORDER[b.key]
       if (oa !== undefined || ob !== undefined) return (oa ?? 500) - (ob ?? 500) || b.entries.length - a.entries.length
+      // 年份组按时间倒序（新书在前），其余按书数量降序
+      if (by === 'year') return Number(b.key.slice(2)) - Number(a.key.slice(2))
       return b.entries.length - a.entries.length || a.key.localeCompare(b.key, 'zh')
     })
 }
@@ -76,7 +85,7 @@ export function limitGroups(groups: readonly BookGroup[], limit: number): Limite
 
 /* ---------------- 乱序推荐 ---------------- */
 
-export type RecommendReason = 'resume' | 'sameAuthor' | 'fresh' | 'retry' | 'revisit'
+export type RecommendReason = 'resume' | 'sameAuthor' | 'sameCategory' | 'fresh' | 'retry' | 'revisit'
 
 export interface Recommendation {
   entry: LibraryEntry
@@ -112,6 +121,14 @@ function weigh(index: LibraryIndex): Weighted[] {
       .slice(0, 3)
       .map((e) => e.author!)
   )
+  // 最近读过的书的主分类：同类的书加权（比同作者弱，但覆盖面更广）
+  const favouredCategories = new Set(
+    all
+      .filter((e) => e.lastOpenedAt && e.subjects?.[0])
+      .sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
+      .slice(0, 3)
+      .map((e) => e.subjects![0])
+  )
   const out: Weighted[] = []
   for (const e of all) {
     const pct = e.readProgress?.pct ?? 0
@@ -135,6 +152,9 @@ function weigh(index: LibraryIndex): Weighted[] {
     if (e.author && favouredAuthors.has(e.author) && reason !== 'resume') {
       weight *= 1.6
       reason = 'sameAuthor'
+    } else if (e.subjects?.[0] && favouredCategories.has(e.subjects[0]) && reason !== 'resume') {
+      weight *= 1.3
+      reason = 'sameCategory'
     }
     out.push({ entry: e, weight, reason })
   }

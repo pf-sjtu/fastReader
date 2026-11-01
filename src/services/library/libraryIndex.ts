@@ -239,21 +239,26 @@ export function enforceSizeCap(index: LibraryIndex, maxBytes = LIBRARY_MAX_BYTES
   return { index: cur, evicted }
 }
 
-export type LibrarySort = 'recent' | 'name' | 'author' | 'status' | 'size' | 'modified' | 'progress'
+export type LibrarySort = 'recent' | 'name' | 'author' | 'status' | 'size' | 'modified' | 'progress' | 'year'
 export type LibraryFilter = 'all' | 'done' | 'todo'
 
 const STATUS_RANK: Record<BookStatus, number> = { partial: 0, unprocessed: 1, done: 2 }
 
+/** 搜索范围：书名 / 作者 / 分类 / 出版社 / 年份 / 简介（元数据都用上，找"讲拿破仑的"也能搜到） */
+const haystack = (e: LibraryEntry) =>
+  [e.title, e.author, e.subjects?.join(' '), e.publisher, e.year, e.desc].filter(Boolean).join(' ').toLowerCase()
+
 export function listEntries(
   index: LibraryIndex,
-  { query = '', filter = 'all', sort = 'recent' }: { query?: string; filter?: LibraryFilter; sort?: LibrarySort } = {}
+  { query = '', filter = 'all', sort = 'recent', category = null }: { query?: string; filter?: LibraryFilter; sort?: LibrarySort; category?: string | null } = {}
 ): LibraryEntry[] {
   const q = query.trim().toLowerCase()
   const list = Object.values(index.entries).filter((e) => {
     if (filter === 'done' && e.status !== 'done') return false
     if (filter === 'todo' && e.status === 'done') return false
+    if (category && !e.subjects?.includes(category)) return false
     if (!q) return true
-    return `${e.title} ${e.author ?? ''}`.toLowerCase().includes(q)
+    return haystack(e).includes(q)
   })
   const byName = (a: LibraryEntry, b: LibraryEntry) => a.title.localeCompare(b.title, 'zh')
   const recency = (e: LibraryEntry) => e.lastOpenedAt ?? 0
@@ -262,6 +267,7 @@ export function listEntries(
     (a.author ? 0 : 1) - (b.author ? 0 : 1) || (a.author ?? '').localeCompare(b.author ?? '', 'zh') || byName(a, b)
   const mtime = (e: LibraryEntry) => (Number.isFinite(Date.parse(e.mtime)) ? Date.parse(e.mtime) : 0)
   const pct = (e: LibraryEntry) => (e.status === 'done' ? 100 : 0) + (e.readProgress?.pct ?? 0)
+  if (sort === 'year') return list.sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || byName(a, b)) // 新书在前，没有年份的排最后
   if (sort === 'name') return list.sort(byName)
   if (sort === 'author') return list.sort(byAuthor)
   if (sort === 'size') return list.sort((a, b) => b.size - a.size || byName(a, b))

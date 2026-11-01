@@ -11,6 +11,14 @@ export interface BookMeta {
   author?: string
   /** PDF 页数 */
   pages?: number
+  /** EPUB 的 spine 项数（近似章数） */
+  chapterCount?: number
+  /** 分类标签（dc:subject）、简介、出版信息 */
+  subjects?: string[]
+  desc?: string
+  publisher?: string
+  year?: number
+  lang?: string
   /** EPUB 内嵌封面原图（尚未缩放；缩略图在 coverThumb） */
   cover?: { bytes: Uint8Array; mime: string }
 }
@@ -91,7 +99,22 @@ export function parseOpfMeta(opfXml: string): BookMeta {
     .filter((e) => e.localName === 'creator')
     .map((e) => clean(e.textContent))
     .filter((s): s is string => !!s)
-  return { title: clean(first('title')), author: creators.length ? creators.join('、') : undefined }
+  const all = Array.from(doc.getElementsByTagName('*'))
+  const subjects = [...new Set(all.filter((e) => e.localName === 'subject').map((e) => clean(e.textContent)).filter((s): s is string => !!s))].slice(0, 8)
+  // 简介常带 HTML 标签（<p>…）：先去标签再压空白
+  const desc = clean(first('description')?.replace(/<[^>]+>/g, ' '))
+  const year = Number(/(1[0-9]{3}|2[01][0-9]{2})/.exec(first('date') ?? '')?.[1])
+  const spine = all.filter((e) => e.localName === 'itemref').length
+  return {
+    title: clean(first('title')),
+    author: creators.length ? creators.join('、') : undefined,
+    ...(subjects.length ? { subjects } : {}),
+    ...(desc ? { desc: desc.slice(0, 400) } : {}),
+    publisher: clean(first('publisher')),
+    ...(year ? { year } : {}),
+    lang: clean(first('language')),
+    ...(spine ? { chapterCount: spine } : {}),
+  }
 }
 
 /** 相对路径解析：OPF 里的 href 相对 OPF 所在目录，且可能带 ../ 与 URL 编码 */

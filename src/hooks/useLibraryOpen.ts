@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { webdavService } from '@/services/webdavService'
+import { unreachableLabel } from '@/components/library/labels'
 import { baseName } from '@/services/library/libraryIndex'
 import { useLibraryStore } from '@/services/library/libraryStore'
 import type { LibraryEntry } from '@/services/library/types'
@@ -31,18 +32,34 @@ export function useLibraryOpen({
   const { t } = useTranslation()
   const markOpened = useLibraryStore((s) => s.markOpened)
   const contributeOpened = useLibraryStore((s) => s.contributeOpened)
+  const resolveEntry = useLibraryStore((s) => s.resolveEntry)
+  const askRemove = useLibraryStore((s) => s.askRemove)
   const [openingPath, setOpeningPath] = useState<string | null>(null)
   /** ready：选文件流程（含云缓存检查）已全部结束；之前不能下结论，否则会把"检查尚未开始"误当成"没有缓存" */
   const [autoLoad, setAutoLoad] = useState<{ name: string; ready: boolean } | null>(null)
 
   const openBook = useCallback(
-    async (entry: LibraryEntry) => {
-      setOpeningPath(entry.path)
+    async (shelfEntry: LibraryEntry) => {
+      setOpeningPath(shelfEntry.path)
       try {
+        // 书架上的虚拟条目只有云端资料：先去 WebDAV 找到真实文件（这是第一次真正用到 WebDAV）
+        const resolved = await resolveEntry(shelfEntry)
+        if (resolved.kind === 'unreachable') {
+          toast.error(unreachableLabel(t, resolved.reason))
+          return
+        }
+        if (resolved.kind === 'missing') {
+          askRemove(shelfEntry)
+          return
+        }
+        // 真实条目来自 WebDAV 索引，没有云端 id：沿用书架条目上叠加的 catalogId
+        const entry: LibraryEntry = { ...resolved.entry, catalogId: shelfEntry.catalogId ?? resolved.entry.catalogId }
         const name = baseName(entry.path)
         const r = await webdavService.downloadFileAsFile(entry.path, name)
         if (!r.success || !r.data) {
-          toast.error(t('library.openFailed', { error: r.error ?? '' }))
+          // 区分「文件确实没了」和「网络 / 权限问题」：只有前者才提示删除 metadata，后者绝不能动数据
+          if ((await webdavService.existsStatus(entry.path).catch(() => 'unknown')) === 'missing') askRemove(entry)
+          else toast.error(t('library.openFailed', { error: r.error ?? '' }))
           return
         }
         const picked = r.data.name
@@ -62,7 +79,7 @@ export function useLibraryOpen({
         setOpeningPath(null)
       }
     },
-    [handleWebDAVFileSelect, markOpened, contributeOpened, t]
+    [handleWebDAVFileSelect, markOpened, contributeOpened, resolveEntry, askRemove, t]
   )
 
   useEffect(() => {

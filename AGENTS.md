@@ -122,7 +122,9 @@ git push -u origin HEAD
 
 ## Library Covers (Cloudflare KV)
 - 书库封面与元数据放 KV（`/api/covers`，实现 `functions/_lib/covers.js`）：`id = bookIdOf(书名主干)`，前端 `bookId.ts` ↔ 脚本 `scripts/covers_prepare.py` 同一算法，契约 `tests/fixtures/book-id-cases.json`
-- 书库扫描后 `adoptCloudCovers` 按书名匹配（精确 → 模糊，歧义不配）补齐 stale 条目；匹配不上的书点开后 `contributeOpened` 解析并补传。细节见 `docs/covers-kv.md`
+- **云端书目是书架的主数据**：书架 = `buildShelf(WebDAV 书库索引, 云端目录)`（`cloudCatalog.ts`，仅内存叠加，不写 library.json）；云端有而 WebDAV 暂无记录的书是**虚拟条目**（`cloud://<id>/<文件名>`）。进入书库只读云端目录 + 本地镜像，**不扫描 WebDAV**；WebDAV 只在打开书 / 处理 / 手动刷新时才访问
+- 打开虚拟条目前 `resolveEntry`：连接正常且扫描成功却找不到 → 询问是否删云端 metadata；连不上 / 扫描失败 / 扫到 0 本书（多半目录配错）→ 只报错，**绝不提示删除**。点开时按 `size` / 完整度补传或 `?replace=1` 覆盖。细节与全生命周期见 `docs/covers-kv.md`
+- 预处理脚本 `scripts/covers_prepare.py --upload` 直写 KV（Cloudflare REST，token 取 `CLOUDFLARE_API_TOKEN` 或 cloudflare-cli skill 的 .env），项目 `.env` 不需要任何变量
 
 ## Cloud Cache Reading
 - 检查 WebDAV 上 `{syncPath}/{sanitizedName}-完整摘要.md` 是否存在

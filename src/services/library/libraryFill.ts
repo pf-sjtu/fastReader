@@ -10,12 +10,13 @@ import { extractBookMeta, type BookMeta } from './bookMeta'
 import { makeThumb, pdfFirstPageThumb } from './coverThumb'
 import { titleFromPath } from './libraryIndex'
 import { recordMetadataBatch, type LibraryIO } from './libraryService'
-import { bookIdOf, bookStem } from './bookId'
-import { uploadCover, type CoverItem } from './cloudCovers'
+import { bookIdOf } from './bookId'
+import { uploadCover, type CoverMeta } from './cloudCovers'
+import { buildCatalogMeta } from './cloudCatalog'
 import type { LibraryEntry, LibraryIndex } from './types'
 
 export const FILL_MAX_BYTES = 60 * 1024 * 1024
-export const FILL_CONCURRENCY = 2
+export const FILL_CONCURRENCY = 4 // 补全是用户主动触发的，且每本都要整本下载；4 路在 WebDAV 上仍属温和
 const FLUSH_EVERY = 5
 
 /** 路径 → 稳定短键（FNV-1a 的 36 进制）。同一路径在任何设备上得到同一个封面文件名 */
@@ -44,7 +45,7 @@ export interface FillOptions {
   signal?: AbortSignal
   inspect?: (buf: ArrayBuffer, path: string) => Promise<Inspection>
   /** 把封面与元数据补传到云端（默认走 /api/covers）；失败只影响「下次别人能否直接命中」，不影响本机 */
-  publishCover?: (id: string, meta: Omit<CoverItem, 'cover'>, thumb: Blob) => Promise<unknown>
+  publishCover?: (id: string, meta: CoverMeta, thumb: Blob) => Promise<unknown>
   onProgress?: (done: number, total: number) => void
 }
 
@@ -104,7 +105,7 @@ export async function fillLibraryMetadata(io: LibraryIO, entries: readonly Libra
         coverKey = id
         await io.putLocalCover(id, thumb)
         // 跨设备共享（云端 KV）：尽力而为，失败不影响本机
-        const meta2: Omit<CoverItem, 'cover'> = { stem: bookStem(e.path), title: usable(meta.title) ?? (e.title || titleFromPath(e.path)), author: usable(meta.author), pages: meta.pages }
+        const meta2 = buildCatalogMeta(e.path, e.size, meta, e.title || titleFromPath(e.path))
         uploads = uploads.then(() => publishCover(id, meta2, thumb)).catch(() => {})
       }
       pending.push({

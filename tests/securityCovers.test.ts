@@ -43,7 +43,7 @@ describe('/api/covers 读写', () => {
     expect(await put.json()).toEqual({ id: ID, status: 'stored' })
 
     const idx = (await (await call(env, '/api/covers')).json()) as { items: Record<string, Record<string, unknown>> }
-    expect(idx.items[ID]).toEqual({ stem: '书名 - 作者', title: '书名', author: '作者', pages: 12, chapterCount: 5, cover: 1 }) // junk 被丢弃
+    expect(idx.items[ID]).toEqual({ stem: '书名 - 作者', title: '书名', author: '作者', pages: 12, chapterCount: 5, cover: 1, updatedAt: expect.any(Number) }) // junk 被丢弃
 
     const get = await call(env, `/api/covers/${ID}`)
     expect(get.headers.get('Content-Type')).toBe('image/webp')

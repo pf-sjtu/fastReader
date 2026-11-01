@@ -57,25 +57,30 @@ def strip_thinking(text: str) -> str:
 class Model:
     """OpenAI 兼容 /chat/completions，只用标准库（评测环境不一定装了 openai SDK）"""
 
-    def __init__(self, base_url: str, api_key: str, model: str, reasoning_effort: str | None = "low"):
+    def __init__(self, base_url: str, api_key: str, model: str, reasoning_effort: str | None = "medium"):
         self.url = base_url.rstrip("/") + "/chat/completions"
         self.key = api_key
         self.model = model
         self.reasoning_effort = reasoning_effort  # None = 不发该参数（非 MiniMax 网关未必接受）
         self.tokens = 0
 
-    def ask(self, prompt: str, max_tokens: int = 24000) -> str:
-        payload = {"model": self.model, "messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens, "temperature": 0.3}
+    def ask(self, prompt: str) -> str:
+        payload = {"model": self.model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.3}
+        # 输出上限用模型自己的属性（目录元数据 meta.output，由环境变量 VITE_TEST_LLM_OUTPUTS 传入 {模型: 上限}）；
+        # 取不到就不发该字段，让网关用模型默认值。不手写 token 数。
+        limit = json.loads(os.environ.get("VITE_TEST_LLM_OUTPUTS", "{}")).get(self.model)
+        if limit:
+            payload["max_tokens"] = int(limit)
         if self.reasoning_effort:
             payload["reasoning_effort"] = self.reasoning_effort
         body = json.dumps(payload).encode("utf-8")
         last: Exception | None = None
-        for attempt in range(5):
+        for attempt in range(3):
             try:
                 req = urllib.request.Request(
                     self.url, data=body, headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"}
                 )
-                with urllib.request.urlopen(req, timeout=240) as resp:
+                with urllib.request.urlopen(req, timeout=900) as resp:  # 思考型模型（~40 token/s）单次可能要数分钟
                     data = json.loads(resp.read().decode("utf-8"))
                 self.tokens += (data.get("usage") or {}).get("total_tokens", 0) or 0
                 choice = data["choices"][0]
@@ -179,7 +184,7 @@ JUDGE_BOOK = """你是严格的中文书籍编辑，请对同一批章节摘要�
 def judge(model: Model, template: str, rng: random.Random, x_v2: str, x_v3: str, **fmt) -> dict:
     flip = rng.random() < 0.5
     a, b = (x_v3, x_v2) if flip else (x_v2, x_v3)
-    out = model.ask(template.format(a=a, b=b, **fmt), max_tokens=8000)
+    out = model.ask(template.format(a=a, b=b, **fmt))
     m = re.search(r"\{[\s\S]*?\}", out)
     try:
         data = json.loads(m.group(0)) if m else {}
@@ -220,7 +225,7 @@ def main() -> int:
     if not base or not key:
         print("缺少网关配置（.env 的 VITE_TEST_LLM_BASE_URL / VITE_TEST_LLM_API_KEY，或 --sensenova 的 SENSENOVA_*）")
         return 2
-    effort = None if (args.sensenova or args.no_effort) else "low"
+    effort = None if (args.sensenova or args.no_effort) else "medium"
     model = Model(base, key, args.model, effort)
     judge_model = Model(base, key, args.judge_model, effort) if args.judge_model else model
     rng = random.Random(args.seed)

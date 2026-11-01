@@ -74,7 +74,7 @@ def _local(tag: str) -> str:
 
 def read_epub(path: Path) -> dict:
     """只读 OPF 与封面图（不展开整本）：标题、作者、封面字节、章节数（spine 项数，近似）"""
-    out: dict = {"title": "", "author": "", "cover": None, "chapterCount": None}
+    out: dict = {"title": "", "author": "", "cover": None, "chapterCount": None, "subjects": [], "description": "", "publisher": "", "date": "", "lang": ""}
     with zipfile.ZipFile(path) as z:
         container = ET.fromstring(z.read("META-INF/container.xml"))
         opf = next((el.attrib.get("full-path") for el in container.iter() if _local(el.tag) == "rootfile"), None)
@@ -90,6 +90,10 @@ def read_epub(path: Path) -> dict:
                 out["title"] = (el.text or "").strip()
             elif name == "creator" and not out["author"]:
                 out["author"] = (el.text or "").strip()
+            elif name == "subject" and (el.text or "").strip():
+                out["subjects"].append(el.text.strip())
+            elif name in ("description", "publisher", "date", "language") and not out["lang" if name == "language" else name]:
+                out["lang" if name == "language" else name] = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", "".join(el.itertext()))).strip()
             elif name == "item":
                 manifest[el.attrib.get("id", "")] = el.attrib
             elif name == "itemref":
@@ -151,8 +155,9 @@ def _clip(v, n: int) -> str:
 def clean_meta(m: dict) -> dict:
     """与 functions/_lib/covers.js#cleanMeta 同口径：只留已知字段并限长"""
     out: dict = {"stem": _clip(m.get("stem"), 240), "title": _clip(m.get("title"), 240)}
-    if _clip(m.get("author"), 120):
-        out["author"] = _clip(m.get("author"), 120)
+    for k, n in (("author", 120), ("file", 240), ("desc", 400), ("publisher", 80), ("lang", 12)):
+        if _clip(m.get(k), n):
+            out[k] = _clip(m.get(k), n)
     for k in ("pages", "chapterCount"):
         try:
             n = int(m.get(k) or 0)
@@ -160,7 +165,25 @@ def clean_meta(m: dict) -> dict:
             n = 0
         if n > 0:
             out[k] = min(n, 100000)
+    try:
+        size = int(float(m.get("size") or 0))
+    except (TypeError, ValueError):
+        size = 0
+    if size > 0:
+        out["size"] = min(size, 2**40)
+    subjects = list(dict.fromkeys(s for s in (_clip(x, 40) for x in (m.get("subjects") if isinstance(m.get("subjects"), list) else []) if isinstance(x, str)) if s))[:8]
+    if subjects:
+        out["subjects"] = subjects
+    year = m.get("year")
+    if isinstance(year, int) and 1000 <= year <= 2200:
+        out["year"] = year
     return out
+
+
+def year_of(date: str) -> int | None:
+    """EPUB dc:date 的年份（'2020-12-31' / '2015' / 'Nov 3, 2018' 都取第一个 4 位年）"""
+    m = re.search(r"(1[0-9]{3}|2[01][0-9]{2})", date or "")
+    return int(m.group(1)) if m else None
 
 
 def build_kv_writes(items: list[dict], index: dict, overwrite: bool = False) -> tuple[list[dict], dict, dict]:
@@ -169,9 +192,11 @@ def build_kv_writes(items: list[dict], index: dict, overwrite: bool = False) -> 
     已有封面不覆盖（重跑不白烧每日 1000 次的写入额度）；元数据总是合并。
     返回 (writes, new_index, tally)。
     """
-    idx = {"items": dict((index or {}).get("items") or {})}
+    old = index or {}
+    idx = {"rev": int(old.get("rev") or 0), "items": dict(old.get("items") or {})}
     writes: list[dict] = []
     tally = {"stored": 0, "exists": 0, "meta": 0}
+    changed = False
     for it in items:
         bid, prev = it["id"], idx["items"].get(it["id"])
         has_cover = bool(prev and prev.get("cover"))
@@ -182,10 +207,21 @@ def build_kv_writes(items: list[dict], index: dict, overwrite: bool = False) -> 
             else:
                 writes.append({"key": f"cover:{bid}", "value": it["image"]})
                 has_cover, status = True, "stored"
-        idx["items"][bid] = {**(prev or {}), **clean_meta(it.get("meta") or {}), **({"cover": 1} if has_cover else {})}
+        nxt = {**(prev or {}), **clean_meta(it.get("meta") or {}), **({"cover": 1} if has_cover else {})}
+        if nxt != prev:  # 与服务端 putItems 同语义：只有真实变化才更新 updatedAt
+            idx["items"][bid] = {**nxt, "updatedAt": now_ms()}
+            changed = True
         tally[status] += 1
-    writes.append({"key": INDEX_KEY, "value": json.dumps(idx, ensure_ascii=False)})
+    if changed or writes:
+        idx["rev"] += 1  # ETag 版本号：每次写索引 +1
+        writes.append({"key": INDEX_KEY, "value": json.dumps(idx, ensure_ascii=False)})
     return writes, idx, tally
+
+
+def now_ms() -> int:
+    import time
+
+    return int(time.time() * 1000)
 
 
 # ---- Cloudflare KV 直写（REST API）：不经应用登录，也不需要项目 .env 里的任何变量 ----
@@ -274,7 +310,19 @@ def main() -> int:
             print(f"x {f.name}: {e}")
             continue
         img = compress_cover(info["cover"]) if info["cover"] else None
-        meta = {"stem": book_stem(f.name), "title": info["title"] or book_stem(f.name), "author": info["author"], "chapterCount": info["chapterCount"]}
+        meta = {
+            "stem": book_stem(f.name),
+            "title": info["title"] or book_stem(f.name),
+            "author": info["author"],
+            "chapterCount": info["chapterCount"],
+            "file": f.name,
+            "size": f.stat().st_size,
+            "subjects": info["subjects"],
+            "desc": info["description"],
+            "publisher": info["publisher"],
+            "year": year_of(info["date"]),
+            "lang": info["lang"],
+        }
         item: dict = {"id": bid, "meta": meta}
         if img:
             item["image"] = base64.b64encode(img).decode("ascii")

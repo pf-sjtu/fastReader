@@ -661,7 +661,8 @@
       "author": "作者",
       "progress": "进度",
       "size": "大小",
-      "modified": "更新时间"
+      "modified": "更新时间",
+      "year": "出版年份"
     },
     "opening": "正在打开《{{title}}》…",
     "openFailed": "打开失败：{{error}}",
@@ -676,7 +677,7 @@
       "rebuilt": "书库索引已重建"
     },
     "sortBy": "排序",
-    "groupBy": "分类",
+    "groupBy": "分组",
     "pages": "{{count}} 页",
     "group": {
       "none": "不分组",
@@ -684,6 +685,9 @@
       "format": "按格式",
       "author": "按作者",
       "folder": "按目录",
+      "category": "按分类",
+      "year": "按年份",
+      "publisher": "按出版社",
       "all": "全部"
     },
     "groupLabel": {
@@ -692,25 +696,94 @@
       "unprocessed": "未精读",
       "done": "已精读",
       "unknownAuthor": "未知作者",
+      "unknown": "未标注",
       "root": "根目录"
+    },
+    "category": {
+      "all": "全部分类",
+      "label": "分类",
+      "more": "更多分类",
+      "count": "{{name}} · {{count}}"
+    },
+    "categories": {
+      "Business": "商业",
+      "History": "历史",
+      "Economics": "经济",
+      "China": "中国",
+      "Politics": "政治",
+      "Philosophy": "哲学",
+      "Biography": "传记",
+      "Sociology": "社会学",
+      "Classics": "经典",
+      "International": "国际",
+      "Psychology": "心理学",
+      "SelfHelp": "自我提升",
+      "Science": "科学",
+      "Literature": "文学",
+      "Reference": "工具书",
+      "War": "战争",
+      "Religion": "宗教",
+      "Art": "艺术"
+    },
+    "info": {
+      "open": "查看详情",
+      "title": "书籍详情",
+      "publisher": "出版社",
+      "year": "出版年份",
+      "categories": "分类",
+      "desc": "简介",
+      "noDesc": "这本书没有简介",
+      "chapters": "章节",
+      "size": "大小",
+      "format": "格式",
+      "file": "文件",
+      "progress": "阅读进度",
+      "unverified": "来自云端书目，打开时才会连接 WebDAV 确认文件是否还在",
+      "openBook": "打开这本书",
+      "browseCategory": "只看「{{name}}」"
+    },
+    "sync": {
+      "cached": "书架来自云端书目；状态与进度取自上次同步，点开书时才会连接 WebDAV。",
+      "fresh": "已与 WebDAV 同步"
+    },
+    "unreachable": {
+      "off": "WebDAV 未启用，无法打开书籍。请先在设置里启用并连接。",
+      "timeout": "WebDAV 还没有连上，请稍后再试。",
+      "scanFailed": "读取 WebDAV 目录失败，暂时无法确认这本书的位置。"
+    },
+    "missing": {
+      "title": "WebDAV 上找不到《{{title}}》",
+      "body": "WebDAV 连接正常，但同步目录里已经没有这本书（可能被删除或移走了）。要同时删除云端书目里关于它的封面与资料吗？此操作不会影响 WebDAV 上的任何文件。",
+      "keep": "保留",
+      "remove": "删除资料"
+    },
+    "orphans": {
+      "notice": "云端书目里有 {{count}} 本书在 WebDAV 上找不到",
+      "review": "查看并清理",
+      "title": "清理 {{count}} 条云端资料？",
+      "body": "下面这些书在云端书目里有资料，但 WebDAV 同步目录里已经没有了。删除只会清除云端的封面与资料，不会动 WebDAV 上的文件。",
+      "more": "……另有 {{count}} 本",
+      "confirm": "全部删除",
+      "done": "已清理 {{count}} 条云端资料"
     },
     "recommend": {
       "title": "随机推荐",
       "shuffle": "换一批",
       "reason": {
         "resume": "接着读",
-        "sameAuthor": "你读过的作者",
-        "fresh": "还没翻开",
-        "retry": "打开过，尚未精读",
-        "revisit": "回头再看"
+        "sameAuthor": "同作者",
+        "sameCategory": "同类别",
+        "fresh": "未翻开",
+        "retry": "待精读",
+        "revisit": "回顾"
       }
     },
     "fill": {
       "button": "补全书籍信息（{{count}}）",
       "running": "正在补全 {{done}}/{{total}}",
       "cancel": "取消",
-      "hint": "下载书籍以读取书名、作者与封面，会消耗流量；每次同时只处理 2 本",
-      "hintSize": "将下载 {{count}} 本书，共约 {{size}}，用于读取书名、作者与封面；每次同时只处理 2 本，可随时取消",
+      "hint": "下载书籍以读取书名、作者与封面，会消耗流量；每次同时处理 4 本",
+      "hintSize": "将下载 {{count}} 本书，共约 {{size}}，用于读取书名、作者与封面；每次同时处理 4 本，可随时取消",
       "confirm": "将下载 {{count}} 本书，共约 {{size}}，会消耗较多流量。继续吗？"
     }
   },

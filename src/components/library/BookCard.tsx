@@ -1,15 +1,21 @@
 import { useTranslation } from 'react-i18next'
-import { Loader2 } from 'lucide-react'
+import { Info, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { LibraryEntry } from '@/services/library/types'
 import { BookCover } from './BookCover'
+import { BookTooltipBody } from './BookInfo'
+import { categoryLabel, formatBookSize } from './labels'
 import { useCoverUrl } from './useCoverUrl'
+import { useLongPress } from './useLongPress'
 
 interface BookCardProps {
   entry: LibraryEntry
   opening: boolean
   disabled: boolean
   onOpen: () => void
+  /** 打开详情对话框（悬浮卡的键盘 / 触屏等价入口） */
+  onInfo: () => void
   /** 推荐理由等：显示在封面左上角的小胶囊 */
   caption?: string
   /** 按大小排序时才把体积直接显示在卡片上；平时只放进悬停提示 */
@@ -18,18 +24,18 @@ interface BookCardProps {
   compact?: boolean
 }
 
-const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
+const fmtSize = formatBookSize
 const extOf = (path: string) => (path.split('.').pop() ?? '').toUpperCase()
 /** 默认格式不占位：EPUB 最常见，只有 PDF/TXT/MD 这类少数派才值得在封面上标出 */
 const DEFAULT_FORMAT = 'EPUB'
 /** 毛玻璃小胶囊：压在任意封面上都清晰 */
-const PILL = 'rounded-full bg-black/45 px-2 py-0.5 text-xs font-medium leading-4 text-white backdrop-blur-sm'
+const PILL = 'max-w-full truncate whitespace-nowrap rounded-full bg-black/45 px-1.5 py-0.5 sm:px-2 text-xs font-medium leading-4 text-white backdrop-blur-sm'
 
 /**
  * 书卡：书名与作者放进封面内部底部，用自下而上的深色渐变做底，
  * 任何封面（真实/生成）上都能读清；封面下方只留一行安静的元信息。
  */
-export function BookCard({ entry, opening, disabled, onOpen, caption, showSize = false, compact = false }: BookCardProps) {
+export function BookCard({ entry, opening, disabled, onOpen, onInfo, caption, showSize = false, compact = false }: BookCardProps) {
   const { t } = useTranslation()
   const format = extOf(entry.path)
   const oddFormat = format && format !== DEFAULT_FORMAT ? format : null
@@ -39,19 +45,26 @@ export function BookCard({ entry, opening, disabled, onOpen, caption, showSize =
     : entry.pages
       ? t('library.pages', { count: entry.pages })
       : null
-  const detail = [entry.title, entry.author, [format, fmtSize(entry.size), count].filter(Boolean).join(' · ')].filter(Boolean).join('\n')
+  // 虚拟条目没有可信的大小（0）：不显示 "1 KB" 这种假数据
+  const facts = [format, entry.size > 0 ? fmtSize(entry.size) : null, count].filter(Boolean).join(' · ')
+  const label = [entry.title, entry.author, entry.subjects?.[0] ? categoryLabel(t, entry.subjects[0]) : null, facts].filter(Boolean).join('，')
   const pct = entry.readProgress?.pct ?? 0
   const inProgress = pct > 0 && pct < 100
   // 真实封面：进入视口才请求（队列限并发）；没有/失败时回退生成式封面
   const { ref, url } = useCoverUrl(entry.coverKey)
+  const longPress = useLongPress(onInfo)
   return (
+    <div className="group relative">
+    <Tooltip delayDuration={350}>
+    <TooltipTrigger asChild>
     <button
       type="button"
+      data-book-card=""
       onClick={onOpen}
       disabled={disabled}
-      title={detail}
-      aria-label={detail.replace(/\n/g, '，')}
-      className="group flex min-h-11 flex-col rounded-lg p-1 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+      aria-label={label}
+      {...longPress}
+      className="flex min-h-11 w-full select-none flex-col rounded-lg p-1 text-left outline-none transition-colors [-webkit-touch-callout:none] focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
     >
       <div
         ref={ref}
@@ -111,5 +124,21 @@ export function BookCard({ entry, opening, disabled, onOpen, caption, showSize =
       </div>
 
     </button>
+    </TooltipTrigger>
+    <TooltipContent side="top" className="bg-popover text-popover-foreground shadow-md ring-1 ring-border">
+      <BookTooltipBody entry={entry} />
+    </TooltipContent>
+    </Tooltip>
+    {/* 详情入口（键盘 / 平板 / 鼠标）；与主按钮是兄弟节点（按钮里不能再套按钮）。
+        手机触屏上卡片太窄，按钮会盖住书名：那里改用长按（见 useLongPress），按钮保留给读屏与键盘 */}
+    <button
+      type="button"
+      onClick={onInfo}
+      aria-label={`${t('library.info.open')}：${entry.title}`}
+      className="absolute bottom-3 right-3 flex size-7 items-center justify-center rounded-full bg-black/55 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/70 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring group-hover:opacity-100 [@media(hover:none)]:opacity-100 max-sm:[@media(hover:none)]:pointer-events-none max-sm:[@media(hover:none)]:opacity-0 max-sm:[@media(hover:none)]:focus-visible:opacity-100"
+    >
+      <Info className="size-4" />
+    </button>
+    </div>
   )
 }
