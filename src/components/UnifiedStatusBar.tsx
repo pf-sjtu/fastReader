@@ -131,7 +131,8 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
     <>
       {/* 无卡片外框：它只是一条工具行，框起来会和下面真正的内容卡片（书库、上传）抢层级 */}
       <div data-slot="status-bar" className={cn('w-full min-w-0 px-0.5 py-1 sm:px-1', className)}>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        {/* sm–lg：左右两组占第一行，进度区（中间）整行落到第二行；≥lg 才三栏并排——768 宽三栏会把进度区挤到 0 宽，与模型选择器叠在一起 */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 lg:flex-nowrap">
           {/* 切换按钮 + 模型信息（移动端同一行） */}
           <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-start sm:gap-3 shrink-0">
             {/* 配置视图的「书库 / 处理」分段：书库要能随时回去看一眼，而不是选完书就被表单顶掉 */}
@@ -196,7 +197,7 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
           </div>
 
           {/* 中间：进度条 / 最近历史 / 状态信息 */}
-          <div className="flex-1 min-w-0 mx-0 sm:mx-6">
+          <div className="flex-1 min-w-0 mx-0 sm:order-last sm:basis-full lg:order-none lg:basis-auto lg:mx-6">
             {showProgress ? (
               <div className="space-y-2">
                 {/* 可换行：顶栏变窄时步骤文字让到下一行，而不是被压成 0 宽、让按钮组溢出到模型切换器上 */}
