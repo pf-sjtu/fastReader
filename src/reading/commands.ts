@@ -57,6 +57,8 @@ export interface ResumePoint {
   chapterIndex: number
   chapterTitle: string
   at: number
+  /** 这一章内已经读进的像素（本机恢复阅读位置用；跨设备的书库索引里没有这个字段） */
+  offset?: number
 }
 
 const RESUME_PREFIX = 'juhua.resume:'
@@ -82,6 +84,7 @@ export function loadResume(key: string, storage: Pick<Storage, 'getItem'> = loca
       chapterIndex: Number.isInteger(p.chapterIndex) ? (p.chapterIndex as number) : -1,
       chapterTitle: p.chapterTitle,
       at: typeof p.at === 'number' ? p.at : 0,
+      ...(typeof p.offset === 'number' && Number.isFinite(p.offset) && p.offset > 0 ? { offset: Math.min(p.offset, 200000) } : {}),
     }
   } catch {
     return null

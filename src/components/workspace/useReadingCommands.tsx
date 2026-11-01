@@ -11,6 +11,7 @@ import { useReadingFocusStore } from '@/stores/readingFocus'
 import { adjacentChapter, cycleTab, libraryResumePoint, loadResume, resolveResume, resumeKeyOf, saveResume, type Command } from '@/reading/commands'
 import { CommandPalette } from './CommandPalette'
 import { syncLibraryProgress, useLibraryStore } from '@/services/library/libraryStore'
+import { chapterReadOffset, resolveScrollContainer, scrollInsideChapter } from '@/utils/scrollTo'
 
 interface Params {
   book: { title?: string; author?: string }
@@ -89,6 +90,8 @@ export function useReadingCommands(p: Params): { overlay: ReactNode; openPalette
   /* ---------- 断点续读：每本书只恢复一次，之后只保存 ---------- */
   const resumeKey = resumeKeyOf(p.book)
   const restoredFor = useRef<string | null>(null)
+  const offsetTimer = useRef<number | null>(null)
+  useEffect(() => () => { if (offsetTimer.current) window.clearTimeout(offsetTimer.current) }, [])
   const usableCount = p.chapters.filter((c) => !!c.summary).length
   useEffect(() => {
     if (p.processing || usableCount === 0 || restoredFor.current === resumeKey) return
@@ -96,20 +99,53 @@ export function useReadingCommands(p: Params): { overlay: ReactNode; openPalette
     // 本机续读点优先；没有（换设备 / 清了数据）时用书库索引里随 WebDAV 同步的阅读章节
     const name = live.current.fileName
     const entry = name ? Object.values(useLibraryStore.getState().index.entries).find((e) => e.path.split('/').pop() === name) : undefined
-    const target = resolveResume(loadResume(resumeKey) ?? libraryResumePoint(entry?.readProgress), p.chapters)
-    // 已经在第一章（默认位置）就不用动
-    if (target && target !== p.chapters[0]?.id) goChapter(target)
+    const point = loadResume(resumeKey) ?? libraryResumePoint(entry?.readProgress)
+    const target = resolveResume(point, p.chapters)
+    // 已经在第一章（默认位置）且没有章内偏移就不用动
+    const offset = point?.offset ?? 0
+    if (target && (target !== p.chapters[0]?.id || offset > 0)) {
+      if (target !== p.chapters[0]?.id) goChapter(target)
+      // 章内位置：等 scrollToChapterWithRetry 的 200/400/600ms 三次对齐做完（折叠 / 懒渲染会让位置漂移）再往下读 offset 像素；
+      // 期间用户若已翻到别章（currentChapterId 变了）就不拽回去
+      if (offset > 0) {
+        const timer = window.setTimeout(() => {
+          if (live.current.currentChapterId === target) scrollInsideChapter(target, offset)
+        }, 900)
+        offsetTimer.current = timer
+      }
+    }
   }, [resumeKey, p.processing, usableCount, p.chapters, goChapter])
   useEffect(() => {
     if (p.processing || restoredFor.current !== resumeKey || !p.currentChapterId) return
     const index = idsRef.current.indexOf(p.currentChapterId)
     if (index < 0) return
     const timer = window.setTimeout(
-      () => saveResume(resumeKey, { chapterId: p.currentChapterId, chapterIndex: index, chapterTitle: live.current.chapters[index]?.title ?? '', at: Date.now() }),
+      () => saveResume(resumeKey, { chapterId: p.currentChapterId, chapterIndex: index, chapterTitle: live.current.chapters[index]?.title ?? '', at: Date.now(), offset: chapterReadOffset(p.currentChapterId) }),
       600
     )
     return () => window.clearTimeout(timer)
   }, [resumeKey, p.currentChapterId, p.processing])
+  // 同一章内滚动：停下 800ms 后更新章内偏移（换章由上面那条负责；这里只跟随滚动）
+  useEffect(() => {
+    if (p.processing) return
+    const box = resolveScrollContainer()
+    if (!box) return
+    let timer: number | undefined
+    const onScroll = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        const cur = live.current
+        const index = idsRef.current.indexOf(cur.currentChapterId)
+        if (restoredFor.current !== resumeKey || index < 0) return
+        saveResume(resumeKey, { chapterId: cur.currentChapterId, chapterIndex: index, chapterTitle: cur.chapters[index]?.title ?? '', at: Date.now(), offset: chapterReadOffset(cur.currentChapterId) })
+      }, 800)
+    }
+    box.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.clearTimeout(timer)
+      box.removeEventListener('scroll', onScroll)
+    }
+  }, [resumeKey, p.processing, usableCount])
 
   // 书库进度：停留 5 秒才写（快速翻章不写），且进度没变时服务层会跳过
   useEffect(() => {

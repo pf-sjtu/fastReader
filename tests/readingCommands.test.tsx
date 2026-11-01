@@ -240,3 +240,23 @@ describe('useReadingCommands（快捷键 / 命令面板 / 续读）', () => {
     expect(loadResume(resumeKeyOf(book))).toMatchObject({ chapterId: 'c2', chapterIndex: 1, chapterTitle: '第二章 转折' })
   })
 })
+
+describe('章内续读偏移（本机）', () => {
+  it('loadResume 读取 offset；非数字 / 非正数 / 过大都被规整', () => {
+    const key = resumeKeyOf({ title: 'o', author: 'a' })
+    const base = { chapterId: 'c1', chapterIndex: 0, chapterTitle: 't', at: 1 }
+    const store: Record<string, string> = {}
+    const storage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => void (store[k] = v) }
+    store[key] = JSON.stringify({ ...base, offset: 1234 })
+    expect(loadResume(key, storage)?.offset).toBe(1234)
+    store[key] = JSON.stringify({ ...base, offset: -5 })
+    expect(loadResume(key, storage)).not.toHaveProperty('offset')
+    store[key] = JSON.stringify({ ...base, offset: 'x' })
+    expect(loadResume(key, storage)).not.toHaveProperty('offset')
+    store[key] = JSON.stringify({ ...base, offset: 9e9 })
+    expect(loadResume(key, storage)?.offset).toBe(200000)
+    // 旧存档没有 offset：照常读
+    store[key] = JSON.stringify(base)
+    expect(loadResume(key, storage)).toMatchObject({ chapterId: 'c1' })
+  })
+})

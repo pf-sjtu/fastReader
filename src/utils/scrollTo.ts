@@ -60,6 +60,26 @@ export function scrollToChapterWithRetry(chapterId: string, opts: ScrollToChapte
   return () => timers.forEach(clearTimeout)
 }
 
+/** 对齐位置（上沿留白 offset）之下已经读进这一章多少像素；找不到章节 / 还没滚到它 → 0 */
+export function chapterReadOffset(chapterId: string, { container, offset = 80, idPrefix = CHAPTER_SUMMARY_ID_PREFIX }: ScrollToChapterOptions = {}): number {
+  const element = document.getElementById(`${idPrefix}${chapterId}`)
+  const box = resolveScrollContainer(container)
+  if (!element || !box) return 0
+  const px = box.getBoundingClientRect().top + offset - element.getBoundingClientRect().top
+  return Number.isFinite(px) ? Math.max(0, Math.round(px)) : 0
+}
+
+/** 在章节对齐位置的基础上再往下读 px 像素（不超过这一章的高度）；章节不存在返回 false */
+export function scrollInsideChapter(chapterId: string, px: number, { container, offset = 80, idPrefix = CHAPTER_SUMMARY_ID_PREFIX }: ScrollToChapterOptions = {}): boolean {
+  const element = document.getElementById(`${idPrefix}${chapterId}`)
+  const box = resolveScrollContainer(container)
+  if (!element || !box || !(px > 0)) return false
+  const inside = Math.min(px, Math.max(0, element.offsetHeight - offset))
+  const top = box.scrollTop + (element.getBoundingClientRect().top - box.getBoundingClientRect().top) - offset + inside
+  box.scrollTo({ top: Math.max(0, top), behavior: 'auto' })
+  return true
+}
+
 export function scrollContainerToTop(container?: HTMLElement | null) {
   resolveScrollContainer(container)?.scrollTo({ top: 0, behavior: 'smooth' })
 }
