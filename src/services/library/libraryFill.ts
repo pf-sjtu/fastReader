@@ -9,7 +9,9 @@
 import { extractBookMeta, type BookMeta } from './bookMeta'
 import { makeThumb, pdfFirstPageThumb } from './coverThumb'
 import { titleFromPath } from './libraryIndex'
-import { coverRemotePath, recordMetadataBatch, type LibraryIO } from './libraryService'
+import { recordMetadataBatch, type LibraryIO } from './libraryService'
+import { bookIdOf, bookStem } from './bookId'
+import { uploadCover, type CoverItem } from './cloudCovers'
 import type { LibraryEntry, LibraryIndex } from './types'
 
 export const FILL_MAX_BYTES = 60 * 1024 * 1024
@@ -41,6 +43,8 @@ export interface FillOptions {
   maxBytes?: number
   signal?: AbortSignal
   inspect?: (buf: ArrayBuffer, path: string) => Promise<Inspection>
+  /** 把封面与元数据补传到云端（默认走 /api/covers）；失败只影响「下次别人能否直接命中」，不影响本机 */
+  publishCover?: (id: string, meta: Omit<CoverItem, 'cover'>, thumb: Blob) => Promise<unknown>
   onProgress?: (done: number, total: number) => void
 }
 
@@ -64,11 +68,11 @@ const usable = (s?: string) => (s && !/^(未知|unknown)/i.test(s) ? s : undefin
 export const isFillable = (path: string) => /\.(epub|pdf)$/i.test(path)
 
 export async function fillLibraryMetadata(io: LibraryIO, entries: readonly LibraryEntry[], opts: FillOptions = {}): Promise<FillResult> {
-  const { concurrency = FILL_CONCURRENCY, maxBytes = FILL_MAX_BYTES, signal, inspect = inspectBook } = opts
+  const { concurrency = FILL_CONCURRENCY, maxBytes = FILL_MAX_BYTES, signal, inspect = inspectBook, publishCover = uploadCover } = opts
   const queue = entries.filter((e) => e.stale)
   const res: FillResult = { total: queue.length, filled: 0, retryable: 0, skipped: 0, cancelled: false, index: null }
   let pending: Update[] = []
-  // 封面上传串行化：WebDAV 对并发敏感，且这是尽力而为的附带动作，不该和下载抢连接
+  // 封面补传串行化：尽力而为的附带动作，不该和下载抢连接
   let uploads: Promise<unknown> = Promise.resolve()
   let done = 0
 
@@ -96,11 +100,12 @@ export async function fillLibraryMetadata(io: LibraryIO, entries: readonly Libra
       const { meta, thumb } = await inspect(buf, e.path)
       let coverKey: string | undefined
       if (thumb) {
-        coverKey = coverKeyOf(e.path)
-        await io.putLocalCover(coverKey, thumb)
-        // 跨设备共享：尽力而为，失败不影响本机
-        const remote = coverRemotePath(io.syncPath, coverKey)
-        uploads = uploads.then(() => io.writeBinary(remote, thumb)).catch(() => {})
+        const id = bookIdOf(e.path)
+        coverKey = id
+        await io.putLocalCover(id, thumb)
+        // 跨设备共享（云端 KV）：尽力而为，失败不影响本机
+        const meta2: Omit<CoverItem, 'cover'> = { stem: bookStem(e.path), title: usable(meta.title) ?? (e.title || titleFromPath(e.path)), author: usable(meta.author), pages: meta.pages }
+        uploads = uploads.then(() => publishCover(id, meta2, thumb)).catch(() => {})
       }
       pending.push({
         path: e.path,

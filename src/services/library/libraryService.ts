@@ -19,6 +19,7 @@ import {
   setStatus,
 } from './libraryIndex'
 import type { BookStatus, LibraryEntry, LibraryIndex, ScannedFile } from './types'
+import { buildNormIndex, isCloudCoverKey, matchCoverId, type CoverIndex } from './cloudCovers'
 
 export interface ListedFile {
   path: string
@@ -228,6 +229,36 @@ export function recordMetadataBatch(
   return mutate(io, (idx) =>
     updates.reduce((acc, u) => patchEntry(acc, u.path, u.patch, io.now()), idx)
   )
+}
+
+/**
+ * 采用云端封面 / 元数据：按书名主干匹配云端索引（精确 → 模糊），命中的 stale 条目直接得到
+ * 书名 / 作者 / 页数 / 章数并清掉 stale（不用再下载整本书）；非 stale 条目只补封面键。一次读-改-写。
+ */
+export function adoptCloudCovers(io: LibraryIO, coverIndex: CoverIndex) {
+  if (Object.keys(coverIndex).length === 0) return Promise.resolve(null)
+  const norm = buildNormIndex(coverIndex)
+  const good = (s?: string) => (s && !/^(未知|unknown)/i.test(s) ? s : undefined)
+  return mutate(io, (idx) => {
+    let next = idx
+    for (const e of Object.values(idx.entries)) {
+      if (isCloudCoverKey(e.coverKey) && !e.stale) continue
+      const id = matchCoverId(e.path, coverIndex, norm)
+      if (!id) continue
+      const it = coverIndex[id]
+      const patch: Parameters<typeof patchEntry>[2] = {}
+      if (it.cover && e.coverKey !== id) patch.coverKey = id
+      if (e.stale) {
+        patch.stale = false
+        patch.title = good(it.title) ?? e.title
+        if (good(it.author)) patch.author = it.author
+        if (it.pages) patch.pages = it.pages
+        if (it.chapterCount) patch.chapterCount = it.chapterCount
+      }
+      if (Object.keys(patch).length) next = patchEntry(next, e.path, patch, io.now())
+    }
+    return next
+  })
 }
 
 export function recordProgress(io: LibraryIO, path: string, chapterId: string, pct: number) {

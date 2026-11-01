@@ -1,12 +1,12 @@
 /**
- * 封面缩略图（浏览器 canvas）：把任意封面原图/PDF 首页缩成约 240px 宽的 webp，
- * 单张通常 <30KB，可放心存 IndexedDB 与同步目录。
+ * 封面缩略图（浏览器 canvas）：把任意封面原图/PDF 首页缩成约 144px 宽的 webp，
+ * 单张通常 3–8KB（上限 16KB）：既够书架上看清，也能放心存 IndexedDB 与云端 KV。
  */
 
-export const COVER_WIDTH = 240
-const COVER_QUALITY = 0.82
+export const COVER_WIDTH = 144
+const COVER_QUALITY = 0.55
 /** 缩略图字节上限；超出就降质量再试一次，仍超出则放弃（回退生成式封面） */
-export const COVER_MAX_BYTES = 60 * 1024
+export const COVER_MAX_BYTES = 16 * 1024
 
 /** 按目标宽度等比算出缩略图尺寸（纯函数，便于单测）；原图更小时不放大 */
 export function thumbSize(w: number, h: number, targetW = COVER_WIDTH): { width: number; height: number } {
@@ -22,7 +22,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob 
 async function encode(canvas: HTMLCanvasElement): Promise<Blob | null> {
   const first = await canvasToBlob(canvas, COVER_QUALITY)
   if (first && first.size <= COVER_MAX_BYTES) return first
-  const second = await canvasToBlob(canvas, 0.6)
+  const second = await canvasToBlob(canvas, 0.4)
   return second && second.size <= COVER_MAX_BYTES ? second : null
 }
 

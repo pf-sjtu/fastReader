@@ -4,6 +4,7 @@ import { findCoverHref, listZipEntries, parseOpfMeta, readEpubMeta, resolveZipPa
 import { thumbSize } from '@/services/library/coverThumb'
 import { createCoverLoader } from '@/services/library/coverLoader'
 import { coverKeyOf, fillLibraryMetadata, type Inspection } from '@/services/library/libraryFill'
+import { bookIdOf } from '@/services/library/bookId'
 import { applyScan, emptyIndex } from '@/services/library/libraryIndex'
 import { refreshLibrary, type LibraryIO } from '@/services/library/libraryService'
 import type { LibraryEntry } from '@/services/library/types'
@@ -115,7 +116,7 @@ describe('readEpubMeta：真实 ZIP（stored + deflate）', () => {
 
 describe('thumbSize', () => {
   it('按宽度等比缩小；不放大小图；非法尺寸返回 0', () => {
-    expect(thumbSize(480, 720)).toEqual({ width: 240, height: 360 })
+    expect(thumbSize(480, 720)).toEqual({ width: 144, height: 216 })
     expect(thumbSize(100, 150)).toEqual({ width: 100, height: 150 })
     expect(thumbSize(0, 10)).toEqual({ width: 0, height: 0 })
   })
@@ -160,6 +161,31 @@ describe('createCoverLoader（懒加载 + 并发限制）', () => {
     const results = await Promise.all(Array.from({ length: 10 }, (_, i) => loader.load(`k${i}`)))
     expect(results.every(Boolean)).toBe(true)
     expect(peak).toBe(2)
+  })
+
+  it('云端封面键（bk_ 前缀）走云端取图：独立并发上限 6、不碰 WebDAV；取到写本地；取不到记失败不重试', async () => {
+    let inFlight = 0
+    let peak = 0
+    const fetchCloud = vi.fn(async (id: string) => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise((r) => setTimeout(r, 5))
+      inFlight--
+      return id === 'bk_missing' ? null : new Blob(['img'])
+    })
+    const readBinary = vi.fn(async () => new ArrayBuffer(4))
+    const put = vi.fn(async () => {})
+    const loader = createCoverLoader({ getIO: () => fakeIO({ readBinary, putLocalCover: put }), fetchCloud })
+    await Promise.all(Array.from({ length: 14 }, (_, i) => loader.load(`bk_${i}aaaaaa`)))
+    expect(peak).toBe(6)
+    expect(readBinary).not.toHaveBeenCalled() // 云端封面不占 WebDAV
+    expect(put).toHaveBeenCalledTimes(14)
+    expect(await loader.load('bk_missing')).toBeNull()
+    expect(await loader.load('bk_missing')).toBeNull()
+    expect(fetchCloud.mock.calls.filter((c) => c[0] === 'bk_missing')).toHaveLength(1)
+    // 旧的路径哈希键仍走 WebDAV
+    await createCoverLoader({ getIO: () => fakeIO({ readBinary }), fetchCloud }).load('legacykey')
+    expect(readBinary).toHaveBeenCalledTimes(1)
   })
 
   it('本地命中不走远端；远端取到后写入本地', async () => {
@@ -213,16 +239,17 @@ describe('fillLibraryMetadata', () => {
   it('补全书名/作者/页数/封面键，清 stale，且不动 lastOpenedAt；封面存本地并串行上传', async () => {
     const mirror = await seeded(['/s/a.epub'])
     const put = vi.fn(async () => {})
-    const write = vi.fn(async () => {})
-    const io = fakeIO({ readMirror: async () => mirror, putLocalCover: put, writeBinary: write })
+    const publish = vi.fn(async () => true)
+    const io = fakeIO({ readMirror: async () => mirror, putLocalCover: put })
     const inspect = async (): Promise<Inspection> => ({ meta: { title: '真书名', author: '某作者', pages: 12 }, thumb: new Blob(['t']) })
-    const r = await fillLibraryMetadata(io, Object.values(mirror.entries), { inspect })
+    const r = await fillLibraryMetadata(io, Object.values(mirror.entries), { inspect, publishCover: publish })
     expect(r).toMatchObject({ total: 1, filled: 1, retryable: 0, skipped: 0 })
     const e = r.index!.entries['/s/a.epub']
-    expect(e).toMatchObject({ title: '真书名', author: '某作者', pages: 12, stale: false, coverKey: coverKeyOf('/s/a.epub') })
+    expect(e).toMatchObject({ title: '真书名', author: '某作者', pages: 12, stale: false, coverKey: bookIdOf('/s/a.epub') })
     expect(e.lastOpenedAt).toBeUndefined()
     expect(put).toHaveBeenCalledTimes(1)
-    expect(write).toHaveBeenCalledWith('/s/.juhua/covers/' + coverKeyOf('/s/a.epub') + '.webp', expect.any(Blob))
+    // 封面不再写 WebDAV，而是补传云端：id 由书名主干算出，元数据一并带上
+    expect(publish).toHaveBeenCalledWith(bookIdOf('/s/a.epub'), expect.objectContaining({ stem: 'a', title: '真书名', author: '某作者', pages: 12 }), expect.any(Blob))
   })
 
   it('txt/md 没有内嵌元数据：不下载、直接清 stale（不白白下载整本）', async () => {

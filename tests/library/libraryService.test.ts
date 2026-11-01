@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  adoptCloudCovers,
   clearLibraryMirror,
   libraryIndexPath,
   rebuildLibrary,
@@ -13,6 +14,7 @@ import {
   type ListedFile,
 } from '@/services/library/libraryService'
 import { migrateIndex } from '@/services/library/libraryIndex'
+import { bookIdOf } from '@/services/library/bookId'
 
 const SYNC = '/fastReader'
 const f = (name: string, size = 10, mtime = 'm'): ListedFile => ({ path: `${SYNC}/${name}`, basename: name, size, mtime })
@@ -194,6 +196,30 @@ describe('条目级更新', () => {
     await refreshLibrary(t.io)
     return t
   }
+
+  it('adoptCloudCovers：命中的 stale 书直接补齐书名/作者/章数并清 stale、拿到封面键；非 stale 只补封面键；没命中的不动；一次远端写', async () => {
+    const t = memoryIO({ files: [f('经济学原理 - 曼昆.epub'), f('已补全的书.epub'), f('云端没有的书.epub')] })
+    await refreshLibrary(t.io)
+    // 把第二本标成已补全（stale=false，书名是真书名）
+    const mirror = migrateIndex(t.state.mirror)!
+    mirror.entries[`${SYNC}/已补全的书.epub`] = { ...mirror.entries[`${SYNC}/已补全的书.epub`], stale: false, title: '真·已补全' }
+    t.state.mirror = mirror
+    const idA = bookIdOf('经济学原理 - 曼昆.epub')
+    const idB = bookIdOf('已补全的书.epub')
+    const writesBefore = t.state.remoteWrites
+    const idx = await adoptCloudCovers(t.io, {
+      [idA]: { stem: '经济学原理 - 曼昆', title: '经济学原理', author: '曼昆', chapterCount: 20, pages: 600, cover: 1 },
+      [idB]: { stem: '已补全的书', title: '云端写的另一个书名', cover: 1 },
+    })
+    const e = idx!.entries
+    expect(e[`${SYNC}/经济学原理 - 曼昆.epub`]).toMatchObject({ title: '经济学原理', author: '曼昆', chapterCount: 20, pages: 600, stale: false, coverKey: idA })
+    expect(e[`${SYNC}/已补全的书.epub`]).toMatchObject({ title: '真·已补全', coverKey: idB, stale: false }) // 不覆盖已补全的元数据
+    expect(e[`${SYNC}/云端没有的书.epub`]).toMatchObject({ stale: true })
+    expect(e[`${SYNC}/云端没有的书.epub`].coverKey).toBeUndefined()
+    expect(t.state.remoteWrites - writesBefore).toBe(1)
+    // 空索引 / 没有镜像：不抛、不写
+    expect(await adoptCloudCovers(t.io, {})).toBeNull()
+  })
 
   it('recordOpened：写入打开时间与补全元数据，清 stale', async () => {
     const t = await seeded()

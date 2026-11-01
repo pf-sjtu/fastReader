@@ -30,6 +30,7 @@ export function useLibraryOpen({
 }: Params) {
   const { t } = useTranslation()
   const markOpened = useLibraryStore((s) => s.markOpened)
+  const contributeOpened = useLibraryStore((s) => s.contributeOpened)
   const [openingPath, setOpeningPath] = useState<string | null>(null)
   /** ready：选文件流程（含云缓存检查）已全部结束；之前不能下结论，否则会把"检查尚未开始"误当成"没有缓存" */
   const [autoLoad, setAutoLoad] = useState<{ name: string; ready: boolean } | null>(null)
@@ -55,11 +56,13 @@ export function useLibraryOpen({
         }
         setAutoLoad((cur) => (cur?.name === picked ? { name: picked, ready: true } : cur))
         void markOpened(entry)
+        // 云端还没有这本书的封面 / 元数据：趁文件已经下载，顺手解析并补传（只做一次，之后谁都能直接命中）
+        void contributeOpened(entry, r.data)
       } finally {
         setOpeningPath(null)
       }
     },
-    [handleWebDAVFileSelect, markOpened, t]
+    [handleWebDAVFileSelect, markOpened, contributeOpened, t]
   )
 
   useEffect(() => {
