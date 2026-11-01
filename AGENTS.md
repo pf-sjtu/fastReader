@@ -131,6 +131,11 @@ git push -u origin HEAD
 - 发现缓存后提示用户可直接查看或重新处理
 - 缓存元数据以 HTML 注释格式存储在文件头部
 
+## Artifacts (速读 / 自测 / 笔记的跨设备持久化)
+- 花钱生成或用户亲手写的东西不能只在本机：速读 / 自测 / 答题 / 笔记都写 WebDAV 信封 `{syncPath}/.juhua/books/<bookFolder>/<kind>.json.gz`（`src/services/artifacts/`，`schema: 2`），本机 IndexedDB 仍是缓存；目录用稳定书身份 `书名|作者`，上游指纹记在 `inputsFp`（速读与自测各记各的 `kitFp`/`quizFp`），契约 `openspec/changes/add-reader-workspace/specs/artifact-store/spec.md`
+- **绝不覆盖云端**的三种情形：信封 `schema` 更高（界面说明只读）、结构读不懂、这一轮读取失败；只有确知「云端还没有存档」才把本机内容推上去。写入失败留在待写队列，下次改动或换书补推
+- 笔记按条目 `id + updatedAt` 合并、删除写墓碑（30 天），`{名}-笔记.json` 只是人可读副本；细节见 `docs/artifact-store.md`
+
 ## Deployment
 - `wrangler.toml` 声明 `pages_build_output_dir = "dist"` 与 KV 绑定 `FASTREADER_KV`
 - 环境变量：`APP_PASSWORD`（缺省 `123456a`）、`SESSION_SECRET`（可选，缺省由密码派生）、`ALLOWED_ORIGINS`（可选）
