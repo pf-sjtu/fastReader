@@ -112,6 +112,7 @@
     "processing": "处理中...",
     "allChaptersFailed": "所有章节处理失败，请检查 AI 配置后重试",
     "processingCompleted": "处理完成",
+    "usedTokens": "本次共用约 {{tokens}} token",
     "syncFailed": "结果已生成，但云端同步失败",
     "confirmAbortTitle": "确认中止处理？",
     "confirmAbortDescription": "当前章节结束后将停止，未处理的章节不会生成结果。已完成的章节结果会保留。",

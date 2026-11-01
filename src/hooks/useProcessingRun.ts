@@ -12,6 +12,7 @@ import { useConfigStore } from '@/stores/configStore'
 import type { BookMindMap, BookSummary } from '@/types/book'
 import { clampConcurrency } from '@/utils/async'
 import { isAbortError, waitForSettled, type GenerationCounter } from '@/utils/runGuard'
+import { formatCount } from '@/services/runEstimate'
 import { logger } from '@/lib/logger'
 import { runBookPipeline, type PipelinePhase, type PipelineWarning } from '@/services/pipeline/bookPipeline'
 import {
@@ -255,9 +256,11 @@ export function useProcessingRun(deps: ProcessingRunDeps) {
         model: aiConfig.model,
         chapterCount: total,
       })
-      toast.success(
-        result.warnings.length > 0 ? t('progress.completedWithWarnings') : t('progress.processingCompleted')
-      )
+      // 账单：本次运行已清零后累计的 token（费用拿不到输入/输出拆分，不估金额）
+      const used = useConfigStore.getState().tokenUsage
+      const doneText = result.warnings.length > 0 ? t('progress.completedWithWarnings') : t('progress.processingCompleted')
+      if (used > 0) toast.success(doneText, { description: t('progress.usedTokens', { tokens: formatCount(used) }) })
+      else toast.success(doneText)
       if (processingOptions.enableNotification) {
         await notificationService.sendTaskCompleteNotification(t('progress.bookProcessing'), title)
       }

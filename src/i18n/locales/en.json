@@ -111,6 +111,7 @@
     "postPhaseOverallFailed": "Chapters completed, but the overall summary failed",
     "processing": "Processing...",
     "allChaptersFailed": "All chapters failed. Check your AI settings and try again",
+    "usedTokens": "Used about {{tokens}} tokens in this run",
     "processingCompleted": "Processing completed",
     "syncFailed": "Results generated, but cloud sync failed",
     "confirmAbortTitle": "Abort processing?",

@@ -199,6 +199,28 @@ describe('useBookProcessing 组合入口', () => {
     m.unmount()
   })
 
+  it('处理完成的提示带本次 token 账单；没有用量时不带', async () => {
+    const { useConfigStore } = await import('../src/stores/configStore')
+    const m = mount(<Harness />)
+    await act(async () => {
+      await api().handleFileSelect(new File([new TextEncoder().encode('epub-bytes-bill')], 'bill.epub', { lastModified: 9 }))
+    })
+    await flush()
+    h.ai.summarize.mockImplementationOnce(async (title: string) => {
+      ;(useConfigStore as unknown as { setState: (s: object) => void }).setState({ tokenUsage: 12_345 })
+      return `摘要:${title}`
+    })
+    h.toast.success.mockClear()
+    await act(async () => {
+      await api().processBook()
+    })
+    await flush()
+    const done = h.toast.success.mock.calls.at(-1)
+    expect(done?.[1]).toMatchObject({ description: expect.stringContaining('1.2 万') })
+    ;(useConfigStore as unknown as { setState: (s: object) => void }).setState({ tokenUsage: 0 })
+    m.unmount()
+  })
+
   it('生成关键图表中途取消：不记失败（无 chartsError）、不上传，状态复位，之后还能再生成', async () => {
     const content = formatUnifiedMarkdown(
       { title: '云书', author: '', chapters: [{ id: '1', title: '一', summary: '摘一' }], overallSummary: '总' },
