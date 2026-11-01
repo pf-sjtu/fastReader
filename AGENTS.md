@@ -76,7 +76,10 @@ git push -u origin HEAD
 # Project Context (Architecture)
 
 ## Overview
-**咀华 Juhua**（原名 fastReader）- AI 电子书精读工具，EPUB/PDF 转章节总结、思维导图与全书综述。
+**咀华 Juhua**（原名 fastReader）- AI 电子书精读工具，EPUB / PDF / TXT / Markdown 转章节总结、思维导图与全书综述。
+纯文本（`.txt` / `.md` / `.markdown`）没有解析器，正文就是文件本身；`.md` 按一二级标题切章，没有标题就整篇一章。
+前端（`src/services/pipeline/plainText.ts`）与 CLI（`src/cli/plain_text.py`）同语义，夹具 `tests/fixtures/plain-text-cases.json`；
+编码回退到 GB18030 与 UTF-16（带 BOM）——解码逻辑两端镜像，`.txt` 乱码先看这里。
 品牌：朱砂印章 logo（`public/logo.svg`，小尺寸用 `favicon.svg`）、宣纸/松烟墨/朱砂配色（`src/index.css` 的 token）、
 标题衬线 `.font-brand`。仓库名、Pages 项目 `fast-read`、存储键与 `FASTREADER_*` 环境变量为兼容保留原名，不要改。
 样式一律用语义 token（`bg-muted`/`text-muted-foreground`/`text-success|warning|info|destructive`…），不要写 `gray-*`/`slate-*`/`green-500` 这类调色板硬编码；
