@@ -20,8 +20,10 @@ interface LibraryViewProps {
   openingPath?: string | null
 }
 
-const GRID = 'grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6'
-const RECOMMEND_COUNT = 6
+/** 紧凑封面墙：一行多放几本（手机 4 / 平板 6 / 桌面 8），首屏只当「随机推荐」看，不是全量目录 */
+const GRID = 'grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8'
+/** 推荐数 = 桌面 1.5 行 / 平板 2 行；少渲染就少请求封面，也少打扰上游 */
+const RECOMMEND_COUNT = 12
 /** 首屏书数（6 列 × 4 行）与每次「显示更多」追加的数量；超出的不渲染，别把下面的上传区推到几屏之外 */
 const PAGE_FIRST = 24
 const PAGE_STEP = 48
@@ -66,6 +68,9 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
     const featured = new Set([...resume.map((e) => e.path), ...recs.map((r) => r.entry.path)])
     return featured.size ? allEntries.filter((e) => !featured.has(e.path)) : allEntries
   }, [allEntries, browsing, group, resume, recs])
+  // 默认浏览态（有「继续阅读 / 推荐」、最近排序、不分组）下，其余书籍收起：首屏只放几行，按需展开
+  const [expanded, setExpanded] = useState(false)
+  const collapsed = browsing && group === 'none' && sort === 'recent' && !expanded && resume.length + recs.length > 0
   const groups = useMemo(() => groupEntries(entries, group), [entries, group])
   // 显示上限：筛选/排序/分组/搜索一变就回到首屏数量
   const resetKey = `${query}|${filter}|${sort}|${group}`
@@ -120,6 +125,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
       onOpen={() => onOpenBook(e)}
       caption={caption}
       showSize={sort === 'size'}
+      compact
     />
   )
   const shuffle = () => {
@@ -236,8 +242,23 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
         </div>
       )}
 
-      {allEntries.length > 0 ? (
+      {collapsed ? (
+        entries.length > 0 && (
+          <div className="flex justify-center pt-1">
+            <Button variant="outline" size="sm" onClick={() => setExpanded(true)}>
+              {t('library.browseRest', { count: entries.length })}
+            </Button>
+          </div>
+        )
+      ) : allEntries.length > 0 ? (
         <>
+        {expanded && browsing && group === 'none' && sort === 'recent' && (
+          <div className="flex justify-end">
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setExpanded(false)}>
+              {t('library.collapseRest')}
+            </Button>
+          </div>
+        )}
         {pagedGroups.map((g) => (
           <div key={g.key} className="space-y-1.5">
             {/* 上面有「继续阅读 / 推荐」时，全量网格也要有自己的标题，否则读起来是同一排 */}

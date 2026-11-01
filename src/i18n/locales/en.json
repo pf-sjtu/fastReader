@@ -609,6 +609,8 @@
     "noMatch": "No matching books",
     "all": "More books",
     "showMore": "Show more ({{count}} more)",
+    "browseRest": "Browse {{count}} more",
+    "collapseRest": "Collapse",
     "connecting": "Connecting to the cloud…",
     "connectingCached": "Connecting to the cloud; showing your last shelf",
     "scanFailed": "Couldn't read the sync folder: {{error}}",

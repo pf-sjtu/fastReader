@@ -110,16 +110,24 @@ describe('LibraryView', () => {
     expect(mounted.container.textContent).toContain('补全书籍信息（1）')
   })
 
-  it('有推荐/继续阅读时，下面的网格叫「其余书籍」且不重复它们；没有推荐/继续阅读时不加标题', () => {
-    const files = Array.from({ length: 12 }, (_, i) => ({ path: `/s/书${String(i).padStart(2, '0')}.epub`, size: 1, mtime: 'm' }))
+  it('有推荐/继续阅读时，其余书籍默认收起（只有一个按钮）；展开后网格叫「其余书籍」且不重复它们；没有推荐/继续阅读时不加标题', () => {
+    const files = Array.from({ length: 30 }, (_, i) => ({ path: `/s/书${String(i).padStart(2, '0')}.epub`, size: 1, mtime: 'm' }))
     useLibraryStore.setState({ index: applyScan(emptyIndex(0), files, { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index })
     mounted = mount(<LibraryView onOpenBook={() => {}} openingPath={null} />)
+    const cardCount = () => mounted!.container.querySelectorAll('button.group').length
+    const btn = (text: string) => Array.from(mounted!.container.querySelectorAll('button')).find((b) => b.textContent?.includes(text))
+    // 收起态：只有 12 本推荐 + 「浏览其余 18 本」
+    expect(cardCount()).toBe(12)
+    expect(mounted.container.textContent).not.toContain('其余书籍')
+    click(btn('浏览其余 18 本'))
     expect(mounted.container.textContent).toContain('其余书籍')
     expect(mounted.container.textContent).not.toContain('全部书籍')
-    // 12 本里 6 本推荐 + 6 本在「其余」里：同一本书不会在相邻两个区块各出现一次
+    // 30 本里 12 本推荐 + 18 本在「其余」里：同一本书不会在相邻两个区块各出现一次
     const titles = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button.group')).map((b) => b.getAttribute('aria-label')?.split('，')[0])
-    expect(titles).toHaveLength(12)
-    expect(new Set(titles).size).toBe(12)
+    expect(titles).toHaveLength(30)
+    expect(new Set(titles).size).toBe(30)
+    click(btn('收起'))
+    expect(cardCount()).toBe(12)
     useLibraryStore.setState({ index: applyScan(emptyIndex(0), [{ path: '/s/甲.epub', size: 1, mtime: 'm' }], { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index })
     mounted.rerender(<LibraryView onOpenBook={() => {}} openingPath={null} />)
     expect(mounted.container.textContent).not.toContain('其余书籍')
@@ -187,16 +195,17 @@ describe('LibraryView', () => {
       return grids[grids.length - 1].querySelectorAll('button.group').length
     }
     const more = () => Array.from(mounted!.container.querySelectorAll('button')).find((b) => b.textContent?.includes('显示更多'))
+    click(Array.from(mounted.container.querySelectorAll('button')).find((b) => b.textContent?.includes('浏览其余 88 本')))
     expect(gridCount()).toBe(24)
-    // 100 本里 6 本在「随机推荐」中，网格是其余 94 本
-    expect(more()?.textContent).toContain('还有 70 本')
-    expect(mounted.container.textContent).toContain('其余书籍94') // 标题数量是总数，不是本页数量
+    // 100 本里 12 本在「随机推荐」中，网格是其余 88 本
+    expect(more()?.textContent).toContain('还有 64 本')
+    expect(mounted.container.textContent).toContain('其余书籍88') // 标题数量是总数，不是本页数量
 
     click(more())
     expect(gridCount()).toBe(72)
-    expect(more()?.textContent).toContain('还有 22 本')
+    expect(more()?.textContent).toContain('还有 16 本')
     click(more())
-    expect(gridCount()).toBe(94)
+    expect(gridCount()).toBe(88)
     expect(more()).toBeUndefined()
 
     const sel = mounted.container.querySelector<HTMLSelectElement>('select[aria-label="排序"]')!
@@ -218,7 +227,9 @@ describe('LibraryView', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     expect(useLibraryStore.getState().refresh).toHaveBeenCalled()
     const text = mounted.container.textContent ?? ''
-    for (const t of ['甲', '乙', '丙', '已精读', '12 章']) expect(text).toContain(t)
+    for (const t of ['甲', '乙', '丙', '已精读']) expect(text).toContain(t)
+    // 紧凑卡片：章数只在悬停提示 / aria-label 里
+    expect(Array.from(mounted.container.querySelectorAll('button.group')).some((b) => b.getAttribute('title')?.includes('12 章'))).toBe(true)
     expect(mounted.container.querySelector('[style*="width: 40%"]')).not.toBeNull()
   })
 
@@ -459,19 +470,20 @@ describe('书架：分类 / 排序 / 推荐 / 补全', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     // 用搜索关闭「继续阅读/推荐」，网格才是完整列表（否则推荐是随机的，会让首位书不确定）
     typeInto(mounted.container.querySelector<HTMLInputElement>('input')!, '书')
-    const firstGridTitle = () => mounted!.container.querySelectorAll('.grid')[mounted!.container.querySelectorAll('.grid').length - 1].querySelector('button.group span.line-clamp-3')!.textContent
+    const firstGridTitle = () => mounted!.container.querySelectorAll('.grid')[mounted!.container.querySelectorAll('.grid').length - 1].querySelector('button.group span.line-clamp-2')!.textContent
     expect(firstGridTitle()).toBe('书13') // 最近打开的在前
     setSelect('排序', 'name')
     expect(firstGridTitle()).toBe('书00')
   })
 
-  it('推荐行：6 本；"换一批"后与上一批不重叠（书库够大时）', () => {
+  it('推荐行：12 本；"换一批"后与上一批不重叠（书库够大时）', () => {
+    useLibraryStore.setState({ index: bigIndex(40) })
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     const first = recPaths()
-    expect(first).toHaveLength(6)
+    expect(first).toHaveLength(12)
     click(Array.from(mounted.container.querySelectorAll('button')).find((b) => b.textContent?.includes('换一批')))
     const second = recPaths()
-    expect(second).toHaveLength(6)
+    expect(second).toHaveLength(12)
     expect(second.filter((x) => first.includes(x))).toEqual([])
   })
 
@@ -509,7 +521,7 @@ describe('书架：分类 / 排序 / 推荐 / 补全', () => {
     useLibraryStore.setState({ index: idx })
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     expect(mounted.container.textContent).not.toContain('补全书籍信息')
-    expect(mounted.container.textContent).toContain('某作者')
+    expect(Array.from(mounted.container.querySelectorAll('button.group')).some((b) => b.getAttribute('title')?.includes('某作者'))).toBe(true)
   })
 })
 
@@ -556,7 +568,7 @@ describe('书卡信息布局：常见格式与体积不占位', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     const yi = cardFor('乙')
     expect(yi.textContent).not.toContain('MB')
-    expect(yi.textContent).toContain('12 章')
+    expect(yi.textContent).not.toContain('12 章') // 紧凑卡片不占位，只在悬停提示里
     expect(yi.title).toContain('2.0 MB')
     expect(yi.title).toContain('EPUB')
     expect(yi.title).toContain('12 章')

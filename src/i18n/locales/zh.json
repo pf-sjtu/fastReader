@@ -619,6 +619,8 @@
     "stale": "显示的是缓存内容，可能不是最新",
     "all": "其余书籍",
     "showMore": "显示更多（还有 {{count}} 本）",
+    "browseRest": "浏览其余 {{count}} 本",
+    "collapseRest": "收起",
     "connecting": "正在连接云端…",
     "connectingCached": "正在连接云端，先显示上次的书架",
     "scanFailed": "读取同步目录失败：{{error}}",

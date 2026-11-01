@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { LibraryEntry } from '@/services/library/types'
 import { BookCover } from './BookCover'
 import { useCoverUrl } from './useCoverUrl'
@@ -13,6 +14,8 @@ interface BookCardProps {
   caption?: string
   /** 按大小排序时才把体积直接显示在卡片上；平时只放进悬停提示 */
   showSize?: boolean
+  /** 紧凑：封面内书名缩到 text-xs 两行，作者/章数只留在悬停提示里 */
+  compact?: boolean
 }
 
 const fmtSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
@@ -26,7 +29,7 @@ const PILL = 'rounded-full bg-black/45 px-2 py-0.5 text-xs font-medium leading-4
  * 书卡：书名与作者放进封面内部底部，用自下而上的深色渐变做底，
  * 任何封面（真实/生成）上都能读清；封面下方只留一行安静的元信息。
  */
-export function BookCard({ entry, opening, disabled, onOpen, caption, showSize = false }: BookCardProps) {
+export function BookCard({ entry, opening, disabled, onOpen, caption, showSize = false, compact = false }: BookCardProps) {
   const { t } = useTranslation()
   const format = extOf(entry.path)
   const oddFormat = format && format !== DEFAULT_FORMAT ? format : null
@@ -61,11 +64,21 @@ export function BookCard({ entry, opening, disabled, onOpen, caption, showSize =
         )}
 
         {/* 底部阴影层：书名 + 作者 */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/55 to-transparent px-2.5 pb-2.5 pt-12 text-white">
-          <span className="font-brand line-clamp-3 text-sm font-semibold leading-snug [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">
+        <div
+          className={cn(
+            'pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/55 to-transparent text-white',
+            compact ? 'px-1.5 pb-1.5 pt-8' : 'px-2.5 pb-2.5 pt-12'
+          )}
+        >
+          <span
+            className={cn(
+              'font-brand font-semibold leading-snug [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]',
+              compact ? 'line-clamp-2 text-xs' : 'line-clamp-3 text-sm'
+            )}
+          >
             {entry.title}
           </span>
-          {(entry.author || count || showSize) && (
+          {(!compact || showSize) && (entry.author || count || showSize) && (
             <span className="mt-0.5 flex items-baseline justify-between gap-2 text-xs leading-tight text-white/75 [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">
               <span className="line-clamp-1 min-w-0">{entry.author}</span>
               <span className="shrink-0 tabular-nums text-white/65">
