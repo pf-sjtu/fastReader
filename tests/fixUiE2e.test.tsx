@@ -284,3 +284,20 @@ describe('3. 移动端布局（jsdom 无布局引擎，断言防溢出的结构�
     expect(m.container.querySelector('[role="tablist"]')?.className).toContain('sm:grid-cols-4')
   })
 })
+
+describe('章节质量提示（quality: warn）', () => {
+  const book = (quality?: 'warn') => ({
+    title: 'B',
+    author: 'A',
+    chapters: [{ id: 'c1', title: '一', content: 'x', summary: '正文', processed: true, ...(quality ? { quality } : {}) }],
+    connections: '',
+    overallSummary: '',
+  })
+
+  it('质量闸仍有问题的章节卡片显示提示；正常章节不显示', () => {
+    m = mount(<ResultsSection {...baseProps} expandedChapters={new Set(["c1"])} bookSummary={book('warn') as never} processingMode="summary" />)
+    expect(m.container.querySelector('[data-testid="chapter-quality-warn"]')?.textContent).toContain(t('results.qualityWarn'))
+    m.rerender(<ResultsSection {...baseProps} expandedChapters={new Set(["c1"])} bookSummary={book() as never} processingMode="summary" />)
+    expect(m.container.querySelector('[data-testid="chapter-quality-warn"]')).toBeNull()
+  })
+})

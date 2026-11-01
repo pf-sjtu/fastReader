@@ -123,6 +123,8 @@
     "unknownError": "Unknown error"
   },
   "results": {
+    "qualityWarn": "Formatting or length still imperfect",
+    "qualityWarnHint": "This chapter was rewritten once automatically and still has formatting or length issues. It is readable; clear this chapter's cache to regenerate if needed.",
     "summaryTitle": "Analysis Results for \"{{title}}\"",
     "chapterMindMapTitle": "Chapter Mind Maps for \"{{title}}\"",
     "wholeMindMapTitle": "Complete Mind Map for \"{{title}}\"",

@@ -123,6 +123,8 @@
     "unknownError": "未知错误"
   },
   "results": {
+    "qualityWarn": "格式或篇幅仍有瑕疵",
+    "qualityWarnHint": "这一章已自动重写过一次，仍有格式或篇幅问题；内容可读，必要时可清除本章缓存重新生成。",
     "title": "处理结果",
     "summaryTitle": "《{{title}}》解析结果",
     "chapterMindMapTitle": "《{{title}}》章节思维导图",

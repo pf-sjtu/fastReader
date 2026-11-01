@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FontSizeControl } from '@/components/FontSizeControl'
 import { MarkdownCard, type RemarkPlugins } from '@/components/MarkdownCard'
 import { MindMapCard } from '@/components/MindMapCard'
+import { ChapterQualityNote } from './ChapterQualityNote'
 import { UploadToWebDAVButton } from '@/components/UploadToWebDAVButton'
 import { ChartsPanel } from '@/charts'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -170,7 +171,14 @@ export const ResultsSection = memo(function ResultsSection({
                   onClearCache={onClearChapterCache}
                   onReadChapter={onReadChapter}
                   extraRemarkPlugins={chapterExtras?.remarkPlugins}
-                  headerExtra={chapterExtras?.renderStrip?.(chapter.id)}
+                  headerExtra={
+                    chapter.quality === 'warn' || chapterExtras?.renderStrip ? (
+                      <>
+                        {chapter.quality === 'warn' && <ChapterQualityNote />}
+                        {chapterExtras?.renderStrip?.(chapter.id)}
+                      </>
+                    ) : undefined
+                  }
                 />
               ))}
             </TabsContent>
