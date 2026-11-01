@@ -11,6 +11,7 @@ import type { LibraryEntry } from '@/services/library/types'
 import { isFillable } from '@/services/library/libraryFill'
 import { formatFileSize } from '@/utils/file'
 import { webdavService } from '@/services/webdavService'
+import { useGridColumns } from './useGridColumns'
 import { BookCard } from './BookCard'
 import { groupLabel, reasonLabel } from './labels'
 
@@ -22,8 +23,8 @@ interface LibraryViewProps {
 
 /** 紧凑封面墙：一行多放几本（手机 4 / 平板 6 / 桌面 8），首屏只当「随机推荐」看，不是全量目录 */
 const GRID = 'grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8'
-/** 推荐数 = 桌面 1.5 行 / 平板 2 行；少渲染就少请求封面，也少打扰上游 */
-const RECOMMEND_COUNT = 12
+/** 推荐固定 2 整行（数量 = 列数 × 2，随断点变化），少渲染就少请求封面，也少打扰上游 */
+const RECOMMEND_ROWS = 2
 /** 首屏书数（6 列 × 4 行）与每次「显示更多」追加的数量；超出的不渲染，别把下面的上传区推到几屏之外 */
 const PAGE_FIRST = 24
 const PAGE_STEP = 48
@@ -39,6 +40,8 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
   const [sort, setSort] = useState<LibrarySort>('recent')
   const [group, setGroup] = useState<GroupBy>('none')
   // 推荐：种子决定结果；"换一批"换种子并避开上一批。初始种子取当前时间，每次进入书架都是新的一批
+  const cols = useGridColumns()
+  const recommendCount = cols * RECOMMEND_ROWS
   const [seed, setSeed] = useState(() => Date.now() % 1_000_000)
   const [prevBatch, setPrevBatch] = useState<string[]>([])
 
@@ -55,11 +58,11 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
 
   const allEntries = useMemo(() => listEntries(index, { query, filter, sort }), [index, query, filter, sort])
   const browsing = !query && filter === 'all'
-  const resume = useMemo(() => (browsing ? continueReading(index) : []), [index, browsing])
+  const resume = useMemo(() => (browsing ? continueReading(index, cols) : []), [index, browsing, cols])
   const total = Object.keys(index.entries).length
   const recs = useMemo(
-    () => (browsing && total >= 3 ? recommendBooks(index, { seed, count: RECOMMEND_COUNT, exclude: prevBatch, omit: resume.map((e) => e.path) }) : []),
-    [index, browsing, total, seed, prevBatch, resume]
+    () => (browsing && total >= 3 ? recommendBooks(index, { seed, count: recommendCount, exclude: prevBatch, omit: resume.map((e) => e.path) }) : []),
+    [index, browsing, total, seed, prevBatch, resume, recommendCount]
   )
   // 「继续阅读 / 推荐」已经展示的书不在下面的全量网格里再出现一遍（同一屏相邻重复）；
   // 分组/排序模式下网格本身就是主视图，不排除

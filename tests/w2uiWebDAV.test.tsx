@@ -274,6 +274,7 @@ describe('WebDAVConfig', () => {
     await waitFor(() => expect(document.body.textContent).toContain(t('webdav.config.testFailed')))
 
     dav.testConnection.mockRejectedValueOnce(new Error('kaboom'))
+    await waitFor(() => expect(btn().disabled).toBe(false)) // 上一轮测试未结束前按钮仍禁用，满载时会点空
     click(btn())
     await waitFor(() => expect(document.body.textContent).toContain(t('webdav.config.testException', { error: 'kaboom' })))
 
