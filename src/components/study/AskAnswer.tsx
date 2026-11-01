@@ -37,7 +37,7 @@ export const AskAnswer = memo(function AskAnswer({ answer, chapters, onJumpChapt
               <button
                 type="button"
                 onClick={() => onJumpChapter(id)}
-                className="mx-0.5 inline-flex max-w-[12rem] items-center truncate rounded-full border bg-muted px-1.5 align-baseline text-xs text-muted-foreground no-underline transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                className="mx-0.5 inline-block max-w-full whitespace-normal break-words rounded-md border bg-muted px-1.5 py-0.5 align-baseline text-xs leading-snug text-muted-foreground no-underline transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
               >
                 {children}
               </button>

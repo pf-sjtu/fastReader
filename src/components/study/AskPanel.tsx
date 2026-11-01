@@ -74,11 +74,11 @@ export function AskPanel({ bookSummary, onJumpChapter }: Props) {
                 <>
                   <AskAnswer answer={turn.answer ?? ''} chapters={bookSummary.chapters} onJumpChapter={onJumpChapter} />
                   {turn.citations.length > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
-                      <span className="text-xs text-muted-foreground">{t('study.ask.sources')}</span>
+                    <div className="mt-2 flex flex-wrap items-start gap-1.5 border-t pt-2">
+                      <span className="shrink-0 text-xs leading-snug text-muted-foreground">{t('study.ask.sources')}</span>
                       {turn.citations.map((id) => (
                         <ChapterPeek key={id} chapterId={id} chapters={bookSummary.chapters}>
-                          <button type="button" onClick={() => onJumpChapter(id)} className="min-h-6 rounded-full border px-2 text-xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring">
+                          <button type="button" onClick={() => onJumpChapter(id)} className="max-w-full whitespace-normal break-words rounded-md border px-2 py-0.5 text-left text-xs leading-snug hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring">
                             {titleOf(id)}
                           </button>
                         </ChapterPeek>

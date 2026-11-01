@@ -228,6 +228,23 @@ describe('AskPanel', () => {
     expect(onJump).toHaveBeenCalledWith('c3')
   })
 
+  it('章节标签与「出处」标签都不再截断，长标题可整块换行显示', async () => {
+    ai.askBook.mockResolvedValue('方案见【第2章】。')
+    mounted = mount(<AskPanel bookSummary={book} onJumpChapter={() => {}} />)
+    key(type('问'), 'Enter')
+    await flush()
+    const buttons = Array.from(mounted.container.querySelectorAll('button'))
+    const inline = buttons.find((b) => b.textContent === '【第2章】')!
+    const source = buttons.find((b) => b.textContent === '第2章')!
+    for (const chip of [inline, source]) {
+      expect(chip.className).not.toContain('truncate')
+      expect(chip.className).not.toMatch(/max-w-\[\d/)
+      expect(chip.className).toContain('whitespace-normal')
+      expect(chip.className).toContain('break-words')
+      expect(chip.className).toContain('max-w-full')
+    }
+  })
+
   it('章节标签悬浮卡优先显示速读（一句话 + 要点）；没有速读时退回总结摘录；两者都没有就不弹', async () => {
     seed({ kit })
     ai.askBook.mockResolvedValue('方案见【第2章】，另见【第3章】')

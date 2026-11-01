@@ -60,7 +60,7 @@ export function ModelSwitcher({ disabled, tokenUsage = 0, className }: ModelSwit
         <Button
           variant="outline"
           size="sm"
-          className={cn('h-8 max-w-[18rem] gap-1.5 px-2.5 font-normal', missingKey && 'border-destructive/50 text-destructive', className)}
+          className={cn('max-w-[18rem] gap-1.5 px-2.5 font-normal', missingKey && 'border-destructive/50 text-destructive', className)}
           aria-label={t('modelSwitcher.trigger', { model: label })}
         >
           {missingKey ? <KeyRound className="h-3.5 w-3.5 shrink-0" /> : <Brain className="h-3.5 w-3.5 shrink-0" />}

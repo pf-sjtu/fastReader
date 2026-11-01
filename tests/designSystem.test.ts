@@ -75,6 +75,13 @@ const RULES: { id: string; re: RegExp; unless?: RegExp; hint: string; skipDirs?:
     hint: '不用任意值颜色函数（text-[rgb(...)] / bg-[#fff]）；用语义 token',
     skipDirs: ['src/charts', 'src/components/markdown/genui'],
   },
+  {
+    // 静态扫描看不进运行时的字符串：模板插值拼出来的颜色类（`text-${tone}-500`）必须换成分档映射表
+    id: 'dynamic-palette',
+    re: /(?<![\w-])(?:text|bg|border|ring|fill|stroke|from|via|to)-\$\{/,
+    hint: '颜色类不能用模板插值拼（`text-${tone}-500`）；改成显式映射或语义 token',
+    skipDirs: ['src/charts', 'src/components/markdown/genui'],
+  },
 ]
 
 describe('设计一致性守卫', () => {
