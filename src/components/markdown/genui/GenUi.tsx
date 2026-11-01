@@ -151,7 +151,7 @@ function Node({ node }: { node: GenUiNode }) {
 
 export function GenUiView({ nodes }: { nodes: GenUiNode[] }) {
   return (
-    <div className="not-prose my-3 flex flex-col gap-3 rounded-lg border bg-muted/30 p-3" data-slot="genui">
+    <div className="not-prose my-3 flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 text-foreground" data-slot="genui">
       {nodes.map((n, i) => (
         <div key={i}>
           {'title' in n && <Title>{n.title}</Title>}

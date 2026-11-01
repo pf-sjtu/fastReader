@@ -1,8 +1,8 @@
-import { Component, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useIsDarkMode } from '@/components/useTheme'
 import { Skeleton } from '@/components/ui/skeleton'
 import { renderMermaid, svgToDataUri } from '@/lib/mermaidRender'
-import { buildSandboxDoc, HEIGHT_MSG } from '@/lib/htmlSandbox'
+import { buildSandboxDoc, DOC_MSG, HEIGHT_MSG, READY_MSG, READY_TIMEOUT_MS, SANDBOX_URL } from '@/lib/htmlSandbox'
 import type { RichLang } from '@/lib/richBlocks'
 import { parseGenUi } from './genui/schema'
 import { GenUiView } from './genui/GenUi'
@@ -10,7 +10,7 @@ import { GenUiView } from './genui/GenUi'
 /** 渲染失败的统一回退：一行轻提示 + 源码（可读、可复制），绝不让一个坏块毁掉整章 */
 function Fallback({ code, lang, reason }: { code: string; lang: string; reason: string }) {
   return (
-    <div className="not-prose my-3 rounded-lg border border-dashed p-3" data-slot="rich-fallback">
+    <div className="not-prose my-3 rounded-lg border border-dashed p-3 text-foreground" data-slot="rich-fallback">
       <div className="mb-1 text-xs text-muted-foreground">
         {lang} 块无法渲染（{reason}），以下为源码
       </div>
@@ -52,32 +52,67 @@ function MermaidView({ code }: { code: string }) {
   )
 }
 
+/**
+ * html 块：独立沙箱页 + 握手（为什么不用 srcdoc 见 lib/htmlSandbox.ts）。
+ * 流程：iframe 加载 /rich-sandbox/ → 页面发 READY → 这里下发整份文档 → 文档内脚本回报高度。
+ * 所有消息都校验 source === 这个 iframe 的 contentWindow；超时没有握手 → 回退为源码。
+ */
 function HtmlView({ code }: { code: string }) {
+  const dark = useIsDarkMode()
   const ref = useRef<HTMLIFrameElement>(null)
   const [h, setH] = useState(120)
-  const built = buildSandboxDoc(code)
+  const [dead, setDead] = useState(false)
+  const built = useMemo(() => buildSandboxDoc(code, dark), [code, dark])
+  const doc = built.ok ? built.doc : null
+
   useEffect(() => {
+    if (!doc) return
+    setDead(false)
+    let sent = false
+    const timer = setTimeout(() => !sent && setDead(true), READY_TIMEOUT_MS)
     const onMsg = (e: MessageEvent) => {
-      if (e.source !== ref.current?.contentWindow || e.data?.type !== HEIGHT_MSG) return
-      const v = Number(e.data.h)
-      if (Number.isFinite(v)) setH(Math.min(Math.max(v, 40), 720))
+      const win = ref.current?.contentWindow
+      if (!win || e.source !== win) return
+      if (e.data?.type === READY_MSG && !sent) {
+        sent = true
+        clearTimeout(timer)
+        // opaque origin：targetOrigin 只能是 '*'；内容只发给自己刚创建的这个 iframe
+        win.postMessage({ type: DOC_MSG, doc }, '*')
+      } else if (e.data?.type === HEIGHT_MSG) {
+        const v = Number(e.data.h)
+        if (Number.isFinite(v)) setH(Math.min(Math.max(Math.ceil(v) + 2, 40), 720))
+      }
     }
     window.addEventListener('message', onMsg)
-    return () => window.removeEventListener('message', onMsg)
-  }, [])
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('message', onMsg)
+    }
+  }, [doc])
+
   if (!built.ok) return <Fallback code={code} lang="html" reason={built.error} />
+  if (dead) return <Fallback code={code} lang="html" reason="沙箱页不可用" />
   return (
     <iframe
+      // 主题 / 内容变了就整个重建：沙箱页只接受一次下发
+      key={`${dark ? 'd' : 'l'}:${hashOf(code)}`}
       ref={ref}
       title="交互示意"
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
-      srcDoc={built.doc}
+      src={SANDBOX_URL}
       style={{ height: h }}
       className="not-prose my-3 w-full rounded-lg border bg-card"
       data-slot="html-block"
     />
   )
+}
+
+/** 简单字符串哈希（只用来决定 iframe 要不要重建，不求抗碰撞） */
+const hashOf = (s: string) => {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
 }
 
 function GenUi({ code }: { code: string }) {

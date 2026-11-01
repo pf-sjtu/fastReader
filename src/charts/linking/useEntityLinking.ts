@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { isUsableText } from '@/utils/resultStatus'
+import { stripRichBlocks } from '@/lib/richBlocks'
 import type { BookCharts } from '../types'
 import { buildEntityLinking, type EntityLinking, type LinkChapter } from './entityLinking'
 
@@ -25,7 +26,8 @@ export function useEntityLinking(
       id: c.id,
       title: c.title,
       // 失败/跳过的章节带占位前缀，不参与匹配
-      text: isUsableText(c.summary) ? (c.summary as string) : '',
+      // 图示 / 组件 / 交互块不是正文：块里的名字既画不出高亮，也不该算「出现在这一章」
+      text: isUsableText(c.summary) ? stripRichBlocks(c.summary as string) : '',
       meta: c.meta,
     }))
     return buildEntityLinking(charts, linkChapters)

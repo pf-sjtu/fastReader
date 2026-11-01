@@ -259,6 +259,8 @@ export function packLabels(t: TranslateFn): PackLabels {
     graph: text('graph'),
     timeline: text('timeline'),
     emptyChapter: text('emptyChapter'),
+    interactiveOnline: text('interactiveOnline'),
+    diagramBelow: text('diagramBelow'),
     author: text('author'),
     generatedAt: text('generatedAt'),
     correctAnswer: text('correctAnswer'),

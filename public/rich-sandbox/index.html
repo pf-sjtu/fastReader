@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>rich-sandbox</title>
+  </head>
+  <body>
+    <!-- 总结里 html 块的沙箱页：在 sandbox="allow-scripts"（无 same-origin）的 iframe 里加载，
+         自带 CSP（见 public/_headers 的 /rich-sandbox/ 规则：default-src 'none'，无网络），
+         内容由父页面经 postMessage 下发。
+         脚本必须内联：opaque origin 下 CSP 的 'self' 匹配不到外链脚本（真实浏览器里验证过）。
+         消息名与 src/lib/htmlSandbox.ts 的 READY_MSG / DOC_MSG 逐字一致（tests/richSandbox.test.ts 守卫）。
+         握手：本页就绪 → 通知父页面 → 父页面下发整份文档 → 本页用 document.write 替换自身。
+         document.open() 会清掉本页监听，所以只接受第一次下发；之后文档里的脚本（模型写的交互）按本页 CSP 运行：
+         能执行内联脚本，但没有任何网络、不能嵌套页面、碰不到站点的存储与 Cookie。 -->
+    <script>
+      ;(function () {
+        var done = false
+        window.addEventListener('message', function (e) {
+          if (done || e.source !== window.parent) return
+          var d = e.data
+          if (!d || d.type !== 'juhua:html-doc' || typeof d.doc !== 'string') return
+          done = true
+          document.open()
+          document.write(d.doc)
+          document.close()
+        })
+        window.parent.postMessage({ type: 'juhua:html-ready' }, '*')
+      })()
+    </script>
+  </body>
+</html>

@@ -13,7 +13,7 @@ import { STUDY_KIT_FORMAT, QUIZ_FORMAT, RICH_REPAIR_FORMAT } from '../src/servic
 
 const DIR = join(__dirname, '..', 'src', 'services', 'prompts')
 const CFG = join(DIR, 'config')
-const read = (f: string) => readFileSync(join(CFG, f), 'utf8').replace(/^﻿/, '').trim()
+const read = (f: string) => readFileSync(join(CFG, f), 'utf8').trim()
 
 describe('提示词单一来源', () => {
   it('代码里不能再写大段提示词：services/prompts/*.ts 与 services/ai/*.ts 没有超过 200 字、含「你是」的模板字面量', () => {

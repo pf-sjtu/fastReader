@@ -13,6 +13,7 @@ import {
   getNonFictionChapterSummaryPrompt,
   getOverallSummaryPrompt,
 } from '@/services/prompts'
+import { expandRichGuide } from '@/services/prompts/richGuide'
 import { resolveAutoLanguage, type SupportedLanguage } from '@/services/prompts/utils'
 import { cacheService as defaultStore, type CacheService } from '@/services/cacheService'
 import { autoSyncService } from '@/services/autoSyncService'
@@ -52,7 +53,8 @@ export function resolvePromptTemplates(
       ? pc.chapterSummary?.fiction || getFictionChapterSummaryPrompt()
       : pc.chapterSummary?.nonFiction || getNonFictionChapterSummaryPrompt()
   return {
-    summary: customPrompt?.trim() ? customPrompt : chapterBase,
+    // 缓存键要按「真正发给模型的文本」算：占位符展开后，改指南正文也会让章节缓存失效
+    summary: expandRichGuide(customPrompt?.trim() ? customPrompt : chapterBase),
     mindmap: pc.mindmap?.chapter || getChapterMindMapPrompt(),
     connections: pc.connectionAnalysis || getChapterConnectionsAnalysisPrompt(),
     overall_summary: pc.overallSummary || getOverallSummaryPrompt(),

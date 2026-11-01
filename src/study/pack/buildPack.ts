@@ -17,6 +17,8 @@
  *    本文件不含实体调色板，避免与「同一实体处处同色」的规则各自为政。
  */
 
+import { PACK_RICH_STYLE, restoreFragments, richBlocksToStatic } from './richStatic'
+
 export interface PackChapter {
   index: number
   title: string
@@ -103,6 +105,10 @@ export interface PackLabels {
   /** 实体时间线的图题 */
   timeline: string
   emptyChapter: string
+  /** 总结里的 html 交互块 / 读不懂的 genui 块在离线包里的替代说明 */
+  interactiveOnline: string
+  /** 总结里的 mermaid 块：图在「图谱与时间线」区 */
+  diagramBelow: string
   author: string
   generatedAt: string
   correctAnswer: string
@@ -128,6 +134,8 @@ export const DEFAULT_PACK_LABELS: PackLabels = {
   graph: '人物关系图',
   timeline: '实体时间线',
   emptyChapter: '（本章暂无总结）',
+  interactiveOnline: '（此处为交互内容，仅在线版可用）',
+  diagramBelow: '图示（mermaid 源码）',
   author: '作者',
   generatedAt: '生成时间',
   correctAnswer: '正确答案',
@@ -232,8 +240,10 @@ function renderMinimalMarkdown(escaped: string): string {
 }
 
 /** 一段总结 → 正文 HTML；空白时返回空串（调用方据此不渲染该块） */
-function summaryHtml(summary: string): string {
-  return renderMinimalMarkdown(escapeHtml(summary.trim()))
+function summaryHtml(summary: string, L: PackLabels): string {
+  // 富内容块（genui / mermaid / html）先换成占位符，正文走最小 Markdown，最后把静态片段放回去
+  const { text, fragments } = richBlocksToStatic(summary, escapeHtml, L)
+  return restoreFragments(renderMinimalMarkdown(escapeHtml(text.trim())), fragments)
 }
 
 /**
@@ -380,7 +390,7 @@ function renderChapters(chapters: readonly PackChapter[], L: PackLabels): string
   if (!chapters.length) return ''
   const items = chapters
     .map((chapter, i) => {
-      const body = summaryHtml(chapter.summary)
+      const body = summaryHtml(chapter.summary, L)
       return [
         `<article class="chapter" id="ch-${i}">`,
         `<h3>${escapeHtml(chapter.title || L.untitled)}</h3>`,
@@ -392,8 +402,8 @@ function renderChapters(chapters: readonly PackChapter[], L: PackLabels): string
   return section('chapters', L.chapters, items)
 }
 
-function renderProse(id: string, title: string, text: string): string {
-  const body = summaryHtml(text)
+function renderProse(id: string, title: string, text: string, L: PackLabels): string {
+  const body = summaryHtml(text, L)
   if (!body) return ''
   return section(id, title, body)
 }
@@ -460,6 +470,7 @@ body {
 .sec p { margin: 0 0 10px; }
 .sec ul { margin: 0 0 10px; padding-left: 22px; }
 .empty { color: var(--pack-muted-fg); font-size: 13px; }
+${PACK_RICH_STYLE}
 .toc { margin: 0 0 32px; }
 .toc > h2 { margin: 0 0 10px; font-size: 19px; }
 .toc-list { margin: 0; padding-left: 22px; }
@@ -552,8 +563,8 @@ export function buildStudyPackHtml(data: PackData, options?: PackBuildOptions): 
     `</header>`,
     renderToc(chapters, L),
     renderChapters(chapters, L),
-    renderProse('connections', L.connections, connections),
-    renderProse('overall', L.overallSummary, overallSummary),
+    renderProse('connections', L.connections, connections, L),
+    renderProse('overall', L.overallSummary, overallSummary, L),
     renderPeople(data.people, L),
     renderImages(images, L),
     renderNotes(chapters, data.notes, palette, L),

@@ -1,5 +1,6 @@
 // 提示词预览：与真实请求走同一个 renderPrompt 与同一套变量定义（名称/标签/顺序），只把值换成示例文本
 import { renderPrompt, type PromptVar } from '../../services/prompts/render'
+import { expandRichGuide } from '../../services/prompts/richGuide'
 import {
   arrowVars,
   chapterVars,
@@ -42,5 +43,5 @@ export function buildPromptPreview(
 ): string {
   const variant: MindmapVariant = mindmap === true ? 'combined' : mindmap === false ? 'chapter' : mindmap
   const vars = varsFor(tab, variant).map((v) => ({ ...v, value: samples[v.name] ?? v.value }))
-  return renderPrompt(template, vars)
+  return renderPrompt(expandRichGuide(template), vars)
 }

@@ -144,6 +144,13 @@ git push -u origin HEAD
 - 纯渲染在 `src/study/pack/**`（无 React / store / i18n 依赖），接线在 `src/study/exportPack.ts`（笔记按当前章节归位、`var(--entity-N)` 解析成具体色值、文案走 i18n `study.pack.*`）
 - 图谱与时间线是**自绘 SVG**（`src/study/exportFigures.ts`）：时间线复用 `layoutEntityTimeline` 的几何，人物关系图用圆环布局；不引新依赖、不改图表组件。图里只能用十六进制色（SVG 在 data URI 里读不到 CSS 变量）。细节见 `docs/study-pack.md`
 
+## 富内容块（总结里的 mermaid / genui / html）
+- 总结可含围栏块：```mermaid（懒加载，strict，`<img data:>`）/ ```genui（JSON → 七种原生组件）/ ```html（独立沙箱页）；**不计字数**，下游 prompt / 图表 / 综述只喂剔除块后的正文（`src/lib/richBlocks.ts` ↔ `src/cli/rich_blocks.py`，夹具 `tests/fixtures/rich-blocks/cases.json`）
+- html 块**不能用 srcdoc**：srcdoc iframe 继承全站 CSP（`script-src 'self'`），内联脚本被拦。现为 `<iframe sandbox="allow-scripts" src="/rich-sandbox/">` + `postMessage` 握手；沙箱页脚本必须内联（opaque origin 下 `'self'` 匹配不到外链），其专属 CSP 在 `public/_headers`（用 `!` 摘除全站 CSP；无网络）。守卫 `tests/richSandbox.test.ts`；改动后用 `tests/tour/richDemo/`（真实浏览器 + 生产 CSP）验收，jsdom 测不出
+- 渲染入口都经 `richMarkdownComponents`（`tests/richEntries.test.ts` 守卫）；离线学习包把 genui 静态化、mermaid 指路到图示区、html 注明仅在线可用（`src/study/pack/richStatic.ts`）
+- 坏块生成后统一修复：只发坏块 + 80 字前文，结构化输出 `{fixes:[…]}`，修好复检才写回、仍坏则删（`pipeline/richRepair.ts` ↔ `rich_repair.py`）。CLI 的 mermaid 校验是结构启发式，网页用真解析器
+- 「模型知道有这些块」是独立的上下文模块 `services/prompts/config/rich-blocks-guide.md`（`{{richBlocksGuide}}` 预展开，见 config/README），改措辞后用 `tests/tour/eval_rich_guide.py` 真模型复测
+
 ## 笔记划线高亮（阅读工作台）
 - 锚点定位是纯函数：`src/notes/anchor.ts` 的 exact → tolerant（折叠掉标点空白）→ fuzzy（bigram Dice ≥ 0.6）三级，`resolveNote` 与批量复用的 `createNoteResolver` 同语义；fuzzy 先反查 rare bigram 得候选窗口，再用「多重集交集上限」预筛把注定找不到的引文挡在全篇扫描之前
 - 正文高亮是 remark 插件 `src/notes/remarkNoteMark.ts`：把整章各块拼成一段**一次**定位（与笔记页签同口径），每条笔记只画一处、只画起点所在的块级单元；同段内跨行内格式逐段切开，引文确实覆盖行内代码时整段包住 `<code>`，围栏代码块不参与

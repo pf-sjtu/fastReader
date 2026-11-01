@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useStudyStore } from '@/study/studyStore'
 import type { StudyChapter } from '@/study/schema'
+import { stripRichBlocks } from '@/lib/richBlocks'
 
 /** 速读要点在悬浮卡里最多显示几条 / 退回章节总结时摘录多少字 */
 const PEEK_POINTS = 3
@@ -23,8 +24,8 @@ interface Props {
 }
 
 /** 章节总结 → 一小段纯文本（去掉 Markdown 标记与空白） */
-const previewOf =(summary?: string) =>
-  (summary ?? '')
+const previewOf = (summary?: string) =>
+  stripRichBlocks(summary ?? '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/[#>*_`~-]+/g, '')
     .replace(/\s+/g, ' ')

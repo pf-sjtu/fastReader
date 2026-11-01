@@ -1498,6 +1498,8 @@
       "graph": "Relationship map",
       "timeline": "Entity timeline",
       "emptyChapter": "(no summary for this chapter yet)",
+      "interactiveOnline": "(Interactive content — available online only)",
+      "diagramBelow": "Diagram (mermaid source)",
       "author": "Author",
       "generatedAt": "Generated",
       "correctAnswer": "Correct answer",

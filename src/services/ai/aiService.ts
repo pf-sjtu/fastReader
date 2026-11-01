@@ -11,6 +11,7 @@ import type {
   PromptConfig
 } from './types'
 import type { MindElixirData } from 'mind-elixir'
+import { expandRichGuide } from '../prompts/richGuide'
 import type { SupportedLanguage } from '../prompts/utils'
 import {
   getFictionChapterSummaryPrompt,
@@ -337,7 +338,8 @@ export class AIService {
 
     const prompt = customPrompt || basePrompt
     const withHint = opts?.rewriteHint ? `${prompt}\n\n${sharedStrings.rewriteHeader}\n${opts.rewriteHint}` : prompt
-    return this.generateForLongContent(withHint, chapterTitle, chapterContent, outputLanguage, opts)
+    // {{richBlocksGuide}} 在这里预展开：下面按模板长度扣输入预算时要算上它
+    return this.generateForLongContent(expandRichGuide(withHint), chapterTitle, chapterContent, outputLanguage, opts)
   }
 
   /**
@@ -589,7 +591,7 @@ export class AIService {
         bookType === 'fiction'
           ? promptConfig.chapterSummary.fiction || getFictionChapterSummaryPrompt()
           : promptConfig.chapterSummary.nonFiction || getNonFictionChapterSummaryPrompt()
-      content = await this.generateForLongContent(condensePrompt, chapterTitle, chapterContent, outputLanguage, opts)
+      content = await this.generateForLongContent(expandRichGuide(condensePrompt), chapterTitle, chapterContent, outputLanguage, opts)
     }
 
     const prompt = renderPrompt(basePrompt, chapterVars(chapterTitle, content))

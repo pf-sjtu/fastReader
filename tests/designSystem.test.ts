@@ -30,6 +30,7 @@ const EXEMPT: Record<string, Record<string, string>> = {
   'src/components/library/BookCard.tsx': { 'empty-state': '封面加载态的遮罩，不是页级空状态，需要绝对定位覆盖在封面上' },
   'src/charts/plugins/entity-timeline/EntityTimelineChart.tsx': { 'empty-state': '时间轴的空白格（网格单元内居中），不是页级空状态' },
   'src/study/pack/buildPack.ts': { 'heading-role': '离线学习包是独立 HTML 文档，h1–h4 是导出产物的标签，用不到应用内角色类', 'raw-color': '离线学习包的内嵌样式表是独立 HTML 文档，读不到宿主 CSS 变量' },
+  'src/study/pack/richStatic.ts': { 'raw-color': '离线学习包里 genui 静态版的内嵌样式，同 buildPack：独立 HTML 文档读不到宿主 CSS 变量' },
   'src/lib/htmlSandbox.ts': { 'raw-color': '注入 iframe 沙箱文档内的基础样式，读不到宿主 CSS 变量' },
   'src/study/exportFigures.ts': { 'raw-color': '导出的 SVG 进 data URI 后读不到宿主 CSS 变量，必须写具体色值（与 index.css 亮色 token 对齐，有测试守着 NOTE_PALETTE）' },
   'src/utils/mindmapExport.ts': { 'raw-color': 'canvas 导出用的纯色底，同样读不到 CSS 变量' },

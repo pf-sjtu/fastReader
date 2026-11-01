@@ -3,7 +3,8 @@ import { afterEach } from 'vitest'
 import { mount, click, waitFor } from './uiTestUtils'
 import ReactMarkdown from 'react-markdown'
 import { richMarkdownComponents } from '@/components/markdown/richComponents'
-import { buildSandboxDoc, HTML_MAX } from '@/lib/htmlSandbox'
+import { act } from 'react'
+import { buildSandboxDoc, DOC_MSG, HEIGHT_MSG, HTML_MAX, READY_MSG, READY_TIMEOUT_MS, SANDBOX_URL } from '@/lib/htmlSandbox'
 
 const renderMermaid = vi.fn()
 vi.mock('@/lib/mermaidRender', () => ({
@@ -50,11 +51,56 @@ describe('富内容块渲染', () => {
     await waitFor(() => expect(document.querySelector('[data-slot="rich-fallback"]')?.textContent).toContain('Parse error'))
   })
 
-  it('html：沙箱 iframe 只开 allow-scripts，不带 same-origin', () => {
+  it('html：沙箱 iframe 只开 allow-scripts，指向独立沙箱页，不用 srcdoc', () => {
     md(`${F}html\n<button>点我</button>\n${F}`)
     const f = document.querySelector('iframe')!
     expect(f.getAttribute('sandbox')).toBe('allow-scripts')
-    expect(f.getAttribute('srcdoc')).toContain('点我')
+    expect(f.getAttribute('src')).toBe(SANDBOX_URL)
+    expect(f.hasAttribute('srcdoc')).toBe(false)
+  })
+
+  it('html：握手——就绪后下发整份文档；只认自己 iframe 的消息；高度回报生效', async () => {
+    md(`${F}html\n<button>点我</button>\n${F}`)
+    const f = document.querySelector('iframe')!
+    const win = f.contentWindow!
+    const post = vi.spyOn(win, 'postMessage')
+    const from = (source: Window | null, data: unknown) =>
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', { source, data }))
+      })
+    // 陌生来源的 READY 不响应
+    from(window, { type: READY_MSG })
+    expect(post).not.toHaveBeenCalled()
+    from(win, { type: READY_MSG })
+    expect(post).toHaveBeenCalledTimes(1)
+    const sent = post.mock.calls[0][0] as { type: string; doc: string }
+    expect(sent.type).toBe(DOC_MSG)
+    expect(sent.doc).toContain('点我')
+    // 重复 READY 不再下发
+    from(win, { type: READY_MSG })
+    expect(post).toHaveBeenCalledTimes(1)
+    // 高度：陌生来源忽略；自己的取 ceil+2 并夹在 40..720
+    from(window, { type: HEIGHT_MSG, h: 500 })
+    expect(f.style.height).toBe('120px')
+    from(win, { type: HEIGHT_MSG, h: 200.2 })
+    expect(f.style.height).toBe('203px')
+    from(win, { type: HEIGHT_MSG, h: 99999 })
+    expect(f.style.height).toBe('720px')
+  })
+
+  it('html：超时未握手 → 回退为源码', async () => {
+    vi.useFakeTimers()
+    try {
+      md(`${F}html\n<b>x</b>\n${F}`)
+      expect(document.querySelector('iframe')).toBeTruthy()
+      act(() => {
+        vi.advanceTimersByTime(READY_TIMEOUT_MS + 10)
+      })
+      expect(document.querySelector('iframe')).toBeNull()
+      expect(document.querySelector('[data-slot="rich-fallback"]')?.textContent).toContain('沙箱页不可用')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('普通代码块不被接管', () => {

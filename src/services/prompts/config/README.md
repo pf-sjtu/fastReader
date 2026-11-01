@@ -107,3 +107,10 @@ const testPrompt = getSystemPrompt('testConnection')
 - 解析与清理：前端 `services/prompts/chapterMeta.ts`，CLI `src/cli/chapter_meta.py`，共用 `tests/fixtures/prompts-v3/meta-cases.json`。旁路损坏只会退化为「无旁路」，不会使章节失败。
 - 旁路随章节缓存（缓存值是 `正文 + 标记 + JSON`），不写入云端 MD，而是另存同名 `{书名}-完整摘要.meta.json`（`pipeline/metaSidecar.ts`，按章节序号还原）；各章实体合并成「实体表」，作为 `entityTable` 追加到关联分析 / 全书总结 / 关键图表的提示词末尾。
 - 旧导出配置（1.0.0 / v2 时代）按 **v2 默认文本**求覆盖项：没改过的条目跟随 v3，改过的保持原样。CLI 在配置里找不到 v3 条目时回落到 v2 条目，所以旧的自定义提示词仍然生效。
+
+## 共享说明模块（富内容块 / 速读 / 自测…）
+
+- `rich-blocks-guide.md`：告诉模型「总结里可以用 mermaid / genui / html 三种块」——能力介绍、何时用与何时不用、硬规则（上限、不计字数、不得压缩正文）、精确语法与常见错误、few-shot（正例 + 反例）。章节总结提示词里写 `{{richBlocksGuide}}` 引用它。
+- 它是**预展开**（`src/services/prompts/richGuide.ts#expandRichGuide`，CLI `PromptTemplates.expand_rich_guide`）而不是 `renderPrompt` 变量：变量规则 4 会把「模板没引用的变量」追加到末尾，用户自定义的旧提示词没有这个占位符，就不该被塞进一大段说明。没有占位符 → 原样返回。提示词预览按真实请求展开。
+- 守卫：`tests/richGuide.test.ts`（few-shot 必须被我们自己的解析器认可、模板无内联副本）与 `tests/python/test_cli_shared_prompts.py`。调说明的措辞后用 `tests/tour/eval_rich_guide.py` 真模型复测出块率 / 误画率 / 正文长度（实测数字见 `openspec/changes/add-reader-workspace/specs/rich-blocks/spec.md`）。
+- 其他共享文件：`study-kit.md` / `quiz.md` / `ask-book.md` / `key-charts.md` / `rich-repair.md` 与对应 `*.schema.json`、`language-instructions.json`、`shared-strings.json`——前端与 CLI 读同一份。

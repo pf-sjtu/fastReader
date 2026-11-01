@@ -1498,6 +1498,8 @@
       "graph": "人物关系图",
       "timeline": "实体时间线",
       "emptyChapter": "（本章暂无总结）",
+      "interactiveOnline": "（此处为交互内容，仅在线版可用）",
+      "diagramBelow": "图示（mermaid 源码）",
       "author": "作者",
       "generatedAt": "生成时间",
       "correctAnswer": "正确答案",

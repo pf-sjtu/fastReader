@@ -41,12 +41,19 @@ export function renderMermaid(code: string, dark: boolean): Promise<MermaidResul
   if (!code.trim()) return Promise.resolve({ ok: false, error: '图为空' })
   if (code.length > MAX_CODE) return Promise.resolve({ ok: false, error: '图过大' })
   const job = queue.then(async (): Promise<MermaidResult> => {
+    const id = `mmd-${++seq}`
     try {
       const mermaid = await load(dark)
-      const { svg } = await withTimeout(mermaid.render(`mmd-${++seq}`, code))
+      // 先只做语法校验：语法错在这里抛出。直接 render 失败时 mermaid 会把「Syntax error」炸弹图留在 <body> 里，污染整个页面
+      await withTimeout(mermaid.parse(code))
+      const { svg } = await withTimeout(mermaid.render(id, code))
       return { ok: true, svg }
     } catch (e) {
       return { ok: false, error: messageOf(e) }
+    } finally {
+      // 兜底：无论成败都清掉 mermaid 留在 body 里的临时节点（容器 `d<id>` 与 svg `<id>`）
+      document.getElementById(`d${id}`)?.remove()
+      document.getElementById(id)?.remove()
     }
   })
   queue = job

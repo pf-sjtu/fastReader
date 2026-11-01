@@ -8,6 +8,7 @@ import remarkGfm from 'remark-gfm'
 import remarkCjkFriendly from "remark-cjk-friendly";
 import { prepareMarkdownForRender } from '@/lib/markdown'
 import { sanitizeBookHtml } from '@/utils/sanitizeHtml'
+import { richMarkdownComponents } from '@/components/markdown/richComponents'
 
 // 模块级常量：避免每次渲染新建插件数组
 const REMARK_PLUGINS = [remarkGfm, remarkCjkFriendly]
@@ -30,7 +31,7 @@ export function ViewContentDialog({ title, content, chapterIndex, contentType = 
       case 'markdown':
         return (
           <div className="markdown-card-content prose prose-sm">
-            <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>
+            <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={richMarkdownComponents}>
               {prepareMarkdownForRender(content)}
             </ReactMarkdown>
           </div>
