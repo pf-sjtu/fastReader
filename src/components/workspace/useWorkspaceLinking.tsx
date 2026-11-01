@@ -5,11 +5,14 @@
  * 性能约束：chapterExtras / 插件数组必须稳定，且**不依赖当前阅读章**——
  * 否则正文每滚过一章，所有章节卡都会重新处理 Markdown。当前章只流向图表入参与卡片。
  */
-import { useCallback, useMemo, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { RemarkPlugins } from '@/components/MarkdownCard'
 import { remarkEntityMark } from '@/charts/linking/remarkEntityMark'
+import { remarkNoteMark } from '@/notes/remarkNoteMark'
+import { resolveChapterIndex, visibleNotes, type Note } from '@/notes/notes'
+import { useNotesStore } from '@/notes/notesStore'
 import {
   chapterEntityIds,
   chapterEventIds,
@@ -70,19 +73,53 @@ export function useWorkspaceLinking({
     return [[remarkEntityMark, { matcher: linking.matcher, slotOf }]] as RemarkPlugins
   }, [linking, annotate])
 
+  /* ---------- 正文：划线高亮（按章节分插件，笔记只标在自己那一章） ---------- */
+
+  const notes = useNotesStore((s) => s.notes)
+  const notesByChapter = useMemo(() => {
+    const map = new Map<string, Note[]>()
+    for (const n of visibleNotes(notes)) {
+      const i = resolveChapterIndex(n, bookSummary.chapters)
+      if (i < 0) continue
+      const id = bookSummary.chapters[i]?.id
+      if (!id) continue
+      const list = map.get(id)
+      if (list) list.push(n)
+      else map.set(id, [n])
+    }
+    return map
+  }, [notes, bookSummary.chapters])
+
+  // 同一章节必须拿到同一个数组引用：MarkdownCard 依赖它决定要不要重新处理 Markdown
+  const notesCache = useRef(new Map<string, RemarkPlugins | undefined>())
+  const remarkPluginsFor = useMemo(() => {
+    notesCache.current = new Map()
+    return (chapterId: string): RemarkPlugins | undefined => {
+      if (notesCache.current.has(chapterId)) return notesCache.current.get(chapterId)
+      const list = notesByChapter.get(chapterId)
+      const plugins = list?.length
+        ? ([...(remarkPlugins ?? []), [remarkNoteMark, { notes: list }]] as RemarkPlugins)
+        : remarkPlugins
+      notesCache.current.set(chapterId, plugins)
+      return plugins
+    }
+  }, [notesByChapter, remarkPlugins])
+
   const chapterExtras = useMemo(() => {
-    if (!linking) return undefined
+    if (!linking && !notesByChapter.size) return undefined
     return {
       remarkPlugins,
-      renderStrip: (chapterId: string): ReactNode => (
-        <EntityStrip
-          linking={linking}
-          chapterId={chapterId}
-          onOpenEntity={(id, anchor, ch) => openEntityCard(id, anchor, { chapterId: ch })}
-        />
-      ),
+      remarkPluginsFor,
+      renderStrip: (chapterId: string): ReactNode =>
+        linking ? (
+          <EntityStrip
+            linking={linking}
+            chapterId={chapterId}
+            onOpenEntity={(id, anchor, ch) => openEntityCard(id, anchor, { chapterId: ch })}
+          />
+        ) : null,
     }
-  }, [linking, remarkPlugins, openEntityCard])
+  }, [linking, remarkPlugins, remarkPluginsFor, notesByChapter, openEntityCard])
 
   /* ---------- 图表：焦点 + 回调（可依赖当前章） ---------- */
 

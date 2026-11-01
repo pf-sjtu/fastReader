@@ -12,6 +12,7 @@ import { ChapterQualityNote } from './ChapterQualityNote'
 import { StepRetryNote } from './StepRetryNote'
 import type { BookStepKind } from '@/hooks/useBookSteps'
 import { UploadToWebDAVButton } from '@/components/UploadToWebDAVButton'
+import { ExportPackButton } from '@/components/study/ExportPackButton'
 import { ChartsPanel } from '@/charts'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { isUsableText } from '@/utils/resultStatus'
@@ -47,6 +48,8 @@ interface ResultsSectionProps {
    */
   chapterExtras?: {
     remarkPlugins?: RemarkPlugins
+    /** 按章节取插件（如只标注本章的划线）；同一章节必须返回稳定引用 */
+    remarkPluginsFor?: (chapterId: string) => RemarkPlugins | undefined
     renderStrip?: (chapterId: string) => React.ReactNode
   }
   /** 关联分析 / 全书总结失败或缺失时的单步重试 */
@@ -125,6 +128,7 @@ export const ResultsSection = memo(function ResultsSection({
                   <Download className="h-3.5 w-3.5" />
                   MD
                 </Button>
+                <ExportPackButton bookSummary={bookSummary} />
                 <UploadToWebDAVButton
                   bookSummary={bookSummary}
                   file={file}
@@ -178,6 +182,7 @@ export const ResultsSection = memo(function ResultsSection({
                   onClearCache={onClearChapterCache}
                   onReadChapter={onReadChapter}
                   extraRemarkPlugins={chapterExtras?.remarkPlugins}
+                  extraRemarkPluginsFor={chapterExtras?.remarkPluginsFor}
                   headerExtra={
                     chapter.quality === 'warn' || chapterExtras?.renderStrip ? (
                       <>

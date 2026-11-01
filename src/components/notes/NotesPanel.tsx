@@ -1,16 +1,18 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ClipboardCopy, Download, Trash2 } from 'lucide-react'
+import { AlertTriangle, ClipboardCopy, Download, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { groupNotes, notesToMarkdown, MAX_COMMENT } from '@/notes/notes'
+import { createNoteResolver, type NoteResolver } from '@/notes/anchor'
 import { useNotesStore } from '@/notes/notesStore'
 import { cn } from '@/lib/utils'
 
 interface Props {
   bookTitle: string
-  chapters: readonly { id: string; title: string }[]
+  /** 需要 `summary`：用来判断每条划线在新正文里还能不能找到（找不到只标注，不删） */
+  chapters: readonly { id: string; title: string; summary?: string }[]
   onJumpChapter: (chapterId: string) => void
 }
 
@@ -21,6 +23,27 @@ export function NotesPanel({ bookTitle, chapters, onJumpChapter }: Props) {
   const { t } = useTranslation()
   const { notes, editingId, update, remove, setEditing } = useNotesStore()
   const groups = useMemo(() => groupNotes(notes, chapters), [notes, chapters])
+
+  // 每条笔记在当前正文里还能不能定位：章节找不到（游离）或引文消失都算「已失去定位」，
+  // 这只是标注——笔记一定保留，绝不因为找不到就删。
+  // 定位器按章建一次：几十条笔记 × 两万字正文，逐条重新折叠正文会明显卡住页签。
+  const located = useMemo(() => {
+    const map = new Map<string, boolean>()
+    const resolvers = new Map<number, NoteResolver>()
+    for (const g of groups) {
+      if (!g.chapter) {
+        for (const n of g.notes) map.set(n.id, false)
+        continue
+      }
+      let resolver = resolvers.get(g.chapter.index)
+      if (!resolver) {
+        resolver = createNoteResolver(chapters[g.chapter.index]?.summary ?? '')
+        resolvers.set(g.chapter.index, resolver)
+      }
+      for (const n of g.notes) map.set(n.id, resolver.resolve(n) !== null)
+    }
+    return map
+  }, [groups, chapters])
 
   const markdown = () => notesToMarkdown(bookTitle, groups, { orphan: t('notes.orphan'), untitled: t('notes.untitled') })
   const copy = async () => {
@@ -78,6 +101,12 @@ export function NotesPanel({ bookTitle, chapters, onJumpChapter }: Props) {
           </h3>
           {g.notes.map((n) => (
             <article key={n.id} className={cn('space-y-1.5 rounded-md border border-l-4 bg-card p-2.5', BAR[n.color - 1])}>
+              {located.get(n.id) === false && (
+                <p className="t-caption flex items-center gap-1 text-warning" title={t('notes.lostHint')}>
+                  <AlertTriangle className="size-3.5 shrink-0" />
+                  {t('notes.lost')}
+                </p>
+              )}
               <blockquote className="text-sm leading-relaxed">{n.quote}</blockquote>
               {editingId === n.id ? (
                 <Textarea

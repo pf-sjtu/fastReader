@@ -719,6 +719,20 @@
   background: color-mix(in oklab, var(--entity-color) 24%, transparent);
 }
 
+/* 划线高亮（阅读工作台）：颜色槽位由 data-color 选择，与笔记页签的左边条同一套语义色，
+   换明暗主题只改变量。写在 @layer 之外：无层样式优先于层内的 .prose mark 规则。 */
+.note-mark {
+  --note-color: var(--primary);
+  background: color-mix(in oklab, var(--note-color) 16%, transparent);
+  border-bottom: 2px solid color-mix(in oklab, var(--note-color) 60%, transparent);
+  border-radius: 2px;
+  padding: 0 1px;
+  color: inherit;
+}
+.note-mark[data-color='2'] { --note-color: var(--info); }
+.note-mark[data-color='3'] { --note-color: var(--success); }
+.note-mark[data-color='4'] { --note-color: var(--warning); }
+
 /* 跳转到达后的短暂高亮（≤2s）；reduced-motion 下改为静态描边 */
 .link-flash {
   --flash-color: var(--entity-color, var(--primary));

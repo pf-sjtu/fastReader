@@ -136,6 +136,11 @@ git push -u origin HEAD
 - **绝不覆盖云端**的三种情形：信封 `schema` 更高（界面说明只读）、结构读不懂、这一轮读取失败；只有确知「云端还没有存档」才把本机内容推上去。写入失败留在待写队列，下次改动或换书补推
 - 笔记按条目 `id + updatedAt` 合并、删除写墓碑（30 天），`{名}-笔记.json` 只是人可读副本；细节见 `docs/artifact-store.md`
 
+## 离线学习包（笔记与总结的导出）
+- 结果页标题栏「HTML」按钮（`src/components/study/ExportPackButton.tsx`，与「MD」并列）导出单文件、断网可读、可打印的学习包：总结 / 关联 / 综述 / 人物志 / 图谱与时间线 / 笔记 / 自测与作答
+- 纯渲染在 `src/study/pack/**`（无 React / store / i18n 依赖），接线在 `src/study/exportPack.ts`（笔记按当前章节归位、`var(--entity-N)` 解析成具体色值、文案走 i18n `study.pack.*`）
+- 图谱与时间线是**自绘 SVG**（`src/study/exportFigures.ts`）：时间线复用 `layoutEntityTimeline` 的几何，人物关系图用圆环布局；不引新依赖、不改图表组件。图里只能用十六进制色（SVG 在 data URI 里读不到 CSS 变量）。细节见 `docs/study-pack.md`
+
 ## Deployment
 - `wrangler.toml` 声明 `pages_build_output_dir = "dist"` 与 KV 绑定 `FASTREADER_KV`
 - 环境变量：`APP_PASSWORD`（缺省 `123456a`）、`SESSION_SECRET`（可选，缺省由密码派生）、`ALLOWED_ORIGINS`（可选）

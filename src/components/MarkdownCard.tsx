@@ -63,6 +63,11 @@ interface MarkdownCardProps {
    * 否则每次渲染都会让这张卡的 Markdown 重新处理。
    */
   extraRemarkPlugins?: RemarkPlugins
+  /**
+   * 按本卡 id 取追加插件的版本（如「只标注本章的划线」）。
+   * 调用方必须保证返回的数组引用稳定（同一 id 同一份笔记给同一个数组），否则每渲染一次就重新处理 Markdown。
+   */
+  extraRemarkPluginsFor?: (id: string) => RemarkPlugins | undefined
   /** 正文上方的插槽（如「本章出场」实体条）；仅展开时显示 */
   headerExtra?: ReactNode
 }
@@ -91,14 +96,17 @@ export const MarkdownCard = memo(function MarkdownCard({
   isExpanded,
   onExpandChange,
   extraRemarkPlugins,
+  extraRemarkPluginsFor,
   headerExtra,
 }: MarkdownCardProps) {
   const { t } = useTranslation()
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed)
   const [viewOpen, setViewOpen] = useState(false)
+  // 按 id 取的那份优先：章节卡里划线标注是分章的，不能用同一组插件
+  const extra = extraRemarkPluginsFor ? extraRemarkPluginsFor(id) : extraRemarkPlugins
   const remarkPlugins = useMemo(
-    () => (extraRemarkPlugins?.length ? [...REMARK_PLUGINS, ...extraRemarkPlugins] : REMARK_PLUGINS),
-    [extraRemarkPlugins]
+    () => (extra?.length ? [...REMARK_PLUGINS, ...extra] : REMARK_PLUGINS),
+    [extra]
   )
 
   // 使用外部控制的展开状态，外部控制优先级更高
