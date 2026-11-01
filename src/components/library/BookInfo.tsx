@@ -61,7 +61,6 @@ export function BookTooltipBody({ entry }: { entry: LibraryEntry }) {
       {entry.desc && <p className="line-clamp-4 text-xs leading-relaxed opacity-90">{entry.desc}</p>}
       {facts && <p className="text-xs tabular-nums opacity-70">{facts}</p>}
       {pct > 0 && pct < 100 && <p className="text-xs opacity-70">{t('library.info.progress')} {pct}%</p>}
-      {entry.virtual && <p className="border-t border-current/20 pt-1 text-xs opacity-60">{t('library.info.unverified')}</p>}
     </div>
   )
 }
@@ -125,7 +124,6 @@ export function BookDetailDialog({ entry, onClose, onOpen, onPickCategory, disab
         <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
           {entry.desc ? (entry.desc.length >= DESC_CAP ? `${entry.desc}…` : entry.desc) : t('library.info.noDesc')}
         </p>
-        {entry.virtual && <p className="text-xs text-muted-foreground">{t('library.info.unverified')}</p>}
         <Button
           className="gap-1.5 self-end"
           disabled={disabled}

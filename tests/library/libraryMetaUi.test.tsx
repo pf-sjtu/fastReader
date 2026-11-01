@@ -146,12 +146,23 @@ describe('详情对话框', () => {
     expect(mounted.container.querySelectorAll('button[aria-label^="查看详情"]').length).toBeGreaterThan(0)
   })
 
-  it('展示出版社 / 年份 / 章数 / 大小 / 简介 / 分类；虚拟条目注明来自云端目录', () => {
+  it('展示出版社 / 年份 / 章数 / 大小 / 简介 / 分类；不在每本书上重复解释数据来源', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     click(chip('商业'))
     openInfo('商业一')
     const text = document.body.textContent ?? ''
-    for (const s of ['商业一', '作者甲', '中信出版社', '2020', '12 章', '3.0 MB', '拿破仑与金融危机', '商业', '历史', '打开时才会连接 WebDAV']) expect(text, s).toContain(s)
+    for (const s of ['商业一', '作者甲', '中信出版社', '2020', '12 章', '3.0 MB', '拿破仑与金融危机', '商业', '历史']) expect(text, s).toContain(s)
+    // 数据来源只在书架顶部说一次，不在每本书的详情里重复
+    expect(text).not.toContain('WebDAV 确认文件')
+    expect(text).not.toContain('来自云端书目')
+  })
+
+  it('悬浮卡内容同样不带数据来源提示（虚拟条目也是）', async () => {
+    const { BookTooltipBody } = await import('@/components/library/BookInfo')
+    const virtual = { path: 'cloud://x/a.epub', title: 'A', size: 0, mtime: '', status: 'unprocessed', stale: false, missingScans: 0, updatedAt: 0, virtual: true } as LibraryEntry
+    mounted = mount(<BookTooltipBody entry={virtual} />)
+    expect(mounted.container.textContent).toContain('A')
+    expect(mounted.container.textContent).not.toContain('WebDAV')
   })
 
   it('没有简介的书写明「没有简介」而不是留空', () => {

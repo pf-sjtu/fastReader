@@ -738,7 +738,6 @@
       "format": "格式",
       "file": "文件",
       "progress": "阅读进度",
-      "unverified": "来自云端书目，打开时才会连接 WebDAV 确认文件是否还在",
       "openBook": "打开这本书",
       "browseCategory": "只看「{{name}}」"
     },

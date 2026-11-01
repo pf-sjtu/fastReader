@@ -729,7 +729,6 @@
       "format": "Format",
       "file": "File",
       "progress": "Reading progress",
-      "unverified": "From the cloud catalog; WebDAV is only contacted when you open the book, to confirm the file is still there",
       "openBook": "Open this book",
       "browseCategory": "Only “{{name}}”"
     },
