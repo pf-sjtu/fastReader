@@ -62,10 +62,11 @@ describe('学习包：总结里的富内容块', () => {
     expect(html).not.toContain('RICHFRAG')
   })
 
-  it('坏 genui → 说明占位；未闭合的尾块直接丢弃', () => {
+  it('坏 genui → 说明占位；未闭合的尾块按源码留下、不丢字', () => {
     const bad = build(`前文\n\n${F}genui\n{坏的\n${F}\n\n${F}html\n<p>没闭合`)
     expect(bad).toContain(DEFAULT_PACK_LABELS.interactiveOnline)
-    expect(bad).not.toContain('没闭合')
+    expect(bad).toContain('没闭合')
+    expect(bad).not.toContain('<p>没闭合')
     expect(bad).not.toContain('RICHFRAG')
   })
 })

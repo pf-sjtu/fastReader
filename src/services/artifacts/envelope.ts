@@ -72,6 +72,7 @@ export function fnv1a(s: string): string {
  * 含 `%`：目录名一旦带百分号，清理侧的 `decodeURIComponent` 校验就没法把它与编码过的恶意名字区分开，
  * 只能整包拒删——所以干脆不让目录名出现它（哈希照旧按 bookKey 算，不受清洗影响）。
  */
+// eslint-disable-next-line no-control-regex -- 控制字符正是要拦的对象
 const UNSAFE_PATH = /[\\/:*?"<>|\u0000-\u001f%]+/g
 
 /**

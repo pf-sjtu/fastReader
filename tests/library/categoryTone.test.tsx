@@ -110,7 +110,6 @@ describe('分类胶囊在封面上的可读性（白字 / 语义色 45% + 黑 55
   const srgb2lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
   const LUM = (rgb: number[]) => 0.2126 * srgb2lin(rgb[0]) + 0.7152 * srgb2lin(rgb[1]) + 0.0722 * srgb2lin(rgb[2])
   const ratio = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
-  const over = (dst: number[], src: number[], a: number) => src.map((c, i) => dst[i] * (1 - a) + c * a)
   const enc = ([L, C, h]: [number, number, number]) => {
     const rad = (h * Math.PI) / 180
     const A = C * Math.cos(rad)

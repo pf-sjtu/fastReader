@@ -14,6 +14,7 @@ describe('html 块沙箱页守卫', () => {
     expect(page).toContain(`'${DOC_MSG}'`)
     expect(page).not.toMatch(/<script[^>]+src=/i)
     expect(page).toContain('e.source !== window.parent')
+    expect(page).toContain("self.origin !== 'null'")
   })
 
   it('SANDBOX_URL 指向 public 下真实存在的页面', () => {
@@ -32,6 +33,8 @@ describe('html 块沙箱页守卫', () => {
     expect(csp).toContain("script-src 'unsafe-inline'")
     expect(csp).toContain("frame-ancestors 'self'")
     expect(csp).not.toContain('connect-src')
+    // 纵深防御：响应头强制 opaque origin（即使被同源直接打开也碰不到站点存储）
+    expect(csp).toContain('sandbox allow-scripts')
   })
 
   it('全局 CSP 不放宽：不含 unsafe-inline 脚本', () => {
@@ -39,5 +42,6 @@ describe('html 块沙箱页守卫', () => {
     const csp = /Content-Security-Policy:\s*(.+)/.exec(globalRule)?.[1] ?? ''
     expect(csp).toContain("script-src 'self'")
     expect(csp).not.toMatch(/script-src[^;]*unsafe-inline/)
+    expect(csp).toContain("frame-src 'self'")
   })
 })

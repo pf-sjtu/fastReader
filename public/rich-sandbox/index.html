@@ -16,6 +16,8 @@
          能执行内联脚本，但没有任何网络、不能嵌套页面、碰不到站点的存储与 Cookie。 -->
     <script>
       ;(function () {
+        // 纵深防御：响应头的 CSP sandbox 会让本页永远是 opaque origin；若不是（被改了头 / 被同源直接打开），什么都不做
+        if (self.origin !== 'null') return
         var done = false
         window.addEventListener('message', function (e) {
           if (done || e.source !== window.parent) return

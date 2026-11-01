@@ -93,6 +93,7 @@ const PILL = `bg-black/45 ${PILL_BOX}`
  * 「bg-<tone> 再叠 bg-black/55」，是为了不受工具类输出顺序影响（Tailwind 按 @theme 变量顺序
  * 输出，两条背景属性谁压谁不可控）。白字对比度最差 7.5:1，见同目录测试的合成对比度用例。
  */
+// eslint-disable-next-line react-refresh/only-export-components -- 单测要断言这张表，拆文件会牵动多处导入
 export const CATEGORY_PILL_BG: Record<CategoryTone, string> = {
   primary: 'bg-[color-mix(in_oklab,var(--primary)_45%,black)]',
   info: 'bg-[color-mix(in_oklab,var(--info)_45%,black)]',

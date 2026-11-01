@@ -58,7 +58,8 @@ export function richBlocksToStatic(summary: string, esc: Esc, L: RichStaticLabel
     return `\n\nRICHFRAG${fragments.length - 1}END\n\n`
   }
   const text = mapRichBlocks(summary, (b) => {
-    if (b.truncated) return ''
+    // 未闭合（输出被截断）：围栏之后的文字无法与块区分，宁可整段按源码留下，也不静默丢弃
+    if (b.truncated) return hold(`<div class="gu-card"><pre class="gu-src">${esc(b.raw.trim())}</pre></div>`)
     if (b.lang === 'mermaid') return hold(`<div class="gu-card"><div class="gu-tag">${esc(L.diagramBelow)}</div><pre class="gu-src">${esc(b.code.trim())}</pre></div>`)
     if (b.lang === 'html') return hold(`<p class="empty">${esc(L.interactiveOnline)}</p>`)
     const r = parseGenUi(b.code)

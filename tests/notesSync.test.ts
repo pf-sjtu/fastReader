@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  ARTIFACT_SCHEMA,
   artifactDirOf,
   artifactPath,
   buildEnvelope,
@@ -119,8 +118,6 @@ const remoteOk = (file: NotesFile): ArtifactLoad<NotesFile> => ({
 })
 /** 确知云端没有这份存档 */
 const MISSING: ArtifactLoad<NotesFile> = { status: 'missing' }
-/** 这一轮没读成（断网 / 5xx）——绝不能被当成「云端没有」 */
-const READ_FAILED: ArtifactLoad<NotesFile> = { status: 'error', error: new Error('boom') }
 
 const flushSync = () => vi.advanceTimersByTimeAsync(NOTES_SYNC_DEBOUNCE_MS + 1)
 
