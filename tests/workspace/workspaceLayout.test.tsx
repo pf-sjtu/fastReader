@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach, beforeAll, afterAll, beforeEach } 
 import { act } from 'react'
 import { mount, flush } from '../uiTestUtils'
 import { ReaderWorkspace } from '@/components/workspace/ReaderWorkspace'
-import { BODY_MIN_WIDTH, COMPACT_BELOW, containerWidth, fitColumns, isCompactWidth } from '@/components/workspace/columns'
+import { BODY_MIN_WIDTH, COMPACT_BELOW, containerWidth, fitColumns, isCompactWidth, wideBonus } from '@/components/workspace/columns'
 import { COMPANION_DEFAULT_WIDTH, COMPANION_MIN_WIDTH, NAV_DEFAULT_WIDTH, NAV_MIN_WIDTH, useReadingFocusStore } from '@/stores/readingFocus'
 import type { BookSummary } from '@/types/book'
 
@@ -65,12 +65,28 @@ describe('fitColumns：正文列不被两侧挤没', () => {
 })
 
 describe('isCompactWidth', () => {
-  it('视口 → 容器宽度（扣页面边距，封顶 110rem）→ 与阈值比较', () => {
+  it('视口 → 容器宽度（扣页面边距，封顶 160rem）→ 与阈值比较', () => {
     expect(containerWidth(800)).toBe(752)
-    expect(containerWidth(4000)).toBe(1760)
+    expect(containerWidth(1808)).toBe(1760) // 与 CSS 在 1800px 以下封顶 110rem 一致
+    expect(containerWidth(4000)).toBe(2560)
     expect(isCompactWidth(800)).toBe(true)
     expect(isCompactWidth(1024)).toBe(true) // 1024 - 48 = 976 < 1000
     expect(isCompactWidth(1100)).toBe(false)
+  })
+})
+
+describe('wideBonus：超宽屏多出来的宽度', () => {
+  it('1760 及以下没有加成（原布局不变）', () => {
+    expect(wideBonus(1000)).toEqual({ nav: 0, companion: 0 })
+    expect(wideBonus(1760)).toEqual({ nav: 0, companion: 0 })
+  })
+
+  it('超过部分：对照栏拿大头、目录小头，正文列至少留 1/3 以上', () => {
+    const extra = 2560 - 1760
+    const b = wideBonus(2560)
+    expect(b.companion).toBeGreaterThan(b.nav)
+    expect(b.nav + b.companion).toBeLessThan(extra * 0.7)
+    expect(extra - b.nav - b.companion).toBeGreaterThan(extra * 0.3)
   })
 })
 

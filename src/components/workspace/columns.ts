@@ -6,7 +6,12 @@ export const BODY_MIN_WIDTH = 420
 export const COMPACT_BELOW = 1000
 /** App 外壳左右内边距之和（px-1.5…sm:p-4，取大值）与工作台最大宽度（2xl:max-w-[110rem]） */
 const PAGE_GUTTER = 48
-const PAGE_MAX = 1760
+/** 超宽屏的工作台上限（App.tsx 的 min-[1800px]:max-w-[160rem]）；1760 以内的屏幕布局不变 */
+const PAGE_MAX = 2560
+/** 超过它的宽度才算「超宽」，多出来的部分按比例加给目录 / 对照栏 */
+const WIDE_FROM = 1760
+const WIDE_SHARE_NAV = 0.1
+const WIDE_SHARE_DOCK = 0.55 // 其余 35% 留给正文列，避免行宽过长
 
 const HANDLE = 8 // ResizeHandle 的 w-2
 const DOCK_PAD = 12 // 对照栏的 pl-3
@@ -16,7 +21,16 @@ const DOCK_REOPEN = 56 // 对照栏收起后的「展开」按钮列
 /** 视口宽度 → 工作台容器宽度 */
 export const containerWidth = (viewport: number) => Math.min(viewport - PAGE_GUTTER, PAGE_MAX)
 
-export const isCompactWidth = (viewport: number) => containerWidth(viewport) < COMPACT_BELOW
+/**
+ * 超宽屏的额外宽度：只加在「显示宽度」上，用户存的偏好宽度不变。
+ * 拖拽时界面要把它减回去再存（见 ReaderWorkspace），否则一拖就会跳一个 bonus。
+ */
+export function wideBonus(container: number): { nav: number; companion: number } {
+  const extra = Math.max(0, container - WIDE_FROM)
+  return { nav: Math.round(extra * WIDE_SHARE_NAV), companion: Math.round(extra * WIDE_SHARE_DOCK) }
+}
+
+export const isCompactWidth =(viewport: number) => containerWidth(viewport) < COMPACT_BELOW
 
 interface FitInput {
   container: number

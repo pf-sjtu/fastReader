@@ -11,7 +11,7 @@ import { estimateRun } from '@/services/runEstimate'
 import { RunEstimateLine } from '@/components/study/RunEstimateLine'
 import { useTranslation } from 'react-i18next'
 import { useViewportWidth } from '@/hooks/useViewportWidth'
-import { containerWidth, fitColumns, isCompactWidth } from './columns'
+import { containerWidth, fitColumns, isCompactWidth, wideBonus } from './columns'
 import { useShallow } from 'zustand/react/shallow'
 import { ChevronsLeft, ChevronUp, Layers, List, Minimize2, PanelRightOpen, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -480,13 +480,16 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
   }
 
   // 三栏：按容器宽度夹紧，保证正文列不被两侧挤没（偏好宽度不变，窗口变宽自动恢复）
-  const fitted = fitColumns({
-    container: containerWidth(viewport ?? 1440),
+  const container = containerWidth(viewport ?? 1440)
+  const bonus = wideBonus(container) // 超宽屏多出来的宽度：只影响显示，不写进偏好
+  const base = fitColumns({
+    container: container - bonus.nav - bonus.companion,
     navWidth,
     navCollapsed,
     companionWidth,
     companionOpen,
   })
+  const fitted = { nav: base.nav + bonus.nav, companion: base.companion + bonus.companion }
 
   return (
     <div className="flex h-full min-h-0 w-full">
@@ -522,10 +525,10 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
             <ResizeHandle
               edge="right"
               width={fitted.nav}
-              min={NAV_MIN_WIDTH}
-              max={NAV_MAX_WIDTH}
-              defaultWidth={NAV_DEFAULT_WIDTH}
-              onChange={setNavWidth}
+              min={NAV_MIN_WIDTH + bonus.nav}
+              max={NAV_MAX_WIDTH + bonus.nav}
+              defaultWidth={NAV_DEFAULT_WIDTH + bonus.nav}
+              onChange={(w) => setNavWidth(w - bonus.nav)}
               label={t('workspace.nav.resize')}
               step={16}
               className="hidden md:block"
@@ -563,10 +566,10 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       {!focusMode && companionOpen && (
         <ResizeHandle
           width={fitted.companion}
-          min={COMPANION_MIN_WIDTH}
-          max={COMPANION_MAX_WIDTH}
-          defaultWidth={COMPANION_DEFAULT_WIDTH}
-          onChange={setCompanionWidth}
+          min={COMPANION_MIN_WIDTH + bonus.companion}
+          max={COMPANION_MAX_WIDTH + bonus.companion}
+          defaultWidth={COMPANION_DEFAULT_WIDTH + bonus.companion}
+          onChange={(w) => setCompanionWidth(w - bonus.companion)}
           label={t('workspace.dock.resize')}
         />
       )}
