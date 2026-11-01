@@ -181,8 +181,8 @@ JUDGE_BOOK = """你是严格的中文书籍编辑，请对同一批章节摘要�
 """
 
 
-def judge(model: Model, template: str, rng: random.Random, x_v2: str, x_v3: str, **fmt) -> dict:
-    flip = rng.random() < 0.5
+def judge(model: Model, template: str, flip: bool, x_v2: str, x_v3: str, **fmt) -> dict:
+    """单次评判：flip=True 时 v3 放在 A 位。一般不直接用，见 judge_both_orders"""
     a, b = (x_v3, x_v2) if flip else (x_v2, x_v3)
     out = model.ask(template.format(a=a, b=b, **fmt))
     m = re.search(r"\{[\s\S]*?\}", out)
@@ -195,11 +195,31 @@ def judge(model: Model, template: str, rng: random.Random, x_v2: str, x_v3: str,
     return {"winner": winner, "reason": str(data.get("reason", ""))[:200], "v3_was_A": flip}
 
 
+def judge_both_orders(model: Model, template: str, x_v2: str, x_v3: str, **fmt) -> dict:
+    """
+    两种顺序各评一次，只有两次一致才算数；不一致记为 tie 并标 consistent=False。
+    LLM 评判有明显的位置偏向（实测同一批数据里 B 位胜出率约 79%），单次随机换位的结果大半是噪声。
+    """
+    verdicts = [judge(model, template, v3_first, x_v2, x_v3, **fmt) for v3_first in (True, False)]
+    ws = [v["winner"] for v in verdicts]
+    consistent = ws[0] == ws[1]
+    return {"winner": ws[0] if consistent else "tie", "consistent": consistent, "verdicts": ws, "reason": verdicts[0]["reason"]}
+
+
+# 任一版本正文短于它就视为退化输出（模型自身故障，比如只回了几个字）：不参与评判，否则「对手崩了」会被记成胜利
+MIN_BODY_CHARS = 200
+
+
 def tally(results: list[dict]) -> dict:
-    c = {"v2": 0, "v3": 0, "tie": 0}
+    c = {"v2": 0, "v3": 0, "tie": 0, "skip": 0}
     for r in results:
         c[r["winner"]] += 1
     return c
+
+
+def consistency(results: list[dict]) -> float | None:
+    judged = [r for r in results if r["winner"] != "skip"]
+    return round(sum(r["consistent"] for r in judged) / len(judged), 2) if judged else None
 
 
 def main() -> int:
@@ -228,7 +248,6 @@ def main() -> int:
     effort = None if (args.sensenova or args.no_effort) else "medium"
     model = Model(base, key, args.model, effort)
     judge_model = Model(base, key, args.judge_model, effort) if args.judge_model else model
-    rng = random.Random(args.seed)
     lang = get_language_instruction("zh")
     t_v2 = PromptTemplates(prompt_config=PromptConfig(currentVersion="v2"))
     t_v3 = PromptTemplates(prompt_config=PromptConfig(currentVersion="v3"))
@@ -259,12 +278,17 @@ def main() -> int:
                 body_v2 = sanitize_summary(split_chapter_meta(raws["v2"])[0])
                 body_v3, meta_v3 = split_chapter_meta(raws["v3"])
                 body_v3 = sanitize_summary(body_v3)
-                row["judge"] = judge(judge_model, JUDGE, rng, body_v2, body_v3, title=ch.title, source=ch.content[:3500])
+                row["text"] = {"v2": body_v2, "v3": body_v3}  # 留存正文，事后可人工复核评判
+                if min(len(body_v2), len(body_v3)) < MIN_BODY_CHARS:
+                    row["judge"] = {"winner": "skip", "consistent": True, "verdicts": [], "reason": "退化输出，不参与评判"}
+                else:
+                    row["judge"] = judge_both_orders(judge_model, JUDGE, body_v2, body_v3, title=ch.title, source=ch.content[:3500])
             except Exception as e:  # noqa: BLE001 - 单章失败只记录，不让整次评测作废
                 errors.append({"book": b["book"], "chapter": ch.title, "error": str(e)[:300]})
                 print(f"  x {ch.title[:24]}: {str(e)[:160]}")
                 continue
-            print(f"  {ch.title[:24]:<24} v2违规{row['v2']['violations']} v3违规{row['v3']['violations']} meta={row['v3']['meta_ok']} 胜者={row['judge']['winner']}")
+            j = row["judge"]
+            print(f"  {ch.title[:24]:<24} v2违规{row['v2']['violations']} v3违规{row['v3']['violations']} meta={row['v3']['meta_ok']} 胜者={j['winner']}" + ("" if j["consistent"] else f"（两次顺序不一致 {j['verdicts']}）"))
             chapter_rows.append(row)
             s2.append((ch.title, body_v2))
             s3.append((ch.title, body_v3))
@@ -287,13 +311,13 @@ def main() -> int:
             if entity_table:
                 c3_prompt += "\n\n已知实体表（请沿用这些规范名与别名，不要另起写法）:\n" + entity_table
             c3 = model.ask(c3_prompt + "\n\n" + lang)
-            bj = judge(judge_model, JUDGE_BOOK, rng, c2, c3, summaries="\n".join(f"【{t}】{s[:600]}" for t, s in s3))
+            bj = judge_both_orders(judge_model, JUDGE_BOOK, c2, c3, summaries="\n".join(f"【{t}】{s[:600]}" for t, s in s3))
         except Exception as e:  # noqa: BLE001
             errors.append({"book": b["book"], "chapter": "(书级关联分析)", "error": str(e)[:300]})
             print(f"  x 书级关联分析: {str(e)[:160]}")
             continue
-        print(f"  书级关联分析 胜者={bj['winner']}")
-        book_rows.append({"book": b["book"], "judge": bj, "v2_chars": len(c2), "v3_chars": len(c3), "entity_table_size": len(table)})
+        print(f"  书级关联分析 胜者={bj['winner']}" + ("" if bj["consistent"] else f"（两次顺序不一致 {bj['verdicts']}）"))
+        book_rows.append({"book": b["book"], "judge": bj, "v2_chars": len(c2), "v3_chars": len(c3), "entity_table_size": len(table), "text": {"v2": c2, "v3": c3}})
 
     def agg(ver: str, k: str):
         return sum(r[ver][k] for r in chapter_rows) / len(chapter_rows)
@@ -312,6 +336,8 @@ def main() -> int:
         "v3_avg_aliases": round(agg("v3", "aliases"), 1),
         "chapter_judge": tally([r["judge"] for r in chapter_rows]),
         "book_judge": tally([r["judge"] for r in book_rows]),
+        # 两种顺序结论一致的比例：越低说明评判越靠位置偏向、越不可信（不一致的已记为 tie）
+        "judge_consistency": {"chapter": consistency([r["judge"] for r in chapter_rows]), "book": consistency([r["judge"] for r in book_rows])},
         "failed_calls": len(errors),
     }
     out = Path(args.out)
