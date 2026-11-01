@@ -54,6 +54,8 @@ import { useReadingCommands } from './useReadingCommands'
 import { StepRetryNote } from '@/components/sections/StepRetryNote'
 import type { BookStepKind } from '@/hooks/useBookSteps'
 import { notesKeyOf, useNotesStore } from '@/notes/notesStore'
+import { useLibraryStore } from '@/services/library/libraryStore'
+import { bookKeyOf } from '@/services/artifacts'
 import { mergeAliasedEntities } from '@/charts/linking/entityMerge'
 
 const ResultsSection = lazy(() =>
@@ -188,6 +190,9 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     // 先等本地缓存加载完再自动补齐：否则 IndexedDB 里已有的速读 / 自测会被重复生成
     const { bind, autoGenerate } = useStudyStore.getState()
     void bind(bookSummary).then(() => autoGenerate(bookSummary))
+    // 顺手把这本书「当前各章总结指纹」记进书库索引：书库索引本身不存章节总结，
+    // 而「清理过时产物」要靠它判断信封里的速读 / 自测是不是按旧总结生成的
+    useLibraryStore.getState().touchStudyFp(bookKeyOf(bookSummary), studyKey)
     // 只在指纹变化 / 开关变化时重新绑定
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studyKey, processing, studyAuto])

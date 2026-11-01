@@ -10,6 +10,7 @@ import type { BookSummary } from '@/types/book'
 import { AutoStudyToggle } from './AutoStudyToggle'
 import { DepthSwitch } from './DepthSwitch'
 import { RunEstimateLine } from './RunEstimateLine'
+import { SyncNote } from './SyncNote'
 
 interface Props {
   bookSummary: BookSummary
@@ -28,6 +29,7 @@ export function StudyKitPanel({ bookSummary, onJumpChapter }: Props) {
   return (
     <div className="space-y-3">
       <AutoStudyToggle />
+      <SyncNote part="kit" />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <DepthSwitch chapters={bookSummary.chapters} />
         {running.kit ? (

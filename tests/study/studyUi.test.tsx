@@ -282,3 +282,64 @@ describe('绑定指纹', () => {
     expect(studyKeyOf(book)).toBe(studyKeyOf(book))
   })
 })
+
+describe('云端同步提示', () => {
+  const fresh = { kit: false, quiz: false }
+
+  it('按旧总结生成时提示可重新生成；重新生成按钮就在旁边', async () => {
+    useStudyStore.setState({
+      data: { ...emptyStudyData(), kit, kitFp: 'study:old', updatedAt: 1 },
+      stale: true,
+      staleParts: { kit: true, quiz: false },
+      sync: 'synced',
+    })
+    mounted = mount(<StudyKitPanel bookSummary={book} onJumpChapter={() => {}} />)
+    await flush()
+    expect(mounted.container.textContent).toContain('按早先的总结生成')
+    expect(btn('重新生成')).toBeTruthy()
+  })
+
+  it('过时看的是自己那一份：速读已经重生成过，自测面板仍要提示', async () => {
+    const key = studyKeyOf(book)
+    useStudyStore.setState({
+      data: { ...emptyStudyData(), kit, quiz, kitFp: key, quizFp: 'study:old' },
+      stale: true,
+      staleParts: { kit: false, quiz: true },
+      sync: 'synced',
+    })
+    mounted = mount(<QuizPanel bookSummary={book} onJumpChapter={() => {}} />)
+    await flush()
+    expect(mounted.container.textContent).toContain('按早先的总结生成')
+    mounted.unmount()
+
+    mounted = mount(<StudyKitPanel bookSummary={book} onJumpChapter={() => {}} />)
+    await flush()
+    expect(mounted.container.textContent).not.toContain('按早先的总结生成')
+  })
+
+  it('云端来自更新的版本：说明只读不动', async () => {
+    useStudyStore.setState({ sync: 'newer', stale: false, staleParts: fresh })
+    mounted = mount(<QuizPanel bookSummary={book} onJumpChapter={() => {}} />)
+    await flush()
+    expect(mounted.container.textContent).toContain('云端那份来自更新的版本')
+  })
+
+  it('云端不可用：说明只存本机', async () => {
+    useStudyStore.setState({ sync: 'offline', stale: false, staleParts: fresh })
+    mounted = mount(<QuizPanel bookSummary={book} onJumpChapter={() => {}} />)
+    await flush()
+    expect(mounted.container.textContent).toContain('只保存在本机')
+  })
+
+  it('一切正常时不多说一句话', async () => {
+    useStudyStore.setState({
+      sync: 'synced',
+      stale: false,
+      staleParts: fresh,
+      data: { ...emptyStudyData(), kit, kitFp: studyKeyOf(book) },
+    })
+    mounted = mount(<StudyKitPanel bookSummary={book} onJumpChapter={() => {}} />)
+    await flush()
+    expect(mounted.container.textContent).not.toContain('云端')
+  })
+})

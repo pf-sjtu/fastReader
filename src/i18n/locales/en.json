@@ -779,7 +779,7 @@
     "artifacts": {
       "open": "Clean up stale outputs",
       "title": "Clean up stale outputs on WebDAV",
-      "desc": "Only generated outputs (summaries, charts…) in the sync folder are removed; no book file is ever deleted. Items that are surely useless are pre-selected; summaries whose book is gone are not, so you decide.",
+      "desc": "Only generated outputs (summaries, charts…) in the sync folder are removed; no book file is ever deleted. Items that are surely useless are pre-selected; ones whose book is gone or that were generated from older summaries are not, so you decide.",
       "scanning": "Re-scanning WebDAV…",
       "none": "No stale outputs found.",
       "error": {
@@ -790,16 +790,19 @@
       "reason": {
         "legacy": "Legacy format",
         "dangling": "Dangling attachments",
-        "orphan": "Book is gone"
+        "orphan": "Book is gone",
+        "stale": "Outdated"
       },
       "reasonHint": {
         "legacy": "Old per-chapter summaries / mind maps, superseded by the full summary.",
         "dangling": "Charts or sidecar files whose full summary no longer exists; unreadable on their own.",
-        "orphan": "The book is neither on WebDAV nor in the cloud catalog; the summary is still readable, so delete only if you do not need it."
+        "orphan": "The book is neither on WebDAV nor in the cloud catalog; the summary is still readable, so delete only if you do not need it.",
+        "stale": "These were generated from an older set of chapter summaries and no longer match the current text; delete them and regenerate from the current summaries."
       },
+      "notesWarn": "A bundle may contain highlights and comments you wrote yourself. Deleting cannot be undone, so review each item.",
       "delete": "Delete {{count}} selected ({{size}})",
       "confirmTitle": "Delete {{count}} files?",
-      "confirmBody": "This cannot be undone. Only the selected output files are deleted; your book files are untouched.",
+      "confirmBody": "This cannot be undone. Only the selected outputs are removed (a bundle deletes every file inside it); your book files are untouched.",
       "confirmDelete": "Delete",
       "deleted": "Deleted {{count}} stale outputs",
       "partial": "Deleted {{ok}}, {{fail}} failed (scan again to retry)"
@@ -1463,6 +1466,11 @@
       "study": "Digest",
       "quiz": "Quiz",
       "ask": "Ask"
+    },
+    "sync": {
+      "stale": "This digest / quiz was generated from an earlier summary — use Regenerate to match the current one",
+      "newer": "The cloud copy comes from a newer version; it is kept read-only and left untouched",
+      "offline": "Cloud unavailable — this copy is only stored on this device"
     },
     "estimate": {
       "withCost": "About {{tokens}} tokens, roughly ¥{{cost}} (rough estimate)",

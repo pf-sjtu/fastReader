@@ -34,6 +34,11 @@ export interface LibraryEntry {
   status: BookStatus
   /** 摘要文件名（status≠unprocessed 时有） */
   summaryFile?: string
+  /**
+   * 当前「各章总结指纹」（`studyKeyOf(book)`）：清理「已过时」信封产物时唯一的比对依据。
+   * 缺省 = 还没算过这一轮的指纹，此时**不判过时**（不认识就不动）。
+   */
+  studyFp?: string
   /** 元数据已过期（源文件变了），下次打开或空闲时重新提取 */
   stale: boolean
   /** 连续缺席的扫描次数；>0 说明上次扫描没看到源文件 */

@@ -280,6 +280,34 @@ export function recordProgressByFileName(io: LibraryIO, fileName: string, chapte
   })
 }
 
+/**
+ * 记录该书当前「各章总结指纹」（清理「已过时」信封产物的唯一依据，见 docs/artifact-store.md §4）。
+ * 条目不存在、指纹为空、指纹没变都不写：每次写都是一次整份远端索引的读-改-写，不能每打开一本书都打扰上游。
+ */
+export function recordStudyFp(io: LibraryIO, path: string, fp: string) {
+  return mutate(io, (idx) => {
+    const entry = idx.entries[path]
+    if (!entry || !fp || entry.studyFp === fp) return idx
+    return patchEntry(idx, path, { studyFp: fp }, io.now())
+  })
+}
+
+/**
+ * 同上，但按信封口径的书身份（`title|author`）匹配：调用方（打开书的那一侧）手里只有书名 / 作者，没有索引里的文件路径。
+ * 同一本书可能有多份条目（同一本书传了两次），一并写上；匹配不到、值都没变就完全不动（不写回）。
+ */
+export function recordStudyFpByKey(io: LibraryIO, bookKey: string, fp: string) {
+  return mutate(io, (idx) => {
+    if (!bookKey || !fp) return idx
+    let next = idx
+    for (const e of Object.values(idx.entries)) {
+      if (`${e.title}|${e.author ?? ''}` !== bookKey || e.studyFp === fp) continue
+      next = patchEntry(next, e.path, { studyFp: fp }, io.now())
+    }
+    return next
+  })
+}
+
 /** 处理完成 / 清缓存 / 删摘要：状态与摘要文件名一次改完（按源文件名定位条目） */
 export function recordStatusByFileName(io: LibraryIO, fileName: string, status: BookStatus) {
   return mutate(io, (idx) => {

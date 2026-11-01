@@ -4,18 +4,44 @@ import { act } from 'react'
 import { mount, click, findButton, flush, stubDomForRadix } from '../uiTestUtils'
 
 const deleteFile = vi.fn()
+const deleteDirectory = vi.fn()
+/** `.juhua/books` 下「假装存在」的子目录 */
+let davDirs: { basename: string; type: string }[] = []
+/** 信封包里的文件：完整路径 → 未压缩的信封文本（假 IO 不做 gzip） */
+const artifactFiles = new Map<string, string>()
 const io = {
   syncPath: '/fastReader',
   summaryNameOf: (n: string) => `${n.replace(/\.[^/.]+$/, '')}-完整摘要.md`,
   listFiles: vi.fn(),
 }
 vi.mock('@/services/library/libraryIO', () => ({ createLibraryIO: () => io }))
-vi.mock('@/services/webdavService', () => ({ webdavService: { deleteFile: (...a: unknown[]) => deleteFile(...a) } }))
+vi.mock('@/services/artifacts/io', () => ({
+  createArtifactIO: () => ({
+    read: async (p: string) => artifactFiles.get(p) ?? null,
+    write: async () => true,
+    list: async (dir: string) =>
+      Array.from(artifactFiles.keys())
+        .filter((p) => p.startsWith(`${dir}/`))
+        .map((p) => ({ path: p, basename: p.slice(dir.length + 1), size: 100 })),
+    removeDir: async () => true,
+  }),
+}))
+vi.mock('@/services/webdavService', () => ({
+  webdavService: {
+    isInitialized: () => true,
+    getDirectoryContents: async () => ({ success: true, data: davDirs }),
+    deleteFile: (...a: unknown[]) => deleteFile(...a),
+    deleteDirectory: (...a: unknown[]) => deleteDirectory(...a),
+  },
+}))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
 import { ArtifactCleanup } from '@/components/library/ArtifactCleanup'
 import { useLibraryStore } from '@/services/library/libraryStore'
-import { applyScan, emptyIndex } from '@/services/library/libraryIndex'
+import { applyScan, emptyIndex, patchEntry } from '@/services/library/libraryIndex'
+import { buildEnvelope, serializeEnvelope, type ArtifactKind as EnvelopeKind } from '@/services/artifacts/envelope'
+
+const BOOKS_ROOT = '/fastReader/.juhua/books'
 
 stubDomForRadix()
 
@@ -38,10 +64,21 @@ afterEach(() => {
 const sum = (n: string) => `${n.replace(/\.[^/.]+$/, '')}-完整摘要.md`
 const indexOf = (...names: string[]) => applyScan(emptyIndex(0), names.map((n) => ({ path: `/EBook/${n}`, size: 1, mtime: 'm' })), { now: 1, summaryNameOf: sum, summaryNames: new Set() }).index
 const file = (name: string, size = 100) => ({ path: `/fastReader/${name}`, basename: name, size, mtime: '' })
+/** 给条目补上标题与「各章总结指纹」（信封比对的依据） */
+const withFp = (index: ReturnType<typeof indexOf>, name: string, studyFp: string) =>
+  patchEntry(index, `/EBook/${name}`, { title: name.replace(/\.[^/.]+$/, ''), studyFp }, 2)
+/** 一份可被 parseEnvelopeText 读懂的信封文本 */
+const envText = (kind: EnvelopeKind, bookKey: string, inputsFp: string) => {
+  const [title, author] = bookKey.split('|')
+  return serializeEnvelope(buildEnvelope({ kind, bookKey, title, author: author || undefined, inputsFp, data: {}, now: 1 }))
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
   deleteFile.mockResolvedValue({ success: true })
+  deleteDirectory.mockResolvedValue({ success: true })
+  davDirs = []
+  artifactFiles.clear()
   io.listFiles.mockResolvedValue([file('甲_chapter_1_summary.md'), file('乙-完整摘要.json'), file('丙-完整摘要.md', 5000), file('丁-完整摘要.md')])
   useLibraryStore.setState({ index: indexOf('丁.epub'), catalog: {}, fresh: true, error: null, refresh: vi.fn().mockResolvedValue(undefined) })
 })
@@ -106,5 +143,41 @@ describe('ArtifactCleanup', () => {
     io.listFiles.mockResolvedValue([file('丁-完整摘要.md')])
     await open()
     expect(document.body.textContent).toContain('没有发现过时产物')
+  })
+
+  it('信封「已过时」：单独成组、默认不勾选（书还在，只是按旧总结生成）', async () => {
+    useLibraryStore.setState({ index: withFp(indexOf('甲.epub'), '甲.epub', '新指纹') })
+    artifactFiles.set(`${BOOKS_ROOT}/甲~abc/study.json.gz`, envText('study', '甲|', '旧指纹'))
+    davDirs = [{ basename: '甲~abc', type: 'directory' }]
+    await open()
+    expect(document.body.textContent).toContain('已过时')
+    const box = boxes().find((b) => b.getAttribute('aria-label') === '甲~abc/study.json.gz')
+    expect(box?.getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('整包「书已不在」：默认不勾、挂笔记警示；勾选后走目录删除，不删单个文件', async () => {
+    useLibraryStore.setState({ index: indexOf('丙.epub') })
+    io.listFiles.mockResolvedValue([])
+    artifactFiles.set(`${BOOKS_ROOT}/乙~zzz/study.json.gz`, envText('study', '乙|', 'fp'))
+    artifactFiles.set(`${BOOKS_ROOT}/乙~zzz/notes.json.gz`, envText('notes', '乙|', ''))
+    davDirs = [{ basename: '乙~zzz', type: 'directory' }]
+    await open()
+    const box = boxes().find((b) => b.getAttribute('aria-label') === '乙~zzz')!
+    expect(box.getAttribute('aria-checked')).toBe('false')
+    // 列表里挂警示（图标带 notesWarn 提示文案）
+    expect(document.querySelector(`[title="${i18n.t('library.artifacts.notesWarn')}"]`)).toBeTruthy()
+
+    click(box)
+    click(findButton(/删除所选 1 个/))
+    await flush(1)
+    expect(deleteDirectory).not.toHaveBeenCalled() // 确认前不删
+    // 确认框里再警示一次
+    expect(document.body.textContent).toContain(i18n.t('library.artifacts.notesWarn'))
+    await act(async () => {
+      findButton('确认删除')!.click()
+    })
+    await flush()
+    expect(deleteDirectory).toHaveBeenCalledWith(`${BOOKS_ROOT}/乙~zzz`)
+    expect(deleteFile).not.toHaveBeenCalled()
   })
 })

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2 } from 'lucide-react'
+import { Folder, Loader2, StickyNote } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -12,17 +12,21 @@ import { summarizeStale, type StaleArtifact, type StaleReason } from '@/services
 import { deleteStaleArtifacts, scanStaleArtifacts } from '@/services/library/artifactCleanupService'
 import { formatFileSize } from '@/utils/file'
 
-const REASONS: StaleReason[] = ['legacy', 'dangling', 'orphan']
+/** 展示顺序沿用既有三类，新增的「已过时」放最后 */
+const REASONS: StaleReason[] = ['legacy', 'dangling', 'orphan', 'stale']
 
 type State =
   | { kind: 'idle' }
   | { kind: 'scanning' }
   | { kind: 'error'; reason: 'no-books' | 'scan-failed' | 'unavailable'; error?: string }
-  | { kind: 'ready'; items: StaleArtifact[] }
+  | { kind: 'ready'; items: StaleArtifact[]; syncPath: string }
 
 /**
  * 清理 WebDAV 上过时的处理产物。判断「书不在了」的唯一依据是扫描，所以先强制重扫一次，
  * 扫描不成功 / 一本书都没扫到（多半目录配错）时拒绝给清单；删除只针对用户勾选的、且只删产物文件，不碰书。
+ *
+ * 两类目标：与书同级的旧式产物，以及 `.juhua/books` 下的信封包（整包 = 书已不在，单份 = 已过时）。
+ * 含笔记的整包默认不勾选，并在确认框里再警示一次。
  */
 export function ArtifactCleanup() {
   const { t } = useTranslation()
@@ -42,19 +46,21 @@ export function ArtifactCleanup() {
     if (!s.fresh) return setState({ kind: 'error', reason: 'scan-failed', error: s.error ?? undefined })
     const r = await scanStaleArtifacts(io, s.index, s.catalog)
     if (!r.ok) return setState({ kind: 'error', reason: r.reason, error: r.error })
-    setState({ kind: 'ready', items: r.items })
+    setState({ kind: 'ready', items: r.items, syncPath: io.syncPath })
     setPicked(new Set(r.items.filter((i) => i.recommended).map((i) => i.path)))
   }, [])
 
   const items = state.kind === 'ready' ? state.items : []
   const chosen = items.filter((i) => picked.has(i.path))
   const chosenBytes = chosen.reduce((n, i) => n + i.size, 0)
+  const chosenNotes = chosen.some((i) => i.hasNotes)
   const toggle = (path: string, on: boolean) => setPicked((p) => new Set(on ? [...p, path] : [...p].filter((x) => x !== path)))
 
   const doDelete = async () => {
     setConfirm(false)
     setDeleting(true)
-    const r = await deleteStaleArtifacts(chosen)
+    // 用本次扫描的 syncPath 再校验一次包含性：不在这个目录下的条目会被服务层拒绝删除
+    const r = await deleteStaleArtifacts(chosen, undefined, 3, undefined, state.kind === 'ready' ? state.syncPath : '')
     setDeleting(false)
     if (r.failed.length) toast.error(t('library.artifacts.partial', { ok: r.deleted.length, fail: r.failed.length }))
     else toast.success(t('library.artifacts.deleted', { count: r.deleted.length }))
@@ -110,6 +116,12 @@ export function ArtifactCleanup() {
                     {group.map((i) => (
                       <li key={i.path} className="flex items-center gap-2 text-xs">
                         <Checkbox checked={picked.has(i.path)} onCheckedChange={(v) => toggle(i.path, v === true)} aria-label={i.basename} />
+                        {i.dir ? <Folder className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : null}
+                        {i.hasNotes ? (
+                          <span className="shrink-0 text-warning" title={t('library.artifacts.notesWarn')}>
+                            <StickyNote className="size-3.5" aria-hidden />
+                          </span>
+                        ) : null}
                         <span className="min-w-0 flex-1 truncate" title={i.path}>
                           {i.basename}
                         </span>
@@ -139,6 +151,7 @@ export function ArtifactCleanup() {
             <AlertDialogTitle>{t('library.artifacts.confirmTitle', { count: chosen.length })}</AlertDialogTitle>
             <AlertDialogDescription>{t('library.artifacts.confirmBody')}</AlertDialogDescription>
           </AlertDialogHeader>
+          {chosenNotes ? <p className="text-xs text-warning">{t('library.artifacts.notesWarn')}</p> : null}
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={() => void doDelete()}>{t('library.artifacts.confirmDelete')}</AlertDialogAction>

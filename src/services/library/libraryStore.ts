@@ -10,8 +10,8 @@ import { logger } from '@/lib/logger'
 import { webdavService } from '@/services/webdavService'
 import { createLibraryIO, readLibraryMirror } from './libraryIO'
 import { useConfigStore } from '@/stores/configStore'
-import { adoptCloudCovers, persistIndex, rebuildLibrary, recordMetadataBatch, recordOpened, recordProgressByFileName, recordStatusByFileName, refreshLibrary } from './libraryService'
-import { emptyIndex, migrateIndex } from './libraryIndex'
+import { adoptCloudCovers, persistIndex, rebuildLibrary, recordMetadataBatch, recordOpened, recordProgressByFileName, recordStatusByFileName, recordStudyFp, recordStudyFpByKey, refreshLibrary } from './libraryService'
+import { emptyIndex, migrateIndex, patchEntry } from './libraryIndex'
 import { fillLibraryMetadata, inspectBook, type FillResult } from './libraryFill'
 import { bookIdOf } from './bookId'
 import { buildCatalogMeta, buildShelf, findRealEntry, isCatalogFile } from './cloudCatalog'
@@ -53,6 +53,10 @@ interface LibraryState {
   rebuild: () => Promise<void>
   resolveEntry: (entry: LibraryEntry) => Promise<Resolved>
   markOpened: (entry: LibraryEntry, meta?: Parameters<typeof recordOpened>[2]) => Promise<void>
+  /** 记录这本书当前「各章总结指纹」（清理「已过时」产物用）；条目不存在或指纹没变都不写 */
+  setStudyFp: (path: string, fp: string) => Promise<void>
+  /** 按信封口径的书身份 `title|author` 记下章节总结指纹（打开书的那一侧手里只有书名 / 作者，没有文件路径） */
+  touchStudyFp: (bookKey: string, fp: string) => void
   /** 用户点开（已下载）一本书：云端缺信息 / 书变了就解析并补传，写回书库 */
   contributeOpened: (entry: LibraryEntry, file: File) => Promise<void>
   /** 登记 / 取消「WebDAV 上已找不到」的待确认项 */
@@ -298,6 +302,44 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
     const next = await recordOpened(io, entry.path, meta).catch(() => null)
     if (next) set({ index: next })
     else void get().refresh()
+  },
+
+  /**
+   * 记下这本书当前「各章总结指纹」（清理「已过时」产物要用它比对信封里的 inputsFp）。
+   * 本机先更新，界面不等一次远端往返；远端返回的才是权威结果，失败时下次打开这本书会再试。
+   */
+  setStudyFp: async (path, fp) => {
+    if (!fp) return
+    const io = createLibraryIO()
+    if (!io) return
+    const cur = get().index
+    if (cur.entries[path]?.studyFp !== fp) set({ index: patchEntry(cur, path, { studyFp: fp }, Date.now()) })
+    const next = await recordStudyFp(io, path, fp).catch(() => null)
+    if (next) set({ index: next })
+  },
+
+  /**
+   * 同上，但按信封口径的书身份 `title|author` 匹配条目：调用方手里只有书名 / 作者。
+   * 匹配不到条目、指纹都没变 → 完全不动（不写镜像，也不碰远端）；
+   * 有一次本机写入就先更新界面，远端返回的才是权威结果，失败时下次打开这本书会再试。
+   */
+  touchStudyFp: (bookKey, fp) => {
+    if (!bookKey || !fp) return
+    const cur = get().index
+    let next = cur
+    for (const e of Object.values(cur.entries)) {
+      if (`${e.title}|${e.author ?? ''}` !== bookKey || e.studyFp === fp) continue
+      next = patchEntry(next, e.path, { studyFp: fp }, Date.now())
+    }
+    if (next === cur) return
+    set({ index: next })
+    const io = createLibraryIO()
+    if (!io) return
+    void recordStudyFpByKey(io, bookKey, fp)
+      .then((idx) => {
+        if (idx) set({ index: idx })
+      })
+      .catch((e) => logger.warn('[library] 记录章节总结指纹失败', e))
   },
 }))
 

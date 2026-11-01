@@ -66,6 +66,8 @@ function sanitizeEntry(raw: unknown): LibraryEntry | null {
     coverKey: typeof r.coverKey === 'string' ? r.coverKey : undefined,
     status: STATUSES.includes(r.status as BookStatus) ? (r.status as BookStatus) : 'unprocessed',
     summaryFile: typeof r.summaryFile === 'string' ? r.summaryFile : undefined,
+    // 空串当「没有」：空指纹没法做比对，留着只会让人误以为算过
+    studyFp: typeof r.studyFp === 'string' && r.studyFp ? r.studyFp : undefined,
     stale: r.stale === true,
     missingScans: Math.max(0, Math.floor(num(r.missingScans))),
     lastOpenedAt: typeof r.lastOpenedAt === 'number' ? r.lastOpenedAt : undefined,

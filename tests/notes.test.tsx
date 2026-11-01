@@ -56,8 +56,9 @@ describe('notes 纯函数', () => {
       version: NOTES_VERSION,
       notes: [note(), note(), { id: 'x' }, { id: 'y', quote: '  ' }, { id: 'z', quote: 'q', color: 9, chapterIndex: 'a' }],
     })
-    expect(out.map((n) => n.id)).toEqual(['n1', 'z'])
-    expect(out[1]).toMatchObject({ color: 1, chapterIndex: -1, chapterId: '' })
+    // 顺序固定为「先 createdAt 再 id」：z 没给 createdAt（视为 0），排在 n1（createdAt 1）前面
+    expect(out.map((n) => n.id)).toEqual(['z', 'n1'])
+    expect(out[0]).toMatchObject({ color: 1, chapterIndex: -1, chapterId: '' })
   })
 
   it('resolveChapterIndex：先 id、再标题（忽略空白标点）、再序号+标题兼容；都不行 -1', () => {
@@ -98,7 +99,7 @@ describe('notesStore', () => {
         saved[key] = file
       },
     }
-    useNotesStore.setState({ bookKey: null, notes: [], editingId: null })
+    useNotesStore.setState({ bookKey: null, notes: [], allNotes: [], editingId: null })
   })
 
   it('bind 读取存档；add / update / remove 都写回；换书后不串', async () => {
@@ -113,11 +114,15 @@ describe('notesStore', () => {
     expect((saved[key] as { notes: Note[] }).notes.find((n) => n.id === 'n2')?.comment).toBe('批')
     useNotesStore.getState().remove('n2')
     expect(useNotesStore.getState().editingId).toBeNull()
-    expect((saved[key] as { notes: Note[] }).notes).toHaveLength(1)
+    // 删除写的是墓碑（同步要用）：本机存档里仍留着这一条，但 UI 看不到
+    const afterRemove = (saved[key] as { notes: Note[] }).notes
+    expect(afterRemove).toHaveLength(2)
+    expect(afterRemove.find((n) => n.id === 'n2')?.deleted).toBe(true)
+    expect(useNotesStore.getState().notes.map((n) => n.id)).toEqual(['n1'])
 
     await useNotesStore.getState().bind(notesKeyOf({ title: 'B' }))
     expect(useNotesStore.getState().notes).toEqual([])
-    expect((saved[key] as { notes: Note[] }).notes).toHaveLength(1) // 旧书存档未被动
+    expect((saved[key] as { notes: Note[] }).notes).toHaveLength(2) // 旧书存档未被动
   })
 
   it('加载慢于换书：旧书的结果被丢弃，不覆盖新书', async () => {

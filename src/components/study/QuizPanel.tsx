@@ -13,6 +13,7 @@ import type { QuizQuestion } from '@/study/schema'
 import type { AnsweredQuestion } from '@/study/persistence'
 import type { BookSummary } from '@/types/book'
 import { RunEstimateLine } from './RunEstimateLine'
+import { SyncNote } from './SyncNote'
 
 const COUNTS = [5, 10, 15] as const
 
@@ -143,6 +144,7 @@ export function QuizPanel({ bookSummary, currentChapterId, onJumpChapter }: Prop
   return (
     <div className="space-y-3">
       <AutoStudyToggle />
+      <SyncNote part="quiz" />
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1 text-xs text-muted-foreground">
           {t('study.quiz.scope')}
