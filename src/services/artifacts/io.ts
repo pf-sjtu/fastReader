@@ -24,6 +24,8 @@ export interface ArtifactEntry {
   basename: string
   size: number
   mtime?: string
+  /** 是子目录（整包删除是递归的，所以必须被看见） */
+  isDir?: boolean
 }
 
 /** 信封 IO 的最小接口：生产实现走 WebDAV，单测注入假实现 */
@@ -63,8 +65,8 @@ export function createArtifactIO(): ArtifactIO | null {
         const r = await webdavService.getDirectoryContents(dir)
         if (!r.success || !r.data) return []
         return r.data
-          .filter((f) => f.type === 'file')
-          .map((f) => ({ path: f.filename, basename: f.basename, size: f.size ?? 0, mtime: f.lastmod }))
+          // 目录也要列：整包删除是递归的，包里混着子目录时必须算作「不认识的东西」
+          .map((f) => ({ path: f.filename, basename: f.basename, size: f.size ?? 0, mtime: f.lastmod, ...(f.type === 'directory' ? { isDir: true } : {}) }))
       } catch {
         return []
       }

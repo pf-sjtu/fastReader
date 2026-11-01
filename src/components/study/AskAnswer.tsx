@@ -31,7 +31,15 @@ export const AskAnswer = memo(function AskAnswer({ answer, chapters, onJumpChapt
     () => ({
       a({ href, children }: { href?: string; children?: ReactNode }) {
         if (href?.startsWith(CITE_SCHEME)) {
-          const id = decodeURIComponent(href.slice(CITE_SCHEME.length))
+          // micromark 只检查 % 后面是不是字母数字，不检查是不是十六进制：cite:%zz 会让 decodeURIComponent 抛异常
+          const raw = href.slice(CITE_SCHEME.length)
+          const id = (() => {
+            try {
+              return decodeURIComponent(raw)
+            } catch {
+              return raw
+            }
+          })()
           return (
             <ChapterPeek chapterId={id} chapters={chapters}>
               <button
@@ -50,6 +58,8 @@ export const AskAnswer = memo(function AskAnswer({ answer, chapters, onJumpChapt
           </a>
         )
       },
+      // 外链图片会在渲染时自动发请求，模型输出（可能被书中文字注入）借此能把对话内容带出去：只显示替代文字，不加载
+      img: ({ alt }: { alt?: string }) => <span className="text-muted-foreground">{alt ? `[${alt}]` : ''}</span>,
     }),
     [chapters, onJumpChapter]
   )

@@ -255,6 +255,19 @@ describe('scanStaleArtifacts：安全闸', () => {
     expect(r.items.map((a) => `${a.basename}:${a.reason}:${a.recommended ? 'rec' : 'keep'}`)).toEqual(['乙~1:orphan:keep', '甲~x/study.json.gz:stale:keep'])
   })
 
+  it('包里混着子目录：整包删除是递归的，必须当作「不认识的东西」整包不动（独立审查 M5）', async () => {
+    const tree = { '乙~1': { 'study.json.gz': envText('study', '乙|', 'fp') } }
+    const withDir = pkgIO(tree, {
+      list: async (dir) => [
+        { path: `${dir}/study.json.gz`, basename: 'study.json.gz', size: 5 },
+        { path: `${dir}/mine`, basename: 'mine', size: 0, isDir: true },
+      ],
+    })
+    const r = await scanStaleArtifacts(io([]), indexWith({ name: '甲.epub', title: '甲' }), {}, withDir)
+    // 乙 不在书架上，本应整包 orphan；因为含子目录，整包跳过
+    expect(r.ok && r.items.map((a) => a.basename)).toEqual([])
+  })
+
   it('单个包读失败不致命：其余包照常给出，整次扫描仍 ok', async () => {
     const tree = { '乙~1': { 'study.json.gz': null }, '丙~1': { 'study.json.gz': envText('study', '丙|', 'fp') } }
     const r = await scanStaleArtifacts(io([]), indexWith({ name: '甲.epub', title: '甲' }), {}, pkgIO(tree))

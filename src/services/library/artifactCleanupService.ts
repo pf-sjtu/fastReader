@@ -88,7 +88,7 @@ async function scanPackages(pkg: ArtifactPackageIO, syncPath: string): Promise<S
     const files: ScannedEnvelopeFile[] = []
     for (const e of entries) {
       const base = { path: e.path, basename: e.basename, size: e.size, mtime: e.mtime }
-      if (!ENVELOPE_FILE.test(e.basename)) {
+      if (e.isDir || !ENVELOPE_FILE.test(e.basename)) {
         // 包内多出来的东西：不认识的 kind（分类时整包跳过）
         files.push({ ...base, kind: null, parsed: null })
         continue

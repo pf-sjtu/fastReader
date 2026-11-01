@@ -370,3 +370,38 @@ describe('阅读深度', () => {
     expect(kitCoverage(chapters, null)).toEqual({ covered: 0, total: 3 })
   })
 })
+
+describe('autoGenerate 与 bind 的竞态 / 答题记录保护（独立审查 M1、M2）', () => {
+  it('重复 bind（StrictMode / 重挂载）时，第二次的 then(autoGenerate) 也要等本机数据读完——不重复生成、不丢答题记录', async () => {
+    const b = mkBook()
+    const answers = { q1: { picked: 0, correct: true } }
+    const slow = memoryBackend({ [studyKeyOf(b)]: { kit, quiz, answers, kitFp: studyKeyOf(b), quizFp: studyKeyOf(b) } })
+    studyDeps.backend = { ...slow.backend, load: (k) => new Promise((r) => setTimeout(() => r(slow.db.get(k) ?? null), 30)) }
+    const run = () => useStudyStore.getState().bind(b).then(() => useStudyStore.getState().autoGenerate(b))
+    await Promise.all([run(), run()])
+    expect(ai.generateStudyKit).not.toHaveBeenCalled()
+    expect(ai.generateQuiz).not.toHaveBeenCalled()
+    expect(useStudyStore.getState().data.answers).toEqual(answers)
+  })
+
+  it('过时的自测若已有答题记录：自动生成不碰（重做会清掉记录，留给用户手动）；没有记录才自动重做', async () => {
+    const b = mkBook()
+    const key = studyKeyOf(b)
+    mem = memoryBackend({ [key]: { kit, quiz, answers: { q1: { picked: 0, correct: true } }, kitFp: key, quizFp: 'old-fp' } })
+    studyDeps.backend = mem.backend
+    await useStudyStore.getState().bind(b)
+    await useStudyStore.getState().autoGenerate(b)
+    expect(ai.generateQuiz).not.toHaveBeenCalled()
+    expect(useStudyStore.getState().data.answers).toEqual({ q1: { picked: 0, correct: true } })
+
+    // 没有答题记录：照常自动重做
+    resetAutoTried()
+    mem = memoryBackend({ [key]: { kit, quiz, answers: {}, kitFp: key, quizFp: 'old-fp' } })
+    studyDeps.backend = mem.backend
+    ai.generateQuiz.mockResolvedValue(quiz)
+    useStudyStore.setState({ bookKey: null })
+    await useStudyStore.getState().bind(b)
+    await useStudyStore.getState().autoGenerate(b)
+    expect(ai.generateQuiz).toHaveBeenCalledTimes(1)
+  })
+})

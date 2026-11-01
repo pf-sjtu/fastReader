@@ -133,6 +133,8 @@ function readAuto(): boolean {
 let abort: AbortController | null = null
 let turnSeq = 0
 /** 本会话已自动尝试过的「书指纹:产物」：成功与否都不再自动重来 */
+/** 最近一次 bind 的加载过程（重复 bind 早退时返回它，让调用方等同一次加载） */
+let bindInflight: Promise<void> | null = null
 const autoTried = new Set<string>()
 /** 仅测试用：清空「已尝试」记录 */
 export const resetAutoTried = () => autoTried.clear()
@@ -307,6 +309,8 @@ export const useStudyStore = create<StudyState>()((set, get) => {
         // 书换了 / 用户关掉开关 / 用户正在做别的：停下（下次进入时再看）
         if (get().bookKey !== key || !get().auto || busy()) return
         if (autoTried.has(tried) || !need[kind]) continue
+        // 过时的自测若已有答题记录：重做会把记录清掉（不可恢复），自动生成不碰，留给用户手动决定（与清理侧「含答题记录默认不勾选」同一原则）
+        if (kind === 'quiz' && get().data.quiz && Object.keys(get().data.answers ?? {}).length) continue
         autoTried.add(tried)
         await (kind === 'kit' ? get().generateKit(book) : get().generateQuiz(book))
         // 速读没成功就不接着烧自测：多半是模型 / 网络问题，等用户处理
@@ -327,7 +331,7 @@ export const useStudyStore = create<StudyState>()((set, get) => {
       // 身份先记住：云端读写要靠它，同一本书重复 bind 也要保证它是最新的
       bookMeta = nextMeta
       // 指纹一样但书不一样（章节 id 与总结长度全撞上）时不能早退：那是两本书，信封都不同
-      if (get().bookKey === key && meta?.bookKey === nextMeta.bookKey) return
+      if (get().bookKey === key && meta?.bookKey === nextMeta.bookKey) return bindInflight ?? undefined
       abort?.abort()
       if (syncTimer) {
         clearTimeout(syncTimer)
@@ -346,17 +350,23 @@ export const useStudyStore = create<StudyState>()((set, get) => {
         stale: false,
         staleParts: { kit: false, quiz: false },
       })
-      const loaded = await studyDeps.backend.load(key).catch(() => null)
-      if (get().bookKey !== key) return
-      const local: StudyData = loaded ? { ...sanitizeStudyData(loaded) } : emptyStudyData()
-      if (loaded) {
-        // 本机这份就是按当前指纹存的：哪一份没写指纹（旧数据）就给哪一份补当前指纹，别把它误判成「按旧总结生成」
-        if (local.kit && !local.kitFp) local.kitFp = key
-        if (local.quiz && !local.quizFp) local.quizFp = key
-        set({ data: local, stale: isStudyStale(local, key), staleParts: stalePartsOf(local, key) })
-      }
-      // 本机数据已经能用了，云端那份只是可能更全 / 更新：异步对齐，不阻塞界面
-      await pullRemote(key, get().data)
+      // 记下这次加载：同一本书再次 bind（StrictMode / 组件重挂载）会直接早退，
+      // 但调用方的 `.then(autoGenerate)` 必须等到本机数据读完——否则它看到的是空数据，会重复生成并清掉答题记录
+      const run = (async () => {
+        const loaded = await studyDeps.backend.load(key).catch(() => null)
+        if (get().bookKey !== key) return
+        const local: StudyData = loaded ? { ...sanitizeStudyData(loaded) } : emptyStudyData()
+        if (loaded) {
+          // 本机这份就是按当前指纹存的：哪一份没写指纹（旧数据）就给哪一份补当前指纹，别把它误判成「按旧总结生成」
+          if (local.kit && !local.kitFp) local.kitFp = key
+          if (local.quiz && !local.quizFp) local.quizFp = key
+          set({ data: local, stale: isStudyStale(local, key), staleParts: stalePartsOf(local, key) })
+        }
+        // 本机数据已经能用了，云端那份只是可能更全 / 更新：异步对齐，不阻塞界面
+        await pullRemote(key, get().data)
+      })()
+      bindInflight = run
+      await run
     },
 
     generateKit: async (book) => {
