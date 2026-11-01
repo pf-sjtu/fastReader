@@ -18,3 +18,13 @@ node tests/tour/richDemo/serve.mjs tmp/rich-demo-dist 5198
 - 章末提问区块的样式
 
 改了 `public/_headers` 要重启服务（规则启动时读一次）；按端口停服务，不要按进程名杀。
+
+## 带完整工作台的端到端走查（不需要后端、不需要密码）
+
+演示页只有渲染组件；要看「真实章节结果页」里三种块，用生产构建 + 静态服务 + Playwright 路由桩：
+
+1. `pnpm build`，`node tests/tour/richDemo/serve.mjs dist 5198`
+2. Playwright 里对 `**/api/auth/me`（200）、`**/api/state`（`{initialized:true, sections:{ai:{rev:1,updatedAt,data:{providers:[{id:'p1',name:'stub',type:'openai',baseUrl:'https://stub.test/v1',apiKey:{hasSecret:true},models:[{id:'stub-model',enabled:true,source:'manual'}]}],active:{providerId:'p1',modelId:'stub-model'},defaultTemperature:0.3}}},missing:[]}`）、`**/api/state/**`、`**/api/covers*` 打桩，`**/api/ai**` 返回一份含 mermaid / genui / html 块的 OpenAI 形状 chat completion
+3. 上传一个有两个标题的 `.md`，处理模式选「文字总结模式」→「开始处理」，在结果页核对三种块、高度、点击、深浅主题
+
+这条路径发现过单看演示页发现不了的问题（html 块高度回报只增不缩，留下大块空白）。

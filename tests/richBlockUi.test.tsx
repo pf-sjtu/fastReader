@@ -119,6 +119,8 @@ describe('buildSandboxDoc', () => {
     expect(r.doc).not.toMatch(/<iframe|<form|refresh|<base|<link/)
     expect(r.doc).toContain('<p id="a">好</p>')
     expect(r.doc).toContain('getElementById')
+    // 高度回报必须能「缩」：documentElement.scrollHeight 不会小于 iframe 自身当前高度，只靠它会永远留一块空白（登录后真实页面里发现的）
+    expect(r.doc).toContain('b.offsetHeight')
   })
   it('空 / 过大 → 失败', () => {
     expect(buildSandboxDoc('  ').ok).toBe(false)

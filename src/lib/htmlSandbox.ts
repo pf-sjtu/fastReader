@@ -29,7 +29,7 @@ export function buildSandboxDoc(code: string, dark = false): SandboxDoc {
   if (!src) return { ok: false, error: '内容为空' }
   if (src.length > HTML_MAX) return { ok: false, error: '内容过大' }
   const body = src.replace(BANNED, '')
-  const reporter = `<script>(function(){function h(){parent.postMessage({type:'${HEIGHT_MSG}',h:document.documentElement.scrollHeight},'*')}` +
+  const reporter = `<script>(function(){function h(){var b=document.body,c=getComputedStyle(b),x=b.offsetHeight+(parseFloat(c.marginTop)||0)+(parseFloat(c.marginBottom)||0),d=document.documentElement;parent.postMessage({type:'${HEIGHT_MSG}',h:Math.max(x,d.scrollHeight>d.clientHeight?d.scrollHeight:0)},'*')}` +
     `addEventListener('load',h);try{new ResizeObserver(h).observe(document.body)}catch(e){}})()</script>`
   // 默认文字色跟随主题（模型自己写了颜色则以它为准）；背景透明，透出卡片底色
   const color = dark ? '#e8e4dc' : '#222'
