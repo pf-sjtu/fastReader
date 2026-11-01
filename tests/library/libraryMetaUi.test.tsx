@@ -153,8 +153,10 @@ describe('详情对话框', () => {
     const text = document.body.textContent ?? ''
     for (const s of ['商业一', '作者甲', '中信出版社', '2020', '12 章', '3.0 MB', '拿破仑与金融危机', '商业', '历史']) expect(text, s).toContain(s)
     // 数据来源只在书架顶部说一次，不在每本书的详情里重复
-    expect(text).not.toContain('WebDAV 确认文件')
-    expect(text).not.toContain('来自云端书目')
+    const dialog = document.querySelector('[role="dialog"]')?.textContent ?? ''
+    expect(dialog).toContain('商业一')
+    expect(dialog).not.toContain('WebDAV')
+    expect(dialog).not.toContain('来自云端书目')
   })
 
   it('悬浮卡内容同样不带数据来源提示（虚拟条目也是）', async () => {
