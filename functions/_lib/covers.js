@@ -1,10 +1,10 @@
 // 书封面 / 元数据的云端存储（Workers KV）。
 //
 // 为什么放 KV：书库有 600+ 本书，原先靠「下载整本书再解析封面」补全，要拉几个 GB；
-// 把压缩后的封面（~3-6KB）与元数据放进 KV，书库首屏只读一份索引 + 可见的几张封面。
+// 把压缩后的封面（~2-3KB）与元数据放进 KV，书库首屏只读一份索引 + 可见的几张封面。
 //
 // 键：
-//   covers:index   JSON {items: {[id]: {stem,title,author,pages,chapterCount,cover}}}   一份索引（~100KB 量级）
+//   covers:index   JSON {rev, items: {[id]: {stem,title,author,pages,chapterCount,file,size,subjects,desc,publisher,year,lang,cover,updatedAt}}}   一份索引（646 本约 650KB）
 //   cover:<id>     base64 文本（webp，≤48KB）
 // KV 免费额度写 1000 次/天：批量接口一次请求写 N 张封面 + 1 次索引，单本补传也是 2 次写。
 import { getKv } from './kv.js'
@@ -73,7 +73,37 @@ export async function readIndex(env) {
   }
 }
 
-const writeIndex = (kv, index) => kv.put(INDEX_KEY, JSON.stringify({ ...index, rev: (index.rev || 0) + 1 }))
+/**
+ * 新版本号：单调且几乎不会撞车。两个并发写入若各自 +1 会得到同一个 rev（ETag 相同而内容不同），
+ * 已拿到第一版的客户端就会对第二版一直收到 304；带时间戳与随机尾数后，撞车的概率可忽略（< 2^53）。
+ */
+const nextRev = (prev) => Math.max((prev || 0) + 1, Date.now() * 1000 + Math.floor(Math.random() * 1000))
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/** KV 对同一个键限 1 次写/秒（超出会抛 429）：补全时连续上传很容易撞上，等一下重试一次 */
+async function putIndex(kv, index) {
+  const body = JSON.stringify({ ...index, rev: nextRev(index.rev) })
+  try {
+    await kv.put(INDEX_KEY, body)
+  } catch {
+    await sleep(1100)
+    await kv.put(INDEX_KEY, body)
+  }
+}
+
+/**
+ * 读-改-写索引。KV 没有 compare-and-set，丢更新无法根治（要彻底串行化得上 Durable Object / D1）；
+ * 这里把「读」推迟到真正写入前一刻，窗口从「整批封面写完」缩到几毫秒，再配合上面的唯一 rev 与重试。
+ * mutate 在最新的索引上就地修改，返回是否有变化；没有变化就不写（保护免费额度）。
+ */
+async function commitIndex(env, mutate) {
+  const kv = getKv(env)
+  const index = await readIndex(env)
+  if (!mutate(index)) return false
+  await putIndex(kv, index)
+  return true
+}
 
 /** base64 → 字节数（不解码，按长度推算），用来在写入前拒绝过大的图片 */
 export function base64Bytes(b64) {
@@ -89,9 +119,9 @@ const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/
  */
 export async function putItems(env, items, { overwrite = false } = {}) {
   const kv = getKv(env)
-  const index = await readIndex(env)
+  const index = await readIndex(env) // 只用来决定「封面已存在则不覆盖」；真正改索引时会重读最新的
   const results = []
-  let dirty = false
+  const changes = []
   for (const it of items) {
     const id = it?.id
     if (typeof id !== 'string' || !ID_RE.test(id)) {
@@ -115,14 +145,28 @@ export async function putItems(env, items, { overwrite = false } = {}) {
         status = 'stored'
       }
     }
-    const next = { ...(prev ?? {}), ...meta, ...(hasCover ? { cover: 1 } : {}) }
-    if (JSON.stringify(next) !== JSON.stringify(prev)) {
-      index.items[id] = { ...next, updatedAt: Date.now() }
-      dirty = true
+    // 整条替换（书被换过）：新文件没有封面就不能留着旧书的封面
+    if (overwrite && prev?.cover && !(typeof it.image === 'string' && it.image)) {
+      await kv.delete(coverKey(id))
+      hasCover = false
     }
+    changes.push({ id, meta, hasCover })
     results.push({ id, status })
   }
-  if (dirty) await writeIndex(kv, index)
+  await commitIndex(env, (cur) => {
+    let dirty = false
+    for (const { id, meta, hasCover } of changes) {
+      const prev = cur.items[id]
+      // 默认只合并（补缺，不抹掉已有字段）；overwrite 是「这是另一本书了」，旧值（分类 / 简介 / 出版社…）不能残留
+      const base = overwrite ? {} : (prev ?? {})
+      const next = { ...base, ...meta, ...(hasCover ? { cover: 1 } : {}) }
+      if (JSON.stringify(next) !== JSON.stringify(prev)) {
+        cur.items[id] = { ...next, updatedAt: Date.now() }
+        dirty = true
+      }
+    }
+    return dirty
+  })
   return results
 }
 
@@ -134,20 +178,26 @@ export async function deleteItems(env, ids) {
   const kv = getKv(env)
   const index = await readIndex(env)
   const results = []
-  let dirty = false
+  const valid = []
   for (const id of ids) {
     if (typeof id !== 'string' || !ID_RE.test(id)) {
       results.push({ id: String(id), status: 'bad_id' })
       continue
     }
     if (index.items[id]?.cover) await kv.delete(coverKey(id))
-    if (id in index.items) {
-      delete index.items[id]
-      dirty = true
-    }
+    valid.push(id)
     results.push({ id, status: 'deleted' })
   }
-  if (dirty) await writeIndex(kv, index)
+  await commitIndex(env, (cur) => {
+    let dirty = false
+    for (const id of valid) {
+      if (id in cur.items) {
+        delete cur.items[id]
+        dirty = true
+      }
+    }
+    return dirty
+  })
   return results
 }
 

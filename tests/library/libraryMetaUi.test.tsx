@@ -208,7 +208,7 @@ describe('云端有、WebDAV 没有：整批提示（只有一次成功扫描之
     expect(useLibraryStore.getState().removeBooks).not.toHaveBeenCalled()
     click(findButton(/查看并清理/))
     expect(document.body.textContent).toContain('清理 4 条云端资料')
-    expect(document.body.textContent).toContain('不会动 WebDAV 上的文件')
+    expect(document.body.textContent).toContain('不会删除 WebDAV 上的书籍文件')
     await act(async () => {
       findButton('全部删除')!.click()
     })
@@ -280,7 +280,7 @@ describe('单本缺失确认（点开时发现 WebDAV 上没有）', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     const text = document.querySelector('[role="alertdialog"]')?.textContent ?? ''
     expect(text).toContain('WebDAV 上找不到《商业一》')
-    expect(text).toContain('不会影响 WebDAV 上的任何文件')
+    expect(text).toContain('不会删除 WebDAV 上的任何书籍文件')
     await act(async () => {
       findButton('删除资料')!.click()
     })

@@ -751,7 +751,7 @@
       "notice": "{{count}} books in the cloud catalog aren't on WebDAV",
       "review": "Review and clean up",
       "title": "Delete {{count}} cloud entries?",
-      "body": "These books have info in the cloud catalog but are no longer in the WebDAV sync folder. Deleting only removes the cloud cover and info; files on WebDAV are not touched.",
+      "body": "These books have info in the cloud catalog but are no longer in the WebDAV sync folder. Deleting only removes the cloud cover and info; your book files on WebDAV are not deleted.",
       "more": "…and {{count}} more",
       "confirm": "Delete all",
       "done": "Removed {{count}} cloud entries"

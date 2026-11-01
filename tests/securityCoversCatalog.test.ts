@@ -2,7 +2,7 @@
  * 云端书目 metadata 的生命周期（服务端）：新字段清洗、索引版本 + ETag、元数据单独更新、
  * 源文件变了时覆盖封面、确认缺失后的删除（单个 / 批量 / 幂等）
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { onRequest as covers } from '../functions/api/covers/[[action]].js'
 import { cleanMeta } from '../functions/_lib/covers.js'
 import { createEnv } from './__mocks__/memoryKv'
@@ -44,7 +44,7 @@ describe('cleanMeta：新字段', () => {
 })
 
 describe('索引版本与 ETag', () => {
-  it('每次写入 rev+1；If-None-Match 命中回 304，改动后不再命中', async () => {
+  it('每次改动 rev 都变且单调增；If-None-Match 命中回 304，改动后不再命中', async () => {
     const env = createEnv()
     const first = await index(env)
     expect(((await first.json()) as Idx).rev).toBe(0)
@@ -52,7 +52,8 @@ describe('索引版本与 ETag', () => {
     await call(env, `/api/covers/${ID}`, { method: 'PUT', body: bytes(50), headers: { 'X-Book-Meta': enc({ stem: 'a', title: 'A' }) } })
     const r1 = await index(env)
     const etag = r1.headers.get('ETag')!
-    expect(((await r1.json()) as Idx).rev).toBe(1)
+    const rev1 = ((await r1.json()) as Idx).rev
+    expect(rev1).toBeGreaterThan(0)
     expect(r1.headers.get('Cache-Control')).toContain('no-cache')
 
     const r304 = await index(env, { 'If-None-Match': etag })
@@ -103,6 +104,58 @@ describe('元数据单独更新与 replace', () => {
   })
 })
 
+describe('书被换过（replace）：整条替换，不残留旧书的资料', () => {
+  const put = (env: unknown, q: string, meta: object, body?: Uint8Array) =>
+    call(env, `/api/covers/${ID}${q}`, { method: 'PUT', body, headers: { 'X-Book-Meta': enc(meta) } })
+
+  it('replace 时旧的分类 / 简介 / 出版社不再合并进来；默认（不带 replace）仍是只补缺', async () => {
+    const env = createEnv()
+    await put(env, '', { stem: 'a', title: 'A', subjects: ['History'], desc: '旧简介', publisher: '旧社' }, bytes(60, 1))
+    await put(env, '', { stem: 'a', title: 'A', year: 2020 }) // 合并：旧字段保留
+    expect(((await (await index(env)).json()) as Idx).items[ID]).toMatchObject({ subjects: ['History'], desc: '旧简介', year: 2020 })
+    await put(env, '?replace=1', { stem: 'a', title: 'A（新版）' }, bytes(60, 9))
+    const it = ((await (await index(env)).json()) as Idx).items[ID]
+    expect(it).toMatchObject({ title: 'A（新版）', cover: 1 })
+    expect(it).not.toHaveProperty('subjects')
+    expect(it).not.toHaveProperty('desc')
+    expect(it).not.toHaveProperty('publisher')
+  })
+
+  it('replace 且新文件没有封面：旧封面一并删掉（不能是 A 的封面配 B 的资料）', async () => {
+    const env = createEnv()
+    await put(env, '', { stem: 'a', title: 'A' }, bytes(60, 1))
+    await put(env, '?replace=1', { stem: 'a', title: 'A2' })
+    expect(((await (await index(env)).json()) as Idx).items[ID]).not.toHaveProperty('cover')
+    expect((await call(env, `/api/covers/${ID}`)).status).toBe(404)
+  })
+})
+
+describe('索引写入：限流重试', () => {
+  it('KV 对同一键限 1 次写/秒：索引写入第一次失败会等待后重试一次，而不是整体 500', async () => {
+    vi.useFakeTimers()
+    try {
+      const env = createEnv()
+      const kv = (env as { FASTREADER_KV: { put: (k: string, v: string) => Promise<void> } }).FASTREADER_KV
+      const orig = kv.put.bind(kv)
+      let failed = false
+      kv.put = async (k, v) => {
+        if (k === 'covers:index' && !failed) {
+          failed = true
+          throw new Error('KV PUT failed: 429 Too Many Requests')
+        }
+        return orig(k, v)
+      }
+      const p = call(env, `/api/covers/${ID}`, { method: 'PUT', body: bytes(50), headers: { 'X-Book-Meta': enc({ stem: 'a', title: 'A' }) } })
+      await vi.advanceTimersByTimeAsync(1200)
+      expect((await p).status).toBe(200)
+      expect(failed).toBe(true)
+      expect(((await (await index(env)).json()) as Idx).items[ID]).toMatchObject({ title: 'A', cover: 1 })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('删除（用户确认 WebDAV 上已找不到之后）', () => {
   async function seeded() {
     const env = createEnv()
@@ -117,7 +170,7 @@ describe('删除（用户确认 WebDAV 上已找不到之后）', () => {
     expect(((await r.json()) as { status: string }).status).toBe('deleted')
     const idx = (await (await index(env)).json()) as Idx
     expect(Object.keys(idx.items)).toEqual([ID2])
-    expect(idx.rev).toBe(before + 1)
+    expect(idx.rev).toBeGreaterThan(before)
     expect((await call(env, `/api/covers/${ID}`)).status).toBe(404)
     expect((await call(env, `/api/covers/${ID2}`)).status).toBe(200)
   })
