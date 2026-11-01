@@ -26,6 +26,8 @@ export function coverKeyOf(path: string): string {
   return (h >>> 0).toString(36)
 }
 
+const defaultPublish = (id: string, meta: CoverMeta, thumb: Blob, o?: { replace?: boolean }) => uploadCover(id, meta, thumb, fetch, o)
+
 export interface Inspection {
   meta: BookMeta
   thumb: Blob | null
@@ -45,7 +47,7 @@ export interface FillOptions {
   signal?: AbortSignal
   inspect?: (buf: ArrayBuffer, path: string) => Promise<Inspection>
   /** 把封面与元数据补传到云端（默认走 /api/covers）；失败只影响「下次别人能否直接命中」，不影响本机 */
-  publishCover?: (id: string, meta: CoverMeta, thumb: Blob) => Promise<unknown>
+  publishCover?: (id: string, meta: CoverMeta, thumb: Blob, opts?: { replace?: boolean }) => Promise<unknown>
   onProgress?: (done: number, total: number) => void
 }
 
@@ -69,7 +71,7 @@ const usable = (s?: string) => (s && !/^(未知|unknown)/i.test(s) ? s : undefin
 export const isFillable = (path: string) => /\.(epub|pdf)$/i.test(path)
 
 export async function fillLibraryMetadata(io: LibraryIO, entries: readonly LibraryEntry[], opts: FillOptions = {}): Promise<FillResult> {
-  const { concurrency = FILL_CONCURRENCY, maxBytes = FILL_MAX_BYTES, signal, inspect = inspectBook, publishCover = uploadCover } = opts
+  const { concurrency = FILL_CONCURRENCY, maxBytes = FILL_MAX_BYTES, signal, inspect = inspectBook, publishCover = defaultPublish } = opts
   const queue = entries.filter((e) => e.stale)
   const res: FillResult = { total: queue.length, filled: 0, retryable: 0, skipped: 0, cancelled: false, index: null }
   let pending: Update[] = []
@@ -101,12 +103,13 @@ export async function fillLibraryMetadata(io: LibraryIO, entries: readonly Libra
       const { meta, thumb } = await inspect(buf, e.path)
       let coverKey: string | undefined
       if (thumb) {
-        const id = bookIdOf(e.path)
+        // 模糊匹配到的条目带 catalogId：沿用它，不能按路径重新算（否则会在云端另起一条重复记录）
+        const id = e.catalogId ?? bookIdOf(e.path)
         coverKey = id
         await io.putLocalCover(id, thumb)
-        // 跨设备共享（云端 KV）：尽力而为，失败不影响本机
+        // 跨设备共享（云端 KV）：尽力而为，失败不影响本机。书被换过（catalogChanged）要覆盖旧封面
         const meta2 = buildCatalogMeta(e.path, e.size, meta, e.title || titleFromPath(e.path))
-        uploads = uploads.then(() => publishCover(id, meta2, thumb)).catch(() => {})
+        uploads = uploads.then(() => publishCover(id, meta2, thumb, { replace: !!e.catalogChanged })).catch(() => {})
       }
       pending.push({
         path: e.path,

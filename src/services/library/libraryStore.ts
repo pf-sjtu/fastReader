@@ -14,7 +14,7 @@ import { adoptCloudCovers, persistIndex, rebuildLibrary, recordMetadataBatch, re
 import { emptyIndex, migrateIndex } from './libraryIndex'
 import { fillLibraryMetadata, inspectBook, type FillResult } from './libraryFill'
 import { bookIdOf } from './bookId'
-import { buildCatalogMeta, findRealEntry } from './cloudCatalog'
+import { buildCatalogMeta, buildShelf, findRealEntry } from './cloudCatalog'
 import { deleteCovers, fetchCoverIndex, isCloudCoverKey, uploadCover, type CoverIndex, type CoverItem } from './cloudCovers'
 import type { BookStatus, LibraryEntry, LibraryIndex } from './types'
 
@@ -226,7 +226,9 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
   fillMetadata: async () => {
     const io = createLibraryIO()
     if (!io || get().fillProgress) return null
-    const stale = Object.values(get().index.entries).filter((e) => e.stale)
+    // 用叠加后的书架判断：云端已有资料的不再下载；云端记录的大小与现在不一致的（书被换过）要算进来
+    const { index, catalog } = get()
+    const stale = Object.values(buildShelf(index, catalog).entries).filter((e) => e.stale && !e.virtual)
     if (!stale.length) return null
     fillAbort = new AbortController()
     set({ fillProgress: { done: 0, total: stale.length } })
@@ -236,6 +238,8 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
         onProgress: (done, total) => set({ fillProgress: { done, total } }),
       })
       if (r.index) set({ index: r.index })
+      // 补传已完成：重新读云端目录（带 ETag，几乎零成本），否则「大小不一致」的标记还在，补全按钮不会消失
+      if (r.filled) await get().loadCatalog()
       return r
     } catch (e) {
       logger.error('[library] 补全元数据失败', e)

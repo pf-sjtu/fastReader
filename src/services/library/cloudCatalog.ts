@@ -61,6 +61,12 @@ function enrich(e: LibraryEntry, id: string, it: CoverItem): LibraryEntry {
     next.title = it.title
     next.stale = false
   }
+  // 但云端记录的大小与 WebDAV 上的不一致 = 同名书被换过，云端资料（封面、章数…）可能已过期：
+  // 重新标为 stale（补全按钮会计入），并记下原因，补全重传时用 replace 覆盖旧封面
+  if (it.size && e.size && it.size !== e.size) {
+    next.stale = true
+    next.catalogChanged = true
+  }
   if (!next.author && good(it.author)) next.author = it.author
   if (!next.pages && it.pages) next.pages = it.pages
   if (!next.chapterCount && it.chapterCount) next.chapterCount = it.chapterCount

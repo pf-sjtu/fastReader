@@ -284,7 +284,24 @@ describe('fillLibraryMetadata', () => {
     expect(e.lastOpenedAt).toBeUndefined()
     expect(put).toHaveBeenCalledTimes(1)
     // 封面不再写 WebDAV，而是补传云端：id 由书名主干算出，元数据一并带上
-    expect(publish).toHaveBeenCalledWith(bookIdOf('/s/a.epub'), expect.objectContaining({ stem: 'a', title: '真书名', author: '某作者', pages: 12 }), expect.any(Blob))
+    expect(publish).toHaveBeenCalledWith(bookIdOf('/s/a.epub'), expect.objectContaining({ stem: 'a', title: '真书名', author: '某作者', pages: 12 }), expect.any(Blob), { replace: false })
+  })
+
+  it('书被换过（catalogChanged）：补传时带 replace 覆盖旧封面；用模糊匹配得到的 catalogId，不按路径另算', async () => {
+    const mirror = await seeded(['/s/a.epub', '/s/b.epub'])
+    const publish = vi.fn(async () => true)
+    const io = fakeIO({ readMirror: async () => mirror })
+    const inspect = async (): Promise<Inspection> => ({ meta: { title: 'T' }, thumb: new Blob(['t']) })
+    const entries = [
+      { ...mirror.entries['/s/a.epub'], catalogId: 'bk_fuzzy01', catalogChanged: true },
+      { ...mirror.entries['/s/b.epub'] }, // 普通的新书：不覆盖
+    ]
+    const r = await fillLibraryMetadata(io, entries, { inspect, publishCover: publish })
+    expect(r.filled).toBe(2)
+    const byId = Object.fromEntries(publish.mock.calls.map((c) => [c[0], c[3]]))
+    expect(byId['bk_fuzzy01']).toEqual({ replace: true })
+    expect(byId[bookIdOf('/s/b.epub')]).toEqual({ replace: false })
+    expect(r.index!.entries['/s/a.epub'].coverKey).toBe('bk_fuzzy01') // 本地封面键也用云端 id
   })
 
   it('txt/md 没有内嵌元数据：不下载、直接清 stale（不白白下载整本）', async () => {

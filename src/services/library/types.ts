@@ -53,6 +53,8 @@ export interface LibraryEntry {
   lang?: string
   /** 对应的云端书目 id（书架叠加时匹配得到） */
   catalogId?: string
+  /** 云端记录的文件大小与 WebDAV 上的不一致（书被换过）：叠加层会把它标成 stale，补全时覆盖云端封面 */
+  catalogChanged?: boolean
   /** 虚拟条目：只有云端 metadata，尚未在 WebDAV 上确认存在；点开时才去 WebDAV 解析真实路径 */
   virtual?: boolean
 }

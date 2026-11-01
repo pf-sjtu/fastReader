@@ -55,6 +55,20 @@ describe('buildShelf', () => {
     expect(e).toMatchObject({ stale: false, title: '正式书名', author: '作者' })
   })
 
+  it('云端记录的大小与 WebDAV 不一致（书被换过）：重新标 stale + catalogChanged；一致或云端没记大小则不动', () => {
+    const id = bookIdOf('/EBook/甲.epub')
+    const mk = (cloudSize?: number, localSize = 1000) => {
+      const idx = scan('甲.epub')
+      idx.entries['/EBook/甲.epub'] = { ...idx.entries['/EBook/甲.epub'], size: localSize, stale: false }
+      return buildShelf(idx, { [id]: item('甲', cloudSize ? { size: cloudSize } : {}) as never }).entries['/EBook/甲.epub']
+    }
+    expect(mk(5000)).toMatchObject({ stale: true, catalogChanged: true })
+    expect(mk(1000)).toMatchObject({ stale: false })
+    expect(mk(1000).catalogChanged).toBeUndefined()
+    expect(mk(undefined).stale).toBe(false) // 老条目没记大小：无从比较，不误报
+    expect(mk(5000, 0).stale).toBe(false) // 本地大小未知（0）：同样不误报
+  })
+
   it('已有书名 / 作者不被云端覆盖（只补缺）；「未知…」占位词不会当成有效值', () => {
     const idx = scan('甲.epub')
     idx.entries['/EBook/甲.epub'] = { ...idx.entries['/EBook/甲.epub'], stale: false, title: '本地书名', author: '本地作者' }
