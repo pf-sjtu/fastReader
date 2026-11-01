@@ -23,6 +23,17 @@
 
 按"重试前先说明改变了什么"的约定：用量上限不是代码问题，原样重试只会继续失败并烧请求，所以**没有重试**。
 
+### 改用 SenseNova 网关的尝试（同样失败）
+
+MiniMax 用完后改用 `gen-image-sensenova` skill 配置的 SenseNova 网关（`--sensenova`，可选文本模型：
+`deepseek-v4-flash` / `glm-5.2` / `sensenova-6.8-flash-lite` / `kimi-k3` 等）。结果：
+
+- 第一轮：`sensenova-6.8-flash-lite` 单次探测成功，之后同模型、同参数连续 429（`inference exceeds tpm/rpm limit`）；`kimi-k3` 报 `EndpointTPMExceeded`
+- 脚本原先对 HTTP 错误**不等待**就重试，三次请求瞬间打完——这是脚本缺陷，已改成对 408/429/5xx 做 20s×n 退避（Token Plan 用量上限类 429 不再重试）。退避后整轮仍全部 429
+- 最后探测：`deepseek-v4-flash`、`glm-5.2` 也返回 `insufficient_quota`。这把 key 的额度很小（疑似为生图配置），撑不起约 50 万 token 的评测
+
+结论：两个网关当前都没有足够额度，**没有再继续重试**。
+
 ## 能说什么、不能说什么
 
 仅有的 4 章（冒烟 2 + 全量 2，其中冒烟与全量是同一本书同样的章节，不独立）：
@@ -56,7 +67,7 @@
 
 ## 下次怎么补
 
-1. 等额度恢复（或换一个有额度的模型/账号：`--model` 参数，`.env` 的 `VITE_TEST_LLM_*`）
+1. 等额度恢复（或换一个有额度的模型/账号：`--model` 参数，`.env` 的 `VITE_TEST_LLM_*`；`--sensenova` 改走 SenseNova 网关；`--judge-model` 指定另一个模型做评判以避免自评偏向）
 2. 先只跑那本《东北游记》的长章节，看 `raw/` 里旁路到底怎么坏的（预计 2–3 次调用）
 3. 再按原计划 4 本 × 3 章；评判者最好换成另一个模型，避免自评偏向
 4. 若旁路失败率明显偏高：优先考虑在提示词里把元数据块放到更靠前、或对解析器做"宽松修复"（去围栏、补尾括号），

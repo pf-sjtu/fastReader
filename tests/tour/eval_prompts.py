@@ -56,18 +56,20 @@ def strip_thinking(text: str) -> str:
 class Model:
     """OpenAI 兼容 /chat/completions，只用标准库（评测环境不一定装了 openai SDK）"""
 
-    def __init__(self, base_url: str, api_key: str, model: str):
+    def __init__(self, base_url: str, api_key: str, model: str, reasoning_effort: str | None = "low"):
         self.url = base_url.rstrip("/") + "/chat/completions"
         self.key = api_key
         self.model = model
+        self.reasoning_effort = reasoning_effort  # None = 不发该参数（非 MiniMax 网关未必接受）
         self.tokens = 0
 
     def ask(self, prompt: str, max_tokens: int = 24000) -> str:
-        body = json.dumps(
-            {"model": self.model, "messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens, "temperature": 0.3, "reasoning_effort": "low"}
-        ).encode("utf-8")
+        payload = {"model": self.model, "messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens, "temperature": 0.3}
+        if self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
+        body = json.dumps(payload).encode("utf-8")
         last: Exception | None = None
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 req = urllib.request.Request(
                     self.url, data=body, headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"}
@@ -87,6 +89,12 @@ class Model:
                 except Exception:  # noqa: BLE001
                     pass
                 last = RuntimeError(f"HTTP {e.code} {detail}")
+                if e.code == 429 and "Token Plan" in detail:  # 用量上限（不是瞬时限流），等多久都没用
+                    break
+                if e.code in (408, 429, 500, 502, 503, 504):  # 限流 / 瞬时故障：退避后重试，别瞬间打满重试次数
+                    time.sleep(20 * (attempt + 1))
+                else:
+                    break
             except Exception as e:  # noqa: BLE001 - 评测脚本：重试后仍失败再抛
                 last = e
                 time.sleep(2 * (attempt + 1))
@@ -196,15 +204,23 @@ def main() -> int:
     ap.add_argument("--per-book", type=int, default=3)
     ap.add_argument("--seed", type=int, default=20261101)
     ap.add_argument("--out", default=".tmp/eval-v3")
+    ap.add_argument("--sensenova", action="store_true", help="改用 gen-image-sensenova skill 的 .env（SENSENOVA_API_BASE/KEY）作为网关")
+    ap.add_argument("--judge-model", default=None, help="评判用的模型（默认与 --model 相同；建议换成另一家以避免自评偏向）")
     args = ap.parse_args()
     sys.stdout.reconfigure(line_buffering=True)  # pyright: ignore[reportAttributeAccessIssue]  重定向到文件时也能实时看到进度
 
-    env = read_env(".env")
-    base, key = env.get("VITE_TEST_LLM_BASE_URL"), env.get("VITE_TEST_LLM_API_KEY")
+    if args.sensenova:
+        env = read_env(str(Path.home() / ".claude/skills/gen-image-sensenova/.env"))
+        base, key = env.get("SENSENOVA_API_BASE"), env.get("SENSENOVA_API_KEY")
+    else:
+        env = read_env(".env")
+        base, key = env.get("VITE_TEST_LLM_BASE_URL"), env.get("VITE_TEST_LLM_API_KEY")
     if not base or not key:
-        print("缺少 VITE_TEST_LLM_BASE_URL / VITE_TEST_LLM_API_KEY（.env）")
+        print("缺少网关配置（.env 的 VITE_TEST_LLM_BASE_URL / VITE_TEST_LLM_API_KEY，或 --sensenova 的 SENSENOVA_*）")
         return 2
-    model = Model(base, key, args.model)
+    effort = None if args.sensenova else "low"
+    model = Model(base, key, args.model, effort)
+    judge_model = Model(base, key, args.judge_model, effort) if args.judge_model else model
     rng = random.Random(args.seed)
     lang = get_language_instruction("zh")
     t_v2 = PromptTemplates(prompt_config=PromptConfig(currentVersion="v2"))
@@ -236,7 +252,7 @@ def main() -> int:
                 body_v2 = sanitize_summary(split_chapter_meta(raws["v2"])[0])
                 body_v3, meta_v3 = split_chapter_meta(raws["v3"])
                 body_v3 = sanitize_summary(body_v3)
-                row["judge"] = judge(model, JUDGE, rng, body_v2, body_v3, title=ch.title, source=ch.content[:3500])
+                row["judge"] = judge(judge_model, JUDGE, rng, body_v2, body_v3, title=ch.title, source=ch.content[:3500])
             except Exception as e:  # noqa: BLE001 - 单章失败只记录，不让整次评测作废
                 errors.append({"book": b["book"], "chapter": ch.title, "error": str(e)[:300]})
                 print(f"  x {ch.title[:24]}: {str(e)[:160]}")
@@ -264,7 +280,7 @@ def main() -> int:
             if entity_table:
                 c3_prompt += "\n\n已知实体表（请沿用这些规范名与别名，不要另起写法）:\n" + entity_table
             c3 = model.ask(c3_prompt + "\n\n" + lang)
-            bj = judge(model, JUDGE_BOOK, rng, c2, c3, summaries="\n".join(f"【{t}】{s[:600]}" for t, s in s3))
+            bj = judge(judge_model, JUDGE_BOOK, rng, c2, c3, summaries="\n".join(f"【{t}】{s[:600]}" for t, s in s3))
         except Exception as e:  # noqa: BLE001
             errors.append({"book": b["book"], "chapter": "(书级关联分析)", "error": str(e)[:300]})
             print(f"  x 书级关联分析: {str(e)[:160]}")
@@ -277,9 +293,10 @@ def main() -> int:
 
     summary = {
         "model": args.model,
+        "judge_model": judge_model.model,
         "n_chapters": len(chapter_rows),
         "n_books": len(book_rows),
-        "tokens_used": model.tokens,
+        "tokens_used": model.tokens + (judge_model.tokens if judge_model is not model else 0),
         "avg_violations": {v: round(agg(v, "violations"), 2) for v in ("v2", "v3")},
         "avg_chars": {v: round(agg(v, "chars")) for v in ("v2", "v3")},
         "avg_bold": {v: round(agg(v, "bold"), 2) for v in ("v2", "v3")},
