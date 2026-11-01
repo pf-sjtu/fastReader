@@ -124,6 +124,16 @@
     "unknownError": "Unknown error"
   },
   "results": {
+    "step": {
+      "retry": "Retry this step",
+      "running": "Regenerating…",
+      "done": "Regenerated",
+      "failed": "Regeneration failed",
+      "emptyResult": "The model returned empty content",
+      "needConnections": "Generate the chapter connections first, then the overall summary",
+      "connectionsMissing": "Chapter connections have no usable result. Only this step is re-run; chapters are not reprocessed.",
+      "overallMissing": "The overall summary has no usable result. Only this step is re-run; chapters are not reprocessed."
+    },
     "qualityWarn": "Formatting or length still imperfect",
     "qualityWarnHint": "This chapter was rewritten once automatically and still has formatting or length issues. It is readable; clear this chapter's cache to regenerate if needed.",
     "summaryTitle": "Analysis Results for \"{{title}}\"",
@@ -1285,6 +1295,24 @@
       "medium": "Med",
       "high": "High"
     }
+  },
+  "notes": {
+    "tab": "Notes",
+    "toolbar": "Highlight and annotate",
+    "highlight": "Highlight",
+    "annotate": "Annotate",
+    "empty": "No notes yet",
+    "emptyHint": "Select text in the body, then choose Highlight or Annotate. Notes are stored on this device only.",
+    "count": "{{count}} notes",
+    "copyMd": "Copy Markdown",
+    "downloadMd": "Download Markdown",
+    "copied": "Notes copied",
+    "copyFailed": "Copy failed",
+    "orphan": "Notes without a chapter",
+    "untitled": "Untitled",
+    "commentPlaceholder": "Write a comment…",
+    "addComment": "Add a comment",
+    "delete": "Delete note"
   },
   "study": {
     "cancel": "Cancel",

@@ -146,3 +146,25 @@ export function askVars(
     { name: 'question', label: '读者的问题', value: question },
   ]
 }
+
+/**
+ * 书级步骤的 map-reduce 分组：按章节顺序贪心装组，每组总结长度 ≤ limit；
+ * 单章本身超限则独占一组（后面的 prepare 会按章截断）。总长不超限时只有一组。
+ */
+export function groupChaptersByChars<T extends { summary?: string }>(chapters: readonly T[], limit: number): T[][] {
+  const groups: T[][] = []
+  let cur: T[] = []
+  let size = 0
+  for (const ch of chapters) {
+    const len = (ch.summary ?? '').trim().length
+    if (cur.length > 0 && size + len > limit) {
+      groups.push(cur)
+      cur = []
+      size = 0
+    }
+    cur.push(ch)
+    size += len
+  }
+  if (cur.length) groups.push(cur)
+  return groups
+}

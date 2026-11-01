@@ -124,6 +124,16 @@
     "unknownError": "未知错误"
   },
   "results": {
+    "step": {
+      "retry": "重试这一步",
+      "running": "正在重新生成…",
+      "done": "已重新生成",
+      "failed": "重新生成失败",
+      "emptyResult": "模型返回了空内容",
+      "needConnections": "请先生成章节关联，再生成全书总结",
+      "connectionsMissing": "章节关联分析没有可用结果。只重跑这一步，不会重新处理章节。",
+      "overallMissing": "全书总结没有可用结果。只重跑这一步，不会重新处理章节。"
+    },
     "qualityWarn": "格式或篇幅仍有瑕疵",
     "qualityWarnHint": "这一章已自动重写过一次，仍有格式或篇幅问题；内容可读，必要时可清除本章缓存重新生成。",
     "title": "处理结果",
@@ -1285,6 +1295,24 @@
       "medium": "中",
       "high": "高"
     }
+  },
+  "notes": {
+    "tab": "笔记",
+    "toolbar": "划线与批注",
+    "highlight": "划线",
+    "annotate": "批注",
+    "empty": "还没有笔记",
+    "emptyHint": "在正文里选中文字，点「划线」或「批注」。笔记只保存在本机。",
+    "count": "共 {{count}} 条",
+    "copyMd": "复制 Markdown",
+    "downloadMd": "下载 Markdown",
+    "copied": "已复制笔记",
+    "copyFailed": "复制失败",
+    "orphan": "找不到章节的笔记",
+    "untitled": "未命名",
+    "commentPlaceholder": "写点批注…",
+    "addComment": "添加批注",
+    "delete": "删除笔记"
   },
   "study": {
     "cancel": "取消",

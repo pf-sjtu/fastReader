@@ -47,6 +47,11 @@ import { applyDepth } from '@/study/depth'
 import { studyKeyOf } from '@/study/persistence'
 import { useStudyStore } from '@/study/studyStore'
 import { useWorkspaceLinking } from './useWorkspaceLinking'
+import { NotesPanel } from '@/components/notes/NotesPanel'
+import { SelectionToolbar } from '@/components/notes/SelectionToolbar'
+import { StepRetryNote } from '@/components/sections/StepRetryNote'
+import type { BookStepKind } from '@/hooks/useBookSteps'
+import { notesKeyOf, useNotesStore } from '@/notes/notesStore'
 import { mergeAliasedEntities } from '@/charts/linking/entityMerge'
 
 const ResultsSection = lazy(() =>
@@ -77,6 +82,8 @@ export interface ReaderWorkspaceProps {
   onDownloadAllMarkdown: () => void
   onRegenerateKeyCharts?: () => void | Promise<void>
   onCancelKeyCharts?: () => void
+  onRetryStep?: (kind: BookStepKind) => void
+  stepRunning?: BookStepKind | null
 }
 
 /** 键盘快捷键不应在输入框里触发 */
@@ -109,6 +116,8 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     onDownloadAllMarkdown,
     onRegenerateKeyCharts,
     onCancelKeyCharts,
+    onRetryStep,
+    stepRunning = null,
   } = props
   const { t } = useTranslation()
   // 窄于约 1000px 的窗口（小平板、缩小的桌面窗口）硬挤三栏会把正文压成窄条：改用紧凑布局（抽屉）
@@ -147,6 +156,10 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
   )
 
   const [bodyEl, setBodyEl] = useState<HTMLElement | null>(null)
+  const notesKey = notesKeyOf(bookSummary)
+  useEffect(() => {
+    void useNotesStore.getState().bind(notesKey)
+  }, [notesKey])
   const [showTop, setShowTop] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
   const [dockSheetOpen, setDockSheetOpen] = useState(false)
@@ -276,6 +289,14 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     [t, mergedCharts, bookSummary.chartsError, chartsGenerating, clearCharts, onRegenerateKeyCharts, onCancelKeyCharts, chartsEstimate, canRegenerate, link.pluginProps]
   )
 
+  // 选中正文 → 划线 / 批注；点「批注」后打开对照栏的笔记页签（紧凑布局里是抽屉）
+  const openNotes = useCallback(() => {
+    setCompanionTab('notes')
+    setCompanionOpen(true)
+    if (narrow) setDockSheetOpen(true)
+  }, [setCompanionTab, setCompanionOpen, narrow])
+  const selectionToolbar = <SelectionToolbar bodyEl={bodyEl} chapters={chapters} onOpenNotes={openNotes} />
+
   const tabs = useMemo<DockTab[]>(() => {
     const list: DockTab[] = [
       { id: 'graph', label: t('results.charts.entityGraph'), keepMounted: true, content: (
@@ -292,22 +313,26 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       },
       { id: 'study', label: t('study.tabs.study'), content: <StudyKitPanel bookSummary={bookSummary} onJumpChapter={handleNavClick} /> },
       { id: 'quiz', label: t('study.tabs.quiz'), content: <QuizPanel bookSummary={bookSummary} currentChapterId={currentViewingChapter} onJumpChapter={handleNavClick} /> },
+      { id: 'notes', label: t('notes.tab'), content: <NotesPanel bookTitle={bookSummary.title} chapters={bookSummary.chapters} onJumpChapter={handleNavClick} /> },
       { id: 'ask', label: t('study.tabs.ask'), content: <AskPanel bookSummary={bookSummary} onJumpChapter={handleNavClick} /> },
       {
         id: 'overall',
         label: t('results.tabs.overallSummary'),
         content: (
-          <MarkdownCard
-            id="overall"
-            title={t('results.tabs.overallSummary')}
-            content={bookSummary.overallSummary}
-            markdownContent={bookSummary.overallSummary}
-            index={0}
-            showClearCache
-            showViewContent={false}
-            showCopyButton
-            onClearCache={clearOverall}
-          />
+          <>
+            <StepRetryNote kind="overall" text={bookSummary.overallSummary} running={stepRunning} onRetry={onRetryStep} />
+            <MarkdownCard
+              id="overall"
+              title={t('results.tabs.overallSummary')}
+              content={bookSummary.overallSummary}
+              markdownContent={bookSummary.overallSummary}
+              index={0}
+              showClearCache
+              showViewContent={false}
+              showCopyButton
+              onClearCache={clearOverall}
+            />
+          </>
         ),
       },
     ]
@@ -326,7 +351,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       })
     }
     return list
-  }, [t, chartPanel, bookSummary, clearOverall, isMobile, source, link.linking, link.openEntity, currentViewingChapter, handleNavClick])
+  }, [t, chartPanel, bookSummary, clearOverall, onRetryStep, stepRunning, isMobile, source, link.linking, link.openEntity, currentViewingChapter, handleNavClick])
 
   const body = (
     <>
@@ -336,6 +361,8 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     >
       <ResultsSection
         variant="body"
+        onRetryStep={onRetryStep}
+        stepRunning={stepRunning}
         processingMode="summary"
         bookSummary={displaySummary}
         bookMindMap={null}
@@ -399,6 +426,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
           {body}
         </main>
         {link.floating}
+        {selectionToolbar}
         {backChip}
 
         <Sheet open={navOpen} onOpenChange={setNavOpen}>
@@ -480,6 +508,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       )}
 
       {link.floating}
+      {selectionToolbar}
       {backChip}
 
       <main

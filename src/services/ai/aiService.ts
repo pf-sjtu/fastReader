@@ -44,6 +44,7 @@ import {
   quizVars,
   askVars,
   overallVars,
+  groupChaptersByChars,
   prepareChapterSummariesForPostProcess,
   truncateText,
   usableChapters
@@ -243,6 +244,20 @@ export class AIService {
     return resolveInputBudget(c.contextWindow, c.maxOutputTokens)
   }
 
+  /** map 阶段：按组顺序执行（不并发，避免同时压服务商限流），产出带范围标题的「分段章节」供 reduce 使用 */
+  private async mapGroups(
+    groups: Chapter[][],
+    run: (group: Chapter[]) => Promise<string>
+  ): Promise<Array<{ title: string; summary: string }>> {
+    const out: Array<{ title: string; summary: string }> = []
+    for (const g of groups) {
+      const text = (await run(g)).trim()
+      if (!text) continue
+      out.push({ title: g.length > 1 ? `${g[0].title} … ${g[g.length - 1].title}（共 ${g.length} 章）` : g[0].title, summary: text })
+    }
+    return out
+  }
+
   /** 后处理（关联 / 全书总结 / 图表 / 整书导图）的压缩上限：按模型上下文窗口计算 */
   private postProcessLimits() {
     const c = this.getCurrentConfig()
@@ -332,10 +347,29 @@ export class AIService {
     const basePrompt =
       promptConfig.connectionAnalysis || getChapterConnectionsAnalysisPrompt()
 
-    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters), this.postProcessLimits().chapters)
+    const usable = usableChapters(chapters)
+    const limit = this.postProcessLimits().chapters
+    let processedChapters = prepareChapterSummariesForPostProcess(usable, limit)
 
     if (processedChapters.length < 2) {
       return '章节数量不足，无法分析关联。'
+    }
+
+    // 总长超出预算：分组各做一次关联分析（map），再把各组结论当作「章节」交给同一提示词合并（reduce），
+    // 而不是把每章砍到几十字——砍掉的细节正是关联分析要找的东西
+    const groups = groupChaptersByChars(usable.filter((c) => (c.summary ?? '').trim()), limit)
+    if (groups.length > 1) {
+      const partials = await this.mapGroups(groups, (g) =>
+        g.length < 2
+          ? Promise.resolve((g[0].summary ?? '').trim())
+          : this.generateContent(
+              renderPrompt(basePrompt, [...connectionVars(prepareChapterSummariesForPostProcess(g, limit)), ...entityTableVars(opts?.entityTable)]),
+              outputLanguage,
+              opts
+            )
+      )
+      processedChapters = prepareChapterSummariesForPostProcess(partials, limit)
+      if (processedChapters.length < 2) return partials[0]?.summary ?? ''
     }
 
     const prompt = renderPrompt(basePrompt, [...connectionVars(processedChapters), ...entityTableVars(opts?.entityTable)])
@@ -356,10 +390,25 @@ export class AIService {
     const promptConfig = this.getCurrentPromptConfig()
     const basePrompt = promptConfig.overallSummary || getOverallSummaryPrompt()
 
-    const processedChapters = prepareChapterSummariesForPostProcess(usableChapters(chapters), this.postProcessLimits().chapters)
+    const usable = usableChapters(chapters)
+    const limit = this.postProcessLimits().chapters
+    let processedChapters = prepareChapterSummariesForPostProcess(usable, limit)
 
     if (processedChapters.length === 0) {
       return '没有可用的章节摘要，无法生成全书总结。'
+    }
+
+    // 总长超出预算：每组先写一份分段总结（不带关联分析），再用分段总结 + 关联分析写全书总结
+    const groups = groupChaptersByChars(usable.filter((c) => (c.summary ?? '').trim()), limit)
+    if (groups.length > 1) {
+      const partials = await this.mapGroups(groups, (g) =>
+        this.generateContent(
+          renderPrompt(basePrompt, [...overallVars(bookTitle, prepareChapterSummariesForPostProcess(g, limit), ''), ...entityTableVars(opts?.entityTable)]),
+          outputLanguage,
+          opts
+        )
+      )
+      processedChapters = prepareChapterSummariesForPostProcess(partials, limit)
     }
 
     // 关联分析正文同样默认不截；仅超软上限时截
