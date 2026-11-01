@@ -6,6 +6,7 @@ import {
   adjacentChapter,
   cycleTab,
   filterCommands,
+  libraryResumePoint,
   loadResume,
   resolveResume,
   resumeKeyOf,
@@ -13,7 +14,12 @@ import {
   type Command,
 } from '../src/reading/commands'
 const syncProgress = vi.hoisted(() => vi.fn())
-vi.mock('../src/services/library/libraryStore', () => ({ syncLibraryProgress: syncProgress }))
+/** 书库索引里随 WebDAV 同步的条目（跨设备续读的兜底来源） */
+const libEntries = vi.hoisted(() => ({ current: {} as Record<string, unknown> }))
+vi.mock('../src/services/library/libraryStore', () => ({
+  syncLibraryProgress: syncProgress,
+  useLibraryStore: { getState: () => ({ index: { entries: libEntries.current } }) },
+}))
 
 import { useReadingCommands } from '../src/components/workspace/useReadingCommands'
 import type { CompanionTab } from '../src/stores/readingFocus'
@@ -74,6 +80,11 @@ describe('续读存档', () => {
     expect(() => saveResume(key, { chapterId: 'x', chapterIndex: 0, chapterTitle: '', at: 0 }, { setItem: () => { throw new Error('quota') } })).not.toThrow()
     expect(loadResume(key, { getItem: () => { throw new Error('denied') } })).toBeNull()
   })
+  it('libraryResumePoint：只有章节 id 的最小续读点；没有进度返回 null', () => {
+    expect(libraryResumePoint({ chapterId: 'c2' })).toMatchObject({ chapterId: 'c2', chapterIndex: -1, at: 0 })
+    expect(libraryResumePoint(undefined)).toBeNull()
+    expect(libraryResumePoint({ chapterId: '' })).toBeNull()
+  })
   it('resolveResume：重新加载后 id 变了也能按标题找回；找不到 null', () => {
     const p = { chapterId: 'old-2', chapterIndex: 2, chapterTitle: '第三章 终局', at: 1 }
     expect(resolveResume(p, [{ id: 'n0', title: '第一章' }, { id: 'n1', title: '第二章' }, { id: 'n2', title: '第三章：终局' }])).toBe('n2')
@@ -119,6 +130,7 @@ describe('useReadingCommands（快捷键 / 命令面板 / 续读）', () => {
   beforeEach(() => {
     stubDomForRadix()
     localStorage.clear()
+    libEntries.current = {}
     vi.clearAllMocks()
   })
   afterEach(() => {
@@ -175,6 +187,24 @@ describe('useReadingCommands（快捷键 / 命令面板 / 续读）', () => {
     m.rerender(<Harness current="c1" fresh />)
     m.rerender(<Harness current="c1" fresh />)
     expect(nav).toHaveBeenCalledTimes(1)
+  })
+
+  it('跨设备续读：本机没有存档时，退回书库索引里同步来的阅读章节；本机有存档则以本机为准', async () => {
+    libEntries.current = { '/fastReader/续读.epub': { path: '/fastReader/续读.epub', readProgress: { chapterId: 'c3', pct: 100 } } }
+    m = mount(<Harness fileName="续读.epub" />)
+    expect(nav).toHaveBeenCalledWith('c3')
+    m.unmount()
+    vi.clearAllMocks()
+    saveResume(resumeKeyOf(book), { chapterId: 'c2', chapterIndex: 1, chapterTitle: '第二章 转折', at: 5 })
+    m = mount(<Harness fileName="续读.epub" />)
+    expect(nav).toHaveBeenCalledWith('c2')
+    expect(nav).not.toHaveBeenCalledWith('c3')
+  })
+
+  it('跨设备续读：索引里的章节 id 在当前书里找不到 → 不动（不乱跳）', async () => {
+    libEntries.current = { '/x/续读.epub': { path: '/x/续读.epub', readProgress: { chapterId: 'gone', pct: 50 } } }
+    m = mount(<Harness fileName="续读.epub" />)
+    expect(nav).not.toHaveBeenCalled()
   })
 
   it('续读：章节还没有可用总结（尚未恢复）时不保存，旧存档不被覆盖', async () => {

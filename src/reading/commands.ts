@@ -88,6 +88,15 @@ export function loadResume(key: string, storage: Pick<Storage, 'getItem'> = loca
   }
 }
 
+/**
+ * 跨设备续读：本机没有续读点（换了设备 / 清了浏览器数据）时，退回书库索引里随 WebDAV 同步的阅读章节。
+ * 只在本机没有时用：本机的续读点更新（含 `at` 时间戳），不会被别处较旧的进度覆盖。
+ * 索引里只有章节 id（没有标题 / 序号），所以只能按 id 找回；id 对不上就当没有。
+ */
+export function libraryResumePoint(progress: { chapterId: string } | undefined | null): ResumePoint | null {
+  return progress?.chapterId ? { chapterId: progress.chapterId, chapterIndex: -1, chapterTitle: '', at: 0 } : null
+}
+
 /** 续读点 → 当前书里的章节 id（复用笔记的章节找回：id → 标题 → 序号+标题兼容）；找不到 null */
 export function resolveResume(point: ResumePoint | null, chapters: readonly ChapterRef[]): string | null {
   if (!point) return null

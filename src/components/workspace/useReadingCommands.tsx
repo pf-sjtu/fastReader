@@ -8,9 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { EntityLinking } from '@/charts/linking/entityLinking'
 import type { CompanionTab } from '@/stores/readingFocus'
 import { useReadingFocusStore } from '@/stores/readingFocus'
-import { adjacentChapter, cycleTab, loadResume, resolveResume, resumeKeyOf, saveResume, type Command } from '@/reading/commands'
+import { adjacentChapter, cycleTab, libraryResumePoint, loadResume, resolveResume, resumeKeyOf, saveResume, type Command } from '@/reading/commands'
 import { CommandPalette } from './CommandPalette'
-import { syncLibraryProgress } from '@/services/library/libraryStore'
+import { syncLibraryProgress, useLibraryStore } from '@/services/library/libraryStore'
 
 interface Params {
   book: { title?: string; author?: string }
@@ -93,7 +93,10 @@ export function useReadingCommands(p: Params): { overlay: ReactNode; openPalette
   useEffect(() => {
     if (p.processing || usableCount === 0 || restoredFor.current === resumeKey) return
     restoredFor.current = resumeKey
-    const target = resolveResume(loadResume(resumeKey), p.chapters)
+    // 本机续读点优先；没有（换设备 / 清了数据）时用书库索引里随 WebDAV 同步的阅读章节
+    const name = live.current.fileName
+    const entry = name ? Object.values(useLibraryStore.getState().index.entries).find((e) => e.path.split('/').pop() === name) : undefined
+    const target = resolveResume(loadResume(resumeKey) ?? libraryResumePoint(entry?.readProgress), p.chapters)
     // 已经在第一章（默认位置）就不用动
     if (target && target !== p.chapters[0]?.id) goChapter(target)
   }, [resumeKey, p.processing, usableCount, p.chapters, goChapter])
