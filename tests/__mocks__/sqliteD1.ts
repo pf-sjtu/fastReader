@@ -3,7 +3,10 @@
  * 不是 mock。只实现 coversStore 用到的接口：prepare().bind().first()/all()/run()、batch()（一个事务）。
  * 每个方法都 await 一次，让并发调用在 await 点交错——和真实 D1 的「读与写之间会有别人插队」同构。
  */
-import { DatabaseSync } from 'node:sqlite'
+// 不用静态 import：Vite 在 jsdom（client 环境）下会拒绝打包 `node:sqlite`（CI 的 Node 22 上实际报错）；运行时取内置模块不经过 Vite 的静态分析
+const sqlite = process.getBuiltinModule('node:sqlite')
+if (!sqlite) throw new Error('当前 Node 没有内置 node:sqlite（需要 Node ≥ 22.13）：D1 测试依赖它跑真 SQL')
+const { DatabaseSync } = sqlite
 
 type Param = string | number | null
 
