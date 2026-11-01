@@ -16,6 +16,7 @@ import { createLibraryIO } from '@/services/library/libraryIO'
 import { clearLibraryMirror } from '@/services/library/libraryService'
 import { emptyIndex } from '@/services/library/libraryIndex'
 import { useLibraryStore } from '@/services/library/libraryStore'
+import { ArtifactCleanup } from './ArtifactCleanup'
 
 /** 设置页的书库维护：清空本地缓存（可随时再拉回）/ 重建索引（丢失已读进度，需确认） */
 export function LibraryMaintenance() {
@@ -42,6 +43,7 @@ export function LibraryMaintenance() {
         <Button variant="outline" size="sm" onClick={() => void clearLocal()}>
           {t('library.maintenance.clearLocal')}
         </Button>
+        <ArtifactCleanup />
         <Button variant="outline" size="sm" disabled={refreshing} onClick={() => setConfirmRebuild(true)}>
           {t('library.maintenance.rebuild')}
         </Button>

@@ -775,6 +775,34 @@
       "hint": "Downloads books to read title, author and cover (uses bandwidth); 4 at a time",
       "hintSize": "Downloads {{count}} books, about {{size}} in total, to read title, author and cover; 4 at a time, cancel anytime",
       "confirm": "This will download {{count}} books, about {{size}} in total, using a lot of bandwidth. Continue?"
+    },
+    "artifacts": {
+      "open": "Clean up stale outputs",
+      "title": "Clean up stale outputs on WebDAV",
+      "desc": "Only generated outputs (summaries, charts…) in the sync folder are removed; no book file is ever deleted. Items that are surely useless are pre-selected; summaries whose book is gone are not, so you decide.",
+      "scanning": "Re-scanning WebDAV…",
+      "none": "No stale outputs found.",
+      "error": {
+        "unavailable": "WebDAV is not enabled or not connected yet.",
+        "scan-failed": "The scan did not succeed, so stale outputs cannot be confirmed. Stopped; nothing was deleted",
+        "no-books": "No books were found in the sync folder (the folder is probably misconfigured), so whether a book still exists cannot be judged. Stopped."
+      },
+      "reason": {
+        "legacy": "Legacy format",
+        "dangling": "Dangling attachments",
+        "orphan": "Book is gone"
+      },
+      "reasonHint": {
+        "legacy": "Old per-chapter summaries / mind maps, superseded by the full summary.",
+        "dangling": "Charts or sidecar files whose full summary no longer exists; unreadable on their own.",
+        "orphan": "The book is neither on WebDAV nor in the cloud catalog; the summary is still readable, so delete only if you do not need it."
+      },
+      "delete": "Delete {{count}} selected ({{size}})",
+      "confirmTitle": "Delete {{count}} files?",
+      "confirmBody": "This cannot be undone. Only the selected output files are deleted; your book files are untouched.",
+      "confirmDelete": "Delete",
+      "deleted": "Deleted {{count}} stale outputs",
+      "partial": "Deleted {{ok}}, {{fail}} failed (scan again to retry)"
     }
   },
   "workspace": {
