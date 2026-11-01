@@ -182,11 +182,15 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
 
   // 学习数据按书的内容指纹绑定；处理中章节还在变，等结果稳定再绑定
   const studyKey = studyKeyOf(bookSummary)
+  const studyAuto = useStudyStore((s) => s.auto)
   useEffect(() => {
-    if (!processing) void useStudyStore.getState().bind(bookSummary)
-    // 只在指纹变化时重新绑定
+    if (processing) return
+    // 先等本地缓存加载完再自动补齐：否则 IndexedDB 里已有的速读 / 自测会被重复生成
+    const { bind, autoGenerate } = useStudyStore.getState()
+    void bind(bookSummary).then(() => autoGenerate(bookSummary))
+    // 只在指纹变化 / 开关变化时重新绑定
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [studyKey, processing])
+  }, [studyKey, processing, studyAuto])
   const kit = useStudyStore((s) => s.data.kit)
   const depth = useStudyStore((s) => s.depth)
   // 阅读深度只改"显示用"的章节总结；实体索引/缓存/导出仍用全文

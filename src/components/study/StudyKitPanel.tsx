@@ -7,6 +7,7 @@ import { usableSummaryChapters } from '@/utils/chapterResults'
 import { estimateRun, formatCount } from '@/services/runEstimate'
 import { useStudyStore } from '@/study/studyStore'
 import type { BookSummary } from '@/types/book'
+import { AutoStudyToggle } from './AutoStudyToggle'
 import { DepthSwitch } from './DepthSwitch'
 import { RunEstimateLine } from './RunEstimateLine'
 
@@ -26,6 +27,7 @@ export function StudyKitPanel({ bookSummary, onJumpChapter }: Props) {
 
   return (
     <div className="space-y-3">
+      <AutoStudyToggle />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <DepthSwitch chapters={bookSummary.chapters} />
         {running.kit ? (

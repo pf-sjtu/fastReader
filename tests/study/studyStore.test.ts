@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useStudyStore, studyDeps } from '@/study/studyStore'
+import { useStudyStore, studyDeps, resetAutoTried } from '@/study/studyStore'
 import { emptyStudyData, sanitizeStudyData, studyKeyOf, type StudyBackend, type StudyData } from '@/study/persistence'
 import { applyDepth, kitCoverage, renderStudyChapter } from '@/study/depth'
 import type { Quiz, StudyKit } from '@/study/schema'
@@ -46,7 +46,9 @@ beforeEach(() => {
   mem = memoryBackend()
   studyDeps.backend = mem.backend
   studyDeps.createAI = () => ai as never
+  resetAutoTried()
   useStudyStore.setState({
+    auto: true,
     bookKey: null,
     data: emptyStudyData(),
     chat: [],
@@ -193,6 +195,85 @@ describe('自测', () => {
     await useStudyStore.getState().generateQuiz(book)
     expect(useStudyStore.getState().errors.quiz).toContain('解析失败')
     expect(useStudyStore.getState().data.quiz).toEqual(quiz)
+  })
+})
+
+describe('autoGenerate：章节总结稳定后自动补齐速读与全书自测', () => {
+  const bound = async (b = mkBook()) => {
+    await useStudyStore.getState().bind(b)
+    return b
+  }
+
+  it('什么都没有：先速读、再全书自测（各一次），结果落盘', async () => {
+    ai.generateStudyKit.mockResolvedValue(kit)
+    ai.generateQuiz.mockResolvedValue(quiz)
+    const b = await bound()
+    await useStudyStore.getState().autoGenerate(b)
+    expect(ai.generateStudyKit).toHaveBeenCalledTimes(1)
+    expect(ai.generateQuiz).toHaveBeenCalledTimes(1)
+    expect(ai.generateQuiz.mock.calls[0][1]).toHaveLength(3) // 全书，不是单章
+    const saved = mem.db.get(studyKeyOf(b))
+    expect(saved?.kit).toEqual(kit)
+    expect(saved?.quiz).toEqual(quiz)
+  })
+
+  it('已有的不重复生成：本地缓存里有速读就只补自测；两样都有就什么都不调', async () => {
+    const b = mkBook()
+    mem = memoryBackend({ [studyKeyOf(b)]: { kit, quiz: null, answers: {} } })
+    studyDeps.backend = mem.backend
+    ai.generateQuiz.mockResolvedValue(quiz)
+    await bound(b)
+    await useStudyStore.getState().autoGenerate(b)
+    expect(ai.generateStudyKit).not.toHaveBeenCalled()
+    expect(ai.generateQuiz).toHaveBeenCalledTimes(1)
+
+    vi.clearAllMocks()
+    resetAutoTried()
+    await useStudyStore.getState().autoGenerate(b)
+    expect(ai.generateStudyKit).not.toHaveBeenCalled()
+    expect(ai.generateQuiz).not.toHaveBeenCalled()
+  })
+
+  it('开关关着：不调用', async () => {
+    useStudyStore.setState({ auto: false })
+    const b = await bound()
+    await useStudyStore.getState().autoGenerate(b)
+    expect(ai.generateStudyKit).not.toHaveBeenCalled()
+    expect(ai.generateQuiz).not.toHaveBeenCalled()
+  })
+
+  it('速读失败：不接着烧自测，也不会自动重试（本会话每本书每种产物只试一次）', async () => {
+    ai.generateStudyKit.mockRejectedValue(new Error('网络错误'))
+    const b = await bound()
+    await useStudyStore.getState().autoGenerate(b)
+    expect(ai.generateQuiz).not.toHaveBeenCalled()
+    expect(useStudyStore.getState().errors.kit).toContain('网络错误')
+    await useStudyStore.getState().autoGenerate(b) // 例如 effect 又触发了一次
+    expect(ai.generateStudyKit).toHaveBeenCalledTimes(1)
+  })
+
+  it('用户正在操作（问书 / 生成中）时不插队打断；书没绑定或指纹对不上也不动', async () => {
+    const b = await bound()
+    useStudyStore.setState({ running: { kit: false, quiz: false, ask: true } })
+    await useStudyStore.getState().autoGenerate(b)
+    expect(ai.generateStudyKit).not.toHaveBeenCalled()
+
+    useStudyStore.setState({ running: { kit: false, quiz: false, ask: false } })
+    await useStudyStore.getState().autoGenerate(mkBook('别的书'))
+    expect(ai.generateStudyKit).not.toHaveBeenCalled()
+  })
+
+  it('没有可用的章节总结：不调用', async () => {
+    const b = await bound({ ...mkBook(), chapters: mkBook().chapters.map((c) => ({ ...c, summary: '' })) })
+    await useStudyStore.getState().autoGenerate(b)
+    expect(ai.generateStudyKit).not.toHaveBeenCalled()
+  })
+
+  it('setAuto 持久化到 localStorage', () => {
+    useStudyStore.getState().setAuto(false)
+    expect(localStorage.getItem('juhua.study.auto')).toBe('off')
+    useStudyStore.getState().setAuto(true)
+    expect(localStorage.getItem('juhua.study.auto')).toBe('on')
   })
 })
 

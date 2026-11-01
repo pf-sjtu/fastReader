@@ -13,6 +13,12 @@ import type { BookSummary } from '@/types/book'
 
 let prevLang = i18n.language
 beforeAll(async () => {
+  // Radix 悬浮卡（章节速读）需要 ResizeObserver，jsdom 没有
+  ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
   prevLang = i18n.language
   await i18n.changeLanguage('zh')
 })
@@ -220,6 +226,22 @@ describe('AskPanel', () => {
     const chip = Array.from(root.querySelectorAll('button')).find((b) => b.textContent === '【第3章】')!
     click(chip)
     expect(onJump).toHaveBeenCalledWith('c3')
+  })
+
+  it('章节标签悬浮卡优先显示速读（一句话 + 要点）；没有速读时退回总结摘录；两者都没有就不弹', async () => {
+    seed({ kit })
+    ai.askBook.mockResolvedValue('方案见【第2章】，另见【第3章】')
+    mounted = mount(<AskPanel bookSummary={book} onJumpChapter={() => {}} />)
+    key(type('问'), 'Enter')
+    await flush()
+    const chip = (name: string) => Array.from(mounted!.container.querySelectorAll('button')).find((b) => b.textContent === name)!
+    // 第 2 章有速读：悬浮后出现一句话与要点
+    await act(async () => {
+      chip('【第2章】').focus()
+    })
+    await flush()
+    expect(document.body.textContent).toContain('提出方案')
+    expect(document.body.textContent).toContain('要点甲')
   })
 
   it('映射不上的【…】保持原文，不生成链接（不猜）；外链在新标签打开且带 noopener', async () => {

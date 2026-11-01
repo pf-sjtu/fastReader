@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { useStudyStore } from '@/study/studyStore'
 import type { BookSummary } from '@/types/book'
 import { AskAnswer } from './AskAnswer'
+import { ChapterPeek } from './ChapterPeek'
 
 interface Props {
   bookSummary: BookSummary
@@ -76,9 +77,11 @@ export function AskPanel({ bookSummary, onJumpChapter }: Props) {
                     <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
                       <span className="text-xs text-muted-foreground">{t('study.ask.sources')}</span>
                       {turn.citations.map((id) => (
-                        <button key={id} type="button" onClick={() => onJumpChapter(id)} className="min-h-6 rounded-full border px-2 text-xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring">
-                          {titleOf(id)}
-                        </button>
+                        <ChapterPeek key={id} chapterId={id} chapters={bookSummary.chapters}>
+                          <button type="button" onClick={() => onJumpChapter(id)} className="min-h-6 rounded-full border px-2 text-xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring">
+                            {titleOf(id)}
+                          </button>
+                        </ChapterPeek>
                       ))}
                     </div>
                   )}

@@ -2,6 +2,7 @@
  * 时间线事件卡片。事件挂章节：所在章严格早于当前章才默认可见，
  * 否则只给"已折叠"提示，点开才渲染（折叠时文字不进 DOM）。
  */
+import { ChapterPeek } from '@/components/study/ChapterPeek'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BookOpen, ChevronDown, ChevronUp, X } from 'lucide-react'
@@ -103,17 +104,23 @@ export function EventCard({ linking, eventId, currentChapterId, onOpenEntity, on
 
       <footer className="border-t pt-2">
         {/* 映射不上章节就置灰并说明原因，不去猜一个位置 */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 gap-1 text-xs"
-          disabled={!chapterId || !show}
-          title={!chapterId ? t('eventCard.noChapter') : undefined}
-          onClick={() => chapterId && onJumpChapter(chapterId)}
-        >
-          <BookOpen className="size-3.5" />
-          {chapterId ? t('eventCard.jumpChapter') : t('eventCard.noChapter')}
-        </Button>
+        {(() => {
+          const jump = (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 text-xs"
+              disabled={!chapterId || !show}
+              title={!chapterId ? t('eventCard.noChapter') : undefined}
+              onClick={() => chapterId && onJumpChapter(chapterId)}
+            >
+              <BookOpen className="size-3.5" />
+              {chapterId ? t('eventCard.jumpChapter') : t('eventCard.noChapter')}
+            </Button>
+          )
+          // 悬停「跳到该章」时先看一眼这章讲什么（速读）；映射不上章节则原样
+          return chapterId && show ? <ChapterPeek chapterId={chapterId}>{jump}</ChapterPeek> : jump
+        })()}
       </footer>
     </div>
   )

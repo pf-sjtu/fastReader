@@ -3,6 +3,7 @@
  * 防剧透：数据来自 buildEntityCardModel（reveal=false 时被折叠的内容不在模型里），
  * 这里只负责渲染，并在用户点击"展开"后用 reveal=true 重算。
  */
+import { ChapterPeek } from '@/components/study/ChapterPeek'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Network, GitCommitHorizontal, X } from 'lucide-react'
@@ -60,6 +61,15 @@ export function EntityCard({
 
   const chapterLabel = (id: string | null) =>
     id ? (linking.chapterTitles.get(id) ?? id) : t('entityCard.unknownChapter')
+  /** 章节标签：悬停显示该章速读（对不上章节则只是个标签） */
+  const chapterBadge = (id: string | null, className: string) => {
+    const badge = (
+      <Badge variant="outline" className={className}>
+        {chapterLabel(id)}
+      </Badge>
+    )
+    return id ? <ChapterPeek chapterId={id} title={linking.chapterTitles.get(id)}>{badge}</ChapterPeek> : badge
+  }
 
   const renderSection = (s: CardSection, tagged: boolean) => (
     <>
@@ -89,7 +99,7 @@ export function EntityCard({
                   </button>
                 )
               })}
-              {tagged && <Badge variant="outline" className="text-xs">{chapterLabel(g.firstChapterId)}</Badge>}
+              {tagged && chapterBadge(g.firstChapterId, 'text-xs')}
             </div>
           ))}
           {s.moreRelations > 0 && (
@@ -111,7 +121,7 @@ export function EntityCard({
                 >
                   <span className="text-xs text-muted-foreground">{ev.timeLabel}</span> {ev.label}
                 </button>
-                {tagged && <Badge variant="outline" className="shrink-0 text-xs">{chapterLabel(ev.chapterId)}</Badge>}
+                {tagged && chapterBadge(ev.chapterId, 'shrink-0 text-xs')}
               </li>
             ))}
           </ul>

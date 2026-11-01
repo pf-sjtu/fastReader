@@ -1,3 +1,5 @@
+import { AutoStudyToggle } from './AutoStudyToggle'
+import { ChapterPeek } from '@/components/study/ChapterPeek'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, Loader2, RotateCcw, Sparkles, X } from 'lucide-react'
@@ -102,9 +104,11 @@ function QuestionCard({ q, index, answered, onAnswer, onJumpChapter }: QuestionP
         <div className="space-y-1 text-xs text-muted-foreground">
           {q.explanation && <p className="leading-relaxed">{q.explanation}</p>}
           {q.chapterId && (
-            <button type="button" className="underline-offset-2 hover:text-foreground hover:underline" onClick={() => onJumpChapter(q.chapterId!)}>
-              {t('study.quiz.source', { chapter: q.chapterTitle })}
-            </button>
+            <ChapterPeek chapterId={q.chapterId} title={q.chapterTitle}>
+              <button type="button" className="underline-offset-2 hover:text-foreground hover:underline" onClick={() => onJumpChapter(q.chapterId!)}>
+                {t('study.quiz.source', { chapter: q.chapterTitle })}
+              </button>
+            </ChapterPeek>
           )}
         </div>
       )}
@@ -138,6 +142,7 @@ export function QuizPanel({ bookSummary, currentChapterId, onJumpChapter }: Prop
   const field = 'h-8 rounded-md border bg-background px-2 text-xs focus-visible:outline-2 focus-visible:outline-ring'
   return (
     <div className="space-y-3">
+      <AutoStudyToggle />
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1 text-xs text-muted-foreground">
           {t('study.quiz.scope')}

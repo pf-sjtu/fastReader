@@ -1404,6 +1404,10 @@
     "delete": "Delete note"
   },
   "study": {
+    "auto": {
+      "label": "Auto-generate digest and quiz",
+      "hint": "Generated in the background (one model call each) once chapter summaries are done; chapter hover cards prefer the digest. Not retried automatically after a failure or cancel."
+    },
     "cancel": "Cancel",
     "noChapters": "No chapter summaries available yet",
     "failed": "Failed: {{error}}",
@@ -1430,7 +1434,7 @@
       "regenerate": "Regenerate",
       "generating": "Generating…",
       "progress": "Generating {{done}}/{{total}}",
-      "empty": "The digest condenses each chapter into a one-liner, three key points and key terms for quick review. Click the button above to generate it (calls the model one or more times).",
+      "empty": "The digest condenses each chapter into a one-liner, three key points and key terms for quick review, and powers the chapter hover cards. It is generated automatically once chapter summaries are done, or click the button above to generate it (calls the model one or more times).",
       "count": "{{count}} chapters · input ≈ {{tokens}} tokens"
     },
     "quiz": {
