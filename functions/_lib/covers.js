@@ -111,6 +111,39 @@ export function base64Bytes(b64) {
   return Math.floor((s.length * 3) / 4)
 }
 
+const B64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+/** 只解出前 n 个字节（文件头用，不解码整张图） */
+export function base64Prefix(b64, n = 12) {
+  const out = []
+  let buf = 0
+  let bits = 0
+  for (const ch of String(b64 || '')) {
+    const v = B64_CHARS.indexOf(ch)
+    if (v < 0) break // '=' 或非法字符：到这就够判头了
+    buf = (buf << 6) | v
+    bits += 6
+    if (bits >= 8) {
+      bits -= 8
+      out.push((buf >> bits) & 0xff)
+      if (out.length >= n) break
+    }
+  }
+  return out
+}
+
+/**
+ * WebP 文件头：`RIFF` …4 字节长度… `WEBP`。
+ * 客户端（canvas.toBlob('image/webp')）与预处理脚本（PIL `save(..., "WEBP")`）产出的都是真 webp；
+ * 只按 base64 形状与体积校验的话，任意 ≤48KB 的字节都能塞进 `cover:` 键，再被当作 `image/webp` 发出去。
+ */
+export function isWebpBase64(b64) {
+  const h = base64Prefix(b64, 12)
+  return h.length >= 12 &&
+    h[0] === 0x52 && h[1] === 0x49 && h[2] === 0x46 && h[3] === 0x46 && // RIFF
+    h[8] === 0x57 && h[9] === 0x45 && h[10] === 0x42 && h[11] === 0x50 // WEBP
+}
+
 const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/
 
 /**
@@ -133,7 +166,7 @@ export async function putItems(env, items, { overwrite = false } = {}) {
     let hasCover = !!prev?.cover
     let status = 'meta'
     if (typeof it.image === 'string' && it.image) {
-      if (!B64_RE.test(it.image) || base64Bytes(it.image) > MAX_IMAGE_BYTES) {
+      if (!B64_RE.test(it.image) || base64Bytes(it.image) > MAX_IMAGE_BYTES || !isWebpBase64(it.image)) {
         results.push({ id, status: 'bad_image' })
         continue
       }

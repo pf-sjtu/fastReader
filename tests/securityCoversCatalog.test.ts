@@ -10,6 +10,14 @@ import { createEnv } from './__mocks__/memoryKv'
 const ID = 'bk_19872exvmifq5'
 const ID2 = 'bk_zzzzzz'
 const bytes = (n: number, fill = 7) => new Uint8Array(n).fill(fill)
+/** 真 webp 头（服务端校验 RIFF/WEBP 魔数），用第 20 字节区分不同封面 */
+const webp = (n: number, fill = 7) => {
+  const b = bytes(n, fill)
+  for (const [i, ch] of [...'RIFF'].entries()) b[i] = ch.charCodeAt(0)
+  for (const [i, ch] of [...'WEBP'].entries()) b[8 + i] = ch.charCodeAt(0)
+  for (let i = 4; i < 8; i++) b[i] = 0
+  return b
+}
 const enc = (o: unknown) => encodeURIComponent(JSON.stringify(o))
 
 async function call(env: unknown, path: string, init: RequestInit = {}) {
@@ -49,7 +57,7 @@ describe('索引版本与 ETag', () => {
     const first = await index(env)
     expect(((await first.json()) as Idx).rev).toBe(0)
 
-    await call(env, `/api/covers/${ID}`, { method: 'PUT', body: bytes(50), headers: { 'X-Book-Meta': enc({ stem: 'a', title: 'A' }) } })
+    await call(env, `/api/covers/${ID}`, { method: 'PUT', body: webp(50), headers: { 'X-Book-Meta': enc({ stem: 'a', title: 'A' }) } })
     const r1 = await index(env)
     const etag = r1.headers.get('ETag')!
     const rev1 = ((await r1.json()) as Idx).rev
@@ -59,13 +67,13 @@ describe('索引版本与 ETag', () => {
     const r304 = await index(env, { 'If-None-Match': etag })
     expect(r304.status).toBe(304)
 
-    await call(env, `/api/covers/${ID2}`, { method: 'PUT', body: bytes(50), headers: { 'X-Book-Meta': enc({ stem: 'b', title: 'B' }) } })
+    await call(env, `/api/covers/${ID2}`, { method: 'PUT', body: webp(50), headers: { 'X-Book-Meta': enc({ stem: 'b', title: 'B' }) } })
     expect((await index(env, { 'If-None-Match': etag })).status).toBe(200)
   })
 
   it('内容没变的重复写入不 bump rev（不白烧写入额度）', async () => {
     const env = createEnv()
-    const put = () => call(env, `/api/covers/${ID}`, { method: 'PUT', body: bytes(50), headers: { 'X-Book-Meta': enc({ stem: 'a', title: 'A', file: 'a.epub' }) } })
+    const put = () => call(env, `/api/covers/${ID}`, { method: 'PUT', body: webp(50), headers: { 'X-Book-Meta': enc({ stem: 'a', title: 'A', file: 'a.epub' }) } })
     await put()
     const rev1 = ((await (await index(env)).json()) as Idx).rev
     // 第二次：封面已存在、元数据相同 → 没有真实变化，不写索引（updatedAt 只在变化时更新）
@@ -77,7 +85,7 @@ describe('索引版本与 ETag', () => {
 describe('元数据单独更新与 replace', () => {
   it('空 body + X-Book-Meta：只补元数据，不动封面', async () => {
     const env = createEnv()
-    await call(env, `/api/covers/${ID}`, { method: 'PUT', body: bytes(80, 1), headers: { 'X-Book-Meta': enc({ stem: 'a', title: 'A' }) } })
+    await call(env, `/api/covers/${ID}`, { method: 'PUT', body: webp(80, 1), headers: { 'X-Book-Meta': enc({ stem: 'a', title: 'A' }) } })
     const r = await call(env, `/api/covers/${ID}`, { method: 'PUT', headers: { 'X-Book-Meta': enc({ stem: 'a', title: 'A', subjects: ['Business'], year: 2020 }) } })
     expect(r.status).toBe(200)
     expect(((await r.json()) as { status: string }).status).toBe('meta')
@@ -85,7 +93,7 @@ describe('元数据单独更新与 replace', () => {
     expect(it).toMatchObject({ subjects: ['Business'], year: 2020, cover: 1 })
     expect(typeof it.updatedAt).toBe('number')
     const img = new Uint8Array(await (await call(env, `/api/covers/${ID}`)).arrayBuffer())
-    expect(img[0]).toBe(1)
+    expect(img[20]).toBe(1)
   })
 
   it('空 body 且没有元数据 → 413（和以前一致）', async () => {
@@ -95,12 +103,12 @@ describe('元数据单独更新与 replace', () => {
   it('?replace=1 覆盖已有封面；不带则保留旧封面', async () => {
     const env = createEnv()
     const meta = { 'X-Book-Meta': enc({ stem: 'a', title: 'A' }) }
-    await call(env, `/api/covers/${ID}`, { method: 'PUT', body: bytes(80, 1), headers: meta })
-    await call(env, `/api/covers/${ID}`, { method: 'PUT', body: bytes(80, 2), headers: meta })
-    expect(new Uint8Array(await (await call(env, `/api/covers/${ID}`)).arrayBuffer())[0]).toBe(1)
-    const r = await call(env, `/api/covers/${ID}?replace=1`, { method: 'PUT', body: bytes(80, 3), headers: meta })
+    await call(env, `/api/covers/${ID}`, { method: 'PUT', body: webp(80, 1), headers: meta })
+    await call(env, `/api/covers/${ID}`, { method: 'PUT', body: webp(80, 2), headers: meta })
+    expect(new Uint8Array(await (await call(env, `/api/covers/${ID}`)).arrayBuffer())[20]).toBe(1)
+    const r = await call(env, `/api/covers/${ID}?replace=1`, { method: 'PUT', body: webp(80, 3), headers: meta })
     expect(((await r.json()) as { status: string }).status).toBe('stored')
-    expect(new Uint8Array(await (await call(env, `/api/covers/${ID}`)).arrayBuffer())[0]).toBe(3)
+    expect(new Uint8Array(await (await call(env, `/api/covers/${ID}`)).arrayBuffer())[20]).toBe(3)
   })
 })
 
@@ -110,10 +118,10 @@ describe('书被换过（replace）：整条替换，不残留旧书的资料', 
 
   it('replace 时旧的分类 / 简介 / 出版社不再合并进来；默认（不带 replace）仍是只补缺', async () => {
     const env = createEnv()
-    await put(env, '', { stem: 'a', title: 'A', subjects: ['History'], desc: '旧简介', publisher: '旧社' }, bytes(60, 1))
+    await put(env, '', { stem: 'a', title: 'A', subjects: ['History'], desc: '旧简介', publisher: '旧社' }, webp(60, 1))
     await put(env, '', { stem: 'a', title: 'A', year: 2020 }) // 合并：旧字段保留
     expect(((await (await index(env)).json()) as Idx).items[ID]).toMatchObject({ subjects: ['History'], desc: '旧简介', year: 2020 })
-    await put(env, '?replace=1', { stem: 'a', title: 'A（新版）' }, bytes(60, 9))
+    await put(env, '?replace=1', { stem: 'a', title: 'A（新版）' }, webp(60, 9))
     const it = ((await (await index(env)).json()) as Idx).items[ID]
     expect(it).toMatchObject({ title: 'A（新版）', cover: 1 })
     expect(it).not.toHaveProperty('subjects')
@@ -123,7 +131,7 @@ describe('书被换过（replace）：整条替换，不残留旧书的资料', 
 
   it('replace 且新文件没有封面：旧封面一并删掉（不能是 A 的封面配 B 的资料）', async () => {
     const env = createEnv()
-    await put(env, '', { stem: 'a', title: 'A' }, bytes(60, 1))
+    await put(env, '', { stem: 'a', title: 'A' }, webp(60, 1))
     await put(env, '?replace=1', { stem: 'a', title: 'A2' })
     expect(((await (await index(env)).json()) as Idx).items[ID]).not.toHaveProperty('cover')
     expect((await call(env, `/api/covers/${ID}`)).status).toBe(404)
@@ -137,20 +145,20 @@ describe('coverAt：封面真正写入的时间', () => {
 
   it('写入封面时记录；只补元数据不改它（否则每次补元数据都让各端缓存的封面失效）；replace 换封面则更新', async () => {
     const env = createEnv()
-    await put(env, '', { stem: 'a', title: 'A' }, bytes(60, 1))
+    await put(env, '', { stem: 'a', title: 'A' }, webp(60, 1))
     const first = (await item(env)).coverAt as number
     expect(first).toBeGreaterThan(0)
     await put(env, '', { stem: 'a', title: 'A', subjects: ['History'] }) // 元数据补传
     expect((await item(env)).coverAt).toBe(first)
-    await put(env, '', { stem: 'a', title: 'A' }, bytes(60, 2)) // 封面已存在且不 replace：不覆盖
+    await put(env, '', { stem: 'a', title: 'A' }, webp(60, 2)) // 封面已存在且不 replace：不覆盖
     expect((await item(env)).coverAt).toBe(first)
-    await put(env, '?replace=1', { stem: 'a', title: 'A' }, bytes(60, 3))
+    await put(env, '?replace=1', { stem: 'a', title: 'A' }, webp(60, 3))
     expect((await item(env)).coverAt as number).toBeGreaterThan(first)
   })
 
   it('replace 且新文件没有封面：封面与 coverAt 一起去掉', async () => {
     const env = createEnv()
-    await put(env, '', { stem: 'a', title: 'A' }, bytes(60, 1))
+    await put(env, '', { stem: 'a', title: 'A' }, webp(60, 1))
     await put(env, '?replace=1', { stem: 'a', title: 'A2' })
     expect(await item(env)).not.toHaveProperty('coverAt')
   })
@@ -171,7 +179,7 @@ describe('索引写入：限流重试', () => {
         }
         return orig(k, v)
       }
-      const p = call(env, `/api/covers/${ID}`, { method: 'PUT', body: bytes(50), headers: { 'X-Book-Meta': enc({ stem: 'a', title: 'A' }) } })
+      const p = call(env, `/api/covers/${ID}`, { method: 'PUT', body: webp(50), headers: { 'X-Book-Meta': enc({ stem: 'a', title: 'A' }) } })
       await vi.advanceTimersByTimeAsync(1200)
       expect((await p).status).toBe(200)
       expect(failed).toBe(true)
@@ -185,7 +193,7 @@ describe('索引写入：限流重试', () => {
 describe('删除（用户确认 WebDAV 上已找不到之后）', () => {
   async function seeded() {
     const env = createEnv()
-    for (const id of [ID, ID2]) await call(env, `/api/covers/${id}`, { method: 'PUT', body: bytes(40), headers: { 'X-Book-Meta': enc({ stem: id, title: id }) } })
+    for (const id of [ID, ID2]) await call(env, `/api/covers/${id}`, { method: 'PUT', body: webp(40), headers: { 'X-Book-Meta': enc({ stem: id, title: id }) } })
     return env
   }
 
