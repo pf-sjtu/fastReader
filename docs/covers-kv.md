@@ -8,10 +8,11 @@
 
 ## 数据
 
-| KV 键 | 内容 |
+| 存储 | 内容 |
 |---|---|
-| `covers:index` | JSON `{rev, items: {[id]: Item}}`，646 本约 650KB（gzip 后约 1/3，后续请求走 304） |
-| `cover:<id>` | 封面 webp 的 base64（≤48KB；预处理产物约 120×160、2–3KB） |
+| **D1** 表 `covers_items`（`id` 主键、`json`、`updated_at`）+ `covers_meta`（`rev` 一行） | 索引：每本书一行，GET 时拼成 `{rev, items: {[id]: Item}}`（646 本约 650KB，gzip 后约 1/3，后续请求走 304）。绑定名 `FASTREADER_DB`，库 `fastreader-index` |
+| KV `covers:index` | 同一份索引的**回退与迁移源**：没绑定 D1 时用它；绑定后只在首次使用时被复制进 D1，之后不再读写（原样留作回退，不删） |
+| KV `cover:<id>` | 封面 webp 的 base64（≤48KB；预处理产物约 120×160、2–3KB），仍在 KV |
 
 `Item` 字段（服务端 `cleanMeta` 清洗、限长，客户端不可信）：
 
@@ -113,11 +114,17 @@ uv run --no-sync --with pillow python scripts/covers_prepare.py --epubs "<epub �
   模糊配到的邻近版本（「第二版」vs「第三版」）让位，补全时会建自己的条目。要让同一书的多种格式各有资料，需要把格式放进 id（会让现有 646 条 id 全变，暂不做）。
 - **「书不在了」只信新鲜而完整的扫描**：扫描有效期 2 分钟，云端条目比扫描新（别的设备刚上传）就重扫；目录遍历任一子目录失败（重试一次后）整体失败而不是返回残缺列表；
   「找不到」的书超过 20 本且占云端一半以上，视为目录配错，不提供整批删除。
-- **索引并发写**：KV 没有 compare-and-set，丢更新无法根治。已做的缓解：写入前一刻才读最新索引、rev 用时间戳保证唯一（ETag 不会撞车）、限流（429）时等 1.1 秒重试一次。
-  要彻底串行化需要 Durable Object / D1。`replace` 是整条替换（旧分类 / 简介不残留；新文件无封面则删旧封面），默认写入仍是只补缺的合并。
+- **索引并发写（D1 后端已根治，KV 回退仍是缓解）**：KV 把整个索引存成一个 JSON、整份读改写，没有 compare-and-set，两个写入者同时改会丢更新；
+  缓解是写入前一刻才读最新索引、rev 用时间戳保证唯一（ETag 不会撞车）、限流（429）时等 1.1 秒重试一次。
+  D1 后端（`functions/_lib/coversStore.js`）每书一行：写入是 `INSERT … ON CONFLICT DO UPDATE … WHERE updated_at IS <读到的值>` 的逐书 CAS，
+  `changes = 0` 说明被别人抢先改过 → 重读重算（最多 4 轮，耗尽回 409 `index_conflict`）；条目的 `updatedAt` 单调递增，同一毫秒的两次写入也不会拿到同一个值。
+  `rev` 与条目在同一个批处理事务里更新、同一个快照里读出，ETag 对得上内容；`If-None-Match` 命中时只读 `rev` 一行。
+  **首次使用**（没有 `rev` 行）把 KV 旧索引复制进 D1（`INSERT OR IGNORE`，rev 行最后写，中途失败整体重来）；一次性核对 / 迁移用 `python scripts/covers_d1.py verify|migrate`。
+  `covers_prepare.py --upload` 在 `wrangler.toml` 声明了 D1 时，索引读写都走 D1（封面仍写 KV）。D1 免费计划超额是请求报错而非计费，额度以官方定价页为准。
+  `replace` 是整条替换（旧分类 / 简介不残留；新文件无封面则删旧封面），默认写入仍是只补缺的合并。
 - **封面换了其他设备怎么知道**：服务端在封面真正写入（新写 / `replace`）时记录 `coverAt`；封面键变成 `bk_x@<coverAt>`，它同时是本地缓存（IndexedDB）键，
   取图 URL 带 `?v=<coverAt>` 绕开浏览器 24 小时缓存。只补元数据不改 `coverAt`；老条目没有它，键仍是纯 id，已有缓存不受影响。
-- **已知未做**：① 每次读写都要解析整份索引（约 650KB），Pages 免费版 CPU 上限下是否超限需线上实测；
+- **已知未做**：① 索引变化后的 GET 要读全部行并逐行 `JSON.parse`（约 650KB；304 不读），Pages 免费版 CPU 上限下是否超限需线上实测；写入只读写涉及的那几行；
   ② 脚本只取第一个作者、前端拼接全部作者，两端 `cleanMeta` 在 emoji / BOM / 数字字符串年份上不完全一致（现有数据无影响）；
   ③ `PUT` 不校验 webp 魔数（仅登录用户可写）。
 - 封面 2–3KB 在高分屏上偏软，换来的是首屏流量极小；要更清晰改 `scripts/covers_prepare.py` 的 `COVER_W/H`、`MAX_BYTES`。

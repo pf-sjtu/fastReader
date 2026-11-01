@@ -8,8 +8,9 @@
 //   cover:<id>     base64 文本（webp，≤48KB）
 // KV 免费额度写 1000 次/天：批量接口一次请求写 N 张封面 + 1 次索引，单本补传也是 2 次写。
 import { getKv } from './kv.js'
+import { INDEX_KEY, getStore, nextUpdatedAt } from './coversStore.js'
 
-export const INDEX_KEY = 'covers:index'
+export { INDEX_KEY }
 export const MAX_IMAGE_BYTES = 48 * 1024
 export const MAX_BULK_ITEMS = 40
 export const MAX_DELETE_IDS = 200
@@ -59,51 +60,12 @@ export function cleanMeta(raw) {
   return out
 }
 
-/** 索引带 rev：每次写入 +1，GET 以它做 ETag，客户端重复进入书架只付一次 304 的代价 */
-export async function readIndex(env) {
-  const raw = await getKv(env).get(INDEX_KEY)
-  if (!raw) return { rev: 0, items: {} }
-  try {
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return parsed && typeof parsed.items === 'object' && parsed.items
-      ? { rev: Number(parsed.rev) || 0, items: parsed.items }
-      : { rev: 0, items: {} }
-  } catch {
-    return { rev: 0, items: {} }
-  }
-}
-
 /**
- * 新版本号：单调且几乎不会撞车。两个并发写入若各自 +1 会得到同一个 rev（ETag 相同而内容不同），
- * 已拿到第一版的客户端就会对第二版一直收到 304；带时间戳与随机尾数后，撞车的概率可忽略（< 2^53）。
+ * 索引带 rev：每次写入换一个新值，GET 以它做 ETag，客户端重复进入书架只付一次 304 的代价。
+ * 存储后端见 coversStore.js：绑定了 D1（FASTREADER_DB）就用 D1（逐书 CAS，不丢更新），否则回退 KV。
  */
-const nextRev = (prev) => Math.max((prev || 0) + 1, Date.now() * 1000 + Math.floor(Math.random() * 1000))
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-
-/** KV 对同一个键限 1 次写/秒（超出会抛 429）：补全时连续上传很容易撞上，等一下重试一次 */
-async function putIndex(kv, index) {
-  const body = JSON.stringify({ ...index, rev: nextRev(index.rev) })
-  try {
-    await kv.put(INDEX_KEY, body)
-  } catch {
-    await sleep(1100)
-    await kv.put(INDEX_KEY, body)
-  }
-}
-
-/**
- * 读-改-写索引。KV 没有 compare-and-set，丢更新无法根治（要彻底串行化得上 Durable Object / D1）；
- * 这里把「读」推迟到真正写入前一刻，窗口从「整批封面写完」缩到几毫秒，再配合上面的唯一 rev 与重试。
- * mutate 在最新的索引上就地修改，返回是否有变化；没有变化就不写（保护免费额度）。
- */
-async function commitIndex(env, mutate) {
-  const kv = getKv(env)
-  const index = await readIndex(env)
-  if (!mutate(index)) return false
-  await putIndex(kv, index)
-  return true
-}
+export const readIndex = (env) => getStore(env).readIndex(env)
+export const readIndexIfChanged = (env, etag) => getStore(env).readIndexIfChanged(env, etag)
 
 /** base64 → 字节数（不解码，按长度推算），用来在写入前拒绝过大的图片 */
 export function base64Bytes(b64) {
@@ -152,7 +114,9 @@ const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/
  */
 export async function putItems(env, items, { overwrite = false } = {}) {
   const kv = getKv(env)
-  const index = await readIndex(env) // 只用来决定「封面已存在则不覆盖」；真正改索引时会重读最新的
+  const store = getStore(env)
+  // 只用来决定「封面已存在则不覆盖」；真正改索引时 commit 会重读最新的
+  const known = await store.loadItems(env, items.map((it) => it?.id).filter((id) => typeof id === 'string' && ID_RE.test(id)))
   const results = []
   const changes = []
   for (const it of items) {
@@ -162,7 +126,7 @@ export async function putItems(env, items, { overwrite = false } = {}) {
       continue
     }
     const meta = cleanMeta(it.meta)
-    const prev = index.items[id]
+    const prev = known[id]
     let hasCover = !!prev?.cover
     let status = 'meta'
     if (typeof it.image === 'string' && it.image) {
@@ -186,21 +150,24 @@ export async function putItems(env, items, { overwrite = false } = {}) {
     changes.push({ id, meta, hasCover, stored: status === 'stored' })
     results.push({ id, status })
   }
-  await commitIndex(env, (cur) => {
-    let dirty = false
-    for (const { id, meta, hasCover, stored } of changes) {
-      const prev = cur.items[id]
+  // 同一个 id 可能在一批里出现多次：按顺序依次合并。step 可能因并发冲突被重放，所以只依赖 prev、不带副作用
+  const byId = new Map()
+  for (const c of changes) byId.set(c.id, [...(byId.get(c.id) ?? []), c])
+  await store.commit(env, [...byId.keys()], (id, prev) => {
+    let cur = prev
+    let changed = false
+    for (const { meta, hasCover, stored } of byId.get(id)) {
       // 默认只合并（补缺，不抹掉已有字段）；overwrite 是「这是另一本书了」，旧值（分类 / 简介 / 出版社…）不能残留
-      const base = overwrite ? {} : (prev ?? {})
+      const base = overwrite ? {} : (cur ?? {})
       // coverAt：封面真正被写入的时间。只有「新写 / 覆盖」才更新；元数据补传不动它，否则每次补元数据都会让各端缓存的封面失效
       const next = { ...base, ...meta, ...(hasCover ? { cover: 1 } : {}) }
-      if (stored) next.coverAt = prev?.coverAt && prev.coverAt >= Date.now() ? prev.coverAt + 1 : Date.now()
-      if (JSON.stringify(next) !== JSON.stringify(prev)) {
-        cur.items[id] = { ...next, updatedAt: Date.now() }
-        dirty = true
+      if (stored) next.coverAt = cur?.coverAt && cur.coverAt >= Date.now() ? cur.coverAt + 1 : Date.now()
+      if (JSON.stringify(next) !== JSON.stringify(cur)) {
+        cur = { ...next, updatedAt: nextUpdatedAt(cur) }
+        changed = true
       }
     }
-    return dirty
+    return changed ? cur : undefined
   })
   return results
 }
@@ -211,7 +178,8 @@ export async function putItems(env, items, { overwrite = false } = {}) {
  */
 export async function deleteItems(env, ids) {
   const kv = getKv(env)
-  const index = await readIndex(env)
+  const store = getStore(env)
+  const known = await store.loadItems(env, ids.filter((id) => typeof id === 'string' && ID_RE.test(id)))
   const results = []
   const valid = []
   for (const id of ids) {
@@ -219,20 +187,11 @@ export async function deleteItems(env, ids) {
       results.push({ id: String(id), status: 'bad_id' })
       continue
     }
-    if (index.items[id]?.cover) await kv.delete(coverKey(id))
+    if (known[id]?.cover) await kv.delete(coverKey(id))
     valid.push(id)
     results.push({ id, status: 'deleted' })
   }
-  await commitIndex(env, (cur) => {
-    let dirty = false
-    for (const id of valid) {
-      if (id in cur.items) {
-        delete cur.items[id]
-        dirty = true
-      }
-    }
-    return dirty
-  })
+  await store.commit(env, valid, (_id, prev) => (prev ? null : undefined))
   return results
 }
 

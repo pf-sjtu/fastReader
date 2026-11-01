@@ -7,7 +7,7 @@
 // /api/covers/bulk       POST  {items:[{id, meta, image?(base64)}], overwrite?} 批量写入（脚本预处理用）
 //
 // 全部要求已登录（_middleware 统一拦截）；写操作额外要求同源或无 Origin（脚本不带 Origin）。
-import { ID_RE, MAX_BODY_BYTES, MAX_BULK_ITEMS, MAX_DELETE_IDS, MAX_IMAGE_BYTES, cleanMeta, deleteItems, putItems, readCover, readIndex } from '../../_lib/covers.js'
+import { ID_RE, MAX_BODY_BYTES, MAX_BULK_ITEMS, MAX_DELETE_IDS, MAX_IMAGE_BYTES, cleanMeta, deleteItems, putItems, readCover, readIndexIfChanged } from '../../_lib/covers.js'
 import { isSameOriginRequest, jsonResponse } from '../../_lib/origin.js'
 
 const actionOf = (url) => url.pathname.replace(/^\/api\/covers\/?/, '').replace(/\/+$/, '')
@@ -36,12 +36,12 @@ export async function onRequest(context) {
 
   try {
     if (action === '' && method === 'GET') {
-      const index = await readIndex(env)
-      // ETag = 索引版本号。no-cache = 每次都向服务端确认，但没变化时只回 304（浏览器自动带 If-None-Match）
-      const etag = `"r${index.rev}"`
-      const headers = { ETag: etag, 'Cache-Control': 'private, no-cache' }
-      if (request.headers.get('If-None-Match') === etag) return new Response(null, { status: 304, headers })
-      return jsonResponse(index, 200, headers)
+      // ETag = 索引版本号。no-cache = 每次都向服务端确认，但没变化时只回 304（浏览器自动带 If-None-Match）；D1 后端下 304 只读 1 行
+      const hit = await readIndexIfChanged(env, request.headers.get('If-None-Match'))
+      const rev = hit.notModified ? hit.rev : hit.index.rev
+      const headers = { ETag: `"r${rev}"`, 'Cache-Control': 'private, no-cache' }
+      if (hit.notModified) return new Response(null, { status: 304, headers })
+      return jsonResponse(hit.index, 200, headers)
     }
 
     if (method === 'PUT' || method === 'POST' || method === 'DELETE') {
@@ -112,6 +112,8 @@ export async function onRequest(context) {
     return jsonResponse({ error: 'not_found' }, 404)
   } catch (error) {
     if (error?.code === 'kv_missing') return jsonResponse({ error: 'kv_missing' }, 503)
+    // D1 逐书 CAS 重试耗尽：同一本书被并发改了好几轮，客户端稍后重试即可
+    if (error?.code === 'index_conflict') return jsonResponse({ error: 'index_conflict', message: error.message }, 409)
     return jsonResponse({ error: 'covers_failed', message: String(error?.message ?? error) }, 500)
   }
 }

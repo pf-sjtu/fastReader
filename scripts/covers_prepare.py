@@ -32,6 +32,9 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import covers_d1  # noqa: E402  与 functions/_lib/coversStore.js 同口径的 D1 存取
+
 OFFSET = 0xCBF29CE484222325
 PRIME = 0x100000001B3
 MASK = 0xFFFFFFFFFFFFFFFF
@@ -265,18 +268,29 @@ def kv_upload(items: list[dict], batch: int = 100, overwrite: bool = False) -> d
     accounts = cf_call(token, "GET", "/accounts")["result"]
     if len(accounts) != 1:
         raise RuntimeError(f"期望恰好 1 个 Cloudflare 账户，实际 {len(accounts)}；请设置只含一个账户的 token")
-    base = f"/accounts/{accounts[0]['id']}/storage/kv/namespaces/{ns}"
-    try:  # 读现有索引（不存在 = 空）
-        cur = cf_call(token, "GET", f"{base}/values/{urllib.parse.quote(INDEX_KEY, safe='')}")
-        index = cur if isinstance(cur, dict) else json.loads(cur)
-    except urllib.error.HTTPError as e:
-        if e.code != 404:
-            raise
-        index = {"items": {}}
-    writes, _, tally = build_kv_writes(items, index, overwrite)
+    acct = accounts[0]["id"]
+    base = f"/accounts/{acct}/storage/kv/namespaces/{ns}"
+    d1_id = covers_d1.d1_database_id()
+    d1_base = f"/accounts/{acct}/d1/database/{d1_id}" if d1_id else None
+    d1_call = lambda method, path, body=None: cf_call(token, method, path, body)  # noqa: E731
+    if d1_base:  # 声明了 D1：索引以 D1 为准（应用只读写 D1；这里再写 KV 索引没人读）
+        index = covers_d1.read_index(d1_call, d1_base)
+    else:
+        try:  # 读现有索引（不存在 = 空）
+            cur = cf_call(token, "GET", f"{base}/values/{urllib.parse.quote(INDEX_KEY, safe='')}")
+            index = cur if isinstance(cur, dict) else json.loads(cur)
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            index = {"items": {}}
+    writes, new_index, tally = build_kv_writes(items, index, overwrite)
+    if d1_base:
+        writes = [w for w in writes if w["key"] != INDEX_KEY]  # 封面仍写 KV，索引改写 D1
     for i in range(0, len(writes), batch):  # 索引是最后一条：封面都写成功后才更新索引，中途失败不会留下指向空封面的条目
         cf_call(token, "PUT", f"{base}/bulk", json.dumps(writes[i : i + batch]).encode("utf-8"))
         print(f"  已写入 {min(i + batch, len(writes))}/{len(writes)}")
+    if d1_base:
+        print(f"  索引写入 D1：{covers_d1.write_diff(d1_call, d1_base, index['items'], new_index)} 条变化")
     return tally
 
 

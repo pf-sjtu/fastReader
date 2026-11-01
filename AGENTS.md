@@ -127,7 +127,8 @@ git push -u origin HEAD
 - 书库封面与元数据放 KV（`/api/covers`，实现 `functions/_lib/covers.js`）：`id = bookIdOf(书名主干)`，前端 `bookId.ts` ↔ 脚本 `scripts/covers_prepare.py` 同一算法，契约 `tests/fixtures/book-id-cases.json`
 - **云端书目是书架的主数据**：书架 = `buildShelf(WebDAV 书库索引, 云端目录)`（`cloudCatalog.ts`，仅内存叠加，不写 library.json）；云端有而 WebDAV 暂无记录的书是**虚拟条目**（`cloud://<id>/<文件名>`）。进入书库只读云端目录 + 本地镜像，**不扫描 WebDAV**；WebDAV 只在打开书 / 处理 / 手动刷新时才访问
 - 打开虚拟条目前 `resolveEntry`：连接正常且扫描成功却找不到 → 询问是否删云端 metadata；连不上 / 扫描失败 / 扫到 0 本书（多半目录配错）→ 只报错，**绝不提示删除**。点开时按 `size` / 完整度补传或 `?replace=1` 覆盖。细节与全生命周期见 `docs/covers-kv.md`
-- 预处理脚本 `scripts/covers_prepare.py --upload` 直写 KV（Cloudflare REST，token 取 `CLOUDFLARE_API_TOKEN` 或 cloudflare-cli skill 的 .env），项目 `.env` 不需要任何变量
+- **索引存 D1，封面图存 KV**：绑定 `FASTREADER_DB`（库 `fastreader-index`，每书一行、逐书 CAS，`functions/_lib/coversStore.js`）；没绑定回退 KV 的 `covers:index`；首次使用自动把 KV 旧索引复制进 D1（KV 里的旧索引留作回退、绑定后不再读写）。改索引读写只动 `coversStore.js` 与 `covers.js`，D1 路径测试见 `tests/coversD1.test.ts`（真 SQLite 适配器）
+- 预处理脚本 `scripts/covers_prepare.py --upload` 封面直写 KV、索引在声明了 D1 时写 D1（Cloudflare REST，token 取 `CLOUDFLARE_API_TOKEN` 或 cloudflare-cli skill 的 .env），项目 `.env` 不需要任何变量；D1 迁移 / 核对 `python scripts/covers_d1.py migrate|verify`
 
 ## Cloud Cache Reading
 - 检查 WebDAV 上 `{syncPath}/{sanitizedName}-完整摘要.md` 是否存在

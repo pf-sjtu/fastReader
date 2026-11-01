@@ -26,6 +26,16 @@ kv_namespaces = [
 ]
 ```
 
+### 1.1b 创建 D1 数据库（书库索引；可选，没有就回退用 KV）
+
+```bash
+pnpm dlx wrangler d1 create fastreader-index
+```
+
+把输出里的 `database_id` 填进 `wrangler.toml` 的 `[[d1_databases]]`（`binding = "FASTREADER_DB"`）。**不需要手动建表**：首次请求会自动建表，
+并把 KV 里已有的 `covers:index` 复制进来（只读 KV，不删不改）。已有旧索引时可用 `python scripts/covers_d1.py migrate` 提前迁移并核对；
+动机与并发写语义见 `docs/covers-kv.md`。
+
 ### 1.2 配置环境变量
 
 Cloudflare Dashboard → **Workers & Pages** → 项目 → **Settings** → **Variables and Secrets**：

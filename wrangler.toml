@@ -17,6 +17,13 @@ kv_namespaces = [
   { binding = "FASTREADER_KV", id = "a4169b1ae0684d559ce632cfca325c91" }
 ]
 
+# 书库索引放 D1（每书一行 + 逐书 CAS，不丢更新）；封面图与共享状态仍在 KV。
+# 没绑定时回退到 KV 里的 covers:index（functions/_lib/coversStore.js）；首次使用会把 KV 旧索引复制进来。fork 部署需换成自己的库
+[[d1_databases]]
+binding = "FASTREADER_DB"
+database_name = "fastreader-index"
+database_id = "b6e45ad3-6b9f-4120-9876-ad37d4c3cda1"
+
 # 本地开发（wrangler pages dev）用的预览 KV，id 指向同一 namespace 也可
 [vars]
 # 不要把真实密码写进仓库：正式环境在 Dashboard 里配置
