@@ -47,7 +47,8 @@ export function BookCard({ entry, opening, disabled, onOpen, onInfo, caption, sh
       : null
   // 虚拟条目没有可信的大小（0）：不显示 "1 KB" 这种假数据
   const facts = [format, entry.size > 0 ? fmtSize(entry.size) : null, count].filter(Boolean).join(' · ')
-  const label = [entry.title, entry.author, entry.subjects?.[0] ? categoryLabel(t, entry.subjects[0]) : null, facts].filter(Boolean).join('，')
+  const primaryCategory = entry.subjects?.[0] ? categoryLabel(t, entry.subjects[0]) : null
+  const label = [entry.title, entry.author, primaryCategory, facts].filter(Boolean).join('，')
   const pct = entry.readProgress?.pct ?? 0
   const inProgress = pct > 0 && pct < 100
   // 真实封面：进入视口才请求（队列限并发）；没有/失败时回退生成式封面
@@ -102,13 +103,20 @@ export function BookCard({ entry, opening, disabled, onOpen, onInfo, caption, sh
         </div>
 
         {/* 角标 */}
-        <div className="pointer-events-none absolute inset-x-1.5 top-1.5 flex items-start justify-between gap-1">
-          {caption ? <span className={PILL}>{caption}</span> : oddFormat ? <span className={PILL}>{oddFormat}</span> : <span />}
-          {entry.status !== 'unprocessed' && (
-            <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium leading-4 text-primary-foreground shadow-sm">
-              {entry.status === 'done' ? t('library.status.done') : t('library.status.partial')}
-            </span>
-          )}
+        <div data-slot="book-corner" className="pointer-events-none absolute inset-x-1.5 top-1.5 flex items-start justify-between gap-1">
+          {/* 左上：推荐理由 / 少见格式；窄卡片里它先让位（min-w-0 + 截断） */}
+          <div className="min-w-0 flex-1">
+            {caption ? <span className={PILL}>{caption}</span> : oddFormat ? <span className={PILL}>{oddFormat}</span> : null}
+          </div>
+          {/* 右上：主分类（subjects[0]）；有阅读状态时叠在它下面 */}
+          <div className="flex max-w-[60%] shrink-0 flex-col items-end gap-1">
+            {primaryCategory && <span className={PILL}>{primaryCategory}</span>}
+            {entry.status !== 'unprocessed' && (
+              <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium leading-4 text-primary-foreground shadow-sm">
+                {entry.status === 'done' ? t('library.status.done') : t('library.status.partial')}
+              </span>
+            )}
+          </div>
         </div>
 
         {inProgress && (

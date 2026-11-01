@@ -12,6 +12,7 @@ vi.mock('@/services/webdavService', () => ({
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
 import { LibraryView } from '@/components/library/LibraryView'
+import { BookCard } from '@/components/library/BookCard'
 import { useLibraryStore } from '@/services/library/libraryStore'
 import { useConfigStore } from '@/stores/configStore'
 import { bookIdOf } from '@/services/library/bookId'
@@ -295,5 +296,36 @@ describe('单本缺失确认（点开时发现 WebDAV 上没有）', () => {
     click(findButton('保留'))
     expect(useLibraryStore.getState().askRemove).toHaveBeenCalledWith(null)
     expect(useLibraryStore.getState().removeBooks).not.toHaveBeenCalled()
+  })
+})
+
+describe('书卡右上角：主分类', () => {
+  const base = { path: '/EBook/甲.epub', size: 1, mtime: '', title: '甲', status: 'unprocessed', stale: false, missingScans: 0, updatedAt: 1 } as LibraryEntry
+  const mountCard = (e: Partial<LibraryEntry>) =>
+    mount(<BookCard entry={{ ...base, ...e }} opening={false} disabled={false} onOpen={() => {}} onInfo={() => {}} compact />)
+  // 角标区：封面内 top-1.5 的那一行
+  const corner = (m: ReturnType<typeof mount>) => m.container.querySelector<HTMLElement>('[data-slot="book-corner"]')!
+
+  it('只显示主分类（subjects[0]），用中文名；次要分类不上卡片', () => {
+    mounted = mountCard({ subjects: ['Business', 'Economics'] })
+    expect(corner(mounted).textContent).toContain('商业')
+    expect(corner(mounted).textContent).not.toContain('经济')
+  })
+
+  it('没有分类就不占位；有阅读状态时与分类并存（分类在上、状态在下）', () => {
+    mounted = mountCard({})
+    expect(corner(mounted).textContent).toBe('')
+    mounted.unmount()
+    mounted = mountCard({ subjects: ['History'], status: 'done' })
+    const pills = Array.from(corner(mounted).querySelectorAll('span')).map((s) => s.textContent)
+    expect(pills).toEqual(['历史', '已精读'])
+  })
+
+  it('推荐语仍在左上，不被分类挤掉', () => {
+    mounted = mountCard({ subjects: ['History'] })
+    mounted.unmount()
+    mounted = mount(<BookCard entry={{ ...base, subjects: ['History'] }} opening={false} disabled={false} onOpen={() => {}} onInfo={() => {}} caption="未翻开" compact />)
+    expect(corner(mounted).textContent).toContain('未翻开')
+    expect(corner(mounted).textContent).toContain('历史')
   })
 })
