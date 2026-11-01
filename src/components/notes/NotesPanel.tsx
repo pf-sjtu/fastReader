@@ -4,6 +4,7 @@ import { AlertTriangle, ClipboardCopy, Download, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { SectionHeading } from '@/components/ui/section-heading'
 import { groupNotes, notesToMarkdown, MAX_COMMENT } from '@/notes/notes'
 import { createNoteResolver, noteSearchText, type NoteResolver } from '@/notes/anchor'
 import { useNotesStore } from '@/notes/notesStore'
@@ -91,15 +92,18 @@ export function NotesPanel({ bookTitle, chapters, onJumpChapter }: Props) {
 
       {groups.map((g) => (
         <section key={g.chapter?.id ?? 'orphan'} className="space-y-2">
-          <h3 className="t-label">
-            {g.chapter ? (
-              <button type="button" className="text-left hover:underline" onClick={() => onJumpChapter(g.chapter!.id)}>
-                {g.chapter.title}
-              </button>
-            ) : (
-              t('notes.orphan')
-            )}
-          </h3>
+          <SectionHeading
+            role="label"
+            title={
+              g.chapter ? (
+                <button type="button" className="text-left hover:underline" onClick={() => onJumpChapter(g.chapter!.id)}>
+                  {g.chapter.title}
+                </button>
+              ) : (
+                t('notes.orphan')
+              )
+            }
+          />
           {g.notes.map((n) => (
             <article key={n.id} className={cn('space-y-1.5 rounded-md border border-l-4 bg-card p-2.5', BAR[n.color - 1])}>
               {located.get(n.id) === false && (

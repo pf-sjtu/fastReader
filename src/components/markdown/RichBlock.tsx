@@ -1,5 +1,6 @@
 import { Component, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useIsDarkMode } from '@/components/useTheme'
+import { Skeleton } from '@/components/ui/skeleton'
 import { renderMermaid, svgToDataUri } from '@/lib/mermaidRender'
 import { buildSandboxDoc, HEIGHT_MSG } from '@/lib/htmlSandbox'
 import type { RichLang } from '@/lib/richBlocks'
@@ -42,7 +43,7 @@ function MermaidView({ code }: { code: string }) {
       live = false
     }
   }, [code, dark])
-  if (!res) return <div className="not-prose my-3 h-24 animate-pulse rounded-lg bg-muted" aria-busy />
+  if (!res) return <Skeleton variant="block" className="not-prose my-3 h-24" />
   if ('error' in res) return <Fallback code={code} lang="mermaid" reason={res.error} />
   return (
     <div className="not-prose my-3 overflow-x-auto rounded-lg border bg-card p-3 text-center" data-slot="mermaid">

@@ -13,7 +13,8 @@ function tsxFiles(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name)
     if (statSync(p).isDirectory()) tsxFiles(p, out)
-    else if (p.endsWith('.tsx')) out.push(p)
+    // 也扫 .ts：类名经常写在常量表、`cn()` 拼接或样式映射里，只扫 .tsx 会漏
+    else if (p.endsWith('.tsx') || p.endsWith('.ts')) out.push(p)
   }
   return out
 }
@@ -24,23 +25,48 @@ const rel = (p: string) => relative(process.cwd(), p).split(sep).join('/')
 const EXEMPT: Record<string, Record<string, string>> = {
   'src/components/study/AskPanel.tsx': { radius: '聊天气泡的非对称圆角', 'button-height': '发送/取消按钮要与同高的输入框对齐（size-10）' },
   'src/components/app/AppHeader.tsx': { 'heading-role': 'h1 只是品牌字标 BrandMark 的语义容器，字样式在字标内部' },
-  'src/components/BrandMark.tsx': { px: '品牌字标的装饰尺寸' },
+  'src/components/BrandMark.tsx': { px: '品牌字标的装饰尺寸', 'raw-color': '印章 logo 的品牌色是固定值，不跟主题走' },
   'src/components/library/BookCover.tsx': { px: '封面水印大字' },
+  'src/components/library/BookCard.tsx': { 'empty-state': '封面加载态的遮罩，不是页级空状态，需要绝对定位覆盖在封面上' },
+  'src/charts/plugins/entity-timeline/EntityTimelineChart.tsx': { 'empty-state': '时间轴的空白格（网格单元内居中），不是页级空状态' },
+  'src/study/pack/buildPack.ts': { 'heading-role': '离线学习包是独立 HTML 文档，h1–h4 是导出产物的标签，用不到应用内角色类' },
+  'src/study/exportFigures.ts': { 'raw-color': '导出的 SVG 进 data URI 后读不到宿主 CSS 变量，必须写具体色值（与 index.css 亮色 token 对齐，有测试守着 NOTE_PALETTE）' },
+  'src/utils/mindmapExport.ts': { 'raw-color': 'canvas 导出用的纯色底，同样读不到 CSS 变量' },
+  'src/components/EpubReader.tsx': { 'raw-color': 'EPUB 正文样式注入 iframe 内部文档，读不到宿主 CSS 变量，只能写具体色值' },
+  'src/components/PdfReader.tsx': { 'raw-color': 'PDF canvas 的背景/边框色，同样在宿主 CSS 之外' },
 }
 
 /** unless：行里出现它就不算违规（用来表达「必须带某个类」，避免写难读的负向先行断言） */
-const RULES: { id: string; re: RegExp; unless?: RegExp; hint: string; skipDirs?: string[] }[] = [
+const RULES: { id: string; re: RegExp; unless?: RegExp; hint: string; skipDirs?: string[]; except?: string[] }[] = [
   {
     id: 'palette',
     re: /\b(?:text|bg|border|ring|fill|stroke)-(?:gray|slate|zinc|neutral|stone|red|green|blue|amber|yellow|orange|emerald|purple|teal|cyan|sky|indigo|violet|pink|rose|lime)-\d{2,3}/,
-    hint: '用语义 token：success / warning / info / destructive / muted / primary',
+    hint: '用语义 token：success / warning / info / danger（destructive）/ muted / primary',
   },
   { id: 'radius', re: /(?<![\w-])rounded(?:-sm|-xl|-2xl)?(?![\w-])/, hint: '圆角只用 rounded-md（控件）/ rounded-lg（容器）/ rounded-full', skipDirs: ['src/charts'] },
   { id: 'px', re: /text-\[(?:9|10|11)px\]/, hint: '不使用 ≤11px 文字；用 text-xs（12px）' },
   { id: 'title-size', re: /<(?:CardTitle|DialogTitle|SheetTitle)\b[^>]*\btext-(?:xs|sm|base|lg|xl|2xl)\b/, hint: '标题用组件默认（t-title）或 t-display，不覆写字号' },
-  { id: 'heading-role', re: /<h[1-6]/, unless: /t-(?:display|title|section|label|caption)/, hint: '标题标签必须带文字角色类 t-display / t-title / t-section / t-label / t-caption' },
+  { id: 'heading-role', re: /<h[1-6]/, unless: /t-(?:display|title|section|label|caption|body)/, hint: '标题标签必须带文字角色类 t-display / t-title / t-section / t-label / t-body / t-caption' },
   { id: 'button-height', re: /<Button(?![\w])[^>]*className="[^"]*(?<![\w-])(?:h|size)-(?:7|8|9|10)(?![\w-])/, hint: '按钮高度用 size 档位：xs(h-7) / sm(h-8) / default(h-9) / lg(h-10) / icon-xs|icon-sm|icon，不在 className 里覆写' },
   { id: 'heading-size', re: /<h[1-6]\b[^>]*\btext-(?:base|lg|xl|2xl)\b/, hint: '标题用 t-title / t-section / t-label 角色类' },
+  {
+    id: 'skeleton',
+    re: /animate-pulse/,
+    hint: '骨架屏统一用 @/components/ui/skeleton 的 Skeleton / SkeletonText / SkeletonList，不手写 animate-pulse',
+    except: ['src/components/ui/skeleton.tsx'],
+  },
+  {
+    id: 'empty-state',
+    re: /flex flex-col items-center justify-center/,
+    hint: '空状态统一用 @/components/ui/empty-state 的 EmptyState，不各页自拼容器',
+    except: ['src/components/ui/empty-state.tsx'],
+  },
+  {
+    id: 'raw-color',
+    re: /#[0-9a-fA-F]{6}\b/,
+    hint: '组件里不写十六进制颜色；用语义 token（图表导出等确实要具体色值的场景登记在 EXEMPT）',
+    skipDirs: ['src/charts', 'src/components/markdown/genui'],
+  },
 ]
 
 describe('设计一致性守卫', () => {
@@ -52,6 +78,7 @@ describe('设计一致性守卫', () => {
       for (const file of files) {
         const r = rel(file)
         if (rule.skipDirs?.some((d) => r.startsWith(d))) continue
+        if (rule.except?.includes(r)) continue
         if (EXEMPT[r]?.[rule.id]) continue
         readFileSync(file, 'utf-8')
           .split(/\r?\n/)
@@ -71,7 +98,38 @@ describe('设计一致性守卫', () => {
 
   it('文字角色类已在 index.css 定义', () => {
     const css = readFileSync(join(SRC, 'index.css'), 'utf-8')
-    for (const cls of ['t-display', 't-title', 't-section', 't-label', 't-caption']) expect(css).toContain(`.${cls}`)
-    for (const token of ['--success', '--warning', '--info']) expect(css.match(new RegExp(`${token}:`, 'g'))?.length).toBe(2)
+    for (const cls of ['t-display', 't-title', 't-section', 't-label', 't-body', 't-caption']) expect(css).toContain(`.${cls}`)
+    for (const token of ['--success', '--warning', '--info', '--destructive']) expect(css.match(new RegExp(`${token}:`, 'g'))?.length).toBe(2)
+  })
+
+  it('状态色的配套 token（-foreground / -muted / danger 别名）深浅主题各一套', () => {
+    const css = readFileSync(join(SRC, 'index.css'), 'utf-8')
+    const twice = (token: string) => expect(css.match(new RegExp(`\\${token}:`, 'g'))?.length, token).toBe(2)
+    for (const token of [
+      '--danger',
+      '--success-foreground',
+      '--warning-foreground',
+      '--info-foreground',
+      '--destructive-foreground',
+      '--danger-foreground',
+      '--success-muted',
+      '--warning-muted',
+      '--info-muted',
+      '--destructive-muted',
+      '--danger-muted',
+    ]) twice(token)
+    // 别名必须指向 destructive，避免两套危险色漂移
+    expect(css).toContain('--danger: var(--destructive)')
+    // Tailwind 侧映射齐全，业务才能写 bg-success-muted / text-danger 这类类名
+    for (const mapped of ['--color-danger:', '--color-danger-foreground:', '--color-danger-muted:', '--color-success-muted:', '--color-success-foreground:', '--color-warning-muted:', '--color-info-muted:', '--color-destructive-muted:'])
+      expect(css).toContain(mapped)
+  })
+
+  it('共享组件存在（分部标题 / 面板头部 / 列表行 / 骨架屏 / 空状态）', () => {
+    for (const p of ['ui/section-heading.tsx', 'ui/list-row.tsx', 'ui/skeleton.tsx', 'ui/empty-state.tsx'])
+      expect(() => statSync(join(SRC, 'components', p))).not.toThrow()
+    const heading = readFileSync(join(SRC, 'components/ui/section-heading.tsx'), 'utf-8')
+    expect(heading).toContain('export function SectionHeading')
+    expect(heading).toContain('export function PanelHeader')
   })
 })

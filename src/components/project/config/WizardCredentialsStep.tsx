@@ -4,6 +4,7 @@ import { AlertCircle, Download, Info, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { SectionHeading } from '@/components/ui/section-heading'
 import { Textarea } from '@/components/ui/textarea'
 import type { AIProtocol } from '../../../types/ai'
 import { defaultBaseUrlForProtocol, type BaseUrlIssue } from './provider-utils'
@@ -149,19 +150,21 @@ export function WizardCredentialsStep({
       </div>
 
       <section className="space-y-2" aria-labelledby="wizard-models">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 id="wizard-models" className="t-section">
-            {t('aiProvider.wizard.models')}
-          </h4>
-          <Button type="button" size="sm" variant="outline" onClick={onFetch} disabled={loading || baseUrlIssue !== null}>
-            {loading ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            {loading ? t('aiProvider.wizard.fetching') : t('aiProvider.wizard.fetchModels')}
-          </Button>
-        </div>
+        <SectionHeading
+          role="section"
+          id="wizard-models"
+          title={t('aiProvider.wizard.models')}
+          action={
+            <Button type="button" size="sm" variant="outline" onClick={onFetch} disabled={loading || baseUrlIssue !== null}>
+              {loading ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {loading ? t('aiProvider.wizard.fetching') : t('aiProvider.wizard.fetchModels')}
+            </Button>
+          }
+        />
 
         <div aria-live="polite">
           {fetchState.status === 'error' && (

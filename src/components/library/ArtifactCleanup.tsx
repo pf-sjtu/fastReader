@@ -4,6 +4,7 @@ import { Folder, Loader2, StickyNote } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { SectionHeading } from '@/components/ui/section-heading'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { createLibraryIO } from '@/services/library/libraryIO'
@@ -108,10 +109,11 @@ export function ArtifactCleanup() {
               const sum = summarizeStale(group)
               return (
                 <section key={reason} className="space-y-1.5">
-                  <h4 className="t-label">
-                    {t(`library.artifacts.reason.${reason}`)} · {sum.count} · {formatFileSize(sum.bytes)}
-                  </h4>
-                  <p className="text-xs text-muted-foreground">{t(`library.artifacts.reasonHint.${reason}`)}</p>
+                  <SectionHeading
+                    role="label"
+                    title={`${t(`library.artifacts.reason.${reason}`)} · ${sum.count} · ${formatFileSize(sum.bytes)}`}
+                  />
+                  <p className="t-caption">{t(`library.artifacts.reasonHint.${reason}`)}</p>
                   <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
                     {group.map((i) => (
                       <li key={i.path} className="flex items-center gap-2 text-xs">

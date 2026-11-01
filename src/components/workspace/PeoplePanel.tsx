@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { SectionHeading } from '@/components/ui/section-heading'
 import { buildEntityCardModel } from '@/charts/linking/entityCard'
 import type { EntityLinking } from '@/charts/linking/entityLinking'
 import { rectOf } from './anchor'
@@ -64,9 +65,7 @@ export function PeoplePanel({ linking, currentChapterId, onOpenEntity }: PeopleP
 
       {groups.map(([type, rows]) => (
         <section key={type} aria-label={type}>
-          <h4 className="mb-1 t-label">
-            {type} · {rows.length}
-          </h4>
+          <SectionHeading role="label" className="mb-1" title={`${type} · ${rows.length}`} />
           <ul className="space-y-0.5">
             {rows.map((r) => {
               const s = linking.styles.get(r.id)!

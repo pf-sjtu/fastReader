@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { PanelHeader } from '@/components/ui/section-heading'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,10 +36,7 @@ export function LibraryMaintenance() {
 
   return (
     <div className="space-y-2 rounded-md border p-3">
-      <div>
-        <h4 className="t-section">{t('library.maintenance.title')}</h4>
-        <p className="text-xs text-muted-foreground">{t('library.maintenance.hint')}</p>
-      </div>
+      <PanelHeader title={t('library.maintenance.title')} description={t('library.maintenance.hint')} />
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={() => void clearLocal()}>
           {t('library.maintenance.clearLocal')}

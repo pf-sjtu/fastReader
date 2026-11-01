@@ -2,8 +2,10 @@
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronUp, Trash2, Loader2, CheckCircle, XCircle, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Trash2, Loader2, CheckCircle, XCircle, X, Inbox } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ListRow } from '@/components/ui/list-row'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Progress } from '@/components/ui/progress'
 import { useBatchQueueStore, useBatchProcessingStatus, useBatchStats } from '../../../stores/batchQueueStore'
@@ -72,41 +74,52 @@ export function BatchQueueTab({ onClearQueue }: { onClearQueue: () => void }) {
         {expanded && (
           <ScrollArea className="flex-1">
             {queue.length === 0 ? (
-              <div className="flex items-center justify-center h-32 text-muted-foreground">{t('batch.queueEmpty')}</div>
+              <EmptyState icon={Inbox} title={t('batch.queueEmpty')} className="py-8" />
             ) : (
               // 窄屏下行内容过宽时在此横向滚动
               <div className="overflow-x-auto">
                 <div className="min-w-[18rem]">
                   {queue.map((item, index) => (
-                    <div key={item.id} className={`flex items-center gap-2 px-3 py-2 border-b ${item.status === 'processing' ? 'bg-accent' : ''}`}>
-                      <span className="w-6 text-xs text-muted-foreground">{index + 1}.</span>
-                      <BatchStatusBadge status={item.status} />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm truncate">{item.fileName}</div>
-                        {item.error && <div className="text-xs text-destructive truncate">{item.error}</div>}
-                        {item.metadata && (
-                          <div className="text-xs text-muted-foreground">
+                    <ListRow
+                      key={item.id}
+                      className={`rounded-none border-b px-3 py-2 ${item.status === 'processing' ? 'bg-accent' : ''}`}
+                      leading={
+                        <>
+                          <span className="w-6 text-xs text-muted-foreground">{index + 1}.</span>
+                          <BatchStatusBadge status={item.status} />
+                        </>
+                      }
+                      title={item.fileName}
+                      description={
+                        item.error ? (
+                          <span className="text-destructive">{item.error}</span>
+                        ) : item.metadata ? (
+                          <>
                             {t('batch.chapterCount', { count: item.metadata.chapterCount })}
                             {item.metadata.costRMB ? ` • ¥${item.metadata.costRMB.toFixed(2)}` : ''}
-                          </div>
-                        )}
-                      </div>
-                      {item.status === 'processing' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                      {item.status === 'completed' && <CheckCircle className="h-4 w-4 text-success" />}
-                      {item.status === 'failed' && <XCircle className="h-4 w-4 text-destructive" />}
-                      {item.status !== 'processing' && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => removeFromQueue(item.id)}
-                          aria-label={t('batch.removeItemNamed', { name: item.fileName })}
-                          title={t('batch.removeItem')}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
+                          </>
+                        ) : undefined
+                      }
+                      trailing={
+                        <>
+                          {item.status === 'processing' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                          {item.status === 'completed' && <CheckCircle className="h-4 w-4 text-success" />}
+                          {item.status === 'failed' && <XCircle className="h-4 w-4 text-destructive" />}
+                          {item.status !== 'processing' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => removeFromQueue(item.id)}
+                              aria-label={t('batch.removeItemNamed', { name: item.fileName })}
+                              title={t('batch.removeItem')}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </>
+                      }
+                    />
                   ))}
                 </div>
               </div>

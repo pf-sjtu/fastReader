@@ -63,6 +63,17 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-info: var(--info);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-muted: var(--destructive-muted);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-muted: var(--success-muted);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-muted: var(--warning-muted);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-muted: var(--info-muted);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-danger-muted: var(--danger-muted);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -99,10 +110,23 @@
   --accent: oklch(0.9050 0.0280 55.0);          /* 淡朱：悬停底色 */
   --accent-foreground: oklch(0.2450 0.0110 55.0);
   --destructive: oklch(0.5200 0.1900 25.0);
-  /* 状态色：文字/图标/淡底都用它们（淡底写 bg-success/10），不要再写 green-500 之类的调色板色 */
+  /* 状态色：文字/图标用裸 token，实心底配 -foreground，淡底用 -muted（不要再写 bg-success/10 或 green-500 之类的调色板色） */
   --success: oklch(0.4800 0.1200 150.0);
   --warning: oklch(0.5200 0.1200 65.0);
   --info: oklch(0.4600 0.1000 255.0);
+  /* danger 是 destructive 的别名：规格里写 --danger，代码里沿用 shadcn 的 destructive，两者始终同值 */
+  --danger: var(--destructive);
+  /* 状态色的两套配套色：实心底上的文字（-foreground）与淡底（-muted，自动跟随主题的卡片底色混合） */
+  --success-foreground: oklch(0.9800 0.0100 150.0);
+  --warning-foreground: oklch(0.9850 0.0100 80.0);
+  --info-foreground: oklch(0.9800 0.0100 255.0);
+  --destructive-foreground: oklch(0.9850 0.0080 25.0);
+  --danger-foreground: var(--destructive-foreground);
+  --success-muted: color-mix(in oklab, var(--success) 14%, var(--card));
+  --warning-muted: color-mix(in oklab, var(--warning) 14%, var(--card));
+  --info-muted: color-mix(in oklab, var(--info) 14%, var(--card));
+  --destructive-muted: color-mix(in oklab, var(--destructive) 14%, var(--card));
+  --danger-muted: var(--destructive-muted);
   --border: oklch(0.8650 0.0170 72.0);
   --input: oklch(0.8650 0.0170 72.0);
   --ring: oklch(0.5150 0.1680 32.0);
@@ -168,6 +192,18 @@
   --success: oklch(0.7600 0.1300 150.0);
   --warning: oklch(0.8000 0.1300 80.0);
   --info: oklch(0.7200 0.1000 255.0);
+  --danger: var(--destructive);
+  /* 深色主题下状态色本身已经提亮，实心底上改用墨色文字，淡底按深色卡片混合 */
+  --success-foreground: oklch(0.1750 0.0080 50.0);
+  --warning-foreground: oklch(0.1750 0.0080 50.0);
+  --info-foreground: oklch(0.1750 0.0080 50.0);
+  --destructive-foreground: oklch(0.9850 0.0080 25.0);
+  --danger-foreground: var(--destructive-foreground);
+  --success-muted: color-mix(in oklab, var(--success) 18%, var(--card));
+  --warning-muted: color-mix(in oklab, var(--warning) 18%, var(--card));
+  --info-muted: color-mix(in oklab, var(--info) 18%, var(--card));
+  --destructive-muted: color-mix(in oklab, var(--destructive) 18%, var(--card));
+  --danger-muted: var(--destructive-muted);
   --border: oklch(0.3200 0.0110 50.0);
   --input: oklch(0.3200 0.0110 50.0);
   --ring: oklch(0.6650 0.1600 35.0);
@@ -233,6 +269,11 @@
     font-size: 0.75rem;
     font-weight: 500;
     line-height: 1.4;
+  }
+  /* 正文（列表行主文本、弹窗正文）：15px，与 --base-font-size 一致 */
+  .t-body {
+    font-size: 0.9375rem;
+    line-height: 1.5;
   }
   .t-caption {
     color: var(--muted-foreground);

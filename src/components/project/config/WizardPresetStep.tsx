@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronRight, Loader2, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { SectionHeading } from '@/components/ui/section-heading'
 import type { CatalogPreset } from '../../../services/ai/catalog'
 import type { AIProtocol } from '../../../types/ai'
 import type { CatalogState } from './useCatalog'
@@ -89,9 +90,7 @@ export function WizardPresetStep({ catalog, onPick }: WizardPresetStepProps) {
   return (
     <div className="space-y-4">
       <section className="space-y-2" aria-labelledby="wizard-generic">
-        <h4 id="wizard-generic" className="t-label">
-          {t('aiProvider.wizard.generic')}
-        </h4>
+        <SectionHeading role="label" id="wizard-generic" title={t('aiProvider.wizard.generic')} />
         <div className="grid gap-2 sm:grid-cols-3">
           {FIXED_PRESETS.map((p) => (
             <OptionButton
@@ -114,14 +113,16 @@ export function WizardPresetStep({ catalog, onPick }: WizardPresetStepProps) {
       </section>
 
       <section className="space-y-2" aria-labelledby="wizard-presets">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 id="wizard-presets" className="t-label">
-            {t('aiProvider.wizard.presets')}
-          </h4>
-          {catalog.status === 'ready' && (
-            <span className="text-xs text-muted-foreground">{t('aiProvider.wizard.presetCount', { count: presets.length })}</span>
-          )}
-        </div>
+        <SectionHeading
+          role="label"
+          id="wizard-presets"
+          title={t('aiProvider.wizard.presets')}
+          action={
+            catalog.status === 'ready' && (
+              <span className="text-xs text-muted-foreground">{t('aiProvider.wizard.presetCount', { count: presets.length })}</span>
+            )
+          }
+        />
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input

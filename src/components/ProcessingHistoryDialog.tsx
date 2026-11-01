@@ -18,6 +18,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ListRow } from '@/components/ui/list-row'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { BookOpen, Clock, Trash2, Loader2 } from 'lucide-react'
 import { useProcessingHistoryStore } from '@/stores/processingHistory'
@@ -105,39 +107,32 @@ export function ProcessingHistoryDialog({
 
         <ScrollArea className="max-h-[400px]">
           {records.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground">
-              <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">{t('history.empty')}</p>
-            </div>
+            <EmptyState icon={BookOpen} title={t('history.empty')} className="py-8" />
           ) : (
             <div className="space-y-2">
               {records.map((record) => (
-                <button
+                <ListRow
                   key={`${record.fileName}-${record.completedAt}`}
-                  className="w-full text-left p-3 rounded-lg border hover:bg-accent transition-colors disabled:opacity-50"
+                  className="rounded-lg border p-3"
                   onClick={() => handleSelect(record)}
                   disabled={loadingFileName !== null}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">
-                        {loadingFileName === record.fileName && (
-                          <Loader2 className="h-3.5 w-3.5 inline-block mr-1 animate-spin" />
-                        )}
-                        {record.bookTitle}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                        <span>{formatDate(record.completedAt)}</span>
-                        <span>·</span>
-                        <span>{getModeLabel(record.processingMode)}</span>
-                        <span>·</span>
-                        <span>{record.model}</span>
-                        <span>·</span>
-                        <span>{record.chapterCount} {t('history.chapters')}</span>
-                      </div>
-                    </div>
-                  </div>
-                </button>
+                  title={
+                    <>
+                      {loadingFileName === record.fileName && (
+                        <Loader2 className="mr-1 inline-block h-3.5 w-3.5 animate-spin" />
+                      )}
+                      {record.bookTitle}
+                    </>
+                  }
+                  description={[
+                    formatDate(record.completedAt),
+                    getModeLabel(record.processingMode),
+                    record.model,
+                    `${record.chapterCount} ${t('history.chapters')}`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                />
               ))}
             </div>
           )}

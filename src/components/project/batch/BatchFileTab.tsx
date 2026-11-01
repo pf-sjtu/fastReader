@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { formatFileSize } from '../../../utils/file'
 import { extOf } from '../webdav/fileListUtils'
@@ -82,7 +83,7 @@ export function BatchFileTab({ selection: sel, options, onOptionsChange }: Batch
                 <span className="ml-2">{t('common.loading')}</span>
               </div>
             ) : entries.length === 0 ? (
-              <div className="flex items-center justify-center h-32 text-muted-foreground">{t('webdav.emptyDirectory')}</div>
+              <EmptyState icon={FolderOpen} title={t('webdav.emptyDirectory')} className="py-8" />
             ) : (
               // 窄屏下行内容过宽时在此横向滚动（外层 ScrollArea 仅纵向）
               <div className="overflow-x-auto">

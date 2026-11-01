@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { LibraryView } from '@/components/library/LibraryView'
 import { FileUploadCard } from '@/components/sections/FileUploadCard'
 import { ChapterSelectionSection } from '@/components/sections/ChapterSelectionSection'
@@ -35,9 +36,9 @@ function OpeningSkeleton({ name }: { name: string }) {
           <span className="min-w-0 truncate">{t('library.opening', { title: name })}</span>
         </div>
         <div className="space-y-2" aria-hidden="true">
-          <div className="h-4 w-2/3 animate-pulse rounded-md bg-muted" />
-          <div className="h-4 w-full animate-pulse rounded-md bg-muted" />
-          <div className="h-4 w-5/6 animate-pulse rounded-md bg-muted" />
+          <Skeleton width="w-2/3" />
+          <Skeleton />
+          <Skeleton width="w-5/6" />
         </div>
       </CardContent>
     </Card>

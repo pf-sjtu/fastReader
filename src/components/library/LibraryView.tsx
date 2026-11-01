@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Download, Loader2, RefreshCw, Search, Shuffle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SectionHeading } from '@/components/ui/section-heading'
 import { cn } from '@/lib/utils'
 import { useConfigStore } from '@/stores/configStore'
 import { continueReading, listEntries, type LibraryFilter, type LibrarySort } from '@/services/library/libraryIndex'
@@ -208,20 +209,23 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
 
       {resume.length > 0 && (
         <div className="space-y-1.5">
-          <h3 className="t-label">{t('library.continue')}</h3>
+          <SectionHeading role="label" title={t('library.continue')} />
           <div className={GRID}>{resume.map((e) => card(e))}</div>
         </div>
       )}
 
       {recs.length > 0 && (
         <div className="space-y-1.5" aria-label={t('library.recommend.title')}>
-          <div className="flex items-center gap-2">
-            <h3 className="t-label">{t('library.recommend.title')}</h3>
-            <Button variant="ghost" size="xs" onClick={shuffle}>
-              <Shuffle className="size-3.5" />
-              {t('library.recommend.shuffle')}
-            </Button>
-          </div>
+          <SectionHeading
+            role="label"
+            title={t('library.recommend.title')}
+            action={
+              <Button variant="ghost" size="xs" onClick={shuffle}>
+                <Shuffle className="size-3.5" />
+                {t('library.recommend.shuffle')}
+              </Button>
+            }
+          />
           <div className={GRID}>{recs.map((r) => card(r.entry, reasonLabel(t, r.reason)))}</div>
         </div>
       )}
@@ -247,16 +251,10 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
             <div key={g.key} className="space-y-1.5">
               {/* 上面有「继续阅读 / 推荐」时，全量网格也要有自己的标题，否则读起来是同一排 */}
               {group === 'none' && browsing && (resume.length > 0 || recs.length > 0) && (
-                <h3 className="border-b pb-1 t-label">
-                  {t('library.all')}
-                  <span className="ml-1.5 font-normal">{g.total}</span>
-                </h3>
+                <SectionHeading role="label" bordered title={t('library.all')} hint={g.total} />
               )}
               {group !== 'none' && (
-                <h3 className="border-b pb-1 t-label">
-                  {groupLabel(t, g.key, group)}
-                  <span className="ml-1.5 font-normal">{g.total}</span>
-                </h3>
+                <SectionHeading role="label" bordered title={groupLabel(t, g.key, group)} hint={g.total} />
               )}
               <div className={GRID}>{g.entries.map((e) => card(e))}</div>
             </div>

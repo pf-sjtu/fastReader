@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Network, GitCommitHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { SectionHeading } from '@/components/ui/section-heading'
 import { buildEntityCardModel, type CardSection } from '@/charts/linking/entityCard'
 import type { EntityLinking } from '@/charts/linking/entityLinking'
 import { EntitySwatch } from './EntitySwatch'
@@ -77,7 +78,7 @@ export function EntityCard({
 
       {s.relations.length > 0 && (
         <section aria-label={t('entityCard.relations')} className="space-y-1.5">
-          <h4 className="t-label">{t('entityCard.relations')}</h4>
+          <SectionHeading role="label" title={t('entityCard.relations')} />
           {s.relations.map((g) => (
             <div key={g.key} className="flex flex-wrap items-center gap-1 text-sm">
               <span className="inline-flex items-center gap-0.5 text-muted-foreground">
@@ -110,7 +111,7 @@ export function EntityCard({
 
       {s.events.length > 0 && (
         <section aria-label={t('entityCard.events')} className="space-y-1">
-          <h4 className="t-label">{t('entityCard.events')}</h4>
+          <SectionHeading role="label" title={t('entityCard.events')} />
           <ul className="space-y-0.5">
             {s.events.map((ev) => (
               <li key={ev.id} className="flex items-center gap-1.5">
@@ -133,7 +134,7 @@ export function EntityCard({
 
       {s.appearances.length > 0 && (
         <section aria-label={t('entityCard.appearances')} className="space-y-1">
-          <h4 className="t-label">{t('entityCard.appearances')}</h4>
+          <SectionHeading role="label" title={t('entityCard.appearances')} />
           <ul className="space-y-0.5">
             {s.appearances.slice(0, MAX_APPEARANCE_ROWS * (tagged ? 3 : 1)).map((a) => (
               <li key={a.chapterId} className="flex items-center gap-1">

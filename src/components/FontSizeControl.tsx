@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { PanelHeader } from '@/components/ui/section-heading'
 import { Minus, Plus, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -95,48 +96,44 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
   return (
     <Card className={`w-full ${className}`}>
       <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="t-title">
-              {t('fontSize.title')}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {t('fontSize.description')}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={decreaseFontSize}
-              disabled={fontScale <= 0.5}
-            >
-              <Minus className="h-4 w-4 mr-1" />
-              {t('fontSize.decrease')}
-            </Button>
-            <span className="text-sm font-medium px-3 py-1 bg-muted rounded-md min-w-[80px] text-center">
-              {Math.round(fontScale * 100)}%
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={increaseFontSize}
-              disabled={fontScale >= 2}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              {t('fontSize.increase')}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={resetFontSize}
-              disabled={fontScale === 1}
-            >
-              <RotateCcw className="h-4 w-4 mr-1" />
-              {t('fontSize.reset')}
-            </Button>
-          </div>
-        </div>
+        <PanelHeader
+          title={t('fontSize.title')}
+          description={t('fontSize.description')}
+          actions={
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={decreaseFontSize}
+                disabled={fontScale <= 0.5}
+              >
+                <Minus className="h-4 w-4 mr-1" />
+                {t('fontSize.decrease')}
+              </Button>
+              <span className="text-sm font-medium px-3 py-1 bg-muted rounded-md min-w-[80px] text-center">
+                {Math.round(fontScale * 100)}%
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={increaseFontSize}
+                disabled={fontScale >= 2}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                {t('fontSize.increase')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetFontSize}
+                disabled={fontScale === 1}
+              >
+                <RotateCcw className="h-4 w-4 mr-1" />
+                {t('fontSize.reset')}
+              </Button>
+            </div>
+          }
+        />
         <div className="mt-2 text-xs text-muted-foreground">
           {t('fontSize.currentScale')}: {fontScale}x 
           ({t('fontSize.baseSize')}: 16px)

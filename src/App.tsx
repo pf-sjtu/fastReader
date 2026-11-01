@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ChevronUp, List, Eye } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useShallow } from 'zustand/react/shallow'
 
 import { scrollToTop } from '@/utils/index'
@@ -37,10 +38,10 @@ const BatchQueuePanel = lazy(() =>
 /** 懒加载面板的占位骨架（避免出现「点了没反应」的空白期） */
 function PanelSkeleton() {
   return (
-    <div className="space-y-2 py-2" aria-hidden="true">
-      <div className="h-8 w-1/3 animate-pulse rounded-md bg-muted" />
-      <div className="h-4 w-2/3 animate-pulse rounded-md bg-muted" />
-      <div className="h-4 w-1/2 animate-pulse rounded-md bg-muted" />
+    <div className="space-y-2 py-2">
+      <Skeleton variant="block" width="w-1/3" />
+      <Skeleton width="w-2/3" />
+      <Skeleton width="w-1/2" />
     </div>
   )
 }

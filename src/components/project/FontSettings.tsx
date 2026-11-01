@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, Minus, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { SectionHeading } from '@/components/ui/section-heading'
 import { cn } from '@/lib/utils'
 import { useReadingFocusStore, type ReadingFont } from '@/stores/readingFocus'
 import { canvasMeasure, checkStack, parseFontStack, type FontStatus, type MeasureFn, type StackReport } from '@/utils/fontCheck'
@@ -100,7 +101,7 @@ export function FontSettings({ measure }: FontSettingsProps) {
 
       {reports.map((r) => (
         <section key={r.id} data-role={r.id} className="space-y-1.5">
-          <h3 className="t-section">{t(r.labelKey)}</h3>
+          <SectionHeading role="section" title={t(r.labelKey)} />
           <StackList report={r.report} />
           {r.report.noneInstalled && <p className="text-xs text-warning">{t('config.fonts.fallbackOnly')}</p>}
         </section>

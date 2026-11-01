@@ -6,6 +6,8 @@ import { CheckCircle, Info, Loader2, Play, Plus, Server, XCircle } from 'lucide-
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { EmptyState } from '@/components/ui/empty-state'
+import { PanelHeader } from '@/components/ui/section-heading'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -163,27 +165,26 @@ export function AIProviderConfig() {
     <div className="space-y-4">
       <ActiveModelBar />
 
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="t-section">{t('aiProvider.title')}</h3>
-          <p className="text-xs text-muted-foreground">{t('aiProvider.subtitle')}</p>
-        </div>
-        <Button size="sm" onClick={() => openWizard()}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          {t('aiProvider.add')}
-        </Button>
-      </div>
-
-      {providers.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center">
-          <Server className="h-6 w-6 text-muted-foreground" aria-hidden />
-          <p className="text-sm font-medium">{t('aiProvider.emptyTitle')}</p>
-          <p className="max-w-sm text-xs text-muted-foreground">{t('aiProvider.emptyDescription')}</p>
-          <Button size="sm" variant="outline" className="mt-1" onClick={() => openWizard()}>
+      <PanelHeader
+        title={t('aiProvider.title')}
+        description={t('aiProvider.subtitle')}
+        actions={
+          <Button size="sm" onClick={() => openWizard()}>
             <Plus className="mr-1.5 h-4 w-4" />
             {t('aiProvider.add')}
           </Button>
-        </div>
+        }
+      />
+
+      {providers.length === 0 ? (
+        <EmptyState
+          icon={Server}
+          title={t('aiProvider.emptyTitle')}
+          description={t('aiProvider.emptyDescription')}
+          actionLabel={t('aiProvider.add')}
+          onAction={() => openWizard()}
+          className="rounded-lg border border-dashed"
+        />
       ) : (
         <div className="space-y-2">
           {providers.map((provider) => (
