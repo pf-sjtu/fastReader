@@ -53,9 +53,9 @@ export function EntityTimelineChart({
             // 名称 + 简介两行
             headerHeight: 64,
             pad: 8,
-            fontSize: 11,
-            lineHeight: 15,
-            minRowHeight: 48,
+            fontSize: 12,
+            lineHeight: 17,
+            minRowHeight: 52,
             palette: theme.palette,
           })
         : null,
@@ -190,11 +190,11 @@ export function EntityTimelineChart({
                         background: headerBg,
                       }}
                     >
-                      <span className="text-[11px] font-medium text-foreground leading-snug line-clamp-2 w-full break-words">
+                      <span className="text-xs font-medium text-foreground leading-snug line-clamp-2 w-full break-words">
                         {ent.name}
                       </span>
                       {blurb ? (
-                        <span className="text-[10px] text-muted-foreground leading-snug line-clamp-2 w-full mt-0.5 break-words">
+                        <span className="text-xs text-muted-foreground leading-snug line-clamp-2 w-full mt-0.5 break-words">
                           {blurb}
                         </span>
                       ) : null}
@@ -227,7 +227,7 @@ export function EntityTimelineChart({
                     background: stickyColBg,
                   }}
                 >
-                  <span className="text-[10px] text-muted-foreground text-right leading-snug break-words whitespace-normal w-full">
+                  <span className="text-xs text-muted-foreground text-right leading-snug break-words whitespace-normal w-full">
                     {row.timeLabel}
                   </span>
                 </div>
@@ -272,7 +272,7 @@ export function EntityTimelineChart({
                           )}
                           style={{ backgroundColor: bg, color: textOn(bg) }}
                         >
-                          <span className="block text-[11px] font-medium leading-snug break-words whitespace-normal">
+                          <span className="block text-xs font-medium leading-snug break-words whitespace-normal">
                             {item.event.label}
                           </span>
                         </button>

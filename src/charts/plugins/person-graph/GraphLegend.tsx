@@ -81,7 +81,7 @@ export function GraphLegend({ groups, hidden, onToggleGroup, entities, onEntityC
                 const r = ev.currentTarget.getBoundingClientRect()
                 onEntityClick?.(e.id, { x: r.x, y: r.y, width: r.width, height: r.height })
               }}
-              className="inline-flex min-h-6 max-w-[9rem] items-center gap-1 rounded px-1 text-[11px] hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+              className="inline-flex min-h-6 max-w-[9rem] items-center gap-1 rounded px-1 text-xs hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
             >
               <ShapeGlyph shape={e.shape} className="" />
               <span className="truncate">{e.name}</span>

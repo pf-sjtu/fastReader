@@ -34,7 +34,7 @@ const RULES: { id: string; re: RegExp; hint: string; skipDirs?: string[] }[] = [
     hint: '用语义 token：success / warning / info / destructive / muted / primary',
   },
   { id: 'radius', re: /(?<![\w-])rounded(?:-sm|-xl|-2xl)?(?![\w-])/, hint: '圆角只用 rounded-md（控件）/ rounded-lg（容器）/ rounded-full', skipDirs: ['src/charts'] },
-  { id: 'px', re: /text-\[(?:9|10|11)px\]/, hint: '不使用 ≤11px 文字；用 text-xs（12px）', skipDirs: ['src/charts'] },
+  { id: 'px', re: /text-\[(?:9|10|11)px\]/, hint: '不使用 ≤11px 文字；用 text-xs（12px）' },
   { id: 'title-size', re: /<(?:CardTitle|DialogTitle|SheetTitle)\b[^>]*\btext-(?:xs|sm|base|lg|xl|2xl)\b/, hint: '标题用组件默认（t-title）或 t-display，不覆写字号' },
   { id: 'heading-size', re: /<h[1-6]\b[^>]*\btext-(?:base|lg|xl|2xl)\b/, hint: '标题用 t-title / t-section / t-label 角色类' },
 ]
