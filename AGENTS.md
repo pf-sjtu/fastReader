@@ -141,6 +141,11 @@ git push -u origin HEAD
 - 纯渲染在 `src/study/pack/**`（无 React / store / i18n 依赖），接线在 `src/study/exportPack.ts`（笔记按当前章节归位、`var(--entity-N)` 解析成具体色值、文案走 i18n `study.pack.*`）
 - 图谱与时间线是**自绘 SVG**（`src/study/exportFigures.ts`）：时间线复用 `layoutEntityTimeline` 的几何，人物关系图用圆环布局；不引新依赖、不改图表组件。图里只能用十六进制色（SVG 在 data URI 里读不到 CSS 变量）。细节见 `docs/study-pack.md`
 
+## 笔记划线高亮（阅读工作台）
+- 锚点定位是纯函数：`src/notes/anchor.ts` 的 exact → tolerant（折叠掉标点空白）→ fuzzy（bigram Dice ≥ 0.6）三级，`resolveNote` 与批量复用的 `createNoteResolver` 同语义；fuzzy 先反查 rare bigram 得候选窗口，再用「多重集交集上限」预筛把注定找不到的引文挡在全篇扫描之前
+- 正文高亮是 remark 插件 `src/notes/remarkNoteMark.ts`：把整章各块拼成一段**一次**定位（与笔记页签同口径），每条笔记只画一处、只画起点所在的块级单元；同段内跨行内格式逐段切开，引文确实覆盖行内代码时整段包住 `<code>`，围栏代码块不参与
+- `.note-mark`（`src/index.css`）用 `data-color` 选语义色槽位；**不要给它水平内边距**——重叠笔记是嵌套的 mark，每层内边距会把文字推开。行为契约见 `openspec/changes/add-reader-workspace/specs/notes/spec.md` 的「划线与批注」
+
 ## Deployment
 - `wrangler.toml` 声明 `pages_build_output_dir = "dist"` 与 KV 绑定 `FASTREADER_KV`
 - 环境变量：`APP_PASSWORD`（缺省 `123456a`）、`SESSION_SECRET`（可选，缺省由密码派生）、`ALLOWED_ORIGINS`（可选）

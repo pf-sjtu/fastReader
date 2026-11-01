@@ -34,6 +34,47 @@ export function categoryLabel(t: TFunction, name: string): string {
   return key ? t(key) : name
 }
 
+/** 分类角标可选色调（键即语义 token 名，拼出的 Tailwind 类都是静态可识别的） */
+export type CategoryTone = 'primary' | 'info' | 'success' | 'warning' | 'destructive'
+
+/**
+ * 分类 → 色调。语义分组：商业 / 哲学 / 文学 / 艺术偏朱砂（品牌），科学 / 社科 / 工具书偏蓝，
+ * 心理 / 自我提升 / 经管偏绿，历史 / 传记 / 战争偏琥珀，政治 / 国际关系偏红。
+ *
+ * 之所以用「语义色压暗 + 白字」，是因为纯彩底在两套主题下不可能同时保住可读性：
+ * 语义 token 在暗色主题下会变亮（success `oklch(0.76…)`），白字压上去只剩 ~2:1；而彩色文字
+ * 在浅色主题的 token 上又太深（对照度 < 3:1）。压成「语义色 45% + 黑 55%」（BookCard 里那条
+ * color-mix）后，白字在最坏的「纯白封面」上仍有 7.5:1，同时色相足以让各类一眼区分。
+ * 具体色值与对比度见 tests/library/categoryTone.test.tsx（从 index.css 现读 oklch 值计算）。
+ */
+export const CATEGORY_TONES: Record<string, CategoryTone> = {
+  Business: 'primary',
+  Economics: 'success',
+  Psychology: 'success',
+  'Self Help': 'success',
+  Philosophy: 'primary',
+  Religion: 'primary',
+  Literature: 'primary',
+  Classics: 'primary',
+  Art: 'primary',
+  China: 'primary',
+  Science: 'info',
+  Reference: 'info',
+  Sociology: 'info',
+  History: 'warning',
+  Biography: 'warning',
+  War: 'warning',
+  Politics: 'destructive',
+  International: 'destructive',
+}
+
+/** 未收录分类确定的兜底色：中性 primary，不会因为缺少映射而退化成另一种样式 */
+export const DEFAULT_CATEGORY_TONE: CategoryTone = 'primary'
+
+export function categoryTone(name: string): CategoryTone {
+  return CATEGORY_TONES[name] ?? DEFAULT_CATEGORY_TONE
+}
+
 /** i18n 要求静态 key：分组键 → 文案（作者/目录名/出版社直接显示原文）。by 用来区分「未知」是未知作者还是未标注 */
 export function groupLabel(t: TFunction, key: string, by?: GroupBy): string {
   if (key.startsWith('a:') || key.startsWith('d:') || key.startsWith('p:') || key.startsWith('y:')) return key.slice(2)

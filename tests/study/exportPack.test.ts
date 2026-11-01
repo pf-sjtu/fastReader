@@ -5,19 +5,40 @@
  * 笔记怎么归位、人物志怎么挑、mermaid 图从哪来、色值怎么解析、i18n 文案怎么落到包里。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { BookCharts } from '@/charts/types'
 import type { Note } from '@/notes/notes'
-import { DEFAULT_PACK_LABELS } from '@/study/pack'
+import i18n from '@/i18n'
+import en from '@/i18n/locales/en.json'
+import zh from '@/i18n/locales/zh.json'
+import { DEFAULT_PACK_LABELS, DEFAULT_PACK_LANG, NOTE_PALETTE } from '@/study/pack'
 import {
+  PACK_ENTITY_PALETTE,
   buildPackHtml,
+  currentPackLang,
   mermaidSourcesOf,
   packLabels,
+  packLangOf,
   packNotesOf,
   peopleOf,
-  resolveCssColorVar,
+  resolveEntityColor,
   studyPackFileName,
   type PackChapterSource,
 } from '@/study/exportPack'
+
+const INDEX_CSS = readFileSync(join(process.cwd(), 'src/index.css'), 'utf-8')
+
+/** 取 :root（亮色）或 .dark（暗色）块里某个 token 的原值（`--` 前缀不要带） */
+function cssTokenOf(name: string, theme: 'light' | 'dark'): string {
+  const open = theme === 'light' ? /:root\s*\{/ : /\.dark\s*\{/
+  const start = open.exec(INDEX_CSS)
+  if (!start) throw new Error(`index.css 找不到 ${theme === 'light' ? ':root' : '.dark'} 块`)
+  const block = INDEX_CSS.slice(start.index, INDEX_CSS.indexOf('}', start.index))
+  const m = new RegExp(`--${name}:\\s*([^;]+);`).exec(block)
+  if (!m) throw new Error(`${theme} 主题缺少 --${name}`)
+  return m[1].trim()
+}
 
 const chapters: PackChapterSource[] = [
   { id: 'c1', title: '第一章 多元思维模型', summary: '正文一' },
@@ -128,25 +149,89 @@ describe('mermaidSourcesOf', () => {
   })
 })
 
-describe('resolveCssColorVar', () => {
+describe('resolveEntityColor', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('解析 var(--x) 为页面上的真实颜色', () => {
-    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
-      getPropertyValue: (name: string) => (name === '--entity-3' ? 'oklch(0.5 0.1 30)' : ''),
-    } as unknown as CSSStyleDeclaration)
-    expect(resolveCssColorVar('var(--entity-3)')).toBe('oklch(0.5 0.1 30)')
+  it('取固定亮色实体色表，与当前主题无关', () => {
+    // 暗色主题把 --entity-N 提亮到 0.68–0.80，而学习包纸面固定亮色：
+    // 取暗色值会让实体色对纸面的对比度掉到 1.69–2.57:1。
+    // 这里直接让 getComputedStyle 抛异常 —— 只要实现回头去读当前主题，本测试立刻炸。
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+      throw new Error('不应读取当前主题的计算值')
+    })
+    expect(resolveEntityColor('var(--entity-1)')).toBe('oklch(0.5200 0.1700 32.0)')
+    expect(resolveEntityColor(' var( --entity-3 ) ')).toBe('oklch(0.5800 0.1200 80.0)')
+    expect(resolveEntityColor('var(--entity-neutral)')).toBe('oklch(0.5200 0.0150 70.0)')
   })
 
-  it('不是变量写法 / 变量没定义时退回 currentColor，绝不返回空串', () => {
-    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
-      getPropertyValue: () => '',
-    } as unknown as CSSStyleDeclaration)
-    expect(resolveCssColorVar('#b5321f')).toBe('currentColor')
-    expect(resolveCssColorVar('var(--entity-99)')).toBe('currentColor')
-    expect(resolveCssColorVar('var(--entity-1, red)')).toBe('currentColor')
+  it('不是变量写法 / 变量不在表里时退回 currentColor，绝不返回空串', () => {
+    expect(resolveEntityColor('#b5321f')).toBe('currentColor')
+    expect(resolveEntityColor('var(--entity-99)')).toBe('currentColor')
+    expect(resolveEntityColor('var(--chart-1)')).toBe('currentColor')
+    // 带兜底值的 var：兜底值只在变量缺失时有意义，变量名认出来就用亮色表
+    expect(resolveEntityColor('var(--entity-7, red)')).toBe(PACK_ENTITY_PALETTE['--entity-7'])
+  })
+})
+
+describe('PACK_ENTITY_PALETTE', () => {
+  it('逐字等于 index.css 亮色 token（token 改值就必须同步这张表）', () => {
+    // 与 buildPack.ts 的 NOTE_PALETTE 同一约定：这张表是亮色 token 的副本，不能各改各的
+    expect(Object.keys(PACK_ENTITY_PALETTE)).toHaveLength(11)
+    for (const [name, value] of Object.entries(PACK_ENTITY_PALETTE)) {
+      expect(value, name).toBe(cssTokenOf(name.replace(/^--/, ''), 'light'))
+    }
+  })
+
+  it('暗色主题确实把实体色提亮了 —— 这正是当初固定取亮色表的理由', () => {
+    // 哪天暗色不再提亮实体色，这条会先失败，提醒重新评估「固定亮色表」是否还必要
+    const light = Number(/^oklch\(([\d.]+)/.exec(cssTokenOf('entity-1', 'light'))?.[1])
+    const dark = Number(/^oklch\(([\d.]+)/.exec(cssTokenOf('entity-1', 'dark'))?.[1])
+    expect(dark).toBeGreaterThan(light)
+  })
+})
+
+describe('NOTE_PALETTE', () => {
+  it('逐字等于 index.css 亮色 token（primary / info / success / warning）', () => {
+    // 与 PACK_ENTITY_PALETTE 同一约定：学习包固定亮色纸面，这张表是亮色 token 的副本
+    const names = ['primary', 'info', 'success', 'warning'] as const
+    names.forEach((name, index) => {
+      expect(NOTE_PALETTE[(index + 1) as 1 | 2 | 3 | 4], name).toBe(cssTokenOf(name, 'light'))
+    })
+  })
+
+  it('暗色主题的四色确实比亮色更亮 —— 所以绝不能用当前主题的计算值', () => {
+    for (const name of ['primary', 'info', 'success', 'warning']) {
+      const light = Number(/^oklch\(([\d.]+)/.exec(cssTokenOf(name, 'light'))?.[1])
+      const dark = Number(/^oklch\(([\d.]+)/.exec(cssTokenOf(name, 'dark'))?.[1])
+      expect(dark, name).toBeGreaterThan(light)
+    }
+  })
+})
+
+describe('packLangOf', () => {
+  it('中文（zh / zh-CN / zh-TW）归到 zh-CN，其它语言归到 en，未知退回默认', () => {
+    expect(packLangOf('zh')).toBe('zh-CN')
+    expect(packLangOf('zh-CN')).toBe('zh-CN')
+    expect(packLangOf('zh-TW')).toBe('zh-CN')
+    expect(packLangOf('en')).toBe('en')
+    expect(packLangOf('en-US')).toBe('en')
+    for (const missing of [undefined, '', '   ']) {
+      expect(packLangOf(missing)).toBe(DEFAULT_PACK_LANG)
+    }
+  })
+
+  it('currentPackLang 读的是当前界面语言', async () => {
+    const before = i18n.language
+    try {
+      await i18n.changeLanguage('en')
+      expect(currentPackLang()).toBe('en')
+      await i18n.changeLanguage('zh')
+      expect(currentPackLang()).toBe('zh-CN')
+    } finally {
+      await i18n.changeLanguage(before)
+    }
   })
 })
 
@@ -176,6 +261,15 @@ describe('packLabels', () => {
     expect(labels.countOf('Notes', 3)).toBe('3 Notes')
     expect(seen).toContain('study.pack.countOf')
   })
+
+  it('PackLabels 的每个键都在两份 locale 里有文案（动态 key 逃过 uiLocales 的字面量扫描）', () => {
+    const keys = Object.keys(DEFAULT_PACK_LABELS).filter((k) => k !== 'questionNo' && k !== 'countOf')
+    expect(keys.length).toBeGreaterThan(15)
+    for (const key of keys) {
+      expect(zh, `zh 缺 study.pack.${key}`).toHaveProperty(`study.pack.${key}`)
+      expect(en, `en 缺 study.pack.${key}`).toHaveProperty(`study.pack.${key}`)
+    }
+  })
 })
 
 describe('studyPackFileName', () => {
@@ -184,9 +278,30 @@ describe('studyPackFileName', () => {
     expect(studyPackFileName('a/b:c', 'pack')).toBe('a_b_c-pack.html')
     expect(studyPackFileName('   ', '')).toBe('book-pack.html')
   })
+
+  it('超长标题截到 80 字符，后缀原样保留', () => {
+    const name = studyPackFileName('长'.repeat(120), '学习包')
+    // 76 个「长」+ '-' + '学习包' + '.html'
+    expect(name).toBe(`${'长'.repeat(76)}-学习包.html`)
+    expect(Array.from(name).length).toBe(85)
+    expect(name.endsWith('-学习包.html')).toBe(true)
+  })
+
+  it('按码点截断，不会把 emoji 劈成半个代理对', () => {
+    const name = studyPackFileName('🎉'.repeat(120), 'p')
+    // 去掉后缀与连字符后剩 78 个完整 emoji
+    expect(name).toBe(`${'🎉'.repeat(78)}-p.html`)
+    // 出现孤立的代理项就说明截断切错了：整个文件名应是合法 UTF-16 序列
+    expect(() => encodeURIComponent(name)).not.toThrow()
+    expect([...name].filter((c) => c === '🎉')).toHaveLength(78)
+  })
 })
 
 describe('buildPackHtml', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   const base = {
     book: {
       title: '人类简史',
@@ -222,6 +337,49 @@ describe('buildPackHtml', () => {
     expect(result.html).toContain('查理·芒格')
     // 自包含：没有任何外部资源引用
     expect(result.html).not.toMatch(/(src|href)="https?:/)
+  })
+
+  it('文档语言默认跟随界面语言，也可由调用方指定', async () => {
+    const result = await buildPackHtml({
+      ...base,
+      images: false,
+      resolveColor: () => '#b5321f',
+      lang: 'en',
+    })
+    expect(result.html).toContain('<html lang="en">')
+
+    const before = i18n.language
+    try {
+      await i18n.changeLanguage('en')
+      const followed = await buildPackHtml({ ...base, images: false, resolveColor: () => '#b5321f' })
+      expect(followed.html).toContain('<html lang="en">')
+      await i18n.changeLanguage('zh')
+      const zhPack = await buildPackHtml({ ...base, images: false, resolveColor: () => '#b5321f' })
+      expect(zhPack.html).toContain('<html lang="zh-CN">')
+    } finally {
+      await i18n.changeLanguage(before)
+    }
+  })
+
+  it('不传 resolveColor 时用固定亮色实体色表，暗色主题的提亮值一个都不出现', async () => {
+    // 学习包纸面固定亮色，实体色若跟着当前主题走，暗色下对比度会掉到 1.69–2.57:1：
+    // 让 getComputedStyle 抛异常，确保这条路径完全不碰当前主题。
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+      throw new Error('不应读取当前主题的计算值')
+    })
+    const result = await buildPackHtml({
+      ...base,
+      // 去掉 mermaid 图块，让断言只面对实体色（图题渲染无关）
+      book: { ...base.book, chapters: [base.book.chapters[0]] },
+      charts: charts(),
+      images: false,
+    })
+    expect(result.html).toContain('查理·芒格')
+    const used = Object.entries(PACK_ENTITY_PALETTE).filter(([, value]) => result.html.includes(value))
+    expect(used.length).toBeGreaterThan(0)
+    for (const [name] of used) {
+      expect(result.html, name).not.toContain(cssTokenOf(name.replace(/^--/, ''), 'dark'))
+    }
   })
 
   it('内嵌 mermaid 图，并把渲染失败的图收进 failed 而不中止导出', async () => {

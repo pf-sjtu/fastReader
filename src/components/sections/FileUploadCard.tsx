@@ -142,7 +142,7 @@ export function FileUploadCard({
             ref={fileInputRef}
             id="file"
             type="file"
-            accept=".epub,.pdf"
+            accept=".epub,.pdf,.txt,.md"
             onChange={handleFileChange}
             disabled={processing}
             className="hidden"

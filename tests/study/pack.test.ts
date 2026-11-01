@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_PACK_LABELS,
+  DEFAULT_PACK_LANG,
   NOTE_PALETTE,
   buildStudyPackHtml,
   escapeHtml,
@@ -69,6 +70,18 @@ describe('buildStudyPackHtml', () => {
     expect(html).toContain('穷查理宝典')
     expect(html).toContain('查理·芒格')
     expect(html).toContain(`生成时间：${formatLocalTime(pack().generatedAt)}`)
+  })
+
+  it('文档语言由 options.lang 决定，缺省中文', () => {
+    expect(DEFAULT_PACK_LANG).toBe('zh-CN')
+    expect(buildStudyPackHtml(pack())).toContain('<html lang="zh-CN">')
+    expect(buildStudyPackHtml(pack(), { lang: 'en' })).toContain('<html lang="en">')
+    // 空白串当作没传，别让调用方把 lang 写成 '' 就掉到空属性
+    expect(buildStudyPackHtml(pack(), { lang: '   ' })).toContain('<html lang="zh-CN">')
+    // 与文案分开：只换 lang 不换 labels，也仍然生效
+    expect(buildStudyPackHtml(pack(), { lang: 'en', labels: { ...DEFAULT_PACK_LABELS } })).toContain(
+      '<html lang="en">'
+    )
   })
 
   it('空数据也不崩，仍是完整文档', () => {

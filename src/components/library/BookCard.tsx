@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import type { LibraryEntry } from '@/services/library/types'
 import { BookCover } from './BookCover'
 import { BookTooltipBody } from './BookInfo'
-import { categoryLabel, formatBookSize } from './labels'
+import { categoryLabel, categoryTone, formatBookSize, type CategoryTone } from './labels'
 import { useCoverUrl } from './useCoverUrl'
 import { useLongPress } from './useLongPress'
 import { useOpenProgress } from '@/stores/openProgress'
@@ -78,8 +78,30 @@ const fmtSize = formatBookSize
 const extOf = (path: string) => (path.split('.').pop() ?? '').toUpperCase()
 /** 默认格式不占位：EPUB 最常见，只有 PDF/TXT/MD 这类少数派才值得在封面上标出 */
 const DEFAULT_FORMAT = 'EPUB'
-/** 毛玻璃小胶囊：压在任意封面上都清晰 */
-const PILL = 'max-w-full truncate whitespace-nowrap rounded-full bg-black/45 px-1.5 py-0.5 sm:px-2 text-xs font-medium leading-4 text-white backdrop-blur-sm'
+/** 毛玻璃小胶囊的共有外观（不含背景）：压在任意封面上都清晰 */
+const PILL_BOX = 'max-w-full truncate whitespace-nowrap rounded-full px-1.5 py-0.5 sm:px-2 text-xs font-medium leading-4 text-white backdrop-blur-sm'
+/**
+ * 中性胶囊（推荐理由 / 少见格式 / 阅读状态）：静态半透明黑底。
+ * 背景必须和 `CATEGORY_PILL_BG` 分开——两条同特异性的 background-color 工具类同时存在时
+ * 由产物里的输出顺序决定胜负，实测 `.bg-black/45` 排在任意值类之后，会把分类色整片盖掉。
+ */
+const PILL = `bg-black/45 ${PILL_BOX}`
+/**
+ * 分类胶囊：语义色 → 自己的色相，导出给单测断言（tests/library/categoryTone.test.tsx）。
+ * 白字压纯语义色在暗色主题下会失效（token 变亮，只剩 ~2:1）；彩色文字在浅色主题的 token 上
+ * 又太深，所以把暗化做进同一个背景值：token 45% + 黑 55%。写成一整条 color-mix 而不是
+ * 「bg-<tone> 再叠 bg-black/55」，是为了不受工具类输出顺序影响（Tailwind 按 @theme 变量顺序
+ * 输出，两条背景属性谁压谁不可控）。白字对比度最差 7.5:1，见同目录测试的合成对比度用例。
+ */
+export const CATEGORY_PILL_BG: Record<CategoryTone, string> = {
+  primary: 'bg-[color-mix(in_oklab,var(--primary)_45%,black)]',
+  info: 'bg-[color-mix(in_oklab,var(--info)_45%,black)]',
+  success: 'bg-[color-mix(in_oklab,var(--success)_45%,black)]',
+  warning: 'bg-[color-mix(in_oklab,var(--warning)_45%,black)]',
+  destructive: 'bg-[color-mix(in_oklab,var(--destructive)_45%,black)]',
+}
+/** 分类胶囊完整类名（色调色 + 白字玻璃底）；导出给单测断言 */
+export const CATEGORY_PILL_BASE = (tone: CategoryTone) => `${CATEGORY_PILL_BG[tone]} ${PILL_BOX}`
 
 /**
  * 书卡：书名与作者放进封面内部底部，用自下而上的深色渐变做底，
@@ -154,13 +176,15 @@ export function BookCard({ entry, opening, disabled, onOpen, onInfo, caption, sh
 
         {/* 角标 */}
         <div data-slot="book-corner" className="pointer-events-none absolute inset-x-1.5 top-1.5 flex items-start justify-between gap-1">
-          {/* 左上：推荐理由 / 少见格式；窄卡片里它先让位（min-w-0 + 截断） */}
-          <div className="min-w-0 flex-1">
+          {/* 左上：推荐理由 / 少见格式；窄卡片里它先让位（min-w-0 + 截断）。
+              容器必须是 flex：胶囊在 inline 与 block 两种盒下纵向 padding 不撑行盒 / 撑行盒，
+              几何口径不同会让左右顶端差出几个像素；都作为 flex 子项后由同一行盒对齐。 */}
+          <div className="flex min-w-0 flex-1 items-start truncate">
             {caption ? <span className={PILL}>{caption}</span> : oddFormat ? <span className={PILL}>{oddFormat}</span> : null}
           </div>
-          {/* 右上：主分类（subjects[0]）；有阅读状态时叠在它下面 */}
+          {/* 右上：主分类（subjects[0]，按分类自己的色相；有阅读状态时叠在它下面） */}
           <div className="flex max-w-[60%] shrink-0 flex-col items-end gap-1">
-            {primaryCategory && <span className={PILL}>{primaryCategory}</span>}
+            {primaryCategory && <span className={CATEGORY_PILL_BASE(categoryTone(entry.subjects![0]))}>{primaryCategory}</span>}
             {entry.status !== 'unprocessed' && (
               <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium leading-4 text-primary-foreground shadow-sm">
                 {entry.status === 'done' ? t('library.status.done') : t('library.status.partial')}

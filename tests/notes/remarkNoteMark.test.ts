@@ -70,12 +70,14 @@ describe('remarkNoteMark', () => {
     expect(html).not.toContain('note-mark')
   })
 
-  it('代码块与行内代码不碰', () => {
-    const md = ['```', '划线文字', '```', '', '这里是 `划线文字` 行内代码。', '', '正文里也有划线文字。'].join('\n')
-    const html = render(md, [note({ quote: '划线文字' })])
-    // 只应命中正文那一处：mark 只出现一次
-    expect(html.match(/class="note-mark"/g)?.length).toBe(1)
-    expect(html).toContain('<code>划线文字</code>')
+  it('代码块不碰；引文确实覆盖行内代码时，标在代码上（与笔记页签口径一致）', () => {
+    const md = ['```', '围栏里的文字', '```', '', '这里是 `行内代码文字` 行内代码。'].join('\n')
+    // 围栏块整块跳过：引文只出现在围栏里时一处都不标
+    expect(render(md, [note({ quote: '围栏里的文字' })])).not.toContain('note-mark')
+    // 行内代码的文字参与定位（笔记页签已经把它算作「找得到」），画的时候整段包住 code
+    expect(render(md, [note({ quote: '行内代码文字' })])).toContain(
+      '<mark class="note-mark" data-note-id="n1" data-color="1"><code>行内代码文字</code></mark>'
+    )
   })
 
   it('同一段里有多个候选时只标第一处', () => {
@@ -130,5 +132,55 @@ describe('remarkNoteMark', () => {
     const html = render(md, [note({ quote: '划线文字在列表里' })])
     expect(html).toContain('data-note-id="n1"')
     expect(html).toContain('<li>')
+  })
+
+  /*
+   * 以下四条是独立审查（review-notes-pack）发现的行为错，逐条立回归：
+   * 都是「测试全绿但划线画错/画不上/画很久」的典型，光靠既有的单块用例拦不住。
+   */
+
+  it('短引文在更早段落有近似文字时，仍要画在真正命中原句的那一段', () => {
+    // 旧实现「撞上第一块就画」：第 1 段的「编号1」被模糊匹配吃掉，第 3 段真正的「编号10」反而没画
+    const md = ['第1段：编号1。', '', '第2段：无关。', '', '第3段：编号10。'].join('\n')
+    const html = render(md, [note({ quote: '编号10', prefix: '第3段：', suffix: '。' })])
+    expect(html.match(/class="note-mark"/g)?.length).toBe(1)
+    expect(html).toContain('第1段：编号1。')
+    expect(html).toContain('第3段：<mark class="note-mark" data-note-id="n1" data-color="1">编号10</mark>')
+  })
+
+  it('跨段落划的引文至少画出能画的部分，界面不能出现「面板说已定位、正文一处都没有」', () => {
+    // makeNote 会把选区里的换行折成一个空格，所以引文天生跨块
+    const md = ['他在山脊上站了很久。', '', '直到云海翻涌。'].join('\n')
+    const html = render(md, [
+      note({ quote: '站了很久。 直到云海', prefix: '他在山脊上', suffix: '翻涌。' }),
+    ])
+    expect(html).toContain('class="note-mark"')
+    expect(html.match(/class="note-mark"/g)?.length).toBe(1)
+  })
+
+  it('选区跨过行内代码时正文也标得上（审查发现的第二个「面板说已定位、正文 0 高亮」）', () => {
+    // md 源码里的反引号在折叠比对时被当标点去掉，所以页签用 tolerant 命中；正文必须同样命中
+    const html = render('用 `map` 记下这件事，很有用。', [note({ quote: '用 map 记下这件事' })])
+    expect(html).toContain('class="note-mark"')
+    expect(html.replace(/<[^>]+>/g, '')).toBe('用 map 记下这件事，很有用。')
+  })
+
+  it('跨列表项的引文只标一处，不做成多个同 id 的 mark', () => {
+    const md = ['- 第一条：先看目录', '- 第二条：再读正文', '- 第三条'].join('\n')
+    const html = render(md, [
+      note({ quote: '先看目录 第二条：再读正文', prefix: '第一条：', suffix: '' }),
+    ])
+    expect(html.match(/class="note-mark"/g)?.length).toBe(1)
+  })
+
+  it('同一条笔记引文重叠时嵌套层数不再横向推开文字（mark 不带水平内边距）', () => {
+    const md = '第1段：编号1。'
+    const notes = Array.from({ length: 5 }, (_, i) =>
+      note({ id: `n${i}`, quote: '编号1', color: 1 })
+    )
+    const html = render(md, notes)
+    // 五条笔记重叠：都画上（嵌套 mark），文字本身仍只有一份
+    expect(html.match(/class="note-mark"/g)?.length).toBe(5)
+    expect(html.replace(/<[^>]+>/g, '')).toBe('第1段：编号1。')
   })
 })

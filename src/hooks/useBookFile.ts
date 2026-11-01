@@ -9,7 +9,8 @@ import { cloudCacheService, type ProcessingMetadata } from '@/services/cloudCach
 import { webdavService } from '@/services/webdavService'
 import { matchesDefaultUnselectTitle } from '@/services/constants'
 import { useConfigStore } from '@/stores/configStore'
-import { detectBookFormat } from '@/utils/file'
+import { detectBookFormat, isPlainTextBook } from '@/utils/file'
+import { plainBookTitle, readPlainText, splitPlainText } from '@/services/pipeline/plainText'
 import { isPartialCache } from '@/utils/chapterResults'
 import type { GenerationCounter } from '@/utils/runGuard'
 import { logger } from '@/lib/logger'
@@ -110,18 +111,28 @@ export function useBookFile(generationRef: MutableRefObject<GenerationCounter>) 
       setExtractingChapters(true)
       try {
         const format = detectBookFormat(targetFile)
-        if (!format) {
+        if (!format && !isPlainTextBook(targetFile)) {
           throw new Error(
             t('upload.unsupportedFormat', {
-              defaultValue: `不支持的文件格式: ${targetFile.name}（仅支持 .epub / .pdf）`,
+              defaultValue: `不支持的文件格式: ${targetFile.name}（仅支持 .epub / .pdf / .txt / .md）`,
             })
           )
         }
-        processor = await createProcessor(format)
-        const result: AnyBookData & { chapters: ChapterData[] } = await processor.extractBookData(
-          targetFile,
-          ...extractionArgs(processingOptions)
-        )
+        let result: AnyBookData & { chapters: ChapterData[] }
+        if (format) {
+          processor = await createProcessor(format)
+          result = await processor.extractBookData(targetFile, ...extractionArgs(processingOptions))
+        } else {
+          // .txt / .md：没有解析器，正文就是文件本身（批量处理一直是这么做的）
+          const text = await readPlainText(targetFile)
+          if (!text.trim()) throw new Error(t('upload.emptyFile', { name: targetFile.name }))
+          result = {
+            title: plainBookTitle(targetFile.name),
+            author: '',
+            plain: true,
+            chapters: splitPlainText(text, plainBookTitle(targetFile.name)),
+          }
+        }
         if (isStale()) {
           releaseBookResources(processor, result)
           return

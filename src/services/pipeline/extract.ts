@@ -3,10 +3,11 @@
  */
 import type { EpubProcessor, BookData as EpubBookData } from '@/services/epubProcessor'
 import type { PdfProcessor, BookData as PdfBookData } from '@/services/pdfProcessor'
+import type { PlainBookData } from './plainText'
 import { logger } from '@/lib/logger'
 
 export type BookProcessor = EpubProcessor | PdfProcessor
-export type AnyBookData = EpubBookData | PdfBookData
+export type AnyBookData = EpubBookData | PdfBookData | PlainBookData
 
 /** 章节识别参数（与 processingOptions 对应字段一致） */
 export interface ExtractionOptions {

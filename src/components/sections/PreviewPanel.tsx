@@ -9,12 +9,13 @@ import { cn } from '@/lib/utils'
 import type { ChapterData } from '@/services/epubProcessor'
 import type { EpubBookData } from '@/types/chapter'
 import type { BookData as PdfBookData } from '@/services/pdfProcessor'
+import type { AnyBookData } from '@/services/pipeline/extract'
 
 interface PreviewPanelProps {
   chapter: ChapterData
   title: string
   fileName: string
-  bookData: EpubBookData | PdfBookData | null
+  bookData: AnyBookData | null
   fontSize: number
   isFullscreen: boolean
   onClose: () => void
@@ -42,7 +43,9 @@ export function PreviewPanel({
 }: PreviewPanelProps) {
   const { t } = useTranslation()
   const cardRef = useRef<HTMLDivElement>(null)
-  const isEpub = fileName.endsWith('.epub')
+  const isEpub = fileName.toLowerCase().endsWith('.epub')
+  // .txt / .md：没有原书版式可还原，正文就是我们自己切出来的章节文本
+  const isPlain = !!bookData && 'plain' in bookData
   const isSheet = variant === 'sheet'
   // sheet 与 dock 都是"撑满父容器、无边框"的版式；差别只在关闭钮与右侧留白
   const isFlush = variant !== 'sidebar'
@@ -128,7 +131,9 @@ export function PreviewPanel({
             isFlush ? 'flex-1 min-h-0' : 'max-h-[min(70vh,36rem)]'
           )}
         >
-          {isEpub ? (
+          {isPlain ? (
+            <div className="whitespace-pre-wrap break-words px-4 py-3 text-sm leading-relaxed">{chapter.content}</div>
+          ) : isEpub ? (
             <EpubReader
               chapter={chapter}
               bookData={bookData as EpubBookData}

@@ -6,15 +6,18 @@
  * 自测与作答来自速读 store。
  *
  * 只有界面层才知道的两件事：
- * - **色值必须落成具体颜色**：`entityColors` 给的是 `var(--entity-N)`，离线包里没有这些变量，
- *   导出时要用 `getComputedStyle` 解析成当前主题下的真实颜色（见 `resolveCssColorVar`）。
+ * - **色值必须落成具体颜色**：`entityColors` 给的是 `var(--entity-N)`，离线包里没有这些变量。
+ *   但**不能**读当前主题的计算值：学习包固定亮色纸面，暗色主题会把这些 token 整体提亮，
+ *   照当前主题取色会让白纸上的对比度掉到 2:1 左右。所以查的是固定亮色表（见 `PACK_ENTITY_PALETTE`）。
  * - **图片只收能低成本做到的**：阅读器里的 mermaid 图块可以就地转成 data URI；人物关系图谱与
- *   实体时间线要改既有组件或引新依赖，结论表见 `src/study/pack/captureImages.ts`。
+ *   实体时间线由 `exportFigures.ts` 用 `BookCharts` 数据自绘 SVG（改动与代价见
+ *   `src/study/pack/captureImages.ts` 的结论表）。
  *
  * 拿不到图只提示、不影响整包导出：学习包的价值在正文、笔记与自测。
  */
 import { buildEntityStyles } from '@/charts/linking/entityColors'
 import { getEntityGraph, type BookCharts } from '@/charts/types'
+import i18n from '@/i18n'
 import { listRichBlocks } from '@/lib/richBlocks'
 import { resolveChapterIndex, visibleNotes, type ChapterRef, type Note } from '@/notes/notes'
 import {
@@ -22,6 +25,7 @@ import {
   captureDiagramImages,
   collectPackData,
   DEFAULT_PACK_LABELS,
+  DEFAULT_PACK_LANG,
   type DiagramSource,
   type PackImage,
   type PackLabels,
@@ -72,9 +76,11 @@ export interface PackHtmlInput {
   now?: number
   /** 传 false 整包不出图（含图谱与时间线的自绘 SVG，也不去截 mermaid） */
   images?: boolean
+  /** 文档语言（`<html lang>`）；不传跟随当前界面语言（见 `currentPackLang`） */
+  lang?: string
   /** 测试注入的 SVG 渲染器；不传用应用内的 mermaid */
   renderSvg?: SvgRenderFn
-  /** 测试注入的色值解析；不传读页面上的 CSS 变量 */
+  /** 测试注入的色值解析；不传用固定亮色实体色表（见 `resolveEntityColor`） */
   resolveColor?: (cssVar: string) => string
 }
 
@@ -177,16 +183,57 @@ export function mermaidSourcesOf(chapters: readonly PackChapterSource[]): Diagra
 }
 
 /**
- * `var(--entity-3)` → 当前主题下该变量的真实颜色。
+ * 实体色的**亮色**表：与 `src/index.css` 亮色主题的 `--entity-1..10` / `--entity-neutral` 逐字一致。
+ *
+ * 为什么不读 `getComputedStyle`：学习包固定亮色纸面（见 `buildPack.ts` 的 STYLE —— 它要能被打印，
+ * 跟着纸张走），而 `.dark` 把这批 token 整体提亮了（`--entity-1` 明度 0.52 → 0.70）。照当前主题
+ * 取值会让深色主题下导出的实体色在白纸上的对比度从 5.39:1 掉到 2.57:1（`--entity-3` 3.92:1 → 1.69:1），
+ * 图谱与人物志也跟着一起看不清。
+ *
+ * 与 `buildPack.ts` 的 `NOTE_PALETTE` 是同一约定：**`src/index.css` 亮色 token 改值时要同步这里**。
+ */
+export const PACK_ENTITY_PALETTE: Readonly<Record<string, string>> = {
+  '--entity-1': 'oklch(0.5200 0.1700 32.0)',
+  '--entity-2': 'oklch(0.4600 0.1100 255.0)',
+  '--entity-3': 'oklch(0.5800 0.1200 80.0)',
+  '--entity-4': 'oklch(0.5000 0.1000 150.0)',
+  '--entity-5': 'oklch(0.4600 0.1100 305.0)',
+  '--entity-6': 'oklch(0.5000 0.0900 205.0)',
+  '--entity-7': 'oklch(0.5000 0.1600 8.0)',
+  '--entity-8': 'oklch(0.4400 0.0650 60.0)',
+  '--entity-9': 'oklch(0.5400 0.0900 115.0)',
+  '--entity-10': 'oklch(0.5600 0.1000 340.0)',
+  '--entity-neutral': 'oklch(0.5200 0.0150 70.0)',
+}
+
+/**
+ * `var(--entity-3)` → 学习包固定亮色表里的颜色（**不看当前主题**，理由见 `PACK_ENTITY_PALETTE`）。
  *
  * 解析不出来时退回 `currentColor` 而不是空串：空串会让 `style="border-color:"` 这种
  * 坏样式写进 HTML，`currentColor` 至少能跟着学习包的文字色走。
  */
-export function resolveCssColorVar(cssVar: string): string {
+export function resolveEntityColor(cssVar: string): string {
   const name = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(cssVar.trim())?.[1]
-  if (!name || typeof document === 'undefined') return 'currentColor'
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-  return value || 'currentColor'
+  if (!name) return 'currentColor'
+  return PACK_ENTITY_PALETTE[name] ?? 'currentColor'
+}
+
+/**
+ * 界面语言 → 学习包 `<html lang>`。
+ *
+ * 离线包不引 i18next，但 `lang` 决定浏览器的断词、拼写检查与读屏器发音，必须与包内文案一致；
+ * 而文案只是 `zh` / 其余两档（`PackLabels` 就两套 locale），所以这里同样只分两档。
+ * 空/未知退回 `DEFAULT_PACK_LANG`，与默认中文文案对齐。
+ */
+export function packLangOf(language: string | undefined): string {
+  const lang = (language ?? '').trim().toLowerCase()
+  if (!lang) return DEFAULT_PACK_LANG
+  return lang.startsWith('zh') ? 'zh-CN' : 'en'
+}
+
+/** 当前界面语言下的学习包 `lang`（文案由 `packLabels(t)` 按同一份 i18n 生成） */
+export function currentPackLang(): string {
+  return packLangOf(i18n?.language)
 }
 
 /**
@@ -223,10 +270,25 @@ export function packLabels(t: TranslateFn): PackLabels {
   }
 }
 
-/** `人类简史` + `学习包` → `人类简史-学习包.html` */
+/**
+ * 文件名主干（不含 `.html`）的字符上限。
+ *
+ * Windows 单段文件名上限 255，但学习包是「书名 + 后缀」，书名可能整段是 AI 生成的章节式长标题
+ * （实测 120 字标题会产出 130+ 字符的文件名），加上目录层次、云盘同步重名时追加的「(1)」就危险了。
+ * 留出余量截到 80，后缀始终保留 —— 它是这个文件「是什么」的唯一标识。
+ */
+const FILENAME_MAX_LENGTH = 80
+
+/** 按码点截断：直接 slice 可能把代理对（emoji）劈成半个字符 */
+const truncate = (text: string, max: number): string => Array.from(text).slice(0, Math.max(0, max)).join('')
+
+/** `人类简史` + `学习包` → `人类简史-学习包.html`（标题过长时截标题一侧，后缀不截） */
 export function studyPackFileName(title: string, suffix: string): string {
-  const base = sanitizeFileName(`${title.trim() || 'book'}-${suffix.trim() || 'pack'}`)
-  return `${base}.html`
+  const head = sanitizeFileName(title.trim() || 'book')
+  const tail = sanitizeFileName(suffix.trim() || 'pack')
+  const room = FILENAME_MAX_LENGTH - tail.length - 1
+  const fit = head.length <= room ? head : truncate(head, room)
+  return `${fit}-${tail}.html`
 }
 
 function quizQuestionsOf(quiz: PackQuizSource | null | undefined) {
@@ -256,7 +318,7 @@ function answersOf(answers: Readonly<Record<string, PackAnswerSource>> | undefin
 /** 组装并渲染整包（图片可选）。失败只反映在 `failed` 里，正文与笔记照常导出 */
 export async function buildPackHtml(input: PackHtmlInput): Promise<PackHtmlResult> {
   const { book, labels } = input
-  const resolveColor = input.resolveColor ?? resolveCssColorVar
+  const resolveColor = input.resolveColor ?? resolveEntityColor
   const figures = input.images === false ? [] : figureImagesOf(input.charts, labels, resolveColor)
   const sources = mermaidSourcesOf(book.chapters)
   const captured =
@@ -282,7 +344,7 @@ export async function buildPackHtml(input: PackHtmlInput): Promise<PackHtmlResul
   })
 
   return {
-    html: buildStudyPackHtml(data, { labels }),
+    html: buildStudyPackHtml(data, { labels, lang: input.lang ?? currentPackLang() }),
     images: images.length,
     failed: captured.failed.map((item) => item.title),
     filename: studyPackFileName(book.title, labels.docTitleSuffix),

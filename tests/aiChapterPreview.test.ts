@@ -54,9 +54,22 @@ describe('chapterPreviewService.previewChapters', () => {
     expect(pdfMock.destroy).toHaveBeenCalledTimes(1)
   })
 
+  it('纯文本（.txt/.md）：没有解析器，正文就是文件本身', async () => {
+    const r = await chapterPreviewService.previewChapters(
+      new File(['# 一\n正文一\n# 二\n正文二'], 'notes.md', { type: 'text/markdown' }),
+      'normal',
+      1,
+      'auto'
+    )
+    expect(r).toEqual([
+      { title: '一', preview: '正文一' },
+      { title: '二', preview: '正文二' },
+    ])
+  })
+
   it('不支持的格式返回空数组', async () => {
     await expect(
-      chapterPreviewService.previewChapters({ name: 'a.md', type: '' } as File, 'normal', 1, 'auto')
+      chapterPreviewService.previewChapters({ name: 'a.mobi', type: '' } as File, 'normal', 1, 'auto')
     ).resolves.toEqual([])
   })
 

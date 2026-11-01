@@ -77,6 +77,19 @@ describe('timelineFigure', () => {
     expect(svg.match(/https?:\/\//g) ?? []).toHaveLength(1)
     expect(svg).not.toMatch(/href=/)
   })
+
+  it('实体色里的引号被转义：颜色原样进去，但构造不出新属性', () => {
+    // 实体色来自书的数据（`BookCharts` 里可带 color），不是可信常量
+    const hostile = 'red" onload="alert(1)'
+    const svg = svgOf(timelineFigure(CHARTS, () => hostile, '实体时间线') as PackImage)
+    expect(svg).not.toContain('" onload="')
+
+    const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml')
+    expect(parsed.querySelector('parsererror')).toBeNull()
+    const fills = [...parsed.querySelectorAll('[fill]')].map((el) => el.getAttribute('fill'))
+    expect(fills).toContain(hostile)
+    expect(parsed.querySelector('[onload]')).toBeNull()
+  })
 })
 
 describe('personGraphFigure', () => {
@@ -125,5 +138,20 @@ describe('personGraphFigure', () => {
     expect(svg).not.toContain('<script')
     expect(svg).not.toContain('<img')
     expect(svg).toContain('&lt;script&gt;')
+  })
+
+  it('节点色里的引号被转义：节点照画，属性注入不成立', () => {
+    const hostile = 'blue" onmouseover="alert(1)'
+    const svg = svgOf(personGraphFigure(CHARTS, () => hostile, '人物关系图') as PackImage)
+    expect(svg).not.toContain('" onmouseover="')
+
+    const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml')
+    expect(parsed.querySelector('parsererror')).toBeNull()
+    const fills = [...parsed.querySelectorAll('[fill]')].map((el) => el.getAttribute('fill'))
+    expect(fills).toContain(hostile)
+    // 三个节点都画出来了（圆 + 圆角矩形），不是被异常颜色吞掉
+    expect(svg.match(/<circle [^>]*fill=/g) ?? []).toHaveLength(2)
+    expect(svg.match(/<rect [^>]*stroke="#f7f4ee"/g) ?? []).toHaveLength(1)
+    expect(parsed.querySelector('[onmouseover]')).toBeNull()
   })
 })

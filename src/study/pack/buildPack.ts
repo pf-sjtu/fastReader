@@ -66,7 +66,10 @@ export interface PackData {
 /**
  * 笔记四色默认值：`src/index.css` 亮色主题 token 的解析值（原样 oklch）。
  * 顺序与 `NoteColor`（1..4）一致，语义 = 朱砂 / 花青 / 竹青 / 藤黄。
- * 调用方可用 `buildStudyPackHtml` 的第二参数覆盖（例如换成深色主题的解析值）。
+ *
+ * 学习包固定亮色纸面，所以默认值只能是**亮色** token；`noteColors` 覆盖是给测试或未来换配色留的，
+ * 不要拿当前主题（尤其暗色）的计算值来覆盖 —— 那会让纸面上的对比度掉到 2:1 左右
+ * （实体色同此道理，见 `src/study/exportPack.ts` 的 `PACK_ENTITY_PALETTE`）。
  */
 export const NOTE_PALETTE: Readonly<Record<1 | 2 | 3 | 4, string>> = {
   1: 'oklch(0.5150 0.1680 32.0)',
@@ -140,7 +143,15 @@ export interface PackBuildOptions {
   noteColors?: Partial<Record<1 | 2 | 3 | 4, string>>
   /** 界面文案（本地化）：只想换一两条时传其中一部分即可 */
   labels?: Partial<PackLabels>
+  /**
+   * 文档语言（`<html lang>`）：跟随界面语言，如 `zh-CN` / `en`。
+   * 不传用 `DEFAULT_PACK_LANG`（中文），保持只改 labels 的老调用方行为不变。
+   */
+  lang?: string
 }
+
+/** 学习包默认文档语言：文案默认也是中文，两者必须一致（读屏器与断词都看它） */
+export const DEFAULT_PACK_LANG = 'zh-CN'
 
 /**
  * HTML 转义。`&` 必须最先替换，否则后续插入的实体（`&amp;`）会被二次转义。
@@ -510,11 +521,12 @@ body {
  * 生成完整的学习包 HTML 文档。
  *
  * @param data 学习包数据（见 `PackData`）；`chapters` 会按 `index` 升序重排，不改动入参
- * @param options 可选：覆盖笔记四色与界面文案（不传则用默认中文与 `NOTE_PALETTE`）
+ * @param options 可选：覆盖笔记四色、界面文案与 `<html lang>`（默认中文与 `NOTE_PALETTE`）
  */
 export function buildStudyPackHtml(data: PackData, options?: PackBuildOptions): string {
   const palette: Readonly<Record<1 | 2 | 3 | 4, string>> = { ...NOTE_PALETTE, ...options?.noteColors }
   const L: PackLabels = { ...DEFAULT_PACK_LABELS, ...options?.labels }
+  const lang = options?.lang?.trim() || DEFAULT_PACK_LANG
   const chapters = [...data.chapters].sort((a, b) => a.index - b.index)
   const title = data.title.trim() || L.untitled
   const author = data.author?.trim()
@@ -553,7 +565,7 @@ export function buildStudyPackHtml(data: PackData, options?: PackBuildOptions): 
 
   return [
     `<!doctype html>`,
-    `<html lang="zh-CN">`,
+    `<html lang="${escapeHtml(lang)}">`,
     `<head>`,
     `<meta charset="utf-8">`,
     `<meta name="viewport" content="width=device-width, initial-scale=1">`,

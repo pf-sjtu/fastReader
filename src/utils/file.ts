@@ -2,19 +2,34 @@
  * 文件处理工具函数
  */
 
+/** 文件名归一化：小写、去首尾空白、全角点转半角（兼容大小写与全角扩展名） */
+function normalizeName(file: File | null | undefined): string {
+  return (file?.name || '')
+    .toLowerCase()
+    .trim()
+    .replace(/．/g, '.') // 全角点
+}
+
 /**
  * 识别电子书格式（兼容全角点、MIME、大小写）
  */
 export function detectBookFormat(file: File): 'epub' | 'pdf' | null {
-  const name = (file?.name || '')
-    .toLowerCase()
-    .trim()
-    .replace(/．/g, '.') // 全角点
+  const name = normalizeName(file)
   const type = (file?.type || '').toLowerCase()
 
   if (name.endsWith('.epub') || type.includes('epub')) return 'epub'
   if (name.endsWith('.pdf') || type === 'application/pdf') return 'pdf'
   return null
+}
+
+/**
+ * 纯文本类书籍：没有解析器，正文就是文件本身（见 `services/pipeline/plainText.ts`）。
+ * WebDAV 文件浏览器与书库都列出 .txt/.md，所以这里必须认它们，否则用户一点就报「不支持的文件格式」。
+ */
+export function isPlainTextBook(file: File | null | undefined): boolean {
+  const name = normalizeName(file)
+  const type = (file?.type || '').toLowerCase()
+  return /\.(txt|md|markdown)$/.test(name) || type.startsWith('text/')
 }
 
 /**

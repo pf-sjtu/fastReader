@@ -1,18 +1,19 @@
 /**
  * 图谱 / 时间线 → 学习包内嵌图片（任务 7.2 第三阶段，探索性）。
  *
- * ## 结论（先说清代价，免得后人重复摸索）
+ * ## 当时查到的结论（先说清代价，免得后人重复摸索）
  *
  * 需求里的「彩色图谱 / 时间线图片」指 `src/charts/` 的两个插件。逐条查过它们的导出能力：
  *
  * | 目标 | 现状 | 低成本方案？ |
  * |---|---|---|
- * | 人物关系图谱（cytoscape） | 实例是 `PersonGraphChart.tsx` 内部的局部 `useRef`，没有实例注册表；cytoscape 核心的 `cy.png()` 能用，但拿不到实例 | ✗ 要改既有组件（把实例暴露出来）才可能 |
- * | 实体时间线 | 是**纯 HTML/CSS div**，不含任何 `<svg>`，没有可序列化的矢量根 | ✗ 要引 `html2canvas` 之类新依赖 |
+ * | 人物关系图谱（cytoscape） | 实例是 `PersonGraphChart.tsx` 内部的局部 `useRef`，没有实例注册表；cytoscape 核心的 `cy.png()` 能用，但拿不到实例 | ✗ 截图这条路要改既有组件（把实例暴露出来） |
+ * | 实体时间线 | 是**纯 HTML/CSS div**，不含任何 `<svg>`，没有可序列化的矢量根 | ✗ 截图这条路要引 `html2canvas` 之类新依赖 |
  * | mermaid 图（阅读器里的图块） | `src/lib/mermaidRender.ts` 已导出 `renderMermaid` 与 `svgToDataUri`，全程无 DOM 依赖、无新依赖 | ✓ 本文件就是它 |
  *
- * 所以本文件**只做能低成本做到的那条路**：把已经存在的「mermaid 代码 → SVG 字符串 → data URI」
- * 包成 `PackImage`。图谱与时间线需要改动既有组件或引入新依赖，超出本任务写范围，仅在此记录结论。
+ * 所以**截图**这条路本文件不做，只做「mermaid 代码 → SVG 字符串 → data URI」并包成 `PackImage`。
+ * 图谱与时间线后来走了第四种做法：用 `BookCharts` 的数据**自绘 SVG**（`src/study/exportFigures.ts`），
+ * 同样是零新依赖、不改既有图表组件，只是位置不逐字复刻（见该文件头部的取舍说明）。
  *
  * ## 为什么内嵌 SVG data URI 是安全的
  *

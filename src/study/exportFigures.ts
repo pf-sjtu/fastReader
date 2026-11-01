@@ -7,8 +7,9 @@
  * - 两者的数据本来就在 `BookCharts` 里，而时间线的**几何**已经被 `layoutEntityTimeline` 算好
  *   （应用内那套列宽/换行/行高），照着画 SVG 等于用同一套排版离线重绘一遍，零新依赖。
  *
- * 因此：时间线与图内配色与应用内一致，但人物关系图用的是自己写的**圆环布局**（应用内是
- * cytoscape 的力导布局）——节点、连线与关系文字都在，位置不逐字复刻。
+ * 因此：时间线的排版沿用 `layoutEntityTimeline` 的函数与换行规则（参数按打印尺寸另配），
+ * 图内配色取**亮色**实体色表（见 `exportPack.ts` 的 `PACK_ENTITY_PALETTE`）；人物关系图用的是
+ * 自己写的**圆环布局**（应用内是 cytoscape 的力导布局）——节点、连线与关系文字都在，位置不逐字复刻。
  *
  * 图里全部用十六进制色：SVG 一旦进了 `<img src="data:...">` 就是独立文档，读不到页面的
  * `--pack-*` 变量；而这些值正是学习包亮色主题（见 `buildPack.ts` 的 STYLE）的 sRGB 对应值。
@@ -46,11 +47,16 @@ interface TextOpts {
   anchor?: 'start' | 'middle' | 'end'
 }
 
+/**
+ * 一行 SVG 文本。内容与属性值都过 `escapeHtml`：`fill` 虽然目前只来自本文件的常量或
+ * `readableTextOn` 的结果，但它是唯一往属性里塞外部颜色的入口所在（实体色来自书的数据），
+ * 转义成本为零，不做就是留一个「颜色字符串能跑出属性」的口子。
+ */
 function text(x: number, y: number, content: string, opts: TextOpts = {}): string {
   const { size = 12, weight = 400, fill = INK, anchor = 'start' } = opts
   return (
     `<text x="${round(x)}" y="${round(y)}" font-size="${size}" font-weight="${weight}"` +
-    ` fill="${fill}" text-anchor="${anchor}">${escapeHtml(content)}</text>`
+    ` fill="${escapeHtml(fill)}" text-anchor="${escapeHtml(anchor)}">${escapeHtml(content)}</text>`
   )
 }
 
@@ -73,8 +79,11 @@ function svgDoc(width: number, height: number, body: string): string {
 export type FigureColorOf = (entityId: string, fallback?: string) => string
 
 /**
- * 实体时间线 → SVG。几何完全交给 `layoutEntityTimeline`，这里只负责把矩形与文字画出来，
- * 所以换行、行高、列位置与应用内一致。
+ * 实体时间线 → SVG。几何完全交给 `layoutEntityTimeline`（与应用内同一个函数、同一套换行规则），
+ * 这里只负责把矩形与文字画出来。
+ *
+ * 参数**不照抄界面默认值**：界面用 `DEFAULT_LAYOUT` 并另外注入 `theme.palette`，而这里按打印尺寸
+ * 另配一份 `TIMELINE_CONFIG`（列更窄、字更小、行更高），所以列位置与换行点会与界面略有出入。
  *
  * 没有事件（或没有实体）时返回 null：空的图不如不导出。
  */
@@ -94,7 +103,7 @@ export function timelineFigure(
   layout.entities.forEach((entity, col) => {
     const w = config.colWidth - config.pad * 2
     const x = config.labelWidth + col * config.colWidth + config.pad
-    body.push(`<rect x="${round(x)}" y="6" width="${round(w)}" height="4" rx="2" fill="${colorOf(entity.id, layout.entityColor.get(entity.id))}"/>`)
+    body.push(`<rect x="${round(x)}" y="6" width="${round(w)}" height="4" rx="2" fill="${escapeHtml(colorOf(entity.id, layout.entityColor.get(entity.id)))}"/>`)
     const lines = layout.headerLines.get(entity.id) ?? [entity.name]
     lines.slice(0, 3).forEach((line, i) => {
       body.push(
@@ -117,7 +126,7 @@ export function timelineFigure(
   layout.items.forEach((item) => {
     const color = colorOf(item.entityId, item.color)
     body.push(
-      `<rect x="${round(item.x)}" y="${round(item.y)}" width="${round(item.chipWidth)}" height="${round(item.chipHeight)}" rx="8" fill="${color}"/>`
+      `<rect x="${round(item.x)}" y="${round(item.y)}" width="${round(item.chipWidth)}" height="${round(item.chipHeight)}" rx="8" fill="${escapeHtml(color)}"/>`
     )
     const fg = readableTextOn(cssColorToHex(color, '#ffffff'))
     item.labelLines.slice(0, 4).forEach((line, i) => {
@@ -215,11 +224,11 @@ export function personGraphFigure(
       const w = r * 2.4
       const h = r * 1.6
       body.push(
-        `<rect x="${round(point.x - w / 2)}" y="${round(point.y - h / 2)}" width="${round(w)}" height="${round(h)}" rx="8" fill="${color}" stroke="${PAPER}" stroke-width="2"/>`
+        `<rect x="${round(point.x - w / 2)}" y="${round(point.y - h / 2)}" width="${round(w)}" height="${round(h)}" rx="8" fill="${escapeHtml(color)}" stroke="${PAPER}" stroke-width="2"/>`
       )
     } else {
       body.push(
-        `<circle cx="${round(point.x)}" cy="${round(point.y)}" r="${r}" fill="${color}" stroke="${PAPER}" stroke-width="2"/>`
+        `<circle cx="${round(point.x)}" cy="${round(point.y)}" r="${r}" fill="${escapeHtml(color)}" stroke="${PAPER}" stroke-width="2"/>`
       )
     }
     const lines = wrapText(node.name, GRAPH_LABEL_UNITS).slice(0, 2)

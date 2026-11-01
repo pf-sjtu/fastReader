@@ -1,7 +1,8 @@
 // 处理器按格式动态 import：本服务经 ConfigDialog 进入首屏，静态引入会把 pdfjs/epubjs 拖进首屏
 import type { EpubProcessor, ChapterData } from './epubProcessor'
 import type { PdfProcessor } from './pdfProcessor'
-import { detectBookFormat } from '../utils/file'
+import { detectBookFormat, isPlainTextBook } from '../utils/file'
+import { plainBookTitle, readPlainText, splitPlainText } from './pipeline/plainText'
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
@@ -67,6 +68,10 @@ export class ChapterPreviewService {
           chapterDetectionMode,
           epubTocDepth
         )
+      } else if (isPlainTextBook(file)) {
+        // .txt / .md：没有解析器，正文就是文件本身（章节按标题切分，见 pipeline/plainText）
+        const title = plainBookTitle(file.name)
+        chapters = splitPlainText(await readPlainText(file), title)
       } else {
         return []
       }

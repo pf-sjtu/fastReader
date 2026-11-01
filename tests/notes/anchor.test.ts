@@ -216,5 +216,28 @@ describe('createNoteResolver：一章多条笔记共用折叠结果', () => {
     const elapsed = performance.now() - startedAt
     expect(elapsed).toBeLessThan(3000)
   })
+
+  it('带标点的两万字散文 + 几十条找不到的引文：不走全篇 step=1 的慢路径', () => {
+    // 现实长章：归一化两万字出头，标点占一成左右。旧实现用「折叠后长度」判长短，
+    // 这种文本折叠后仍有 1.8 万字，落在 step=1，每条 30 字引文要滑完全篇（审查实测 306ms/条）。
+    const sentence = '他在山脊上站了很久，直到云海翻涌；风把松针吹得沙沙响。'
+    const chapter = sentence.repeat(10).repeat(75)
+    expect(normalizeText(chapter).length).toBeGreaterThan(20000)
+    expect(foldText(chapter).length).toBeLessThan(normalizeText(chapter).length * 0.95)
+
+    const resolver = createNoteResolver(chapter)
+    // 正确性：深处那句的确切引文仍然准确定位
+    const deep = mustAnchor(resolver.resolve({ quote: '风把松针吹得沙沙响' }))
+    expect(deep.kind).toBe('exact')
+    expect(sliceOf(chapter, deep)).toContain('松针')
+
+    // 120 条全落空是最坏路径：没有上限预筛时，每条都要滑完整个粗扫网格（审查实测 76ms/条，合计 9 秒）
+    const notes = Array.from({ length: 120 }, (_, i) => ({ quote: `整章都没有的第${i}句，也没有相邻上下文` }))
+    const startedAt = performance.now()
+    for (const note of notes) expect(resolver.resolve(note)).toBeNull()
+    const elapsed = performance.now() - startedAt
+    // 上限预筛（Σ min(引用计数, 正文计数) 达不到阈值就直接判 null）必须把这条路径压到毫秒级
+    expect(elapsed).toBeLessThan(2500)
+  })
 })
 

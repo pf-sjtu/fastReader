@@ -720,13 +720,13 @@
 }
 
 /* 划线高亮（阅读工作台）：颜色槽位由 data-color 选择，与笔记页签的左边条同一套语义色，
-   换明暗主题只改变量。写在 @layer 之外：无层样式优先于层内的 .prose mark 规则。 */
+   换明暗主题只改变量。写在 @layer 之外：无层样式优先于层内的 .prose mark 规则。
+   注意：不要给水平内边距——同一条笔记与别的笔记重叠时是嵌套的 mark，每层 1px 会累积把文字推开。 */
 .note-mark {
   --note-color: var(--primary);
   background: color-mix(in oklab, var(--note-color) 16%, transparent);
   border-bottom: 2px solid color-mix(in oklab, var(--note-color) 60%, transparent);
   border-radius: 2px;
-  padding: 0 1px;
   color: inherit;
 }
 .note-mark[data-color='2'] { --note-color: var(--info); }
