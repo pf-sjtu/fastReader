@@ -803,6 +803,26 @@
       "confirmDelete": "Delete",
       "deleted": "Deleted {{count}} stale outputs",
       "partial": "Deleted {{ok}}, {{fail}} failed (scan again to retry)"
+    },
+    "download": {
+      "connecting": "Connecting to WebDAV…",
+      "starting": "Request sent, waiting for the server…",
+      "parsing": "Downloaded, parsing chapters…",
+      "percent": "{{pct}}%",
+      "loaded": "{{size}} downloaded",
+      "eta": "about {{time}} left",
+      "stalled": "Slow connection, still waiting for the server",
+      "cancel": "Cancel",
+      "cancelled": "Opening cancelled",
+      "toastTitle": "Opening “{{title}}”",
+      "duration": {
+        "s": "{{s}}s",
+        "ms": "{{m}}m {{s}}s",
+        "hm": "{{h}}h {{m}}m"
+      },
+      "connectingShort": "Connecting…",
+      "parsingShort": "Parsing…",
+      "stalledShort": "Slow, waiting…"
     }
   },
   "workspace": {

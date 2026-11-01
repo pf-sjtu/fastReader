@@ -4,6 +4,7 @@ import { probeStatus } from './exists'
 import type { DavContext, WebDAVOperationResult } from './types'
 import { buildHeaderPath, normalizeToArrayBuffer, toUploadBody } from './utils'
 import { logger } from '../../lib/logger'
+import { readBodyWithProgress, type ProgressOptions } from './progress'
 
 const NO_CACHE_HEADERS = { 'Cache-Control': 'no-store, no-cache', Pragma: 'no-cache' }
 
@@ -19,7 +20,8 @@ async function failureText(prefix: string, res: Response, bodyLimit: number): Pr
 export function getFileContents(
   ctx: DavContext,
   filePath: string,
-  format: 'text' | 'binary'
+  format: 'text' | 'binary',
+  opts?: ProgressOptions
 ): Promise<WebDAVOperationResult<string | ArrayBuffer>> {
   return ctx.runExclusive(async () => {
     try {
@@ -31,6 +33,7 @@ export function getFileContents(
       if (ctx.isBrowserProxyMode()) {
         const res = await ctx.proxyFetch('GET', filePath, {
           extraHeaders: { Accept: format === 'text' ? 'text/plain, */*' : '*/*' },
+          signal: opts?.signal,
         })
         if (res.status === 404 && !isProxyErrorResponse(res)) {
           console.warn('[WebDAV] 文件不存在 (404):', filePath)
@@ -39,7 +42,8 @@ export function getFileContents(
         if (!res.ok) {
           return { success: false, error: await failureText('下载文件失败', res, 80) }
         }
-        return { success: true, data: format === 'text' ? await res.text() : await res.arrayBuffer() }
+        // 二进制（书）走流式读取以回报进度；文本（摘要 / 索引）体积小，照旧一次读完
+        return { success: true, data: format === 'text' ? await res.text() : await readBodyWithProgress(res, opts) }
       }
 
       if (!ctx.client) {

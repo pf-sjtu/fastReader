@@ -39,7 +39,7 @@ export interface DavContext {
   proxyFetch(
     method: string,
     filePath: string,
-    options?: { body?: BodyInit | null; extraHeaders?: Record<string, string> }
+    options?: { body?: BodyInit | null; extraHeaders?: Record<string, string>; signal?: AbortSignal }
   ): Promise<Response>
   isBrowserProxyMode(): boolean
   /** 串行锁；已在锁内的调用方不得再调用 */

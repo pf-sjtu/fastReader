@@ -18,9 +18,11 @@ vi.mock('@/services/webdavService', () => ({
   },
 }))
 const toastError = vi.fn()
-vi.mock('sonner', () => ({ toast: { error: (...a: unknown[]) => toastError(...a), success: vi.fn() } }))
+const toastDismiss = vi.fn()
+vi.mock('sonner', () => ({ toast: { error: (...a: unknown[]) => toastError(...a), success: vi.fn(), loading: vi.fn(), dismiss: (...a: unknown[]) => toastDismiss(...a), message: vi.fn() } }))
 
 import { LibraryView } from '@/components/library/LibraryView'
+import { useOpenProgress } from '@/stores/openProgress'
 import { coverSlot } from '@/components/library/coverSlot'
 import { useLibraryOpen } from '@/hooks/useLibraryOpen'
 import { useLibraryStore } from '@/services/library/libraryStore'
@@ -416,6 +418,86 @@ describe('useLibraryOpen', () => {
       await open(entry('unprocessed'))
     })
     expect(seen.every((v) => v === false)).toBe(true)
+  })
+
+  it('下载进度：把 signal / expectedSize / onProgress 传给下载；阶段 连接→下载→解析→结束，结束后清空，不残留', async () => {
+    const phases: string[] = []
+    const unsub = useOpenProgress.subscribe((s) => phases.push(s.current?.phase ?? 'none'))
+    let seenOpts: { signal: AbortSignal; expectedSize?: number; onProgress: (p: unknown) => void } | null = null
+    downloadFileAsFile.mockImplementation(async (_p: string, _n: string, opts: typeof seenOpts) => {
+      seenOpts = opts
+      opts!.onProgress({ loaded: 5, total: 10, speed: 1, etaSeconds: 5 })
+      expect(useOpenProgress.getState().current?.progress).toMatchObject({ loaded: 5, total: 10 })
+      return { success: true, data: new File(['x'], '甲.epub') }
+    })
+    let open!: (e: LibraryEntry) => Promise<void>
+    mounted = mount(<Harness select={vi.fn(async () => {})} load={vi.fn()} expose={(o: typeof open) => (open = o)} file={null} cloud={null} checking={false} />)
+    await act(async () => {
+      await open({ ...entry('unprocessed'), size: 1234 })
+    })
+    unsub()
+    expect(seenOpts!.expectedSize).toBe(1234) // 总量回退：书库索引里记的大小
+    expect(seenOpts!.signal).toBeInstanceOf(AbortSignal)
+    expect(phases.indexOf('connecting')).toBeLessThan(phases.indexOf('downloading'))
+    expect(phases.indexOf('downloading')).toBeLessThan(phases.indexOf('parsing'))
+    expect(useOpenProgress.getState().current).toBeNull() // 结束后清空
+    expect(toastDismiss).toHaveBeenCalled()
+  })
+
+  it('用户取消下载：不是失败——不报「打开失败」，更不会去查文件在不在、弹删除云端资料的确认', async () => {
+    downloadFileAsFile.mockImplementation(async (_p: string, _n: string, opts: { signal: AbortSignal }) => {
+      useOpenProgress.getState().cancel?.() // 用户点了 toast 上的「取消」
+      expect(opts.signal.aborted).toBe(true)
+      return { success: false, error: '下载文件失败: 下载已取消' }
+    })
+    let open!: (e: LibraryEntry) => Promise<void>
+    const select = vi.fn(async () => {})
+    mounted = mount(<Harness select={select} load={vi.fn()} expose={(o: typeof open) => (open = o)} file={null} cloud={null} checking={false} />)
+    await act(async () => {
+      await open(entry('unprocessed'))
+    })
+    expect(toastError).not.toHaveBeenCalled()
+    expect(existsStatus).not.toHaveBeenCalled()
+    expect(useLibraryStore.getState().missing).toBeNull()
+    expect(select).not.toHaveBeenCalled()
+    expect(useOpenProgress.getState().current).toBeNull()
+  })
+
+  it('下载中很久没有新数据：标记 stalled（界面提示「连接较慢」）；来数据后恢复', async () => {
+    vi.useFakeTimers()
+    try {
+      let release!: () => void
+      let onProgress!: (p: unknown) => void
+      downloadFileAsFile.mockImplementation(
+        (_p: string, _n: string, opts: { onProgress: (p: unknown) => void }) =>
+          new Promise((r) => {
+            onProgress = opts.onProgress
+            release = () => r({ success: true, data: new File(['x'], '甲.epub') })
+          })
+      )
+      let open!: (e: LibraryEntry) => Promise<void>
+      mounted = mount(<Harness select={vi.fn(async () => {})} load={vi.fn()} expose={(o: typeof open) => (open = o)} file={null} cloud={null} checking={false} />)
+      let p!: Promise<void>
+      await act(async () => {
+        p = open(entry('unprocessed'))
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(useOpenProgress.getState().current?.stalled).toBe(false)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(9000)
+      })
+      expect(useOpenProgress.getState().current?.stalled).toBe(true)
+      await act(async () => {
+        onProgress({ loaded: 1, total: 10, speed: 1, etaSeconds: 9 })
+      })
+      expect(useOpenProgress.getState().current?.stalled).toBe(false)
+      await act(async () => {
+        release()
+        await p
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('已精读但云缓存没读到：不自动进入，停在选章节页', async () => {

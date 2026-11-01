@@ -8,6 +8,7 @@ import { getDirectoryContents, filterSupportedFiles, getStat } from './webdav/br
 import { getFileContents, putFileContents } from './webdav/transfer'
 import { bindWebDAVServiceToStore } from './webdav/bind'
 import { ensureSyncDirectory, syncFiles, downloadFileAsFile } from './webdav/sync'
+import type { ProgressOptions } from './webdav/progress'
 import type {
   DavContext,
   DavExistsStatus,
@@ -81,7 +82,7 @@ export class WebDAVService {
   private async proxyFetch(
     method: string,
     filePath: string,
-    options?: { body?: BodyInit | null; extraHeaders?: Record<string, string> }
+    options?: { body?: BodyInit | null; extraHeaders?: Record<string, string>; signal?: AbortSignal }
   ): Promise<Response> {
     if (!this.config) {
       throw new Error('WebDAV配置未找到')
@@ -96,7 +97,7 @@ export class WebDAVService {
       ...(options?.extraHeaders || {}),
     }
     logger.debug(`[WebDAV:proxy] ${method} path=${headerPath}`)
-    return fetch('/api/dav/', { method, headers, body: options?.body ?? null })
+    return fetch('/api/dav/', { method, headers, body: options?.body ?? null, signal: options?.signal })
   }
 
   /** 给拆分出的操作模块用的上下文（每次调用取最新 client/config） */
@@ -249,10 +250,11 @@ export class WebDAVService {
    */
   async getFileContents(
     filePath: string,
-    format: 'text' | 'binary' = 'binary'
+    format: 'text' | 'binary' = 'binary',
+    opts?: ProgressOptions
   ): Promise<WebDAVOperationResult<string | ArrayBuffer>> {
     if (!this.config && !this.client) return { success: false, error: NOT_INITIALIZED }
-    return getFileContents(this.ctx(), filePath, format)
+    return getFileContents(this.ctx(), filePath, format, opts)
   }
 
   /**
@@ -346,9 +348,9 @@ export class WebDAVService {
   }
 
   /** 下载文件并转换为File对象（fileName 可选，用于避免特殊字符问题） */
-  async downloadFileAsFile(filePath: string, fileName?: string): Promise<WebDAVOperationResult<File>> {
+  async downloadFileAsFile(filePath: string, fileName?: string, opts?: ProgressOptions): Promise<WebDAVOperationResult<File>> {
     if (!this.client) return { success: false, error: NOT_INITIALIZED }
-    return downloadFileAsFile(this, filePath, fileName)
+    return downloadFileAsFile(this, filePath, fileName, opts)
   }
 
   /** 获取文件下载链接 */

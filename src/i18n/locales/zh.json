@@ -812,6 +812,26 @@
       "confirmDelete": "确认删除",
       "deleted": "已删除 {{count}} 个过时产物",
       "partial": "已删除 {{ok}} 个，{{fail}} 个失败（可再次扫描重试）"
+    },
+    "download": {
+      "connecting": "正在连接 WebDAV…",
+      "starting": "已发出下载请求，等待服务器响应…",
+      "parsing": "下载完成，正在解析章节…",
+      "percent": "{{pct}}%",
+      "loaded": "已下载 {{size}}",
+      "eta": "剩余约 {{time}}",
+      "stalled": "连接较慢，仍在等待服务器响应",
+      "cancel": "取消",
+      "cancelled": "已取消打开",
+      "toastTitle": "正在打开《{{title}}》",
+      "duration": {
+        "s": "{{s}} 秒",
+        "ms": "{{m}} 分 {{s}} 秒",
+        "hm": "{{h}} 小时 {{m}} 分"
+      },
+      "connectingShort": "连接中…",
+      "parsingShort": "解析中…",
+      "stalledShort": "较慢，等待中…"
     }
   },
   "workspace": {

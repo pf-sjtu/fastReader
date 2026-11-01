@@ -1,6 +1,7 @@
 import { getMimeType } from '../../utils/file'
 import type { WebDAVConfig } from '../../stores/configStore'
 import type { UploadProgressCallback, WebDAVOperationResult } from './types'
+import type { ProgressOptions } from './progress'
 
 /** 同步/下载只依赖 WebDAVService 的这几个公开方法 */
 export interface DavSyncHost {
@@ -9,7 +10,7 @@ export interface DavSyncHost {
   exists(path: string): Promise<WebDAVOperationResult<boolean>>
   createDirectory(path: string): Promise<WebDAVOperationResult<boolean>>
   putFileContents(path: string, data: string | ArrayBuffer | Blob, overwrite?: boolean): Promise<WebDAVOperationResult<boolean>>
-  getFileContents(path: string, format?: 'text' | 'binary'): Promise<WebDAVOperationResult<string | ArrayBuffer>>
+  getFileContents(path: string, format?: 'text' | 'binary', opts?: ProgressOptions): Promise<WebDAVOperationResult<string | ArrayBuffer>>
 }
 
 const NOT_INITIALIZED = 'WebDAV客户端未初始化'
@@ -61,7 +62,8 @@ export async function syncFiles(
 export async function downloadFileAsFile(
   host: DavSyncHost,
   filePath: string,
-  fileName?: string
+  fileName?: string,
+  opts?: ProgressOptions
 ): Promise<WebDAVOperationResult<File>> {
   try {
     let normalizedPath = filePath
@@ -72,7 +74,7 @@ export async function downloadFileAsFile(
       normalizedPath = '/' + normalizedPath
     }
 
-    const contentResult = await host.getFileContents(normalizedPath, 'binary')
+    const contentResult = await host.getFileContents(normalizedPath, 'binary', opts)
     if (!contentResult.success || !contentResult.data) {
       return { success: false, error: contentResult.error || '获取文件内容失败' }
     }

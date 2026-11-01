@@ -8,6 +8,56 @@ import { BookTooltipBody } from './BookInfo'
 import { categoryLabel, formatBookSize } from './labels'
 import { useCoverUrl } from './useCoverUrl'
 import { useLongPress } from './useLongPress'
+import { useOpenProgress } from '@/stores/openProgress'
+import { fractionOf } from '@/services/webdav/progress'
+
+const RING_R = 18
+const RING_C = 2 * Math.PI * RING_R
+
+/**
+ * 打开中的进度环：下载阶段有总量时按百分比走；连接 / 解析 / 总量未知时转圈并写出阶段，
+ * 让用户一眼看出「在干活」而不是卡死。详细的速度与剩余时间在全局 toast 里。
+ */
+function OpeningOverlay({ path }: { path: string }) {
+  const { t } = useTranslation()
+  const cur = useOpenProgress((s) => (s.current?.path === path ? s.current : null))
+  const frac = cur?.phase === 'downloading' && cur.progress ? fractionOf(cur.progress) : null
+  const label = !cur
+    ? null
+    : cur.phase === 'connecting'
+      ? t('library.download.connectingShort')
+      : cur.phase === 'parsing'
+        ? t('library.download.parsingShort')
+        : cur.stalled
+          ? t('library.download.stalledShort')
+          : null
+  return (
+    <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-background/75" role="status">
+      {frac != null ? (
+        <span className="relative flex size-11 items-center justify-center">
+          <svg viewBox="0 0 44 44" className="absolute inset-0 -rotate-90" aria-hidden="true">
+            <circle cx="22" cy="22" r={RING_R} fill="none" strokeWidth="4" className="stroke-muted" />
+            <circle
+              cx="22"
+              cy="22"
+              r={RING_R}
+              fill="none"
+              strokeWidth="4"
+              strokeLinecap="round"
+              className="stroke-primary transition-[stroke-dashoffset] duration-200"
+              strokeDasharray={RING_C}
+              strokeDashoffset={RING_C * (1 - frac)}
+            />
+          </svg>
+          <span className="text-xs font-medium tabular-nums">{Math.floor(frac * 100)}%</span>
+        </span>
+      ) : (
+        <Loader2 className="size-5 animate-spin" />
+      )}
+      {label && <span className="px-1 text-center text-xs leading-tight text-muted-foreground">{label}</span>}
+    </span>
+  )
+}
 
 interface BookCardProps {
   entry: LibraryEntry
@@ -124,11 +174,7 @@ export function BookCard({ entry, opening, disabled, onOpen, onInfo, caption, sh
             <span className="block h-full bg-primary" style={{ width: `${pct}%` }} />
           </span>
         )}
-        {opening && (
-          <span className="absolute inset-0 flex items-center justify-center bg-background/70">
-            <Loader2 className="size-5 animate-spin" />
-          </span>
-        )}
+        {opening && <OpeningOverlay path={entry.path} />}
       </div>
 
     </button>
