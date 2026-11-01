@@ -5,6 +5,7 @@
  * 导致已配置密钥的服务商也显示「未配置 API Key」。现在改看 hasCredentials（服务端 {hasSecret}）。
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { act } from 'react'
 import i18n from '../src/i18n'
 import { mount, click, flush, stubDomForRadix, type Mounted } from './uiTestUtils'
 import { ModelSwitcher } from '../src/components/ModelSwitcher'
@@ -73,7 +74,9 @@ describe('ModelSwitcher', () => {
     useAIConfigStore.getState().replaceAI(state(true))
     m = mount(<ModelSwitcher />)
     const trigger = m.container.querySelector('button')!
-    trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, ctrlKey: false, pointerType: 'mouse' }))
+    act(() => {
+      trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, ctrlKey: false, pointerType: 'mouse' }))
+    })
     await flush()
 
     const options = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="option"]'))

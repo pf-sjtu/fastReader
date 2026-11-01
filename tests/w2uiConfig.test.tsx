@@ -5,6 +5,7 @@
  * 分别见 AIProviderConfig / config/ProviderWizard。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act } from 'react'
 import i18n from '../src/i18n'
 import { mount, click, findButton, flush, typeInto, waitFor, stubDomForRadix, selectOption, type Mounted } from './uiTestUtils'
 
@@ -57,8 +58,10 @@ const byId = <T extends Element = HTMLInputElement>(id: string) => document.getE
 /** Textarea 的受控赋值（typeInto 只支持 input） */
 function typeIntoTextarea(el: HTMLTextAreaElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
-  setter?.call(el, value)
-  el.dispatchEvent(new Event('input', { bubbles: true }))
+  act(() => {
+    setter?.call(el, value)
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  })
 }
 
 // Radix 弹层 + 多次异步交互，全量并行跑时单测可能超过默认 5s
@@ -273,9 +276,11 @@ describe('服务商面板（服务商维度 + 多模型）', () => {
   it('新建向导：先选服务商，再填凭据与模型', async () => {
     m = mount(<AIProviderConfig />)
     click(findButton(t('aiProvider.add')))
+    await flush()
     // 第一步：预设列表
     expect(document.body.textContent).toContain(t('aiProvider.wizard.step1'))
     click(findButton(new RegExp(t('aiProvider.wizard.fixed.openai'))))
+    await flush()
     // 第二步：凭据
     expect(document.body.textContent).toContain(t('aiProvider.wizard.step2'))
     typeInto(byId('wizard-base-url')!, 'https://new.example/v1')

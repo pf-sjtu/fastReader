@@ -1,6 +1,8 @@
 import i18n from '../../src/i18n'
 import { describe, it, expect, afterEach, beforeAll, afterAll, vi } from 'vitest'
-import { mount, click, findButton, type Mounted } from '../uiTestUtils'
+import { mount, click, findButton, flush, type Mounted } from '../uiTestUtils'
+import { useLibraryStore } from '@/services/library/libraryStore'
+import { applyScan, emptyIndex } from '@/services/library/libraryIndex'
 import { ConfigStep } from '@/components/app/ConfigStep'
 import { UnifiedStatusBar } from '@/components/UnifiedStatusBar'
 import type { BookProcessing } from '@/components/app/types'
@@ -34,8 +36,17 @@ const props = {
 const emptyBook = { file: null } as unknown as BookProcessing
 
 describe('配置页的「书库 / 处理」两段', () => {
-  it('书库段：只渲染书架，不出现上传与配置卡', () => {
+  it('书库段：只渲染书架，不出现上传与配置卡', async () => {
+    // 书架有数据、数据源加载动作为空操作：避免异步加载把空状态写回而触发 act 警告
+    useLibraryStore.setState({
+      index: applyScan(emptyIndex(0), [{ path: '/s/甲.epub', size: 1, mtime: 'm' }], { now: 1, summaryNameOf: (n) => `${n}-完整摘要.md`, summaryNames: new Set() }).index,
+      fresh: true,
+      error: null,
+      loadCatalog: vi.fn().mockResolvedValue(undefined),
+      loadMirror: vi.fn().mockResolvedValue(undefined),
+    })
     m = mount(<ConfigStep {...props} book={emptyBook} section="library" />)
+    await flush()
     expect(m.container.querySelector('[aria-label="我的书库"]')).toBeTruthy()
     expect(m.container.textContent).not.toContain('文件上传与配置')
   })

@@ -217,7 +217,9 @@ describe('useBookProcessing 组合入口', () => {
     await flush()
     const done = h.toast.success.mock.calls.at(-1)
     expect(done?.[1]).toMatchObject({ description: expect.stringContaining('1.2 万') })
-    ;(useConfigStore as unknown as { setState: (s: object) => void }).setState({ tokenUsage: 0 })
+    act(() => {
+      ;(useConfigStore as unknown as { setState: (s: object) => void }).setState({ tokenUsage: 0 })
+    })
     m.unmount()
   })
 

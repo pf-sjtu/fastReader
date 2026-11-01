@@ -1,6 +1,6 @@
 import i18n from '../../src/i18n'
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll, beforeEach } from 'vitest'
-import { mount } from '../uiTestUtils'
+import { mount, flush } from '../uiTestUtils'
 
 vi.mock('@/services/webdavService', () => ({
   webdavService: { isInitialized: () => false, onInitialized: () => () => {} },
@@ -54,9 +54,10 @@ describe('书库首屏：推荐总是整行（数量 = 列数 × 2）', () => {
     [1280, 16], // lg：8 列
     [800, 12], // sm：6 列
     [400, 8], // 手机：4 列
-  ])('视口 %ipx → %i 本', (width, expected) => {
+  ])('视口 %ipx → %i 本', async (width, expected) => {
     setViewport(width)
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
+    await flush()
     expect(recCount()).toBe(expected)
   })
 })

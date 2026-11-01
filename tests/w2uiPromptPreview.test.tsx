@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { act } from 'react'
 import i18n from '../src/i18n'
 import { mount, click, findButton, stubDomForRadix, type Mounted } from './uiTestUtils'
 import { buildPromptPreview } from '../src/components/project/promptPreview'
@@ -86,7 +87,7 @@ describe('PromptEditor：改用 v2 提示词（v3 评测未完成时的回退出
     expect(cfg.overallSummary).toBe(LEGACY_V2_PROMPT_CONFIG.overallSummary) // 自定义被覆盖
     expect(findButton(t('promptEditor.useV2'))!.disabled).toBe(true)
 
-    store().resetAllPrompts()
+    act(() => store().resetAllPrompts())
     expect(store().promptConfig.chapterSummary.nonFiction).toContain('<!--juhua:meta-->')
   })
 })
