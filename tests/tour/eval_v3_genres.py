@@ -32,6 +32,29 @@ EN_NONFIC = (
     "such as the UK Treasury for large infrastructure bids, reduced overruns, though political incentives still "
     "reward optimism. The chapter closes by noting that awareness alone does not cure the bias."
 ) * 2
+# 长样本（约 450 词、不重复）：排除「原文太短，内容段为凑下限字数而扩写」的混淆
+EN_NONFIC_LONG = (
+    "Chapter 7. When a Measure Becomes a Target. In 1975 the economist Charles Goodhart, advising the Bank of England, "
+    "observed that any statistical regularity tends to collapse once pressure is placed upon it for control purposes. "
+    "The anthropologist Marilyn Strathern later gave the idea its popular wording: when a measure becomes a target, it "
+    "ceases to be a good measure. This chapter traces the pattern through four cases. The first is the Soviet nail "
+    "factory. When planners set output targets by weight, factories produced a few enormous, useless nails; when the "
+    "targets were switched to count, they produced millions of tiny ones. The second case is the 2016 Wells Fargo sales "
+    "scandal, in which employees, pressed to open eight accounts per household, opened roughly two million accounts "
+    "without customer consent; the bank paid 185 million dollars in penalties and its chief executive resigned. The third "
+    "is hospital waiting times in England, where a four-hour emergency target led some trusts to hold ambulances outside "
+    "the building so the clock would not start. The fourth is academic citation counts, which the author says encouraged "
+    "citation rings and salami-sliced papers, though he concedes the evidence on how widespread this is remains thin. "
+    "The author distinguishes two mechanisms. In regressional gaming a proxy and the true goal merely drift apart under "
+    "optimisation; in adversarial gaming agents deliberately exploit the gap. He argues that the second is far more "
+    "damaging because it is a moving target: each fix invites a new workaround. Against the fashionable remedy of adding "
+    "more metrics, he is sceptical, noting that a dashboard of forty indicators simply gives gamers forty surfaces to "
+    "game. His proposal is modest: pair every quantitative target with a qualitative review by someone who knows the work, "
+    "rotate the metrics periodically so that workarounds do not harden, and keep some measures deliberately secret from "
+    "those being measured. He admits the last suggestion sits uneasily with demands for transparency. The chapter ends "
+    "with a caution that none of this makes measurement worthless; the failure lies in treating a number as the goal "
+    "itself rather than as evidence about the goal."
+)
 ZH_FIC = (
     "第十二章 雪夜。腊月二十三，大雪封了山路。林舟把最后一块炭添进火盆，听见院门被人拍响。门外站着三年没有音讯的"
     "哥哥林渡，棉袍上结着冰，怀里却抱着一只用红布裹着的木匣。母亲从里屋出来，手里的灯晃了一下，什么也没问，只让他进屋。"
@@ -63,6 +86,7 @@ PDF_NOISE = (
 
 SAMPLES = [
     ("英文非虚构", "non-fiction", EN_NONFIC, "Chapter 4. The Planning Fallacy"),
+    ("英文非虚构长", "non-fiction", EN_NONFIC_LONG, "Chapter 7. When a Measure Becomes a Target"),
     ("中文小说", "fiction", ZH_FIC, "第十二章 雪夜"),
     ("英文小说", "fiction", EN_FIC, "Chapter Nine. The Lighthouse Keeper's Daughter"),
     ("PDF 噪声", "non-fiction", PDF_NOISE, "Minimum Wages and Employment"),
@@ -73,6 +97,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=int, default=2)
     ap.add_argument("--out", default=".tmp/eval-genres")
+    ap.add_argument("--only", default="", help="只跑名称包含该子串的样本")
     args = ap.parse_args()
     env = read_env(str(ROOT / ".env"))
     model = Model(env["VITE_TEST_LLM_BASE_URL"], env["VITE_TEST_LLM_API_KEY"], env.get("VITE_TEST_LLM_MODEL", "MiniMax-M3"))
@@ -81,6 +106,8 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     rows = []
     for label, btype, text, title in SAMPLES:
+        if args.only and args.only not in label:
+            continue
         for run in range(args.runs):
             prompt = tpl.build_chapter_prompt(title, text, btype) + "\n\n请用中文输出。"
             try:
