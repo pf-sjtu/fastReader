@@ -13,6 +13,7 @@ import type { AICallOptions } from '@/services/ai/types'
 import type { SupportedLanguage } from '@/services/prompts/utils'
 import { mapPoolOrdered } from '@/utils/async'
 import { prepareChapterInput } from '@/utils/chapterInput'
+import sharedStrings from '../prompts/config/shared-strings.json'
 import { richBlockCount } from '@/lib/richBlocks'
 import { repairRichBlocks, type RepairAnswer, type RepairItem } from './richRepair'
 import { markChapterFailed, usableOrEmpty, promptChapters } from '@/utils/chapterResults'
@@ -185,7 +186,7 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
     const blocking = (issues: QualityIssue[]) => issues.filter((i) => i !== 'noMeta')
     let cur = await run()
     if (blocking(cur.issues).length > 0) {
-      const hint = '正文字数不足，须按要求写足篇幅并覆盖本章全部论点'
+      const hint = sharedStrings.rewriteHintTooShort
       throwIfAborted()
       // 重写是又一次付费调用：同样要过限速，且它失败（429/网络）不能连累已经可用的首轮结果
       await input.afterChapterAI?.()

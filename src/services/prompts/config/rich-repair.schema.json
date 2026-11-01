@@ -1,0 +1,22 @@
+{
+  "name": "rich_block_fixes",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["fixes"],
+    "properties": {
+      "fixes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "code"],
+          "properties": {
+            "id": { "type": "integer" },
+            "code": { "type": ["string", "null"] }
+          }
+        }
+      }
+    }
+  }
+}

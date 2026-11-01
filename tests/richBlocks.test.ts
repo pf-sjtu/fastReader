@@ -93,3 +93,37 @@ describe('promptChapters：送进下游 prompt 的章节剔除富内容块', () 
     expect(rich.summary).toContain('mermaid') // 原对象不被修改（展示、云端上传仍要完整原文）
   })
 })
+
+// ---- 与 CLI（src/cli/rich_blocks.py 等）共享的契约夹具：两端必须给出完全相同的结果 ----
+import cases from './fixtures/rich-blocks/cases.json'
+import { listRichBlocks } from '@/lib/richBlocks'
+import { parseGenUi } from '@/components/markdown/genui/schema'
+import { diagnoseBlock } from '@/services/pipeline/richRepair'
+
+describe('与 CLI 共享的契约夹具', () => {
+  for (const c of cases.strip) {
+    it(`strip：${c.name}`, () => {
+      expect(stripRichBlocks(c.input)).toBe(c.prose)
+      expect(proseLength(c.input)).toBe(c.prose.trim().length)
+    })
+  }
+  for (const c of cases.list) {
+    it(`list：${c.name}`, () => {
+      expect(listRichBlocks(c.input).map((b) => ({ lang: b.lang, code: b.code, truncated: b.truncated }))).toEqual(c.blocks)
+    })
+  }
+  for (const c of cases.genui) {
+    it(`genui：${c.name}`, () => {
+      const r = parseGenUi(c.code)
+      expect(r.ok).toBe(c.ok)
+      if (r.ok) expect(r.nodes.map((n) => n.type)).toEqual(c.types)
+      else expect(r.error).toBe(c.error)
+    })
+  }
+  for (const c of cases.diagnose) {
+    it(`diagnose：${c.name}`, async () => {
+      const got = await diagnoseBlock({ lang: c.lang as 'mermaid' | 'genui' | 'html', code: c.code, truncated: c.truncated }, { mermaid: async () => null })
+      expect(got).toBe(c.error)
+    })
+  }
+})

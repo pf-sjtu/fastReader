@@ -59,7 +59,7 @@
 - [x] 8.1 排查并修复"暂无内容可上传"（无本地源文件时不渲染上传按钮）
 - [x] 8.2 同步更新受影响测试：`uiRender`、`uiComponents`、`fixUiE2e`、`w2pipeHook`
 - [ ] 8.3 i18n zh/en 补齐；明暗主题与 375/768/1440 走查
-- [ ] 8.4 `pnpm test`、`pnpm build`、`pnpm check:functions` 通过
+- [x] 8.4 `pnpm test`、`pnpm build`、`pnpm check:functions` 通过（2026-11-01 复验：vitest 1871 通过 / 23 跳过、`pnpm build` 通过、8 个 Functions 入口打包通过；本轮后续改动仍需再跑）
 - [ ] 8.5 独立 Reviewer（devils_advocate）审查并处理结论
 - [ ] 8.6 更新 README 与项目 CLAUDE.md
 
@@ -97,8 +97,9 @@
 - [ ] 10.12 设计系统收敛（规格 design-system）——**部分完成**。已做：index.css 的 `.t-*` 文字角色 + `--success/--warning/--info` token；`CardTitle/DialogTitle/SheetTitle` 默认 `t-title`；调色板色/裸圆角/≤11px/12px 图标批量迁移；`tests/designSystem.test.ts` 守卫。**未做**：`SectionHeading`/`PanelTitle`/列表行/骨架屏共享组件（规格已改为「角色类」口径，但列表行/骨架屏仍各页自拼）；按钮高度 h-7/8/9/10 混用；`--danger` 与 `-foreground/-muted` 系 token；约 40 处手写分部标题未迁；`EmptyState` 仅一处使用；守卫只扫 `.tsx`，漏 `.ts` 里的类名与 `cn()` 拼接
 - [ ] 10.13 产物持久化与清理（**部分完成**，设计见 `docs/artifact-store.md`：**已做**：逐类判断；WebDAV 过时产物清理（旧版格式 / 悬空附件 / 书已不在三级，强制重扫 + 新鲜完整扫描闸 + 二次确认）；速读 / 自测在章节总结稳定后自动生成（可关）；章节链接统一悬浮速读卡。**未做**：速读 / 自测 / 笔记的 WebDAV 信封（`.juhua/books/<bookKey>/<kind>.json.gz`，笔记条目级合并 + 墓碑）；`inputsFp` 过时判定并入清理）
 - [x] 10.14 书籍下载进度（用户要求：处理前的下载要有进度环/条、速度、预计完成时间，让用户知道没卡死）：流式读取响应体，`Content-Length` 缺失时回退书库索引里的 `size`；平滑速度 + ETA；久无数据显示「连接较慢，仍在等待」；可取消；书卡进度环 + 全局 toast；阶段标签（连接 → 下载 → 解析）。**未做**
-- [ ] 10.15 总结支持富内容块（用户要求）：模型可选输出 ```mermaid / ```genui（JSON 规格，原生组件渲染）/ ```html（沙箱 iframe）；仅在帮助理解复杂 / 抽象内容时用；**不计入字数**（质量闸、压缩阈值、加粗上限、下游 prompt 输入一律剔除）；前端渲染必须完美且容错（解析失败 / 渲染失败 / 超长 / 脚本出错都回退为源码并提示，不拖垮整页）；提示词同步升级，**文字部分的质量与长度不得下降**。**未做**
-- [ ] 10.16 章末提问样式（用户要求）：颜色变浅、字体与字号区别于正文，前置浅色虚线分隔；兼容「有换行」和「无换行（挤在一段里）」两种输出，渲染与落盘都统一成每问一行。**未做**
+- [x] 10.15 总结支持富内容块（**已落地 0574f3e + 9c5d0af，与 CLI 镜像**）：模型可选输出 ```mermaid / ```genui（JSON 规格，原生组件渲染）/ ```html（沙箱 iframe）；仅在帮助理解复杂 / 抽象内容时用；**不计入字数**（质量闸、压缩阈值、加粗上限、下游 prompt 输入一律剔除，`richBlocks.ts` ↔ `rich_blocks.py`，共享夹具 `tests/fixtures/rich-blocks/cases.json`）；容错渲染（解析 / 渲染 / 超长 / 脚本出错都回退为源码并提示，`RichBlock.tsx` + `richBlockUi.test.tsx`）；坏块生成后统一修复（只发坏块 + 80 字前文，修好复检通过才写回、仍坏则删，`richRepair.ts` ↔ `rich_repair.py`，共用 `rich-repair.schema.json`）
+- [x] 10.16 章末提问样式（**已落地 9c5d0af**）：颜色变浅、字体与字号区别于正文，前置浅色虚线分隔；兼容「有换行」和「无换行（挤在一段里）」两种输出，渲染与落盘都统一成每问一行（`tailQuestions.ts` ↔ `chapter_meta.py` 的 `_normalize_tail_questions`，`tailQuestions.test.tsx` 覆盖）
 - [ ] 10.17 本轮已完成并推送、待独立审查（8.5 同款）：自动生成速读 / 自测（可关）、`ChapterPeek` 章节悬浮速读卡、对照栏页签「图标 + 文字」逐级退让（`planDockLayout`）、WebDAV 过时产物清理、书卡右上角主分类、超宽屏断点修复（px→rem 层叠顺序）、`useFillHeight`、问书 Markdown 渲染与引用标签、两本期权书分类修正（本地 RR / WebDAV / KV 已核实）
 - [ ] 10.18 备忘（延后）：服务端索引并发写根治（Durable Object / D1）与 M5 索引解析开销实测；`cleanMeta` 两端契约样例（L1）；`PUT` 校验 webp 魔数（L6）；换家族评判 / 小说·PDF·英文书评测；笔记云同步与正文高亮、离线学习包；章节调用的书级上下文快照与提示词缓存友好排序；跨设备续读；设计系统 10.12 余项；测试里 `act(...)` 警告清零
 - [ ] 10.19 待用户：登录线上实测（云端书架 / ETag / 补全 / 打开虚拟条目 / 新页签 / 清理产物）；两本期权书改分类后的 Readest 同步（退出 Readest 后执行 `sync_rr_to_readest` / `refresh_readest_groups_from_opf`）；`.env` 里 `FASTREADER_MAX_FILES` / `FASTREADER_SOURCE_PATH` 取舍
+- [x] 10.20 CLI 与网页处理镜像等效（用户要求：「cli的自动化处理确保和web在线是镜像等效的」「提示词都要抽离、共享」）：提示词与 schema 全部抽到 `src/services/prompts/config/`（`study-kit.md` / `quiz.md` / `ask-book.md` / `key-charts.md` / `rich-repair.md` / `language-instructions.json` / `shared-strings.json` / `{study-kit,quiz,rich-repair}.schema.json`），前端 `getStudyKitPrompt` 等与 CLI `load_shared_text` 读同一份文件，两端的「禁止再内联」守卫锁死（`tests/promptsShared.test.ts` 扫 `services/prompts|ai/*.ts` 的 ≥200 字「你是」模板、`tests/python/test_cli_shared_prompts.py`）。CLI 补齐 v3 章节流程：`chapter_meta.py` 拆旁路 + 程序化清理 + 质量闸（`check_summary_quality`），`chapter_summarizer.py` 质量闸定向重写一次（采用条件与前端逐字相同、两次都计费）+ 富内容块修复（token 记第一章）+ 下游 prompt 只喂正文；结构化输出两端同策略（`src/cli/structured.py` ↔ `src/services/ai/structured.ts`：schema → json → 不带，降级成功才记档，经 `state:modelQuirks` 与浏览器互认）；降级顺序把「结构化参数被拒」排在思考参数之前，避免把这类 400 误判成不支持思考。等效性由 `tests/python/test_cli_parity.py`、`test_cli_rich_blocks.py`、`test_cli_shared_prompts.py` 与共享夹具锁定（pytest 493 通过）。**未做**：CLI 只有 summary 模式，不生成速读包 / 自测 / 问书 / 关键图表（只与前端共用它们的提示词文件）

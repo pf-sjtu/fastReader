@@ -1,0 +1,84 @@
+{
+  "_doc": "富内容块的跨端契约：前端 src/lib/richBlocks.ts + genui/schema.ts 与 CLI src/cli/rich_blocks.py + genui_schema.py 必须给出完全相同的结果。mermaid 的语法校验两端不同（前端用真实解析器，CLI 只做结构检查），不在此列。",
+  "strip": [
+    {
+      "name": "没有块：原样",
+      "input": "企业像生命体。\n\n每个阶段有风险。",
+      "prose": "企业像生命体。\n\n每个阶段有风险。"
+    },
+    {
+      "name": "三种围栏都剔除，空行规整",
+      "input": "前。\n\n```mermaid\ngraph LR\n  A-->B\n```\n\n中。\n\n```genui\n{\"type\":\"callout\",\"body\":\"x\"}\n```\n\n```html\n<p>x</p>\n```\n\n后。",
+      "prose": "前。\n\n中。\n\n后。"
+    },
+    {
+      "name": "普通代码块不当作富内容块",
+      "input": "说明：\n\n```python\nprint(1)\n```\n",
+      "prose": "说明：\n\n```python\nprint(1)\n```\n"
+    },
+    {
+      "name": "~~~ 围栏与 info string 也认，语言名大小写不敏感",
+      "input": "正文\n\n~~~Mermaid title=\"x\"\ngraph TD\n~~~\n\n尾",
+      "prose": "正文\n\n尾"
+    },
+    {
+      "name": "更长的围栏：内部出现 ``` 不会提前结束",
+      "input": "前\n\n````html\n<pre>```\ncode\n```</pre>\n````\n\n后",
+      "prose": "前\n\n后"
+    },
+    {
+      "name": "未闭合（被截断）：到文末都算块",
+      "input": "正文。\n\n```mermaid\ngraph LR\n  A --> B\n  B --> ",
+      "prose": "正文。\n\n"
+    }
+  ],
+  "list": [
+    {
+      "name": "闭合 + 未闭合尾块",
+      "input": "前\n\n```mermaid\ngraph LR\nA-->B\n```\n\n中\n\n```genui\n{\"type\":",
+      "blocks": [
+        { "lang": "mermaid", "code": "graph LR\nA-->B", "truncated": false },
+        { "lang": "genui", "code": "{\"type\":", "truncated": true }
+      ]
+    },
+    {
+      "name": "空块与大小写",
+      "input": "```HTML\n\n```",
+      "blocks": [{ "lang": "html", "code": "", "truncated": false }]
+    },
+    {
+      "name": "没有块",
+      "input": "只有正文",
+      "blocks": []
+    }
+  ],
+  "genui": [
+    {
+      "name": "七种组件各自可解析",
+      "code": "[{\"type\":\"steps\",\"items\":[{\"label\":\"孕育\"},\"婴儿\"]},{\"type\":\"compare\",\"columns\":[\"A\",\"B\"],\"rows\":[{\"label\":\"风险\",\"cells\":[\"高\",\"低\"]}]},{\"type\":\"timeline\",\"items\":[{\"time\":\"1990\",\"label\":\"创立\"}]},{\"type\":\"cards\",\"items\":[{\"title\":\"甲\",\"body\":\"乙\"}]},{\"type\":\"callout\",\"tone\":\"warn\",\"body\":\"注意\"},{\"type\":\"tabs\",\"tabs\":[{\"label\":\"一\",\"body\":\"内容\"}]},{\"type\":\"quiz\",\"question\":\"谁？\",\"options\":[\"甲\",\"乙\"],\"answer\":1}]",
+      "ok": true,
+      "types": ["steps", "compare", "timeline", "cards", "callout", "tabs", "quiz"]
+    },
+    { "name": "单个节点", "code": "{\"type\":\"callout\",\"body\":\"x\"}", "ok": true, "types": ["callout"] },
+    { "name": "{blocks:[…]} 写法", "code": "{\"blocks\":[{\"type\":\"callout\",\"body\":\"x\"}]}", "ok": true, "types": ["callout"] },
+    { "name": "尾逗号 + 行注释宽容", "code": "// 说明\n{\"type\":\"steps\",\"items\":[{\"label\":\"甲\"},{\"label\":\"乙\"},]}", "ok": true, "types": ["steps"] },
+    { "name": "坏节点丢弃，其余保留", "code": "[{\"type\":\"nope\"},{\"type\":\"callout\",\"body\":\"好\"},{\"type\":\"steps\",\"items\":[]}]", "ok": true, "types": ["callout"] },
+    { "name": "全部读不出来", "code": "[{\"type\":\"nope\"}]", "ok": false, "error": "没有可渲染的组件" },
+    { "name": "不是 JSON", "code": "不是 JSON", "ok": false, "error": "JSON 无法解析" },
+    { "name": "测验：答案越界", "code": "{\"type\":\"quiz\",\"question\":\"q\",\"options\":[\"a\",\"b\"],\"answer\":2}", "ok": false, "error": "没有可渲染的组件" },
+    { "name": "测验：选项不足 2 个", "code": "{\"type\":\"quiz\",\"question\":\"q\",\"options\":[\"a\"],\"answer\":0}", "ok": false, "error": "没有可渲染的组件" },
+    { "name": "测验：答案是数字字符串", "code": "{\"type\":\"quiz\",\"question\":\"q\",\"options\":[\"a\",\"b\"],\"answer\":\"0\"}", "ok": true, "types": ["quiz"] },
+    { "name": "测验：答案为 null 不是第 0 项", "code": "{\"type\":\"quiz\",\"question\":\"q\",\"options\":[\"a\",\"b\"],\"answer\":null}", "ok": false, "error": "没有可渲染的组件" },
+    { "name": "测验：答案为小数", "code": "{\"type\":\"quiz\",\"question\":\"q\",\"options\":[\"a\",\"b\"],\"answer\":1.5}", "ok": false, "error": "没有可渲染的组件" },
+    { "name": "对比表：没有列", "code": "{\"type\":\"compare\",\"columns\":[],\"rows\":[{\"label\":\"r\",\"cells\":[]}]}", "ok": false, "error": "没有可渲染的组件" },
+    { "name": "type 大小写不敏感", "code": "{\"type\":\"CALLOUT\",\"body\":\"x\"}", "ok": true, "types": ["callout"] },
+    { "name": "空串", "code": "", "ok": false, "error": "JSON 无法解析" }
+  ],
+  "diagnose": [
+    { "name": "闭合的 genui 好块", "lang": "genui", "code": "{\"type\":\"callout\",\"body\":\"x\"}", "truncated": false, "error": null },
+    { "name": "genui 坏 JSON", "lang": "genui", "code": "{坏", "truncated": false, "error": "JSON 无法解析" },
+    { "name": "html 空", "lang": "html", "code": "  ", "truncated": false, "error": "内容为空" },
+    { "name": "html 正常", "lang": "html", "code": "<p>x</p>", "truncated": false, "error": null },
+    { "name": "未闭合一律是坏块", "lang": "mermaid", "code": "graph LR\nA-->", "truncated": true, "error": "代码块没有结束围栏（输出被截断）" }
+  ]
+}

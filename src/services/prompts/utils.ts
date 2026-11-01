@@ -1,5 +1,6 @@
 // Prompt工具函数
 import i18n from '@/i18n'
+import languageInstructions from './config/language-instructions.json'
 
 /**
  * 语言类型定义
@@ -21,21 +22,6 @@ export function resolveAutoLanguage(): 'zh' | 'en' {
  */
 export const getLanguageInstruction = (language: SupportedLanguage = 'en'): string => {
   const resolved = language === 'auto' ? resolveAutoLanguage() : language
-  switch (resolved) {
-    case 'zh':
-      return '请用中文回复。'
-    case 'ja':
-      return '日本語で回答してください。'
-    case 'fr':
-      return 'Veuillez répondre en français.'
-    case 'de':
-      return 'Bitte antworten Sie auf Deutsch.'
-    case 'es':
-      return 'Por favor responda en español.'
-    case 'ru':
-      return 'Пожалуйста, отвечайте на русском языке.'
-    case 'en':
-    default:
-      return 'Please respond in English.'
-  }
+  const table = languageInstructions as Record<string, string>
+  return table[resolved] ?? table.en
 }

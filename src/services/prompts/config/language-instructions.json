@@ -1,0 +1,11 @@
+{
+  "_doc": "输出语言指令。auto 在前端由界面语言决定（zh* → zh，其它 → en），CLI 没有界面，用 autoNoUi 的双语指令",
+  "zh": "请用中文回复。",
+  "en": "Please respond in English.",
+  "ja": "日本語で回答してください。",
+  "fr": "Veuillez répondre en français.",
+  "de": "Bitte antworten Sie auf Deutsch.",
+  "es": "Por favor responda en español.",
+  "ru": "Пожалуйста, отвечайте на русском языке.",
+  "autoNoUi": "请使用与原书相同的语言回复。Please respond in the same language as the original book."
+}

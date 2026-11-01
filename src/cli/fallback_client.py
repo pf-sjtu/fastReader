@@ -120,6 +120,10 @@ class FallbackAIClient:
     def generate_overall_summary(self, *args, **kwargs) -> AIResponse:
         return self._with_fallback("generate_overall_summary", *args, **kwargs)
 
+    def repair_rich_blocks(self, *args, **kwargs):
+        """富内容块修复：改的是模型自己刚写的块（不涉及原文内容审核），不走备用模型"""
+        return self.primary.repair_rich_blocks(*args, **kwargs)
+
     @property
     def prompts(self):  # 供 batch_processor 读取提示词版本等
         return self.primary.prompts

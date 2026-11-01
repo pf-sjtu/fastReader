@@ -80,7 +80,8 @@ function parseNode(raw: unknown): GenUiNode | null {
     }
     case 'quiz': {
       const options = arr(r.options).map((o) => text(o, 120)).filter(Boolean).slice(0, L.options)
-      const answer = Number(r.answer)
+      // 只认数字或非空数字字符串（Number(null) / Number('') / Number(true) 会得到 0 / 1，不能当作「选第 0 项」）
+      const answer = typeof r.answer === 'number' || (typeof r.answer === 'string' && r.answer.trim() !== '') ? Number(r.answer) : NaN
       // 答案必须落在选项里：否则这道题没法判分，宁可整题丢掉
       if (!text(r.question) || options.length < 2 || !Number.isInteger(answer) || answer < 0 || answer >= options.length) return null
       return { type: 'quiz', question: text(r.question), options, answer, explain: opt(r.explain ?? r.explanation) }

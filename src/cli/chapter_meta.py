@@ -10,6 +10,8 @@ import json
 import re
 from typing import Optional
 
+from .rich_blocks import prose_length, split_by_fences
+
 META_MARK = "<!--juhua:meta-->"
 _META_MARK_RE = re.compile(r"<!--\s*juhua:meta\s*-->", re.IGNORECASE)
 
@@ -24,8 +26,6 @@ _GREETING_LINE_RE = re.compile(
 )
 # 模型漏写标记、只在末尾给了 ```json 元数据代码块
 _TRAILING_FENCE_RE = re.compile(r"```json\s*(\{[\s\S]*?\})\s*```\s*$", re.IGNORECASE)
-# 任意围栏代码块（含 mermaid / genui / html 富内容块）：``` 或 ~~~，3 个以上，同种不更短的围栏闭栏（与前端 splitByFences 一致）
-_ANY_FENCE_RE = re.compile(r"(^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n[ \t]{0,3}\2[ \t]*$)", re.MULTILINE)
 
 
 def _first_json_object(raw: str) -> Optional[str]:
@@ -142,11 +142,6 @@ def _sanitize_prose(part: str) -> str:
     )
 
 
-def _split_by_fences(md: str) -> list[str]:
-    """偶数下标是正文、奇数下标是围栏块；拼回去等于原文"""
-    return [p for i, p in enumerate(_ANY_FENCE_RE.split(md)) if i % 3 != 2]
-
-
 # ---- 章末「启发性问题」统一成每题一段（与前端 src/lib/tailQuestions.ts 一致） ----
 _Q_MARK_RE = re.compile(r"^\s*(?:[-*+]|\d{1,2}[.、)）]|[（(]\d{1,2}[)）]|Q\d{1,2}\s*[:：.])\s*", re.IGNORECASE)
 _Q_END_RE = re.compile(r"[？?]$")
@@ -188,7 +183,7 @@ def _normalize_tail_questions(prose: str) -> str:
 def sanitize_summary(text: str) -> str:
     """程序化修复 AI 常见的格式违规：标题符号、分割线、加粗斜体、滥用的反引号、超限的加粗、开头客套话"""
     # 围栏代码块（含富内容块）整体不动：里面的 # 是注释、--- 是内容、** 是源码
-    parts = [p if i % 2 == 1 else _sanitize_prose(p) for i, p in enumerate(_split_by_fences(text))]
+    parts = [p if i % 2 == 1 else _sanitize_prose(p) for i, p in enumerate(split_by_fences(text))]
 
     # 加粗上限只数正文里的；超限时保留最短的几处（主旨句通常短）
     bolds = [m for k in range(0, len(parts), 2) for m in _BOLD_RE.finditer(parts[k])]
@@ -214,3 +209,17 @@ def clean_chapter_summary(raw: str) -> str:
     """CLI 用：拆旁路 + 清理，返回可直接写入输出的正文"""
     text, _ = split_chapter_meta(raw)
     return sanitize_summary(text)
+
+
+def check_summary_quality(text: str, input_chars: int, expect_meta: bool, has_meta: bool) -> list[str]:
+    """质量问题列表（'tooShort' / 'noMeta'）；与前端 checkSummaryQuality 一致，字数不含富内容块"""
+    issues: list[str] = []
+    body = (text or "").strip()
+    # 「无需总结」可能带引号 / 说明：没有旁路的短输出一律不当作「过短」
+    if re.match(r"^[\s\"“\'「《]*无需总结", body):
+        return issues
+    if has_meta and input_chars >= 1500 and prose_length(body) < 150:
+        issues.append("tooShort")
+    if expect_meta and not has_meta:
+        issues.append("noMeta")
+    return issues

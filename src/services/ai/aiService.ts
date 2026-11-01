@@ -29,6 +29,7 @@ import {
 } from '../prompts'
 import { parseCharts, type BookCharts } from '../../charts'
 import { extractJsonObject } from '../../charts/parseCharts'
+import sharedStrings from '../prompts/config/shared-strings.json'
 import { JSON_MODE, QUIZ_FORMAT, RICH_REPAIR_FORMAT, STUDY_KIT_FORMAT } from './structured'
 import { parseQuiz, parseStudyKit, type Quiz, type StudyChapter, type StudyKit } from '../../study/schema'
 import { getLanguageInstruction } from '../prompts/utils'
@@ -335,7 +336,7 @@ export class AIService {
         : promptConfig.chapterSummary.nonFiction || getNonFictionChapterSummaryPrompt()
 
     const prompt = customPrompt || basePrompt
-    const withHint = opts?.rewriteHint ? `${prompt}\n\n## 上一次输出存在的问题（本次必须避免）\n${opts.rewriteHint}` : prompt
+    const withHint = opts?.rewriteHint ? `${prompt}\n\n${sharedStrings.rewriteHeader}\n${opts.rewriteHint}` : prompt
     return this.generateForLongContent(withHint, chapterTitle, chapterContent, outputLanguage, opts)
   }
 

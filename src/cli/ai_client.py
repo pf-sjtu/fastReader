@@ -6,6 +6,7 @@ Prompt 组装统一走 prompts.PromptTemplates（与前端共享 YAML），
 各 provider 只实现一次底层调用 _call；重试/超时/错误归一在基类完成。
 """
 
+import json
 import re
 from typing import Optional
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from .model_budget import (  # noqa: F401  parse_max_tokens_cap / resolve_max_ou
     is_temperature_param_error, next_output_cap, parse_max_tokens_cap, resolve_input_budget,
     resolve_max_output_tokens, resolve_post_process_limits, split_by_budget,
 )
+from .structured import RICH_REPAIR_FORMAT, initial_tier, is_structured_format_error
 from .model_quirks import QuirkStore, quirk_key
 from .prompts import (
     PromptTemplates,
@@ -145,6 +147,9 @@ class AIClient:
         self.learned_output_cap: Optional[int] = learned.get('outputCap')
         # OpenAI 推理模型只认 max_completion_tokens；None 表示不发该参数
         self.token_param: Optional[str] = learned.get('tokenParam', 'max_tokens')
+        # 结构化输出档位：schema 被拒 → 只用 json 模式；json 也被拒 → 不带（与前端同策略，浏览器学到的也能用）
+        self.no_json_schema = bool(learned.get('noJsonSchema'))
+        self.no_structured = bool(learned.get('noStructured'))
 
     def _remember(self, patch: dict) -> None:
         """记住一条已验证成功的经验（本批生效；配置了后端则上报，服务端单调合并）"""
@@ -156,6 +161,10 @@ class AIClient:
             self.send_temperature = False
         if patch.get('noReasoning'):
             self.supports_reasoning = False
+        if patch.get('noJsonSchema'):
+            self.no_json_schema = True
+        if patch.get('noStructured'):
+            self.no_structured = True
         self.quirks.remember(self.quirk_key, patch)
 
     def get_pricing(self) -> Optional[dict]:
@@ -176,21 +185,27 @@ class AIClient:
 
     # ---- 底层调用 ----
 
-    def _call(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool = False) -> tuple[str, int, int]:
+    def _call(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool = False,
+              fmt: Optional[dict] = None) -> tuple[str, int, int]:
         """返回 (content, input_tokens, output_tokens)；失败直接抛 SDK 异常。
+
+        fmt：格式化请求的结构化输出声明 {name, schema?}（见 structured.py）；不带 = 普通文本请求。
 
         low_reasoning：请求服务商少花推理 token（OpenAI 兼容端点用 reasoning_effort=low，
         不支持的服务商由实现自行忽略）。只在「推理把输出预算吃光」后的补救重试里用。
         """
         raise NotImplementedError
 
-    def _call_once(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool) -> tuple[str, int, int]:
+    def _call_once(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool,
+                   fmt: Optional[dict] = None) -> tuple[str, int, int]:
+        extra = {'fmt': fmt} if fmt else {}  # 只在需要时传，保持旧子类 / 测试替身的签名可用
+
         def attempt():
             tokens = min(max_tokens, self.learned_output_cap) if self.learned_output_cap else max_tokens
             backoffs = 0
             while True:
                 try:
-                    result = self._call(prompt, system, tokens, low_reasoning)
+                    result = self._call(prompt, system, tokens, low_reasoning, **extra)
                 except Exception as e:
                     # 输出上限被拒：报错里有可信上限用它，否则 ×0.8 退避；单次请求最多 3 次
                     status = getattr(e, 'status_code', None)
@@ -223,13 +238,14 @@ class AIClient:
         )
         return (resolved, True) if resolved else (DEFAULT_MAX_OUTPUT_TOKENS, False)
 
-    def _generate(self, prompt: str, language: str, max_tokens: Optional[int] = None) -> AIResponse:
+    def _generate(self, prompt: str, language: str, max_tokens: Optional[int] = None,
+                  fmt: Optional[dict] = None) -> AIResponse:
         system = get_language_instruction(language)
         at_model_max = False
         if max_tokens is None:
             max_tokens, at_model_max = self.max_output_tokens(prompt, system)
         try:
-            content, in_tok, out_tok = self._call_once(prompt, system, max_tokens, False)
+            content, in_tok, out_tok = self._call_once(prompt, system, max_tokens, False, fmt)
             # 推理模型可能把整个输出预算都花在思考上：内容为空、输出 token 顶满上限。
             # 实测 MiniMax-M3.1-Flash 对 4.8 万字单章：reasoning=4095/4096、content 为空。
             # 补救一次：降低推理强度；预算未到模型上限时再翻倍。token 两次都计入（都已计费）。
@@ -238,7 +254,7 @@ class AIClient:
                 self.logger.warning(
                     f"{type(self).__name__}: 输出预算 {max_tokens} 被推理耗尽，以 {retry_tokens} 并降低推理强度重试"
                 )
-                content, in2, out2 = self._call_once(prompt, system, retry_tokens, True)
+                content, in2, out2 = self._call_once(prompt, system, retry_tokens, True, fmt)
                 in_tok, out_tok = in_tok + in2, out_tok + out2
         except Exception as e:
             self.logger.error(f"{type(self).__name__} API 调用失败: {e}")
@@ -262,20 +278,20 @@ class AIClient:
                                            getattr(self.config, 'maxOutputTokens', None))
 
     def _summarize_long(self, title: str, content: str, book_type: str, language: str,
-                        depth: int = 0) -> AIResponse:
+                        depth: int = 0, hint: Optional[str] = None) -> AIResponse:
         """正文超出模型输入预算：按段落切分 → 每段同一提示词总结 → 再用同一提示词合并（与前端同语义）"""
         budget = self._input_budget()
-        template_len = len(self.prompts.build_chapter_prompt('', '', book_type))
+        template_len = len(self.prompts.build_chapter_prompt('', '', book_type, hint))
         room = max(budget - template_len, 1000) if budget else None
         if not room or len(content) <= room or depth >= self.MAX_SEGMENT_DEPTH:
-            return self._generate(self.prompts.build_chapter_prompt(title, content, book_type), language)
+            return self._generate(self.prompts.build_chapter_prompt(title, content, book_type, hint), language)
 
         parts = split_by_budget(content, room)
         self.logger.info(f"「{title}」{len(content)} 字超出模型输入预算 {room}，分 {len(parts)} 段总结后合并")
         partials: list[str] = []
         in_tok = out_tok = 0
         for i, part in enumerate(parts, 1):
-            r = self._generate(self.prompts.build_chapter_prompt(f"{title}（第 {i}/{len(parts)} 部分）", part, book_type),
+            r = self._generate(self.prompts.build_chapter_prompt(f"{title}（第 {i}/{len(parts)} 部分）", part, book_type, hint),
                                language)
             in_tok += r.input_tokens
             out_tok += r.output_tokens
@@ -286,16 +302,18 @@ class AIClient:
             # 分段总结的 JSON 旁路不能混进「章节内容」再喂给合并那一轮
             partials.append(f"【第 {i}/{len(parts)} 部分总结】\n{split_chapter_meta(r.content)[0]}")
         merged = self._summarize_long(f"{title}（由 {len(parts)} 段分段总结合并）", "\n\n".join(partials),
-                                      book_type, language, depth + 1)
+                                      book_type, language, depth + 1, hint)
         merged.input_tokens += in_tok
         merged.output_tokens += out_tok
         return merged
 
-    def summarize_chapter(self, chapter: ChapterInfo, book_type: str, language: str) -> AIResponse:
-        """总结章节（原文过短则直接标记跳过；超出模型输入预算则自动分段总结再合并）"""
+    def summarize_chapter(self, chapter: ChapterInfo, book_type: str, language: str,
+                          hint: Optional[str] = None) -> AIResponse:
+        """总结章节（原文过短则直接标记跳过；超出模型输入预算则自动分段总结再合并）。
+        hint：定向重写时的「上一次输出的问题说明」"""
         if len((chapter.content or '').strip()) < MIN_CHAPTER_CHARS:
             return AIResponse(success=True, content=SKIPPED_SHORT_TEXT, skipped=True)
-        return self._summarize_long(chapter.title, chapter.content, book_type, language)
+        return self._summarize_long(chapter.title, chapter.content, book_type, language, hint=hint)
 
     def analyze_connections(self, chapters: list[tuple[str, str]], language: str) -> AIResponse:
         """分析章节关联；chapters 为 (标题, 章节摘要)，只使用可用摘要"""
@@ -313,6 +331,24 @@ class AIClient:
             return AIResponse(success=True, content=OVERALL_NO_CHAPTERS)
         prompt = self.prompts.build_overall_prompt(title, items, connections, limits['connections'])
         return self._generate(prompt, language)
+
+    def repair_rich_blocks(self, items: list[dict], language: str) -> tuple[list[dict], int, int]:
+        """富内容块统一修复：一批坏块一次调用，只回传 {id, code}（与前端 aiService.repairRichBlocks 同语义）。
+        返回 (fixes, input_tokens, output_tokens)；解析不出来返回空列表，调用失败抛异常由上层吞掉。"""
+        r = self._generate(self.prompts.build_rich_repair_prompt(items), language, fmt=RICH_REPAIR_FORMAT)
+        if not r.success:
+            raise RuntimeError(r.error or '坏块修复失败')
+        raw = r.content
+        m = re.search(r"\{[\s\S]*\}", raw)
+        fixes: list[dict] = []
+        try:
+            data = json.loads(m.group(0)) if m else {}
+            for f in data.get('fixes') or []:
+                if isinstance(f, dict) and isinstance(f.get('id'), int) and not isinstance(f.get('id'), bool):
+                    fixes.append({'id': f['id'], 'code': f['code'] if isinstance(f.get('code'), str) else None})
+        except ValueError:
+            fixes = []
+        return fixes, r.input_tokens, r.output_tokens
 
 
 class GeminiClient(AIClient):
@@ -336,17 +372,40 @@ class GeminiClient(AIClient):
             )
         return self._client
 
-    def _call(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool = False) -> tuple[str, int, int]:
+    def _call(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool = False,
+              fmt: Optional[dict] = None) -> tuple[str, int, int]:
         # Gemini 无对应的推理强度参数：low_reasoning 只靠调用方翻倍的 max_tokens 生效
-        response = self._get_client().models.generate_content(
-            model=self.model,
-            contents=prompt,
-            config={
+        # 格式化请求：response_mime_type + response_json_schema → 仅 response_mime_type → 不带（与前端 geminiProvider 同策略）
+        tier = initial_tier(fmt, self.no_json_schema, self.no_structured)
+        tentative: dict = {}
+        response = None
+        for _ in range(3):
+            config = {
                 **({'temperature': self.temperature} if self.send_temperature else {}),
                 'max_output_tokens': max_tokens,
                 'system_instruction': system,
-            },
-        )
+                **({'response_mime_type': 'application/json'} if tier else {}),
+                **({'response_json_schema': fmt['schema']} if tier == 'schema' and fmt else {}),
+            }
+            try:
+                response = self._get_client().models.generate_content(model=self.model, contents=prompt, config=config)
+                break
+            except Exception as e:  # noqa: BLE001 —— SDK 异常类型随版本变化，按状态码 + 正文判断
+                status = getattr(e, 'code', None) or getattr(e, 'status_code', None)
+                if not (tier and is_structured_format_error(status, str(e))):
+                    raise
+                if tier == 'schema':
+                    tier = 'json'
+                    tentative['noJsonSchema'] = True
+                    self.logger.warning(f"{self.model} 不支持 response_json_schema，退回仅 JSON MIME 重试")
+                else:
+                    tier = None
+                    tentative['noStructured'] = True
+                    self.logger.warning(f"{self.model} 不支持 JSON 输出参数，退回纯提示词约束重试")
+        if response is None:
+            raise RuntimeError("结构化输出降级重试耗尽")
+        if tentative:
+            self._remember(tentative)
         content = getattr(response, 'text', None) or ''
         usage = getattr(response, 'usage_metadata', None)
         in_tok = getattr(usage, 'prompt_token_count', 0) or 0
@@ -378,7 +437,11 @@ class OpenAIClient(AIClient):
             )
         return self._client
 
-    def _call(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool = False) -> tuple[str, int, int]:
+    def _call(self, prompt: str, system: str, max_tokens: int, low_reasoning: bool = False,
+              fmt: Optional[dict] = None) -> tuple[str, int, int]:
+        # 格式化请求：json_schema(strict) → json_object → 不带（与前端 openaiProvider 同策略）
+        tier = initial_tier(fmt, self.no_json_schema, self.no_structured)
+
         def build(with_reasoning: bool) -> dict:
             kwargs = dict(
                 model=self.model,
@@ -393,6 +456,11 @@ class OpenAIClient(AIClient):
                 kwargs["temperature"] = self.temperature
             if with_reasoning:
                 kwargs["reasoning_effort"] = "low"
+            if tier == 'schema' and fmt:
+                kwargs["response_format"] = {"type": "json_schema",
+                                             "json_schema": {"name": fmt["name"], "strict": True, "schema": fmt["schema"]}}
+            elif tier == 'json':
+                kwargs["response_format"] = {"type": "json_object"}
             return kwargs
 
         with_reasoning = low_reasoning and self.supports_reasoning
@@ -410,7 +478,7 @@ class OpenAIClient(AIClient):
 
         # 参数被拒时逐个降级（与前端 openaiProvider 同策略）；降级只是试探，成功后才记住并存档：
         # max_tokens → max_completion_tokens（OpenAI 推理模型）→ 省略；temperature → 省略；reasoning_effort → 省略
-        for _ in range(4):
+        for _ in range(7):
             try:
                 response = self._get_client().chat.completions.create(**build_now())
                 break
@@ -425,6 +493,16 @@ class OpenAIClient(AIClient):
                     send_temperature = False
                     tentative['noTemperature'] = True
                     self.logger.warning(f"{self.model} 不支持自定义温度，已按服务商默认重试")
+                elif tier and is_structured_format_error(status, text):
+                    # 放在思考参数之前：「unsupported」之类的宽泛提示不能把这类 400 误判成不支持思考
+                    if tier == 'schema':
+                        tier = 'json'
+                        tentative['noJsonSchema'] = True
+                        self.logger.warning(f"{self.model} 不支持 json_schema，退回 json_object 重试")
+                    else:
+                        tier = None
+                        tentative['noStructured'] = True
+                        self.logger.warning(f"{self.model} 不支持结构化输出参数，退回纯提示词约束重试")
                 elif with_reasoning and status in (400, 422) and re.search(r"reasoning", text, re.I):
                     with_reasoning = False
                     tentative['noReasoning'] = True

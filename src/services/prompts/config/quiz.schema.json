@@ -1,0 +1,67 @@
+{
+  "name": "quiz",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "questions"
+    ],
+    "properties": {
+      "questions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "question",
+            "options",
+            "answerIndex",
+            "answer",
+            "explanation",
+            "chapterTitle"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "choice",
+                "short"
+              ]
+            },
+            "question": {
+              "type": "string"
+            },
+            "options": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "answerIndex": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "answer": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "explanation": {
+              "type": "string"
+            },
+            "chapterTitle": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

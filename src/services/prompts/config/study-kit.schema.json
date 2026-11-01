@@ -1,0 +1,58 @@
+{
+  "name": "study_kit",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "chapters"
+    ],
+    "properties": {
+      "chapters": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "chapterTitle",
+            "oneLiner",
+            "points",
+            "terms"
+          ],
+          "properties": {
+            "chapterTitle": {
+              "type": "string"
+            },
+            "oneLiner": {
+              "type": "string"
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "terms": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "term",
+                  "definition"
+                ],
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  },
+                  "definition": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

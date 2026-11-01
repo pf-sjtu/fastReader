@@ -32,16 +32,11 @@ POST_PROCESS_CONNECTIONS_SOFT_LIMIT = 50_000
 
 # 语言指令：文本与前端 prompts/utils.ts getLanguageInstruction 一致；
 # 唯一差异是 auto —— 前端跟随界面语言，CLI 跟随原书语言（约定 C8）
-LANGUAGE_INSTRUCTIONS = {
-    "zh": "请用中文回复。",
-    "en": "Please respond in English.",
-    "ja": "日本語で回答してください。",
-    "fr": "Veuillez répondre en français.",
-    "de": "Bitte antworten Sie auf Deutsch.",
-    "es": "Por favor responda en español.",
-    "ru": "Пожалуйста, отвечайте на русском языке.",
-    "auto": "请使用与原书相同的语言回复。Please respond in the same language as the original book.",
-}
+# 前端与 CLI 共用 config/language-instructions.json；auto 在前端由界面语言决定，CLI 用 autoNoUi 的双语指令
+_LANG_TABLE: dict = json.loads((DEFAULT_PROMPTS_DIR / "language-instructions.json").read_text(encoding="utf-8-sig"))
+LANGUAGE_INSTRUCTIONS = {**{k: v for k, v in _LANG_TABLE.items() if not k.startswith("_") and k != "autoNoUi"},
+                         "auto": _LANG_TABLE["autoNoUi"]}
+SHARED_STRINGS: dict = json.loads((DEFAULT_PROMPTS_DIR / "shared-strings.json").read_text(encoding="utf-8-sig"))
 
 # 结果状态前缀（与前端 src/utils/resultStatus.ts RESULT_PREFIX 一致）
 RESULT_PREFIX = {
@@ -70,6 +65,15 @@ def is_usable_text(text: Optional[str]) -> bool:
 
 def get_language_instruction(language: str) -> str:
     return LANGUAGE_INSTRUCTIONS.get(language, LANGUAGE_INSTRUCTIONS["auto"])
+
+
+def load_shared_text(name: str, prompts_dir: Optional[str] = None) -> str:
+    """读取共享提示词文件（config/*.md）；自定义目录里没有就退回仓库默认，避免旧的自定义目录缺新文件"""
+    for base in ([Path(prompts_dir)] if prompts_dir else []) + [DEFAULT_PROMPTS_DIR]:
+        path = base / name
+        if path.exists():
+            return path.read_text(encoding="utf-8-sig").strip()
+    raise FileNotFoundError(f"共享提示词不存在: {name}")
 
 
 def load_yaml_prompts(version: str, prompts_dir: Optional[str] = None) -> dict:
@@ -235,11 +239,20 @@ class PromptTemplates:
 
     # ---- 输入组装（对齐前端 aiService）----
 
-    def build_chapter_prompt(self, title: str, content: str, book_type: str) -> str:
-        return render_prompt(self.get_prompt("chapterSummary", book_type), [
+    def build_chapter_prompt(self, title: str, content: str, book_type: str, hint: Optional[str] = None) -> str:
+        template = self.get_prompt("chapterSummary", book_type)
+        if hint:
+            # 定向重写：上一次输出的问题说明追加在模板之后（与前端 aiService.summarizeChapter 同一文案）
+            template = f"{template}\n\n{SHARED_STRINGS['rewriteHeader']}\n{hint}"
+        return render_prompt(template, [
             {"name": "title", "label": "章节标题", "value": title, "inline": True},
             {"name": "content", "label": "章节内容", "value": content},
         ])
+
+    def build_rich_repair_prompt(self, items: list[dict]) -> str:
+        """富内容块修复提示词：模板是前后端共用的 config/rich-repair.md"""
+        template = load_shared_text("rich-repair.md", self.prompts_dir)
+        return render_prompt(template, [{"name": "blocks", "label": "待修复的块", "value": _json(items)}])
 
     def build_connections_prompt(self, chapters_json: list[dict]) -> str:
         return render_prompt(self.get_prompt("connectionAnalysis"), [
