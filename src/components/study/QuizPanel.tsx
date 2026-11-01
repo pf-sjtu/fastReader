@@ -73,7 +73,7 @@ function QuestionCard({ q, index, answered, onAnswer, onJumpChapter }: QuestionP
       ) : (
         <div className="space-y-2">
           {!revealed && !answered && (
-            <Button variant="outline" size="sm" className="h-8" onClick={() => setRevealed(true)}>
+            <Button variant="outline" size="sm" onClick={() => setRevealed(true)}>
               {t('study.quiz.showAnswer')}
             </Button>
           )}
@@ -85,11 +85,11 @@ function QuestionCard({ q, index, answered, onAnswer, onJumpChapter }: QuestionP
           )}
           {revealed && !answered && (
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => onAnswer(null, true)}>
+              <Button size="sm" variant="outline" className="gap-1" onClick={() => onAnswer(null, true)}>
                 <Check className="size-3.5" />
                 {t('study.quiz.gotIt')}
               </Button>
-              <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => onAnswer(null, false)}>
+              <Button size="sm" variant="outline" className="gap-1" onClick={() => onAnswer(null, false)}>
                 <X className="size-3.5" />
                 {t('study.quiz.missed')}
               </Button>
@@ -162,7 +162,7 @@ export function QuizPanel({ bookSummary, currentChapterId, onJumpChapter }: Prop
           <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground" role="status">
             <Loader2 className="size-3.5 animate-spin" />
             {t('study.quiz.generating')}
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={cancel}>
+            <Button variant="ghost" size="xs" onClick={cancel}>
               {t('study.cancel')}
             </Button>
           </span>
@@ -198,7 +198,7 @@ export function QuizPanel({ bookSummary, currentChapterId, onJumpChapter }: Prop
             </button>
           )}
           {answeredCount > 0 && (
-            <Button variant="ghost" size="sm" className="ml-auto h-7 gap-1 px-2 text-xs" onClick={() => {
+            <Button variant="ghost" size="xs" className="ml-auto" onClick={() => {
                 setWrongOnly(false)
                 resetAnswers()
               }}>

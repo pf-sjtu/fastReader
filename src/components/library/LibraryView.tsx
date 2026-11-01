@@ -148,7 +148,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
           <span className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
             <Loader2 className="size-3.5 animate-spin" />
             {t('library.fill.running', { done: fillProgress.done, total: fillProgress.total })}
-            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={cancelFill}>
+            <Button variant="ghost" size="sm" className="px-2 text-xs" onClick={cancelFill}>
               {t('library.fill.cancel')}
             </Button>
           </span>
@@ -236,7 +236,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
         <div className="space-y-1.5" aria-label={t('library.recommend.title')}>
           <div className="flex items-center gap-2">
             <h3 className="t-label">{t('library.recommend.title')}</h3>
-            <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={shuffle}>
+            <Button variant="ghost" size="xs" onClick={shuffle}>
               <Shuffle className="size-3.5" />
               {t('library.recommend.shuffle')}
             </Button>
@@ -257,7 +257,7 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
         <>
         {expanded && browsing && group === 'none' && sort === 'recent' && (
           <div className="flex justify-end">
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setExpanded(false)}>
+            <Button variant="ghost" size="xs" onClick={() => setExpanded(false)}>
               {t('library.collapseRest')}
             </Button>
           </div>

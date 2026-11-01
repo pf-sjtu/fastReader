@@ -140,7 +140,7 @@ function ManualModelAdd({ provider }: { provider: ProviderEntry }) {
         className="h-8 min-w-0 flex-1 basis-40 font-mono text-sm"
         aria-invalid={exists || undefined}
       />
-      <Button type="submit" size="sm" variant="outline" className="h-8" disabled={!id || exists}>
+      <Button type="submit" size="sm" variant="outline" disabled={!id || exists}>
         <Plus className="mr-1 h-3.5 w-3.5" />
         {exists ? t('aiProvider.models.exists') : t('aiProvider.models.manualAdd')}
       </Button>

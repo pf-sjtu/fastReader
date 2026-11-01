@@ -158,13 +158,13 @@ export const MarkdownCard = memo(function MarkdownCard({
           {hasToolbar && (
             <div className="-ml-2 mb-2 flex flex-wrap items-center gap-0.5 text-muted-foreground" role="toolbar" aria-label={title}>
               {showCopyButton && (
-                <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs" onClick={copy} disabled={!markdownContent} title={t('common.copyChapterSummary')}>
+                <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-xs" onClick={copy} disabled={!markdownContent} title={t('common.copyChapterSummary')}>
                   <Copy className="size-3.5" />
                   {t('common.copy')}
                 </Button>
               )}
               {canRead && (
-                <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs" onClick={() => onReadChapter!(id)} title={t('common.readChapter')}>
+                <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-xs" onClick={() => onReadChapter!(id)} title={t('common.readChapter')}>
                   <BookOpen className="size-3.5" />
                   {t('common.readChapter')}
                 </Button>
@@ -172,7 +172,7 @@ export const MarkdownCard = memo(function MarkdownCard({
               {hasMenu && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" title={t('common.moreActions')} aria-label={t('common.moreActions')} className="h-8 w-8 p-0">
+                    <Button variant="ghost" size="icon-sm" title={t('common.moreActions')} aria-label={t('common.moreActions')}>
                       <MoreHorizontal className="size-4" />
                     </Button>
                   </DropdownMenuTrigger>

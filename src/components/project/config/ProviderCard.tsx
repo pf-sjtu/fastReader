@@ -96,11 +96,11 @@ export function ProviderCard({
           >
             {isActive ? t('aiProvider.inUse') : t('aiProvider.use')}
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={onEdit}>
+          <Button size="sm" variant="ghost" className="px-2 text-xs" onClick={onEdit}>
             <Edit className="mr-1 h-3.5 w-3.5" />
             {t('common.edit')}
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={onRefresh} disabled={refreshing}>
+          <Button size="sm" variant="ghost" className="px-2 text-xs" onClick={onRefresh} disabled={refreshing}>
             {refreshing ? (
               <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
             ) : (

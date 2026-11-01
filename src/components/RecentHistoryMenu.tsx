@@ -47,7 +47,7 @@ export function RecentHistoryMenu({ records, loadingFileName, onSelect, onViewAl
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" disabled={loading} className="h-8 max-w-full gap-1.5 px-2 text-sm text-muted-foreground hover:text-foreground">
+        <Button variant="ghost" size="sm" disabled={loading} className="max-w-full gap-1.5 px-2 text-sm text-muted-foreground hover:text-foreground">
           {loading ? <Loader2 className="size-4 shrink-0 animate-spin" /> : <History className="size-4 shrink-0" />}
           <span className="shrink-0">{t('history.recent')}</span>
           <span className="min-w-0 max-w-[14rem] truncate font-medium text-foreground">{latest.bookTitle}</span>

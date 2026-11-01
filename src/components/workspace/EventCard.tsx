@@ -54,7 +54,7 @@ export function EventCard({ linking, eventId, currentChapterId, onOpenEntity, on
           )}
         </div>
         {onClose && (
-          <Button variant="ghost" size="icon" className="-mr-1 -mt-1 size-7 shrink-0" onClick={onClose} aria-label={t('common.close')}>
+          <Button variant="ghost" size="icon-xs" className="-mr-1 -mt-1 shrink-0" onClick={onClose} aria-label={t('common.close')}>
             <X className="size-4" />
           </Button>
         )}

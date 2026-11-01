@@ -92,7 +92,7 @@ export function ChartsPanel({
         {(canRegen || canClear) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 shrink-0 p-0" aria-label={t('results.charts.moreActions')} title={t('results.charts.moreActions')}>
+              <Button variant="ghost" size="icon-sm" className="shrink-0" aria-label={t('results.charts.moreActions')} title={t('results.charts.moreActions')}>
                 {regenBusy || generating ? <RefreshCw className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
               </Button>
             </DropdownMenuTrigger>
@@ -128,7 +128,7 @@ export function ChartsPanel({
         <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
         {t('results.charts.generating')}
         {onCancel && (
-          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={onCancel}>
+          <Button variant="ghost" size="sm" className="px-2 text-xs" onClick={onCancel}>
             {t('results.charts.cancel')}
           </Button>
         )}

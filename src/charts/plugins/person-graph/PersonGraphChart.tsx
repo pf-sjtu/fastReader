@@ -355,7 +355,7 @@ export function PersonGraphChart({
     <>
       {/* 工具条在画布上方，不再用浮层遮住节点 */}
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
-        <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => fitIfAllowed(true)}>
+        <Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => fitIfAllowed(true)}>
           <Maximize2 className="h-3 w-3 mr-1" />
           {t('results.charts.fitView')}
         </Button>

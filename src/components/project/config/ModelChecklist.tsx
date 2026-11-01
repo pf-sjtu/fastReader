@@ -47,10 +47,10 @@ export function ModelChecklist({ ids, selected, onChange }: ModelChecklistProps)
           />
         </div>
         <div className="flex items-center gap-1">
-          <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setMany(visible, true)}>
+          <Button type="button" size="sm" variant="ghost" className="px-2 text-xs" onClick={() => setMany(visible, true)}>
             {t('aiProvider.wizard.selectAll')}
           </Button>
-          <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setMany(visible, false)}>
+          <Button type="button" size="sm" variant="ghost" className="px-2 text-xs" onClick={() => setMany(visible, false)}>
             {t('aiProvider.wizard.selectNone')}
           </Button>
         </div>

@@ -169,7 +169,7 @@ export function EntityCard({
           {model.type && <p className="text-xs text-muted-foreground">{model.type}</p>}
         </div>
         {onClose && (
-          <Button variant="ghost" size="icon" className="-mr-1 -mt-1 size-7 shrink-0" onClick={onClose} aria-label={t('common.close')}>
+          <Button variant="ghost" size="icon-xs" className="-mr-1 -mt-1 shrink-0" onClick={onClose} aria-label={t('common.close')}>
             <X className="size-4" />
           </Button>
         )}
@@ -204,11 +204,11 @@ export function EntityCard({
       )}
 
       <footer className="flex flex-wrap gap-1.5 border-t pt-2">
-        <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => onJumpTimeline(entityId)}>
+        <Button variant="outline" size="xs" onClick={() => onJumpTimeline(entityId)}>
           <GitCommitHorizontal className="size-3.5" />
           {t('entityCard.jumpTimeline')}
         </Button>
-        <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => onJumpGraph(entityId)}>
+        <Button variant="outline" size="xs" onClick={() => onJumpGraph(entityId)}>
           <Network className="size-3.5" />
           {t('entityCard.jumpGraph')}
         </Button>

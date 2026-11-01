@@ -34,12 +34,12 @@ export function StudyKitPanel({ bookSummary, onJumpChapter }: Props) {
             {kitProgress && kitProgress.total > 1
               ? t('study.kit.progress', { done: kitProgress.done, total: kitProgress.total })
               : t('study.kit.generating')}
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={cancel}>
+            <Button variant="ghost" size="xs" onClick={cancel}>
               {t('study.cancel')}
             </Button>
           </div>
         ) : (
-          <Button size="sm" variant={kit ? 'outline' : 'default'} className="h-8 gap-1.5" disabled={!usable.length} onClick={() => void generateKit(bookSummary)}>
+          <Button size="sm" variant={kit ? 'outline' : 'default'} className="gap-1.5" disabled={!usable.length} onClick={() => void generateKit(bookSummary)}>
             <Sparkles className="size-3.5" />
             {kit ? t('study.kit.regenerate') : t('study.kit.generate')}
           </Button>
