@@ -223,6 +223,7 @@ describe('ReaderWorkspace 进入即有内容可读', () => {
 })
 
 describe('超宽屏断点的单位', () => {
+  // 源码正则只能证明「写了什么」；层叠顺序由构建后的 CSS 守卫 scripts/check-css-order.mjs 验证（CI 在 vite build 之后跑）
   it('App.tsx 的超宽上限必须与 2xl 同用 rem 单位：Tailwind 把 px 断点排在 rem 之前，2xl 的 110rem 会盖掉它（线上就这么失效过）', async () => {
     const { readFileSync } = await import('node:fs')
     const src = readFileSync('src/App.tsx', 'utf8')

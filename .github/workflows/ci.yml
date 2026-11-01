@@ -21,6 +21,7 @@ jobs:
       - run: pnpm test
       - run: pnpm exec vite build
       - run: node scripts/check-chunk-cycles.mjs
+      - run: node scripts/check-css-order.mjs
       - run: node scripts/check-functions-build.mjs
 
   cli:
