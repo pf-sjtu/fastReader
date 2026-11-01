@@ -18,7 +18,7 @@ export {
   getKeyChartsPrompt
 } from './keyCharts'
 
-export { getStudyKitPrompt, getQuizPrompt, getAskBookPrompt } from './study'
+export { getStudyKitPrompt, getQuizPrompt, getAskBookPrompt, getRichRepairPrompt } from './study'
 
 // 测试连接的prompt - 从YAML配置加载
 export const getTestConnectionPrompt = () => getSystemPrompt('testConnection')

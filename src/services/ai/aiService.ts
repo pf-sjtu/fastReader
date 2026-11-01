@@ -20,6 +20,7 @@ import {
   getKeyChartsPrompt,
   getStudyKitPrompt,
   getQuizPrompt,
+  getRichRepairPrompt,
   getAskBookPrompt,
   getTestConnectionPrompt,
   getChapterMindMapPrompt,
@@ -27,6 +28,7 @@ import {
   getCombinedMindMapPrompt
 } from '../prompts'
 import { parseCharts, type BookCharts } from '../../charts'
+import { extractJsonObject } from '../../charts/parseCharts'
 import { parseQuiz, parseStudyKit, type Quiz, type StudyChapter, type StudyKit } from '../../study/schema'
 import { getLanguageInstruction } from '../prompts/utils'
 import { createAIProvider } from './factory'
@@ -42,6 +44,7 @@ import {
   keyChartsVars,
   studyKitVars,
   quizVars,
+  richRepairVars,
   askVars,
   overallVars,
   groupChaptersByChars,
@@ -521,6 +524,25 @@ export class AIService {
     const quiz = parseQuiz(response, usable.map((c) => ({ id: c.id, title: c.title })))
     if (!quiz) throw new Error('自测题 JSON 解析失败或无有效题目')
     return quiz
+  }
+
+  /** 富内容块统一修复：一批坏块一次调用；解析不出来返回空数组（调用方当作全部放弃） */
+  async repairRichBlocks(
+    items: { id: number; lang: string; error: string; code: string; context: string }[],
+    outputLanguage?: SupportedLanguage,
+    opts?: AICallOptions
+  ): Promise<{ id: number; code: string | null }[]> {
+    const response = await this.generateContent(renderPrompt(getRichRepairPrompt(), richRepairVars(items)), outputLanguage, opts)
+    const json = extractJsonObject(response)
+    if (!json) return []
+    try {
+      const fixes = (JSON.parse(json) as { fixes?: { id?: unknown; code?: unknown }[] }).fixes
+      return (Array.isArray(fixes) ? fixes : [])
+        .filter((f) => Number.isInteger(f?.id))
+        .map((f) => ({ id: f.id as number, code: typeof f.code === 'string' ? f.code : null }))
+    } catch {
+      return []
+    }
   }
 
   /** 问书：材料（全书总结 + 检索出的章节）由调用方组装好；返回原始回答文本（含【章节】引用） */

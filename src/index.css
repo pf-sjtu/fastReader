@@ -302,6 +302,25 @@
   .dark .markdown-card-content {
     color: var(--foreground);
   }
+
+  /* 章末启发性问题：与总结正文区隔——点线分隔、更浅更小的衬线字（remarkTailQuestions 生成） */
+  .markdown-card-content .chapter-questions {
+    margin-top: 1.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px dotted var(--border);
+    font-family: var(--font-serif);
+    font-size: 0.875em;
+    color: var(--muted-foreground);
+  }
+
+  .markdown-card-content .chapter-questions p {
+    margin: 0.35rem 0;
+  }
+
+  .markdown-card-content .chapter-questions p::before {
+    content: "问 ";
+    opacity: 0.6;
+  }
   
   /* 确保prose类不会限制宽度 */
   .markdown-card-content.prose {

@@ -13,6 +13,8 @@ import type { AICallOptions } from '@/services/ai/types'
 import type { SupportedLanguage } from '@/services/prompts/utils'
 import { mapPoolOrdered } from '@/utils/async'
 import { prepareChapterInput } from '@/utils/chapterInput'
+import { richBlockCount } from '@/lib/richBlocks'
+import { repairRichBlocks, type RepairAnswer, type RepairItem } from './richRepair'
 import { markChapterFailed, usableOrEmpty, promptChapters } from '@/utils/chapterResults'
 import { flattenMindMapToText } from '@/utils/mindMapText'
 import { RESULT_PREFIX, failedText, isFailedText, isPlaceholderText, isUsableText } from '@/utils/resultStatus'
@@ -45,6 +47,8 @@ export interface PipelineAI {
     opts?: AICallOptions
   ): Promise<string>
   analyzeConnections(chapters: Chapter[], lang?: SupportedLanguage, opts?: AICallOptions): Promise<string>
+  /** 富内容块统一修复（可选：没有就跳过，坏块由渲染端回退为源码） */
+  repairRichBlocks?(items: RepairItem[], lang?: SupportedLanguage, opts?: AICallOptions): Promise<RepairAnswer[]>
   generateOverallSummary(
     title: string,
     chapters: Chapter[],
@@ -248,6 +252,22 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
     },
   })
   throwIfAborted()
+
+  // 富内容块（mermaid / genui / html）统一修复：只依据生成内容本身，修好写回缓存；仍坏的块删掉，正文不动
+  if (mode === 'summary' && ai.repairRichBlocks && chapters.some((c) => richBlockCount(c.summary ?? '') > 0)) {
+    try {
+      const r = await repairRichBlocks(chapters.map((c) => c.summary ?? ''), (items) => ai.repairRichBlocks!(items, lang, opts), { signal })
+      for (const i of r.changed) {
+        chapters[i] = { ...chapters[i], summary: r.summaries[i] }
+        if (cache) await safe(() => cache.setChapter('summary', input.chapters[i], joinChapterMeta(r.summaries[i], chapters[i].meta ?? null)))
+      }
+      if (r.stats.bad) logger.info(`[pipeline] 富内容块修复：坏 ${r.stats.bad}，修好 ${r.stats.fixed}，删除 ${r.stats.dropped}`)
+    } catch (err) {
+      rethrowIfAbort(err)
+      logger.warn('[pipeline] 富内容块修复失败，保留原样（渲染端会回退为源码）', err)
+    }
+    throwIfAborted()
+  }
 
   const failed = chapters.filter((ch) => !ch.processed).length
   const skipped = chapters.filter((ch) => isSkippedText(ch.summary)).length

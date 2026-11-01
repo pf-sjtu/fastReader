@@ -168,3 +168,8 @@ export function groupChaptersByChars<T extends { summary?: string }>(chapters: r
   if (cur.length) groups.push(cur)
   return groups
 }
+
+/** 富内容块修复：{{blocks}} */
+export function richRepairVars(blocks: unknown[]): PromptVar[] {
+  return [{ name: 'blocks', label: '待修复的块', value: JSON.stringify(blocks) }]
+}

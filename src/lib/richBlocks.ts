@@ -20,6 +20,49 @@ const UNCLOSED = new RegExp(OPEN + '(?:\\n[\\s\\S]*)?$', 'im')
 /** 任意围栏代码块（含普通代码）：只该处理正文的逻辑（加粗上限、标题 / 分割线清理）要避开它们 */
 const ANY_FENCE = new RegExp('(^[ \\t]{0,3}(`{3,}|~{3,})[^\\n]*\\n[\\s\\S]*?\\n[ \\t]{0,3}\\2[ \\t]*$)', 'gm')
 
+/** 单次扫描：已闭合块优先，找不到闭栏时退而求其次吃到文末（4 个捕获组：围栏 / 语言 / 说明 / 内容；两支各一套） */
+const CAP = '^[ \\t]{0,3}(`{3,}|~{3,})[ \\t]*(' + LANG + ')\\b([^\\n]*)'
+const BLOCK_SCAN = new RegExp(CAP + '\\n([\\s\\S]*?)\\n[ \\t]{0,3}\\1[ \\t]*$|' + CAP + '(?:\\n([\\s\\S]*))?$', 'gim')
+
+export interface RichBlockInfo {
+  lang: RichLang
+  /** 围栏内的源码（不含围栏行） */
+  code: string
+  /** 没有闭栏：输出被截断 */
+  truncated: boolean
+  /** 原文（含围栏）：不需要改动的块原样写回 */
+  raw: string
+}
+
+/**
+ * 逐个富内容块替换：fn 返回新的整块文本（含围栏），返回空串 = 删除该块。正文原样保留。
+ * 修复坏块时用：只动块、不碰正文。
+ */
+export function mapRichBlocks(md: string, fn: (b: RichBlockInfo, index: number) => string): string {
+  if (!md) return ''
+  let i = 0
+  return md.replace(BLOCK_SCAN, (...m: unknown[]) => {
+    const g = m as (string | undefined)[]
+    const closed = g[4] !== undefined
+    const lang = (closed ? g[2] : g[6]) as string
+    const code = (closed ? g[4] : g[8]) ?? ''
+    return fn({ lang: lang.toLowerCase() as RichLang, code, truncated: !closed, raw: g[0] as string }, i++)
+  })
+}
+
+export function listRichBlocks(md: string): RichBlockInfo[] {
+  const out: RichBlockInfo[] = []
+  mapRichBlocks(md, (b) => (out.push(b), ''))
+  return out
+}
+
+/** 按围栏长度安全地写回一个块：源码里出现 ``` 时用更长的围栏 */
+export function fenceRichBlock(lang: string, code: string): string {
+  const longest = Math.max(2, ...(code.match(/`+/g) ?? []).map((s) => s.length))
+  const fence = '`'.repeat(longest + 1)
+  return `${fence}${lang}\n${code.replace(/\n+$/, '')}\n${fence}`
+}
+
 /** 去掉所有富内容块（含未闭合的尾部），留下纯文字部分 */
 export function stripRichBlocks(md: string): string {
   if (!md) return ''

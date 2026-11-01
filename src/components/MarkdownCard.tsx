@@ -18,9 +18,10 @@ import { ViewContentDialog } from './ViewContentDialog'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { richMarkdownComponents } from '@/components/markdown/richComponents'
+import { remarkTailQuestions } from '@/components/markdown/remarkTailQuestions'
 
 // 模块级常量：避免每次渲染新建插件数组导致 ReactMarkdown 重新处理
-const REMARK_PLUGINS = [remarkGfm, remarkCjkFriendly]
+const REMARK_PLUGINS = [remarkGfm, remarkCjkFriendly, remarkTailQuestions]
 
 export type RemarkPlugins = NonNullable<MarkdownOptions['remarkPlugins']>
 

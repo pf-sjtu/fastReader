@@ -24,7 +24,8 @@ _GREETING_LINE_RE = re.compile(
 )
 # 模型漏写标记、只在末尾给了 ```json 元数据代码块
 _TRAILING_FENCE_RE = re.compile(r"```json\s*(\{[\s\S]*?\})\s*```\s*$", re.IGNORECASE)
-_FENCE_SPLIT_RE = re.compile(r"(```[\s\S]*?```)")
+# 任意围栏代码块（含 mermaid / genui / html 富内容块）：``` 或 ~~~，3 个以上，同种不更短的围栏闭栏（与前端 splitByFences 一致）
+_ANY_FENCE_RE = re.compile(r"(^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n[ \t]{0,3}\2[ \t]*$)", re.MULTILINE)
 
 
 def _first_json_object(raw: str) -> Optional[str]:
@@ -141,14 +142,56 @@ def _sanitize_prose(part: str) -> str:
     )
 
 
+def _split_by_fences(md: str) -> list[str]:
+    """偶数下标是正文、奇数下标是围栏块；拼回去等于原文"""
+    return [p for i, p in enumerate(_ANY_FENCE_RE.split(md)) if i % 3 != 2]
+
+
+# ---- 章末「启发性问题」统一成每题一段（与前端 src/lib/tailQuestions.ts 一致） ----
+_Q_MARK_RE = re.compile(r"^\s*(?:[-*+]|\d{1,2}[.、)）]|[（(]\d{1,2}[)）]|Q\d{1,2}\s*[:：.])\s*", re.IGNORECASE)
+_Q_END_RE = re.compile(r"[？?]$")
+_Q_SENTENCE_RE = re.compile(r"[^？?]+[？?]+")
+_QUESTION_MAX = 90
+_QUESTION_MULTI_MAX = 60
+
+
+def _questions_of_line(line: str) -> Optional[list[str]]:
+    t = _Q_MARK_RE.sub("", line, count=1).strip()
+    if not t or not _Q_END_RE.search(t):
+        return None
+    sentences = [s for s in (_Q_MARK_RE.sub("", m, count=1).strip() for m in _Q_SENTENCE_RE.findall(t)) if s]
+    if not sentences:
+        return None
+    mx = _QUESTION_MULTI_MAX if len(sentences) > 1 else _QUESTION_MAX
+    return sentences if all(len(s) <= mx for s in sentences) else None
+
+
+def _normalize_tail_questions(prose: str) -> str:
+    lines = re.sub(r"\s+$", "", prose).split("\n")
+    questions: list[str] = []
+    i = len(lines)
+    while i > 0:
+        if not lines[i - 1].strip():
+            i -= 1
+            continue
+        qs = _questions_of_line(lines[i - 1])
+        if not qs:
+            break
+        questions = qs + questions
+        i -= 1
+    if len(questions) < 2:
+        return prose
+    head = re.sub(r"\s+$", "", "\n".join(lines[:i]))
+    return head + ("\n\n" if head else "") + "\n\n".join(questions)
+
+
 def sanitize_summary(text: str) -> str:
     """程序化修复 AI 常见的格式违规：标题符号、分割线、加粗斜体、滥用的反引号、超限的加粗、开头客套话"""
-    # 围栏代码块整体不动：里面的 # 是注释、--- 是内容（与前端按 ``` 切分一致）
-    parts = _FENCE_SPLIT_RE.split(text)
-    out = "".join(p if i % 2 == 1 else _sanitize_prose(p) for i, p in enumerate(parts))
-    out = re.sub(r"\n{3,}", "\n\n", out)
+    # 围栏代码块（含富内容块）整体不动：里面的 # 是注释、--- 是内容、** 是源码
+    parts = [p if i % 2 == 1 else _sanitize_prose(p) for i, p in enumerate(_split_by_fences(text))]
 
-    bolds = list(_BOLD_RE.finditer(out))
+    # 加粗上限只数正文里的；超限时保留最短的几处（主旨句通常短）
+    bolds = [m for k in range(0, len(parts), 2) for m in _BOLD_RE.finditer(parts[k])]
     if len(bolds) > MAX_BOLD_PER_CHAPTER:
         order = sorted(range(len(bolds)), key=lambda i: (len(bolds[i].group(1)), i))
         keep = set(order[:MAX_BOLD_PER_CHAPTER])
@@ -158,7 +201,12 @@ def sanitize_summary(text: str) -> str:
             counter["i"] += 1
             return m.group(0) if counter["i"] in keep else m.group(1)
 
-        out = _BOLD_RE.sub(repl, out)
+        for k in range(0, len(parts), 2):
+            parts[k] = _BOLD_RE.sub(repl, parts[k])
+    # 章末问题统一成「每题一段」（只处理文末的正文段；以围栏块结尾的不动）
+    if len(parts) % 2 == 1:
+        parts[-1] = _normalize_tail_questions(parts[-1])
+    out = re.sub(r"\n{3,}", "\n\n", "".join(parts))
     return _GREETING_LINE_RE.sub("", out, count=1).strip()
 
 

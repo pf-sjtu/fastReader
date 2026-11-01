@@ -5,6 +5,7 @@
  */
 
 import { proseLength, splitByFences } from '@/lib/richBlocks'
+import { normalizeTailQuestions } from '@/lib/tailQuestions'
 
 export const META_MARK = '<!--juhua:meta-->'
 /** 容忍模型改动空白/大小写 */
@@ -171,6 +172,8 @@ export function sanitizeSummary(text: string): string {
       parts[k] = parts[k].replace(BOLD_RE, (m, inner: string) => (keep.has(++idx) ? m : inner))
     }
   }
+  // 章末问题统一成「每题一段」（只处理文末的正文段；以围栏块结尾的不动）
+  if (parts.length % 2 === 1) parts[parts.length - 1] = normalizeTailQuestions(parts[parts.length - 1])
   return parts.join('').replace(/\n{3,}/g, '\n\n').replace(GREETING_LINE_RE, '').trim()
 }
 
