@@ -22,6 +22,7 @@
  * （笔记属于某一章），调用方用 useMemo 保持引用稳定。
  */
 import { createNoteResolver, normalizeText } from './anchor'
+import { NOTE_SKIP_TYPES } from './noteText'
 import type { Note } from './notes'
 
 interface MdNode {
@@ -32,14 +33,18 @@ interface MdNode {
 }
 
 /**
- * 不参与标注的节点：代码、原始 HTML、图片、定义。
+ * 不参与标注的节点：代码（围栏与**缩进**代码块都是 `code`）、原始 HTML（`<div>` / `<!-- -->`）、
+ * 图片、定义。
+ *
+ * 这份集合与笔记页签判「还能不能定位」**共用**（`noteText.ts` 的 `NOTE_SKIP_TYPES`）：
+ * 两侧各写一份时，缩进代码块与围栏外 HTML 会让页签说「已定位」而正文一处都画不出来。
  *
  * 注意这里**不含** `noteMark`：两条笔记的引文重叠时（一条长句、一条句中的短语），
  * 后一条必须还能在已经包好的 mark 内部找到位置，否则第二处划线不显示。
  * 重叠时包出嵌套 mark，两层颜色各自可见；`.note-mark` 因此不设水平内边距，
  * 免得嵌套时把文字横向推开（见 `src/index.css`）。
  */
-const SKIP_TYPES = new Set(['code', 'html', 'image', 'imageReference', 'definition'])
+const SKIP_TYPES = NOTE_SKIP_TYPES
 
 export const NOTE_MARK_CLASS = 'note-mark'
 

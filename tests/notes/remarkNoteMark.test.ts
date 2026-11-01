@@ -6,7 +6,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { remarkNoteMark } from '@/notes/remarkNoteMark'
-import { createNoteResolver, noteSearchText } from '@/notes/anchor'
+import { createNoteResolver } from '@/notes/anchor'
+import { noteSearchText } from '@/notes/noteText'
 import type { Note } from '@/notes/notes'
 
 const NOW = 1_700_000_000_000

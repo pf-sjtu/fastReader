@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createNoteResolver, foldText, normalizeText, noteSearchText, resolveNote, type NoteAnchor } from '@/notes/anchor'
+import { createNoteResolver, foldText, normalizeText, resolveNote, type NoteAnchor } from '@/notes/anchor'
+import { noteSearchText } from '@/notes/noteText'
 
 /** 断言命中并要求非空，后续访问才有类型收窄（与 notesSync.test.ts 的写法一致） */
 const mustAnchor = (anchor: NoteAnchor | null): NoteAnchor => {

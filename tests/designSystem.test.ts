@@ -29,7 +29,8 @@ const EXEMPT: Record<string, Record<string, string>> = {
   'src/components/library/BookCover.tsx': { px: '封面水印大字' },
   'src/components/library/BookCard.tsx': { 'empty-state': '封面加载态的遮罩，不是页级空状态，需要绝对定位覆盖在封面上' },
   'src/charts/plugins/entity-timeline/EntityTimelineChart.tsx': { 'empty-state': '时间轴的空白格（网格单元内居中），不是页级空状态' },
-  'src/study/pack/buildPack.ts': { 'heading-role': '离线学习包是独立 HTML 文档，h1–h4 是导出产物的标签，用不到应用内角色类' },
+  'src/study/pack/buildPack.ts': { 'heading-role': '离线学习包是独立 HTML 文档，h1–h4 是导出产物的标签，用不到应用内角色类', 'raw-color': '离线学习包的内嵌样式表是独立 HTML 文档，读不到宿主 CSS 变量' },
+  'src/lib/htmlSandbox.ts': { 'raw-color': '注入 iframe 沙箱文档内的基础样式，读不到宿主 CSS 变量' },
   'src/study/exportFigures.ts': { 'raw-color': '导出的 SVG 进 data URI 后读不到宿主 CSS 变量，必须写具体色值（与 index.css 亮色 token 对齐，有测试守着 NOTE_PALETTE）' },
   'src/utils/mindmapExport.ts': { 'raw-color': 'canvas 导出用的纯色底，同样读不到 CSS 变量' },
   'src/components/EpubReader.tsx': { 'raw-color': 'EPUB 正文样式注入 iframe 内部文档，读不到宿主 CSS 变量，只能写具体色值' },
@@ -63,8 +64,15 @@ const RULES: { id: string; re: RegExp; unless?: RegExp; hint: string; skipDirs?:
   },
   {
     id: 'raw-color',
-    re: /#[0-9a-fA-F]{6}\b/,
+    re: /(?<!&)#[0-9a-fA-F]{3,8}\b/,
     hint: '组件里不写十六进制颜色；用语义 token（图表导出等确实要具体色值的场景登记在 EXEMPT）',
+    skipDirs: ['src/charts', 'src/components/markdown/genui'],
+  },
+  {
+    // 只拦「把颜色函数塞进 Tailwind 的任意值颜色工具类」：阴影/渐变里的 rgb(...) 之类不算
+    id: 'raw-color-fn',
+    re: /\b(?:text|bg|border|ring|fill|stroke|from|via|to)-\[(?:#|rgba?\(|hsla?\(|oklch\(|oklab\()/,
+    hint: '不用任意值颜色函数（text-[rgb(...)] / bg-[#fff]）；用语义 token',
     skipDirs: ['src/charts', 'src/components/markdown/genui'],
   },
 ]
@@ -120,6 +128,11 @@ describe('设计一致性守卫', () => {
     ]) twice(token)
     // 别名必须指向 destructive，避免两套危险色漂移
     expect(css).toContain('--danger: var(--destructive)')
+    // 深色主题里四个实心底前景都该是同一个墨色：深色状态色本身已提亮，
+    // 近白前景在提亮后的 destructive 上只有 ~3:1（独立审查实测），墨色约 5:1。
+    const dark = css.slice(css.indexOf('.dark'))
+    for (const token of ['--success-foreground', '--warning-foreground', '--info-foreground', '--destructive-foreground'])
+      expect(dark, `${token} 在深色主题应沿用墨色`).toContain(`${token}: oklch(0.1750 0.0080 50.0)`)
     // Tailwind 侧映射齐全，业务才能写 bg-success-muted / text-danger 这类类名
     for (const mapped of ['--color-danger:', '--color-danger-foreground:', '--color-danger-muted:', '--color-success-muted:', '--color-success-foreground:', '--color-warning-muted:', '--color-info-muted:', '--color-destructive-muted:'])
       expect(css).toContain(mapped)

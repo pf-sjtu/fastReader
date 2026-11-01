@@ -16,8 +16,9 @@
  *
  * 所有下标都挂在 `normalizeText(chapterText)` 这个坐标系上：与 notes.ts 记录
  * quote/prefix/suffix 的那套归一化同源，调用方拿到 start/end 可以直接去切同一份文本。
+ *
+ * 「哪部分正文可以定位」不在本模块：见 `noteText.ts`（与正文高亮共用同一份判定）。
  */
-import { splitByFences } from '@/lib/richBlocks'
 
 export type NoteAnchorKind = 'exact' | 'tolerant' | 'fuzzy'
 
@@ -321,28 +322,6 @@ const fuzzySearch = (
   }
 
   return best.start < 0 || best.score < FUZZY_MIN_SCORE ? null : best
-}
-
-/** 未闭合的围栏开栏行（输出被截断）：它之后的内容同样不算「可以划线的正文」 */
-const OPEN_FENCE_LINE = /^[ \t]{0,3}(?:`{3,}|~{3,})/m
-
-/**
- * 一章正文里「笔记可以定位到」的那部分文本。
- *
- * 围栏代码块（普通代码、以及 mermaid / genui / html 富内容块）不参与定位——正文高亮也跳过它们
- * （`remarkNoteMark` 的 `SKIP_TYPES` 含 `code` / `html`）。两侧必须同一口径：否则在代码块里选中的
- * 文字会被笔记页签判成「还在」，而正文一处都画不出来。未闭合的围栏按「之后都算块」处理。
- *
- * 只做「去掉不可高亮的块」这一件事，不重写 markdown 语法：定位本身是容忍标点与大小写的。
- */
-export function noteSearchText(markdown: string): string {
-  if (!markdown) return ''
-  // splitByFences：偶数下标是正文、奇数下标是围栏块
-  const prose = splitByFences(markdown)
-    .filter((_, i) => i % 2 === 0)
-    .join('')
-  const truncated = prose.search(OPEN_FENCE_LINE)
-  return truncated === -1 ? prose : prose.slice(0, truncated)
 }
 
 /** 一条笔记的定位器接口：见 `createNoteResolver` */

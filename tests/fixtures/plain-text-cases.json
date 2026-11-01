@@ -100,5 +100,54 @@
     "expected": [
       { "index": 0, "title": "标题", "content": "正文" }
     ]
+  },
+  {
+    "name": "空内容：仍然给出一章空正文（单本路径另抛「没有可读文字」）",
+    "content": "",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "f", "content": "" }
+    ]
+  },
+  {
+    "name": "纯空白内容：同上，正文被裁成空串",
+    "content": "  \n\n\t ",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "f", "content": "" }
+    ]
+  },
+  {
+    "name": "U+0085（NEL）不在共享空白集里：不被裁掉、也不参与标题判定",
+    "content": "正文\u0085",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "f", "content": "正文\u0085" }
+    ]
+  },
+  {
+    "name": "U+001C 不在共享空白集里：`#\\u001c标题` 不算标题",
+    "content": "#\u001c标题\n正文",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "f", "content": "#\u001c标题\n正文" }
+    ]
+  },
+  {
+    "name": "NBSP 与全角空格都能当标题分隔（显式空白集两端一致）",
+    "content": "#\u00a0标题一\n正文一\n#\u3000标题二\n正文二",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "标题一", "content": "正文一" },
+      { "index": 1, "title": "标题二", "content": "正文二" }
+    ]
+  },
+  {
+    "name": "astral 字符（emoji）不破坏切章与标题",
+    "content": "# 标题 😀\n正文 😀",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "标题 😀", "content": "正文 😀" }
+    ]
   }
 ]

@@ -3,7 +3,7 @@ import { encodeDavHeaderPath, normalizeDavPath } from '../webdavProxyUtils'
 import type { DavContext, WebDAVFileInfo, WebDAVOperationResult } from './types'
 import { buildHeaderPath } from './utils'
 
-const SUPPORTED_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md']
+const SUPPORTED_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md', '.markdown']
 
 const errMsg = (error: unknown) => (error instanceof Error ? error.message : '未知错误')
 

@@ -197,7 +197,10 @@
   --success-foreground: oklch(0.1750 0.0080 50.0);
   --warning-foreground: oklch(0.1750 0.0080 50.0);
   --info-foreground: oklch(0.1750 0.0080 50.0);
-  --destructive-foreground: oklch(0.9850 0.0080 25.0);
+  /* destructive 同样用墨色（独立审查实测：提亮后的深色 destructive 配近白前景只有 ~3:1，
+     换成墨色约 5:1，与另外三色一致）。注意 `ui/button|badge` 的 destructive 变体在深色下用的是
+     `dark:bg-destructive/60`（更暗的底），那三处继续用 text-white 才对，不要改成这个 token。 */
+  --destructive-foreground: oklch(0.1750 0.0080 50.0);
   --danger-foreground: var(--destructive-foreground);
   --success-muted: color-mix(in oklab, var(--success) 18%, var(--card));
   --warning-muted: color-mix(in oklab, var(--warning) 18%, var(--card));

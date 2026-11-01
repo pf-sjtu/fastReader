@@ -81,8 +81,8 @@ class WebDAVClientWrapper:
     """WebDAV 客户端封装"""
 
     # 与前端 src/services/webdav/browse.ts 的 SUPPORTED_EXTENSIONS 对齐
-    # （`.markdown` 由 chapter_extractor 按纯文本处理，但书库列表/扫描不列它，与前端一致）
-    SUPPORTED_EXTENSIONS = {".epub", ".pdf", ".txt", ".md"}
+    # （`.markdown` 与 `.txt` / `.md` 一样由 chapter_extractor 按纯文本处理，列表/扫描一视同仁）
+    SUPPORTED_EXTENSIONS = {".epub", ".pdf", ".txt", ".md", ".markdown"}
 
     def __init__(self, config, logger: Logger, retry_policy: Optional[RetryPolicy] = None):
         """

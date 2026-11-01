@@ -1,5 +1,5 @@
-"""CLI 纯文本（.txt / .md / .markdown）支持：切章与网页端 plainText.ts 共读同一份契约夹具，
-外加读取（UTF-8 / BOM / CRLF）、书名、工厂分派与 WebDAV 扩展名的落地检查。
+"""CLI 纯文本（.txt / .md / .markdown）支持：切章与网页端 plainText.ts 共读三份契约夹具
+（切章 / 字节解码 / 书名），外加读取、工厂分派与 WebDAV 扩展名的落地检查。
 
 前端侧对应：tests/plainTextParity.test.ts、tests/plainText.test.ts
 """
@@ -29,6 +29,12 @@ from src.cli.webdav_client import WebDAVClientWrapper  # noqa: E402
 CASES = json.loads(
     (ROOT / "tests" / "fixtures" / "plain-text-cases.json").read_text(encoding="utf-8")
 )
+DECODE_CASES = json.loads(
+    (ROOT / "tests" / "fixtures" / "plain-decode-cases.json").read_text(encoding="utf-8")
+)
+TITLE_CASES = json.loads(
+    (ROOT / "tests" / "fixtures" / "plain-title-cases.json").read_text(encoding="utf-8")
+)
 
 
 def _dump(chapters) -> list[dict]:
@@ -45,9 +51,37 @@ def test_split_plain_text_matches_shared_fixture(case):
 def test_fixture_covers_required_edges():
     """夹具必须覆盖任务点名的边界，避免以后被删掉"""
     names = " ".join(c["name"] for c in CASES)
-    for keyword in ("无标题", "一二级标题", "行尾的 #", "三级", "连续标题", "CRLF", "BOM"):
+    for keyword in (
+        "无标题",
+        "一二级标题",
+        "行尾的 #",
+        "三级",
+        "连续标题",
+        "CRLF",
+        "BOM",
+        "空内容",
+        "纯空白",
+        "U+0085",
+        "U+001C",
+        "NBSP",
+        "astral",
+    ):
         assert keyword in names, f"夹具缺少覆盖：{keyword}"
-    assert len(CASES) >= 7
+    assert len(CASES) >= 18
+
+
+# ---- 共享夹具：字节解码（与前端 decodePlainText 同一份字节判定）----
+
+@pytest.mark.parametrize("case", DECODE_CASES, ids=[c["name"] for c in DECODE_CASES])
+def test_read_plain_text_matches_shared_fixture(case):
+    assert read_plain_text(bytes(case["bytes"])) == case["expected"]
+
+
+# ---- 共享夹具：书名提取 ----
+
+@pytest.mark.parametrize("case", TITLE_CASES, ids=[c["name"] for c in TITLE_CASES])
+def test_plain_book_title_matches_shared_fixture(case):
+    assert plain_book_title(case["input"]) == case["expected"]
 
 
 # ---- 读取：解码与归一化 ----
@@ -59,13 +93,19 @@ def test_read_plain_text_strips_bom_and_normalizes_newlines():
 
 def test_read_plain_text_decodes_utf8_and_replaces_invalid_bytes():
     assert read_plain_text("中文正文".encode("utf-8")) == "中文正文"
-    # 非法字节按 U+FFFD 替换，与浏览器 TextDecoder 一致（不抛异常）
+    # 两条严格解码都失败时退回 UTF-8 的替换符结果（不抛异常），与浏览器 TextDecoder 一致
     # 注意用 \xff\xff 而不是 \xff\xfe：后者是 UTF-16LE 的 BOM，会按 UTF-16 解码
     assert read_plain_text(b"\xff\xff") == "\ufffd\ufffd"
 
 
+def test_read_plain_text_keeps_valid_utf8_with_placeholder_chars():
+    """合法 UTF-8 里的 U+FFFD 占位符必须原样保留——旧逻辑会按密度把它当编码坏了重解成乱码"""
+    original = "\ufffd" * 10 + "中文正文"
+    assert read_plain_text(original.encode("utf-8")) == original
+
+
 def test_read_plain_text_falls_back_to_gb18030_for_gbk_txt():
-    # 「中文。」的 GBK 字节：按 UTF-8 解出来 4 个替换符（占比 100%），据此回退 GB18030
+    # 「中文。」的 GBK 字节不是合法 UTF-8，严格解码失败后才按 GB18030（GBK 超集）解
     assert read_plain_text(b"\xd6\xd0\xce\xc4\xa1\xa3") == "中文。"
 
 
@@ -75,10 +115,10 @@ def test_read_plain_text_honors_utf16_bom():
 
 
 def test_read_plain_text_keeps_utf8_when_only_one_bad_byte():
-    good = "这是一段足够长的中文正文，用来把坏字节占比压到百分之一以下。"
+    """0xFF 不是合法 GB18030 首字节：两条严格解码都失败，退回 UTF-8 替换，正文不被猜坏"""
+    good = "这是一段足够长的中文正文，坏字节只应影响它自己。"
     text = read_plain_text(good.encode("utf-8") + b"\xff")
-    assert good in text
-    assert text.count("\ufffd") == 1
+    assert text == good + "\ufffd"
 
 
 def test_read_plain_text_only_strips_leading_bom():
@@ -152,5 +192,5 @@ def test_extract_warns_for_epub_toc_mode(tmp_path):
 # ---- WebDAV 扫描扩展名（对齐 src/services/webdav/browse.ts 的 SUPPORTED_EXTENSIONS）----
 
 def test_webdav_supported_extensions_include_plain_text():
-    assert WebDAVClientWrapper.SUPPORTED_EXTENSIONS == {".epub", ".pdf", ".txt", ".md"}
+    assert WebDAVClientWrapper.SUPPORTED_EXTENSIONS == {".epub", ".pdf", ".txt", ".md", ".markdown"}
     assert PLAIN_TEXT_EXTENSIONS == (".txt", ".md", ".markdown")

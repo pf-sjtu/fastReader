@@ -6,7 +6,7 @@
 
 <p align="center">[English](README.en.md) | 中文</p>
 
-咀华是一个 AI 电子书精读工具：把 EPUB / PDF 拆成章节，逐章总结、生成思维导图，再串起章节关联与全书综述。
+咀华是一个 AI 电子书精读工具：把 EPUB / PDF / TXT / Markdown 拆成章节，逐章总结、生成思维导图，再串起章节关联与全书综述。
 配置与阅读记录全员共享，适合小团队共建一个「读过的书都有笔记」的书库。
 
 > 项目原名 fastReader；仓库、Cloudflare Pages 项目名（`fast-read`）、存储键与 CLI 环境变量（`FASTREADER_*`）为兼容保留原名。

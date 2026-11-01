@@ -1,0 +1,15 @@
+[
+  { "name": "去扩展名", "input": "决策思维.txt", "expected": "决策思维" },
+  { "name": "取路径最后一段", "input": "/books/深奥的简洁.epub", "expected": "深奥的简洁" },
+  { "name": "Windows 分隔符", "input": "C:\\books\\笔记.md", "expected": "笔记" },
+  { "name": "没有扩展名时用原样", "input": "没有扩展名", "expected": "没有扩展名" },
+  { "name": "点开头的隐藏文件名保留首点", "input": ".hidden", "expected": ".hidden" },
+  { "name": "只剩扩展名时退回原文件名", "input": ".md", "expected": ".md" },
+  { "name": "扩展名前的中间点保留", "input": "a.b.md", "expected": "a.b" },
+  {
+    "name": "书名里的 BOM 也算首尾空白（JS trim 与 Python _trim 同集合）",
+    "input": "book\uFEFF.txt",
+    "expected": "book"
+  },
+  { "name": "书名两侧的普通空白去掉", "input": "  书名 .md", "expected": "书名" }
+]

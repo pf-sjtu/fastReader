@@ -48,11 +48,18 @@ describe('readPlainText', () => {
   })
 
   it('GBK（GB18030）的中文 txt 不再整篇乱码', async () => {
-    // 「中文」的 GBK 字节；按 UTF-8 解会得到 4 个 U+FFFD（占比 100%），据此回退 GB18030
+    // 「中文。」的 GBK 字节不是合法 UTF-8，严格解码失败后才按 GB18030（GBK 超集）解
     const gbk = new Uint8Array([0xd6, 0xd0, 0xce, 0xc4, 0xa1, 0xa3])
     const text = await readPlainText(new File([gbk], 'gbk.txt'))
     expect(text).toBe('中文。')
     expect(text).not.toContain('\uFFFD')
+  })
+
+  it('合法 UTF-8 里的 U+FFFD 占位符原样保留（不再按替换符密度猜编码）', async () => {
+    // 书里出现「□」占位符是合法文本；旧逻辑会把它当编码坏了、整篇按 GB18030 重解成乱码
+    const original = `${'\uFFFD'.repeat(10)}中文正文`
+    const text = await readPlainText(mkFile('placeholder.txt', original))
+    expect(text).toBe(original)
   })
 
   it('带 BOM 的 UTF-16 按 BOM 指定端序解（不猜 GBK）', async () => {
@@ -68,12 +75,14 @@ describe('readPlainText', () => {
     expect(await readPlainText(new File([bytes], 'utf16.txt'))).toBe(s)
   })
 
-  it('UTF-8 正文里偶尔一个坏字节不触发回退（不把好文本猜坏）', async () => {
-    const good = '这是一段足够长的中文正文，用来把坏字节占比压到百分之一以下。'
+  it('坏字节落在两套编码都不合法处：退回 UTF-8 替换，好文本照常在', async () => {
+    const good = '这是一段足够长的中文正文，坏字节只应影响它自己。'
+    // 0xFF 既不是合法 UTF-8 也不是合法 GB18030（它不是 GB18030 的首字节），
+    // 所以两条严格解码都失败，最后退回 UTF-8 的替换符结果——正文不会被猜坏
     const bytes = new Uint8Array([...new TextEncoder().encode(good), 0xff])
     const text = await readPlainText(new File([bytes], 'a.txt'))
-    expect(text).toContain('这是一段足够长的中文正文')
-    expect(text).toContain('\uFFFD')
+    expect(text).toContain(good)
+    expect(text).toBe(`${good}\uFFFD`)
   })
 })
 

@@ -57,7 +57,7 @@ export interface LibraryIO {
 
 export const SUMMARY_SUFFIX = '-完整摘要.md'
 /** 与 webdav/browse.ts 的受支持扩展名一致 */
-export const BOOK_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md']
+export const BOOK_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md', '.markdown']
 export const LIBRARY_DIR = '.juhua'
 export const coverRemotePath = (syncPath: string, key: string) => `${syncPath}/${LIBRARY_DIR}/covers/${key}.webp`
 /** 索引以 gzip 存放（一次请求读完全部文字元数据）；旧版明文 library.json 仅作读取兜底 */

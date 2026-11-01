@@ -22,10 +22,11 @@ PLAIN_TEXT_EXTENSIONS = ('.txt', '.md', '.markdown')
 
 # markdown 一二级标题（行尾的 # 允许省略或带空格）——与前端 plainText.ts 的 HEADING 同一条正则：
 # 三级及以下标题不匹配（`#{1,2}` 后面紧跟 `#` 而不是空白），所以留在正文里。
-# `_WS` 而不是裸 `\s`：JS 的 `\s` 把 U+FEFF（BOM）也算空白，Python 的 `\s` 不算，
-# 中间夹了 BOM 的标题行在两端必须同判（夹具里有这条用例）。
-_WS = r'[\s\uFEFF]'
-_HEADING = re.compile(rf'^#{{1,2}}{_WS}+(.+?){_WS}*#*{_WS}*$')
+# 空白集**显式写死**成与 JS `\s` / `String.trim()` 相同的集合：Python 的 `\s` 还会认
+# U+001C–U+001F 与 U+0085，不写死会让 `正文\u0085`、`#\u001c标题` 这类行两端切章不同。
+_WS_CLASS = '\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff'
+_HEADING = re.compile(rf'^#{{1,2}}[{_WS_CLASS}]+(.+?)[{_WS_CLASS}]*#*[{_WS_CLASS}]*$')
+_WS_EDGES = re.compile(rf'^[{_WS_CLASS}]+|[{_WS_CLASS}]+$')
 
 # 纯文本没有作者元数据，与 epub/pdf 缺元数据时的兜底一致
 UNKNOWN_AUTHOR = 'Unknown Author'
@@ -39,18 +40,20 @@ def _normalize(text: str) -> str:
 
 
 def _trim(text: str) -> str:
-    """对齐 JS `String.trim()`：Python 的 `str.isspace()` 不认 U+FEFF，JS 的 trim 把 BOM 当空白"""
-    return text.strip().strip('\ufeff').strip()
+    """对齐 JS `String.trim()`：Python 的 `str.strip()` 认的空白集更大（含 U+001C–U+001F / U+0085）"""
+    return _WS_EDGES.sub('', text)
 
 
 def read_plain_text(data: bytes) -> str:
     """字节 → 文本。
 
-    默认 UTF-8（电子书里最常见）；UTF-16 带 BOM 时按 BOM 指定端序解；
-    UTF-8 解出**大量**替换符（说明多半是 GBK 系的中文 txt）时再按 GB18030（GBK/GB2312 的超集）
-    试一次，取替换符更少的那份——否则整本乱码会照常进 AI 流程白花额度。
-    只在坏字符超过 1% 时才回退：正文里偶尔一个坏字节不该把整篇猜坏。
-    与前端 `src/services/pipeline/plainText.ts` 的 `decodePlainText` 同规则。
+    UTF-16 认 BOM；否则先按**严格** UTF-8 试，失败了才当 GBK 系中文 txt 按 GB18030
+    （GBK / GB2312 的超集）严格解，两者都不合法时退回 UTF-8 的替换符结果。
+    与前端 `src/services/pipeline/plainText.ts` 的 `decodePlainText` **同规则**（夹具 `plain-text-cases.json`）。
+
+    为什么不用「替换符占比」猜编码（旧做法，被独立审查实测出两个坑）：书里的「□」等 U+FFFD 占位符
+    是合法 UTF-8，旧逻辑会整篇按 GB18030 重解成「锟斤拷」（把好文件解坏）；而且占位符密度的分母
+    两端不一致（JS 用 UTF-16 长度、Python 用码点）。严格解码只回答「是不是合法 UTF-8」。
     """
     return _normalize(_decode(data))
 
@@ -61,20 +64,21 @@ def _decode(data: bytes) -> str:
     if data[:2] == b'\xfe\xff':
         return data.decode('utf-16-be', errors='replace')
 
-    text = data.decode('utf-8', errors='replace')
-    broken = text.count('\ufffd')
-    if broken and text and broken / len(text) > 0.01:
-        gb = data.decode('gb18030', errors='replace')
-        if gb.count('\ufffd') < broken:
-            return gb
-    return text
+    try:
+        return data.decode('utf-8')
+    except UnicodeDecodeError:
+        pass
+    try:
+        return data.decode('gb18030')
+    except UnicodeDecodeError:
+        return data.decode('utf-8', errors='replace')
 
 
 def plain_book_title(file_name: str) -> str:
     """`书名.epub` → `书名`；没有扩展名就用原样（去掉路径分隔符后的部分）"""
     base = re.split(r'[\\/]', file_name)[-1]
-    stem = re.sub(r'\.[^.]+$', '', base).strip()
-    return stem or base.strip() or file_name
+    stem = _trim(re.sub(r'\.[^.]+$', '', base))
+    return stem or _trim(base) or file_name
 
 
 def split_plain_text(content: str, fallback_title: str) -> list[Chapter]:

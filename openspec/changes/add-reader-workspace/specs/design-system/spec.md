@@ -40,8 +40,12 @@
 - **THEN** 使用同一 `EmptyState` 组件，图标、标题、说明、操作的排布与字号一致
 
 ### Requirement: 设计一致性的自动守卫
-系统 SHALL 提供测试 `tests/designSystem.test.ts`，静态扫描 `src/components/**/*.tsx` 与 `*.ts`（类名常写在常量表、`cn()` 拼接或样式映射里），对「硬编码调色板色、标题处零散字号、裸圆角、`CardTitle` 内覆写字号、各页自拼骨架屏 / 空状态容器」给出违规清单；清单 SHALL 随迁移逐步清零，新增违规使测试失败（允许在登记表中显式豁免并写明理由）。
+系统 SHALL 提供测试 `tests/designSystem.test.ts`，静态扫描 `src/components/**/*.tsx` 与 `*.ts`（类名常写在常量表、`cn()` 拼接或样式映射里），对「硬编码调色板色与十六进制色 / 任意值颜色函数（`text-[rgb(...)]`、`bg-[#fff]`）、标题处零散字号、裸圆角、`CardTitle` 内覆写字号、`<Button>` 在 `className` 里覆写高度（应改用 `size` 档位）、各页自拼骨架屏 / 空状态容器」给出违规清单；清单 SHALL 随迁移逐步清零，新增违规使测试失败（允许在登记表中显式豁免并写明理由，例如独立 HTML/SVG/iframe 文档读不到宿主 CSS 变量的场景）。
 
 #### Scenario: 新增硬编码色
-- **WHEN** 有人在组件里新增 `text-red-500`
+- **WHEN** 有人在组件里新增 `text-red-500` 或 `bg-[#fff]`
 - **THEN** `pnpm test` 失败并指出文件与行号
+
+#### Scenario: 深色主题下的状态色前景
+- **WHEN** 深色主题重新定义 `--success/--warning/--info/--destructive`
+- **THEN** 四个实心底前景 token 取值同一墨色（近白前景在提亮后的深色状态色上对比不足），且由守卫测试锁定

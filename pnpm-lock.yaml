@@ -119,6 +119,9 @@ importers:
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1(supports-color@7.2.0)
+      remark-parse:
+        specifier: ^11.0.0
+        version: 11.0.0(supports-color@7.2.0)
       sonner:
         specifier: ^2.0.6
         version: 2.0.7(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -128,6 +131,9 @@ importers:
       tailwindcss:
         specifier: ^4.1.11
         version: 4.1.18
+      unified:
+        specifier: ^11.0.5
+        version: 11.0.5
       webdav:
         specifier: ^5.8.0
         version: 5.8.0

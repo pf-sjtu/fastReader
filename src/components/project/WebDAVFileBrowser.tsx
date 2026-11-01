@@ -38,7 +38,7 @@ interface WebDAVFileBrowserProps {
   allowedExtensions?: string[]
 }
 
-const DEFAULT_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md']
+const DEFAULT_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md', '.markdown']
 
 function FileIcon({ file }: { file: WebDAVFileInfo }) {
   if (file.type === 'directory') return <FolderOpen className="h-4 w-4 text-primary" />
