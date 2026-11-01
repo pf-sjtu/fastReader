@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { useFillHeight } from '@/hooks/useFillHeight'
 
 const rectOf = (el: Element) => {
   const r = el.getBoundingClientRect()
@@ -63,6 +64,8 @@ export function EntityTimelineChart({
   )
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  // 时间线最高不超过对照栏剩余高度（再高就在框内滚动，而不是撑出外层滚动条）
+  const fillHeight = useFillHeight(scrollRef, 160)
 
   /** 某实体当前该用的颜色：开启"同色"时取统一 token（CSS 变量，DOM 里可直接用） */
   const colorOf = (id: string, fallback: string): string =>
@@ -130,6 +133,7 @@ export function EntityTimelineChart({
       <div
         ref={scrollRef}
         className="w-full max-h-[max(280px,calc(100dvh-13rem))] overflow-auto border border-border rounded-lg bg-card relative"
+        style={fillHeight ? { maxHeight: fillHeight } : undefined}
       >
         <div className="min-w-max" style={{ width: Math.max(layout.width, 320) }}>
           {/* 表头行：纵向 sticky；「时间」角格同时横向 sticky */}

@@ -242,7 +242,7 @@ function App() {
         className={cn(
           'w-full flex-1 min-w-0 space-y-2.5 sm:space-y-4',
           // 工作台要更宽的画布给三栏；纵向 flex 让工作台吃掉剩余高度
-          workspaceMode ? 'max-w-full 2xl:max-w-[110rem] min-[1800px]:max-w-[160rem] flex flex-col min-h-0 !space-y-0 gap-2' : 'max-w-full xl:max-w-7xl'
+          workspaceMode ? 'max-w-full 2xl:max-w-[110rem] min-[112.5rem]:max-w-[160rem] flex flex-col min-h-0 !space-y-0 gap-2' : 'max-w-full xl:max-w-7xl'
         )}
       >
         {/* 工作台里页头与状态栏合成一行（单层页头）；其余页面状态栏仍在页头下方 */}

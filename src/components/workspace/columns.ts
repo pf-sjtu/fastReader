@@ -6,7 +6,7 @@ export const BODY_MIN_WIDTH = 420
 export const COMPACT_BELOW = 1000
 /** App 外壳左右内边距之和（px-1.5…sm:p-4，取大值）与工作台最大宽度（2xl:max-w-[110rem]） */
 const PAGE_GUTTER = 48
-/** 超宽屏的工作台上限（App.tsx 的 min-[1800px]:max-w-[160rem]）；1760 以内的屏幕布局不变 */
+/** 超宽屏的工作台上限（App.tsx 的 min-[112.5rem]:max-w-[160rem]；必须与 2xl 同用 rem 单位，否则 Tailwind 把 px 断点排在 rem 之前、被 2xl 的 110rem 盖掉）；1760 以内的屏幕布局不变 */
 const PAGE_MAX = 2560
 /** 超过它的宽度才算「超宽」，多出来的部分按比例加给目录 / 对照栏 */
 const WIDE_FROM = 1760

@@ -221,3 +221,13 @@ describe('ReaderWorkspace 进入即有内容可读', () => {
     expect(onChapterExpandChange).toHaveBeenCalledWith('c1', true)
   })
 })
+
+describe('超宽屏断点的单位', () => {
+  it('App.tsx 的超宽上限必须与 2xl 同用 rem 单位：Tailwind 把 px 断点排在 rem 之前，2xl 的 110rem 会盖掉它（线上就这么失效过）', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('src/App.tsx', 'utf8')
+    expect(src).toMatch(/2xl:max-w-\[110rem\]/)
+    expect(src).toMatch(/min-\[112\.5rem\]:max-w-\[160rem\]/)
+    expect(src).not.toMatch(/min-\[\d+px\]:max-w-\[160rem\]/)
+  })
+})

@@ -14,6 +14,7 @@ import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Maximize2, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { useFillHeight } from '@/hooks/useFillHeight'
 
 const DEFAULT_FORCE = 55
 const FORCE_STORAGE_KEY = 'fastreader.entityGraph.forceStrength'
@@ -53,6 +54,8 @@ export function PersonGraphChart({
 }: ChartPluginProps) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
+  // 画布刚好填满对照栏剩余高度（扣掉下面的图例 / 提示）；量不出来时用 CSS 兜底高度
+  const fillHeight = useFillHeight(containerRef)
   const cyRef = useRef<Core | null>(null)
   const layoutRef = useRef<{ stop?: () => void } | null>(null)
   const graph = getEntityGraph(charts)
@@ -400,8 +403,9 @@ export function PersonGraphChart({
       </div>
       <div
         ref={containerRef}
-        // 随视口高度伸缩（不再封顶 640px）：减去页头 / 页签 / 工具条 / 图例 / 提示占的约 19rem，最小 280px
+        // 高度由 useFillHeight 按对照栏实际剩余高度设定；下面是量不出来（jsdom / 尚未布局）时的兜底
         className="w-full h-[max(280px,calc(100dvh-19rem))] border border-border rounded-lg bg-card"
+        style={fillHeight ? { height: fillHeight } : undefined}
       />
       <GraphLegend
         groups={legendGroups}
