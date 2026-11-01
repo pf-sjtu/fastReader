@@ -149,27 +149,30 @@ export function FileUploadCard({
           />
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button
-            onClick={onExtractChapters}
-            disabled={!file || extractingChapters || processing}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-2 min-h-9"
-          >
-            {extractingChapters ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {t('upload.extractingChapters')}
-              </>
-            ) : (
-              <>
-                <List className="h-4 w-4" />
-                {t('upload.extractChapters')}
-              </>
-            )}
-          </Button>
-          <ConfigDialog processing={processing} file={file} />
+        {/* 操作行：处理这本书的动作（获取章节 / 配置）在左，破坏性的「清除缓存」单独在最右，不与前两者并排抢同一层级 */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={onExtractChapters}
+              disabled={!file || extractingChapters || processing}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 min-h-9"
+            >
+              {extractingChapters ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('upload.extractingChapters')}
+                </>
+              ) : (
+                <>
+                  <List className="h-4 w-4" />
+                  {t('upload.extractChapters')}
+                </>
+              )}
+            </Button>
+            <ConfigDialog processing={processing} file={file} />
+          </div>
           <Button
             variant="ghost"
             size="sm"

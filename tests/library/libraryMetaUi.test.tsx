@@ -168,6 +168,20 @@ describe('详情对话框', () => {
     expect(mounted.container.textContent).not.toContain('WebDAV')
   })
 
+  it('悬浮卡显示全部 metadata（长简介不截断、分类不限 4 个），内容过高时卡内纵向滚动', async () => {
+    const { BookTooltipBody } = await import('@/components/library/BookInfo')
+    const longDesc = `${'这是一段很长的简介。'.repeat(39)}结尾句。` // 400 字以内
+    const subjects = ['商业', '传记', '经济', '历史', '哲学', '科学']
+    const entry = { path: 'a.epub', title: 'A', size: 1, mtime: '', status: 'unprocessed', stale: false, missingScans: 0, updatedAt: 0, desc: longDesc, subjects } as LibraryEntry
+    mounted = mount(<BookTooltipBody entry={entry} />)
+    const root = mounted.container.firstElementChild as HTMLElement
+    expect(root.textContent).toContain('结尾句。') // 以前 line-clamp-4 会把后半段藏掉
+    expect(mounted.container.querySelectorAll('ul li')).toHaveLength(subjects.length) // 以前最多 4 个
+    expect(root.className).toMatch(/overflow-y-auto/)
+    expect(root.className).toMatch(/max-h-\[/) // 有最大高度，才轮得到滚动
+    expect(mounted.container.querySelector('p.line-clamp-4, p[class*="line-clamp"]')).toBeNull()
+  })
+
   it('没有简介的书写明「没有简介」而不是留空', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     click(chip('艺术'))

@@ -98,6 +98,25 @@ describe('顶栏的「书库 / 处理」分段', () => {
     expect(onSelect).toHaveBeenCalledWith('process')
   })
 
+  it('「进入处理界面」与「书库 / 处理」合在同一个分组里：在分隔线之后、不是标签页，点击触发视图跳转', () => {
+    const onToggle = vi.fn()
+    m = mount(<UnifiedStatusBar currentView="config" configSections configSection="process" onSelectConfigSection={vi.fn()} onToggleView={onToggle} />)
+    const nav = m.container.querySelector('[data-slot="status-nav"]')!
+    const enter = findButton(/进入处理界面/)!
+    expect(nav.contains(enter)).toBe(true) // 同一个分组，而不是旁边另一个独立按钮
+    expect(enter.getAttribute('role')).not.toBe('tab') // 视图跳转保持按钮语义
+    expect(nav.querySelectorAll('[role="tablist"] [role="tab"]')).toHaveLength(2) // 标签页仍只有两个
+    expect(nav.querySelector('[role="tablist"]')!.contains(enter)).toBe(false)
+    click(enter)
+    expect(onToggle).toHaveBeenCalledTimes(1)
+  })
+
+  it('没有分段时（未启用书库）「进入处理界面」仍是独立的描边按钮', () => {
+    m = mount(<UnifiedStatusBar currentView="config" onToggleView={vi.fn()} />)
+    expect(m.container.querySelector('[data-slot="status-nav"]')).toBeNull()
+    expect(findButton(/进入处理界面/)).toBeTruthy()
+  })
+
   it('未启用书库时不显示分段', () => {
     m = mount(<UnifiedStatusBar currentView="config" onSelectConfigSection={vi.fn()} />)
     expect(m.container.querySelector('[role="tablist"]')).toBeNull()

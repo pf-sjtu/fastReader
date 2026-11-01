@@ -127,6 +127,25 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
     records.length > 0 &&
     !!onLoadFromHistory
 
+  // 视图跳转按钮的内容：配置视图「进入处理界面 →」，处理视图「← 返回配置」
+  const toggleContent =
+    currentView === 'config' ? (
+      <>
+        <Brain className="h-4 w-4 shrink-0" />
+        <span className="hidden sm:inline">{t('statusBar.enterProcessing')}</span>
+        <span className="sm:hidden">{t('statusBar.enterProcessingShort')}</span>
+        <ArrowRight className="h-4 w-4 shrink-0" />
+      </>
+    ) : (
+      <>
+        <ArrowLeft className="h-4 w-4 shrink-0" />
+        <span className="hidden sm:inline">{t('statusBar.backToConfig')}</span>
+        <span className="sm:hidden">{t('statusBar.backToConfigShort')}</span>
+        <Settings className="h-4 w-4 shrink-0" />
+      </>
+    )
+  const groupedNav = currentView === 'config' && configSections && !!onSelectConfigSection
+
   return (
     <>
       {/* 无卡片外框：它只是一条工具行，框起来会和下面真正的内容卡片（书库、上传）抢层级 */}
@@ -135,57 +154,42 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 lg:flex-nowrap">
           {/* 切换按钮 + 模型信息（移动端同一行） */}
           <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-start sm:gap-3 shrink-0">
-            {/* 配置视图的「书库 / 处理」分段：书库要能随时回去看一眼，而不是选完书就被表单顶掉 */}
-            {currentView === 'config' && configSections && onSelectConfigSection && (
-              <div
-                role="tablist"
-                aria-label={t('statusBar.sections')}
-                className="flex items-center gap-0.5 rounded-md border p-0.5"
-              >
-                <Button
-                  role="tab"
-                  aria-selected={configSection === 'library'}
-                  variant={configSection === 'library' ? 'secondary' : 'ghost'}
-                  size="xs"
-                  onClick={() => onSelectConfigSection('library')}
-                >
-                  <BookMarked className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{t('statusBar.library')}</span>
-                </Button>
-                <Button
-                  role="tab"
-                  aria-selected={configSection === 'process'}
-                  variant={configSection === 'process' ? 'secondary' : 'ghost'}
-                  size="xs"
-                  onClick={() => onSelectConfigSection('process')}
-                >
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{t('statusBar.process')}</span>
+            {/* 配置视图的「书库 / 处理」分段 + 「进入处理界面」合成一个分组：三者都是在工作台里换去处，不该是两个互不相干的控件。
+                书库要能随时回去看一眼，而不是选完书就被表单顶掉；最右的「进入处理界面」是视图跳转（不是标签页），用分隔线与两个标签隔开、保持按钮语义 */}
+            {groupedNav ? (
+              <div data-slot="status-nav" className="flex items-center gap-0.5 rounded-md border p-0.5">
+                <div role="tablist" aria-label={t('statusBar.sections')} className="flex items-center gap-0.5">
+                  <Button
+                    role="tab"
+                    aria-selected={configSection === 'library'}
+                    variant={configSection === 'library' ? 'secondary' : 'ghost'}
+                    size="xs"
+                    onClick={() => onSelectConfigSection?.('library')}
+                  >
+                    <BookMarked className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{t('statusBar.library')}</span>
+                  </Button>
+                  <Button
+                    role="tab"
+                    aria-selected={configSection === 'process'}
+                    variant={configSection === 'process' ? 'secondary' : 'ghost'}
+                    size="xs"
+                    onClick={() => onSelectConfigSection?.('process')}
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{t('statusBar.process')}</span>
+                  </Button>
+                </div>
+                <span aria-hidden className="mx-0.5 h-4 w-px shrink-0 bg-border" />
+                <Button variant="ghost" size="xs" onClick={handleToggleView} className="gap-1.5">
+                  {toggleContent}
                 </Button>
               </div>
+            ) : (
+              <Button variant="outline" size="sm" onClick={handleToggleView} className="gap-1.5">
+                {toggleContent}
+              </Button>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleToggleView}
-              className="flex items-center gap-1.5 h-8 min-h-8"
-            >
-              {currentView === 'config' ? (
-                <>
-                  <Brain className="h-4 w-4 shrink-0" />
-                  <span className="hidden sm:inline">{t('statusBar.enterProcessing')}</span>
-                  <span className="sm:hidden">{t('statusBar.enterProcessingShort')}</span>
-                  <ArrowRight className="h-4 w-4 shrink-0" />
-                </>
-              ) : (
-                <>
-                  <ArrowLeft className="h-4 w-4 shrink-0" />
-                  <span className="hidden sm:inline">{t('statusBar.backToConfig')}</span>
-                  <span className="sm:hidden">{t('statusBar.backToConfigShort')}</span>
-                  <Settings className="h-4 w-4 shrink-0" />
-                </>
-              )}
-            </Button>
 
             <div className="flex items-center gap-2 sm:hidden">
               {/* 模型徽章即切换器：换模型 / 调思考强度 都在这里 */}

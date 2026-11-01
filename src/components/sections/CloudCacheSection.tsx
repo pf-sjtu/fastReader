@@ -49,48 +49,48 @@ export function CloudCacheSection({
   }
 
   if (cloudCacheMetadata && !isCheckingCloudCache) {
+    // 费用必须用 `> 0` 判断：`costUSD && …` 在费用为 0 时会把数字 0 原样渲染到页面上
+    const hasCost = (cloudCacheMetadata.costUSD ?? 0) > 0
     return (
-      <div className="p-3 bg-muted border rounded-lg">
-        <div className="flex items-center gap-2 mb-2">
-          <CheckCircle className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-foreground">
-            {t('cloudCache.found')}
-          </span>
+      <div data-slot="cloud-cache" className="rounded-lg border border-success/30 bg-success/5 p-3">
+        {/* 标题行：状态在左、主操作在右（不再埋在卡片底部整行铺开）；窄屏自动换行 */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 shrink-0 text-success" />
+            <span className="text-sm font-medium text-foreground">{t('cloudCache.found')}</span>
+          </div>
+          <Button type="button" size="sm" onClick={onLoadFromCloudCache}>
+            {t('cloudCache.useCache')}
+          </Button>
         </div>
-        <div className="text-xs text-muted-foreground space-y-1">
-          <p>{t('cloudCache.processedAt')}: {new Date(cloudCacheMetadata.processedAt).toLocaleString()}</p>
-          <p>{t('cloudCache.model')}: {cloudCacheMetadata.model}</p>
-          <p>{t('cloudCache.chapterCount')}: {cloudCacheMetadata.chapterCount}</p>
-          {cloudCacheIsPartial && (
-            <p className="flex items-start gap-1 text-warning">
-              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              {t('cloudCache.partialLoaded')}
-            </p>
+        {/* 标签 / 数值两列对齐；整句说明（关键图表、不完整）横跨两列 */}
+        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          <dt className="text-muted-foreground">{t('cloudCache.processedAt')}</dt>
+          <dd className="min-w-0 tabular-nums">{new Date(cloudCacheMetadata.processedAt).toLocaleString()}</dd>
+          <dt className="text-muted-foreground">{t('cloudCache.model')}</dt>
+          <dd className="min-w-0 break-all">{cloudCacheMetadata.model}</dd>
+          <dt className="text-muted-foreground">{t('cloudCache.chapterCount')}</dt>
+          <dd className="min-w-0 tabular-nums">{cloudCacheMetadata.chapterCount}</dd>
+          {hasCost && (
+            <>
+              <dt className="text-muted-foreground">{t('cloudCache.cost')}</dt>
+              <dd className="min-w-0 tabular-nums">${cloudCacheMetadata.costUSD!.toFixed(4)} / ¥{cloudCacheMetadata.costRMB?.toFixed(2)}</dd>
+            </>
           )}
-          {includesKeyCharts ? (
-            <p className="text-foreground/80">
-              {cloudChartsFileFound
+          <dd className={includesKeyCharts ? 'col-span-2 text-foreground/80' : 'col-span-2 text-muted-foreground'}>
+            {includesKeyCharts
+              ? cloudChartsFileFound
                 ? t('cloudCache.includesKeyChartsJson')
-                : t('cloudCache.includesKeyCharts')}
-            </p>
-          ) : (
-            <p className="text-muted-foreground">
-              {t('cloudCache.noKeyChartsYet')}
-            </p>
+                : t('cloudCache.includesKeyCharts')
+              : t('cloudCache.noKeyChartsYet')}
+          </dd>
+          {cloudCacheIsPartial && (
+            <dd className="col-span-2 flex items-start gap-1 text-warning">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {t('cloudCache.partialLoaded')}
+            </dd>
           )}
-          {cloudCacheMetadata.costUSD && cloudCacheMetadata.costUSD > 0 && (
-            <p>{t('cloudCache.cost')}: ${cloudCacheMetadata.costUSD.toFixed(4)} / ¥{cloudCacheMetadata.costRMB?.toFixed(2)}</p>
-          )}
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="mt-2 w-full"
-          onClick={onLoadFromCloudCache}
-        >
-          {t('cloudCache.useCache')}
-        </Button>
+        </dl>
       </div>
     )
   }

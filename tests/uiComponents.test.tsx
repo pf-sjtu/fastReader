@@ -267,4 +267,34 @@ describe('CloudCacheSection 云缓存状态提示', () => {
     )
     expect(m.container.textContent).toContain(i18n.t('cloudCache.partialLoaded'))
   })
+
+  const found = (extra: Record<string, unknown> = {}) =>
+    mount(
+      <CloudCacheSection
+        {...base}
+        cloudCacheContent="# x"
+        cloudCacheMetadata={{ processedAt: '2026-11-01T22:55:39Z', model: 'claude-opus-5-5', chapterCount: 12, ...extra } as never}
+      />
+    )
+
+  it('费用为 0 时不会把数字 0 渲染到页面上（`costUSD && …` 的老坑）', () => {
+    m = found({ costUSD: 0, costRMB: 0 })
+    const dl = m.container.querySelector('dl')!
+    // 游离的 0 是 <dl> 里的一个文本节点（夹在两行之间），不是元素：直接断言子节点全是元素
+    expect(Array.from(dl.childNodes).every((n) => n.nodeType === Node.ELEMENT_NODE)).toBe(true)
+    expect(dl.textContent).not.toContain(i18n.t('cloudCache.cost')) // 0 费用整行不显示
+  })
+
+  it('有费用时显示一行；元数据是标签 / 数值对齐的 dl，主操作「使用云端缓存」在标题行', () => {
+    m = found({ costUSD: 0.1234, costRMB: 0.89 })
+    const dl = m.container.querySelector('dl')!
+    expect(dl.textContent).toContain('$0.1234 / ¥0.89')
+    const labels = Array.from(dl.querySelectorAll('dt')).map((d) => d.textContent)
+    expect(labels).toEqual([i18n.t('cloudCache.processedAt'), i18n.t('cloudCache.model'), i18n.t('cloudCache.chapterCount'), i18n.t('cloudCache.cost')])
+    const btn = Array.from(m.container.querySelectorAll('button')).find((b) => b.textContent === i18n.t('cloudCache.useCache'))!
+    expect(dl.contains(btn)).toBe(false) // 不在元数据列表里
+    expect(btn.className).not.toContain('w-full') // 不再整行铺开
+    click(btn)
+    expect(base.onLoadFromCloudCache).toHaveBeenCalled()
+  })
 })

@@ -12,6 +12,9 @@ import { useCoverUrl } from './useCoverUrl'
 const DESC_CAP = 400
 const extOf = (path: string) => (path.split('.').pop() ?? '').toUpperCase()
 
+/** 简介全文；云端上限 400 字：到上限说明被截断了，补省略号而不是在半句话处突然结束 */
+const descText = (desc: string) => (desc.length >= DESC_CAP ? `${desc}…` : desc)
+
 /** 章数 / 页数：有哪个显示哪个 */
 const countText = (t: TFunction, e: LibraryEntry): string | null =>
   e.chapterCount ? t('library.chapters', { count: e.chapterCount }) : e.pages ? t('library.pages', { count: e.pages }) : null
@@ -46,19 +49,23 @@ function CategoryChips({ subjects, limit, onPick }: { subjects: string[]; limit?
   )
 }
 
-/** 悬浮 / 聚焦时的紧凑信息卡：一眼看清「这是什么书、值不值得点开」 */
+/**
+ * 悬浮 / 聚焦时的信息卡：显示全部 metadata（不截断）；内容超过可用高度时在卡内纵向滚动。
+ * 高度取 Radix 给出的「当前方向上的可用高度」，再封顶 24rem：矮窗口里也不会顶出视口。
+ * Tooltip 内容默认可悬停（鼠标能移进来），所以滚轮滚动可用；overscroll-contain 避免滚到底后带动页面。
+ */
 export function BookTooltipBody({ entry }: { entry: LibraryEntry }) {
   const { t } = useTranslation()
   const count = countText(t, entry)
   const facts = [extOf(entry.path), sizeText(entry), count].filter(Boolean).join(' · ')
   const pct = entry.readProgress?.pct ?? 0
   return (
-    <div className="max-w-[18rem] space-y-1.5 text-left">
+    <div className="max-h-[min(24rem,var(--radix-tooltip-content-available-height,24rem))] max-w-[18rem] space-y-1.5 overflow-y-auto overscroll-contain text-left">
       <p className="font-brand text-sm font-semibold leading-snug">{entry.title}</p>
       {entry.author && <p className="text-xs opacity-80">{entry.author}</p>}
       {publishLine(entry) && <p className="text-xs opacity-70">{publishLine(entry)}</p>}
-      {entry.subjects && <CategoryChips subjects={entry.subjects} limit={4} />}
-      {entry.desc && <p className="line-clamp-4 text-xs leading-relaxed opacity-90">{entry.desc}</p>}
+      {entry.subjects && <CategoryChips subjects={entry.subjects} />}
+      {entry.desc && <p className="whitespace-pre-line text-xs leading-relaxed opacity-90">{descText(entry.desc)}</p>}
       {facts && <p className="text-xs tabular-nums opacity-70">{facts}</p>}
       {pct > 0 && pct < 100 && <p className="text-xs opacity-70">{t('library.info.progress')} {pct}%</p>}
     </div>
@@ -120,10 +127,7 @@ export function BookDetailDialog({ entry, onClose, onOpen, onPickCategory, disab
             }}
           />
         )}
-        {/* 云端简介上限 400 字：到上限说明被截断了，补省略号而不是在半句话处突然结束 */}
-        <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-          {entry.desc ? (entry.desc.length >= DESC_CAP ? `${entry.desc}…` : entry.desc) : t('library.info.noDesc')}
-        </p>
+        <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{entry.desc ? descText(entry.desc) : t('library.info.noDesc')}</p>
         <Button
           className="gap-1.5 self-end"
           disabled={disabled}
