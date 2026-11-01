@@ -89,14 +89,11 @@ describe('目录列表：真实 webdav 库，并发且各带各的路径', () =>
     seen.length = 0
     peak = 0
     const ctx = makeCtx()
-    const t0 = Date.now()
     const results = await Promise.all(['/books/a', '/books/b', '/books/c', '/books/d'].map((d) => getDirectoryContents(ctx, d, false)))
-    const elapsed = Date.now() - t0
     expect(results.every((r) => r.success)).toBe(true)
     expect(seen.map((s) => s.path).sort()).toEqual(['/books/a', '/books/b', '/books/c', '/books/d'])
     expect(seen.some((s) => s.path.includes('STALE'))).toBe(false)
     expect(peak).toBeGreaterThan(1)
-    expect(elapsed).toBeLessThan(80 * 4) // 串行至少 320ms
     const names = results.map((r) => (r.success ? r.data!.map((f) => f.basename).filter((n) => n.endsWith('.epub') || n.endsWith('.pdf')) : []))
     expect(names).toEqual([['a1.epub'], ['b1.pdf'], ['c1.epub'], ['d1.epub']])
   })

@@ -44,6 +44,7 @@ import { applyDepth } from '@/study/depth'
 import { studyKeyOf } from '@/study/persistence'
 import { useStudyStore } from '@/study/studyStore'
 import { useWorkspaceLinking } from './useWorkspaceLinking'
+import { mergeAliasedEntities } from '@/charts/linking/entityMerge'
 
 const ResultsSection = lazy(() =>
   import('@/components/sections/ResultsSection').then((m) => ({ default: m.ResultsSection }))
@@ -206,8 +207,11 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
   const expandChapter = useCallback((id: string) => onChapterExpandChange(id, true), [onChapterExpandChange])
 
   // 联动：实体表、正文标注、章节条、图表入参、悬浮卡片、跳转历史
+  // 同一实体被图表拆成两个节点（KKR / Kohlberg Kravis Roberts）时按各章旁路合并后再给图表和联动用
+  const mergedCharts = useMemo(() => mergeAliasedEntities(bookSummary.charts, bookSummary.chapters.map((c) => c.meta)), [bookSummary.charts, bookSummary.chapters])
+  const linkSummary = useMemo(() => (mergedCharts === bookSummary.charts ? bookSummary : { ...bookSummary, charts: mergedCharts }), [bookSummary, mergedCharts])
   const link = useWorkspaceLinking({
-    bookSummary,
+    bookSummary: linkSummary,
     processing,
     bodyEl,
     currentChapterId: currentViewingChapter,
@@ -244,7 +248,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       <ErrorBoundary section={t('results.tabs.keyCharts')}>
         <ChartsPanel
           toolbarSlot={toolbarSlot}
-          charts={bookSummary.charts}
+          charts={mergedCharts}
           chartsError={bookSummary.chartsError}
           generating={chartsGenerating}
           onClearCache={clearCharts}
@@ -255,7 +259,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
         />
       </ErrorBoundary>
     ),
-    [t, bookSummary.charts, bookSummary.chartsError, chartsGenerating, clearCharts, onRegenerateKeyCharts, canRegenerate, link.pluginProps]
+    [t, mergedCharts, bookSummary.chartsError, chartsGenerating, clearCharts, onRegenerateKeyCharts, canRegenerate, link.pluginProps]
   )
 
   const tabs = useMemo<DockTab[]>(() => {
