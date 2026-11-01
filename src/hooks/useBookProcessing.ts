@@ -23,6 +23,7 @@ import {
 import { clearBookEntries, clearChapterEntries, clearKindEntries } from '@/services/pipeline/persistence'
 import { useBookFile } from './useBookFile'
 import { useKeyCharts } from './useKeyCharts'
+import { useBookSteps } from './useBookSteps'
 import { useProcessingRun } from './useProcessingRun'
 import { useReaderPanel } from './useReaderPanel'
 
@@ -77,6 +78,7 @@ export function useBookProcessing() {
   }, [cloudCacheKeyRef])
 
   const charts = useKeyCharts({ generationRef, bookSummary, setBookSummary, resolveUploadKey, onUploadKey })
+  const steps = useBookSteps({ generationRef, bookSummary, setBookSummary, resolveUploadKey })
 
   const { resetPanel, setExpandedChapters, setCurrentViewingChapterSummary } = reader
   const clearResults = useCallback(() => {
@@ -346,6 +348,7 @@ export function useBookProcessing() {
     cloudCacheStatusUnknown: cloud.statusUnknown,
     cloudChartsFileFound: cloud.chartsFileFound,
     chartsGenerating: charts.chartsGenerating,
+    stepRunning: steps.stepRunning,
     rightPanelContent: reader.rightPanelContent,
     currentViewingChapter: reader.currentViewingChapter,
     currentViewingChapterSummary: reader.currentViewingChapterSummary,
@@ -371,6 +374,7 @@ export function useBookProcessing() {
     clearChapterMindMapCache,
     clearSpecificCache,
     regenerateKeyCharts: charts.regenerateKeyCharts,
+    retryBookStep: steps.retryBookStep,
     cancelKeyCharts: charts.cancelKeyCharts,
     clearBookCache,
     increasePreviewFontSize: reader.increasePreviewFontSize,

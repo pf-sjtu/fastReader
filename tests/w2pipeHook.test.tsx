@@ -100,13 +100,13 @@ const S1_KEYS = [
   'file', 'processing', 'extractingChapters', 'progress', 'currentStep', 'currentProcessingChapter',
   'extractedChapters', 'bookData', 'selectedChapters', 'customPrompt', 'bookSummary', 'bookMindMap',
   'expandedChapters', 'cloudCacheMetadata', 'isCheckingCloudCache', 'cloudCacheContent',
-  'cloudCacheIsPartial', 'cloudCacheStatusUnknown', 'cloudChartsFileFound', 'chartsGenerating',
+  'cloudCacheIsPartial', 'cloudCacheStatusUnknown', 'cloudChartsFileFound', 'chartsGenerating', 'stepRunning',
   'rightPanelContent', 'currentViewingChapter', 'currentViewingChapterSummary', 'previewFontSize',
   'isPreviewFullscreen', 'previewCardRef', 'isWebDAVBrowserOpen', 'tokenUsage', 'processingMode',
   'handleFileSelect', 'extractChapters', 'processBook', 'cancelProcessing', 'restartProcessing',
   'handleChapterSelect', 'handleSelectAll', 'handleViewChapterContent', 'handleCloseRightPanel',
   'handleChapterExpandChange', 'clearChapterCache', 'clearChapterMindMapCache', 'clearSpecificCache',
-  'regenerateKeyCharts', 'cancelKeyCharts', 'clearBookCache', 'increasePreviewFontSize', 'decreasePreviewFontSize',
+  'regenerateKeyCharts', 'retryBookStep', 'cancelKeyCharts', 'clearBookCache', 'increasePreviewFontSize', 'decreasePreviewFontSize',
   'togglePreviewFullscreen', 'loadFromCloudCache', 'handleWebDAVFileSelect', 'openWebDAVBrowser',
   'handleChapterSummaryNavigation', 'handleChapterNavigation', 'loadFromHistoryRecord',
   'setCustomPrompt', 'setSelectedChapters', 'setIsWebDAVBrowserOpen', 'setBookSummary',
@@ -218,6 +218,58 @@ describe('useBookProcessing 组合入口', () => {
     const done = h.toast.success.mock.calls.at(-1)
     expect(done?.[1]).toMatchObject({ description: expect.stringContaining('1.2 万') })
     ;(useConfigStore as unknown as { setState: (s: object) => void }).setState({ tokenUsage: 0 })
+    m.unmount()
+  })
+
+  it('单步重试：关联缺失时只重跑关联（不碰章节）；全书总结依赖关联；失败时报错不改数据', async () => {
+    const content = formatUnifiedMarkdown(
+      { title: '云书', author: '', chapters: [{ id: '1', title: '一', summary: '摘一' }, { id: '2', title: '二', summary: '摘二' }], overallSummary: '' },
+      generateMetadata({
+        fileName: 'rs.epub', model: 'm', chapterDetectionMode: 'normal',
+        selectedChapters: [1, 2], chapterCount: 2, originalCharCount: 1, processedCharCount: 1,
+      })
+    )
+    h.webdav.getFileContents.mockImplementation(async (path: string) =>
+      path.endsWith('.md') ? { success: true, data: content } : { success: false, error: '404 Not Found' }
+    )
+    const m = mount(<Harness />)
+    await act(async () => {
+      await api().loadFromHistoryRecord('rs.epub')
+    })
+    await flush()
+    h.ai.summarize.mockClear()
+    h.ai.connections.mockClear()
+    h.ai.overall.mockClear()
+
+    // 没有关联就重试全书总结：提示先生成关联，不调 AI
+    await act(async () => {
+      await api().retryBookStep('overall')
+    })
+    expect(h.ai.overall).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await api().retryBookStep('connections')
+    })
+    await flush()
+    expect(h.ai.connections).toHaveBeenCalledTimes(1)
+    expect(h.ai.summarize).not.toHaveBeenCalled()
+    expect(api().bookSummary?.connections).toBe('关联')
+    expect(api().stepRunning).toBeNull()
+
+    await act(async () => {
+      await api().retryBookStep('overall')
+    })
+    await flush()
+    expect(h.ai.overall).toHaveBeenCalledTimes(1)
+    expect(api().bookSummary?.overallSummary).toBe('全书')
+
+    h.ai.overall.mockRejectedValueOnce(new Error('boom'))
+    await act(async () => {
+      await api().retryBookStep('overall')
+    })
+    await flush()
+    expect(api().bookSummary?.overallSummary).toBe('全书') // 失败不覆盖已有结果
+    expect(api().stepRunning).toBeNull()
     m.unmount()
   })
 

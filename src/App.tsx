@@ -316,6 +316,8 @@ function App() {
                 onDownloadAllMarkdown={downloadAllMarkdown}
                 onRegenerateKeyCharts={book.regenerateKeyCharts}
                 onCancelKeyCharts={book.cancelKeyCharts}
+                onRetryStep={book.retryBookStep}
+                stepRunning={book.stepRunning}
               />
             </ErrorBoundary>
           </div>

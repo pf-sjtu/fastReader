@@ -9,6 +9,8 @@ import { FontSizeControl } from '@/components/FontSizeControl'
 import { MarkdownCard, type RemarkPlugins } from '@/components/MarkdownCard'
 import { MindMapCard } from '@/components/MindMapCard'
 import { ChapterQualityNote } from './ChapterQualityNote'
+import { StepRetryNote } from './StepRetryNote'
+import type { BookStepKind } from '@/hooks/useBookSteps'
 import { UploadToWebDAVButton } from '@/components/UploadToWebDAVButton'
 import { ChartsPanel } from '@/charts'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -47,9 +49,14 @@ interface ResultsSectionProps {
     remarkPlugins?: RemarkPlugins
     renderStrip?: (chapterId: string) => React.ReactNode
   }
+  /** 关联分析 / 全书总结失败或缺失时的单步重试 */
+  onRetryStep?: (kind: BookStepKind) => void
+  stepRunning?: BookStepKind | null
 }
 
 export const ResultsSection = memo(function ResultsSection({
+  onRetryStep,
+  stepRunning,
   processingMode,
   bookSummary,
   bookMindMap,
@@ -184,6 +191,7 @@ export const ResultsSection = memo(function ResultsSection({
             </TabsContent>
 
             <TabsContent value="connections">
+              <StepRetryNote kind="connections" text={bookSummary.connections} running={stepRunning ?? null} onRetry={onRetryStep} />
               <MarkdownCard
                 id="connections"
                 title={t('results.tabs.connections')}

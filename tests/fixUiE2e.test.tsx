@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import i18n from '../src/i18n'
 import { mount, click, findButton, flush, stubDomForRadix, type Mounted } from './uiTestUtils'
+import { RESULT_PREFIX } from '../src/utils/resultStatus'
+import { StepRetryNote } from '../src/components/sections/StepRetryNote'
 
 const h = vi.hoisted(() => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
@@ -299,5 +301,21 @@ describe('章节质量提示（quality: warn）', () => {
     expect(m.container.querySelector('[data-testid="chapter-quality-warn"]')?.textContent).toContain(t('results.qualityWarn'))
     m.rerender(<ResultsSection {...baseProps} expandedChapters={new Set(["c1"])} bookSummary={book() as never} processingMode="summary" />)
     expect(m.container.querySelector('[data-testid="chapter-quality-warn"]')).toBeNull()
+  })
+})
+
+describe('StepRetryNote：关联 / 全书总结缺失时的单步重试入口', () => {
+  const Note = StepRetryNote
+  it('结果可用或没传回调时不显示；缺失 / 失败占位时显示并回调对应步骤；运行中禁用', () => {
+    const retry = vi.fn()
+    m = mount(<Note kind="connections" text="有效的关联" running={null} onRetry={retry} />)
+    expect(m.container.querySelector('[data-testid="step-retry-connections"]')).toBeNull()
+    m.rerender(<Note kind="connections" text={`${RESULT_PREFIX.connectionsFailed}超时`} running={null} />)
+    expect(m.container.querySelector('[data-testid="step-retry-connections"]')).toBeNull() // 没回调
+    m.rerender(<Note kind="connections" text={`${RESULT_PREFIX.connectionsFailed}超时`} running={null} onRetry={retry} />)
+    click(m.container.querySelector('button'))
+    expect(retry).toHaveBeenCalledWith('connections')
+    m.rerender(<Note kind="overall" text="" running="connections" onRetry={retry} />)
+    expect(m.container.querySelector('button')!.disabled).toBe(true)
   })
 })
