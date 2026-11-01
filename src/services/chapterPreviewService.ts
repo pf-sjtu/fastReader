@@ -70,8 +70,10 @@ export class ChapterPreviewService {
         )
       } else if (isPlainTextBook(file)) {
         // .txt / .md：没有解析器，正文就是文件本身（章节按标题切分，见 pipeline/plainText）
-        const title = plainBookTitle(file.name)
-        chapters = splitPlainText(await readPlainText(file), title)
+        const text = await readPlainText(file)
+        // 空文件不返回「一章空内容」：与单本处理的 upload.emptyFile 守卫保持同一个判断
+        if (!text.trim()) return []
+        chapters = splitPlainText(text, plainBookTitle(file.name))
       } else {
         return []
       }

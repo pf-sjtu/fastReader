@@ -144,6 +144,7 @@ git push -u origin HEAD
 ## 笔记划线高亮（阅读工作台）
 - 锚点定位是纯函数：`src/notes/anchor.ts` 的 exact → tolerant（折叠掉标点空白）→ fuzzy（bigram Dice ≥ 0.6）三级，`resolveNote` 与批量复用的 `createNoteResolver` 同语义；fuzzy 先反查 rare bigram 得候选窗口，再用「多重集交集上限」预筛把注定找不到的引文挡在全篇扫描之前
 - 正文高亮是 remark 插件 `src/notes/remarkNoteMark.ts`：把整章各块拼成一段**一次**定位（与笔记页签同口径），每条笔记只画一处、只画起点所在的块级单元；同段内跨行内格式逐段切开，引文确实覆盖行内代码时整段包住 `<code>`，围栏代码块不参与
+- 页签判「还能不能定位」必须用 `anchor.ts` 的 `noteSearchText()` 取可定位正文（围栏代码块、含 mermaid/genui/html 富块都剔掉），与正文高亮同一口径；否则会出现「页签说已定位、正文一处都画不出来」
 - `.note-mark`（`src/index.css`）用 `data-color` 选语义色槽位；**不要给它水平内边距**——重叠笔记是嵌套的 mark，每层内边距会把文字推开。行为契约见 `openspec/changes/add-reader-workspace/specs/notes/spec.md` 的「划线与批注」
 
 ## Deployment

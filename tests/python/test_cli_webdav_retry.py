@@ -115,11 +115,18 @@ class TestProbeRetry:
         w.client.ls.return_value = [
             {"name": "books/A.EPUB", "size": 3, "modified": datetime(2024, 1, 2)},
             {"name": "books/readme.txt"},
+            {"name": "books/笔记.md"},
+            {"name": "books/old.mobi"},
             "books/b.pdf",
         ]
         books = w.list_books("books")
+        # .txt / .md 现在是支持的书（纯文本，与前端 browse.ts 的扩展名集合对齐）；.mobi 仍被跳过
         assert [(b.name, b.path, b.extension) for b in books] == [
-            ("A.EPUB", "/books/A.EPUB", ".epub"), ("b.pdf", "/books/b.pdf", ".pdf")]
+            ("A.EPUB", "/books/A.EPUB", ".epub"),
+            ("readme.txt", "/books/readme.txt", ".txt"),
+            ("笔记.md", "/books/笔记.md", ".md"),
+            ("b.pdf", "/books/b.pdf", ".pdf"),
+        ]
         assert books[0].last_modified == datetime(2024, 1, 2)
 
 

@@ -25,14 +25,51 @@ export function plainBookTitle(fileName: string): string {
   return stem || base.trim() || fileName
 }
 
+/** `\r\n` / 单独的 `\r` 都折成 `\n`，再去掉可能残留的 BOM */
+const normalizeNewlines = (text: string): string => text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
+
+const REPLACEMENT = /\uFFFD/g
+const countBroken = (text: string): number => (text.match(REPLACEMENT) ?? []).length
+
+/** UTF-16 的 BOM：有它就不必猜，直接按对应端序解 */
+function utf16Bom(bytes: Uint8Array): 'utf-16le' | 'utf-16be' | null {
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return 'utf-16le'
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) return 'utf-16be'
+  return null
+}
+
 /**
- * 读成文本。固定按 UTF-8 解码：这是电子书里最常见的编码；
- * GBK 的 txt 会得到乱码，属于已知取舍（浏览器没有可靠的编码嗅探）。
+ * 字节 → 文本。默认 UTF-8（电子书里最常见）；UTF-16 带 BOM 时按 BOM 解；
+ * UTF-8 解出**大量**替换符（说明多半是 GBK 系的中文 txt）时，再按 GB18030（GBK/GB2312 的超集）试一次，
+ * 取替换符更少的那份——否则整本乱码会照常进 AI 流程白花额度。
+ *
+ * 只在坏字符超过 1% 时才回退：正文里偶尔一个坏字节不该把整篇猜坏。
+ */
+export function decodePlainText(bytes: Uint8Array): string {
+  const utf16 = utf16Bom(bytes)
+  if (utf16) return normalizeNewlines(new TextDecoder(utf16).decode(bytes))
+
+  const utf8 = new TextDecoder('utf-8').decode(bytes)
+  const broken = countBroken(utf8)
+  if (broken === 0 || utf8.length === 0) return normalizeNewlines(utf8)
+
+  if (broken / utf8.length > 0.01) {
+    try {
+      const gb = new TextDecoder('gb18030').decode(bytes)
+      if (countBroken(gb) < broken) return normalizeNewlines(gb)
+    } catch {
+      // 运行环境没有该编码（缺 ICU）时保持 UTF-8 结果，不抛
+    }
+  }
+  return normalizeNewlines(utf8)
+}
+
+/**
+ * 读成文本。编码判定见 `decodePlainText`：
+ * UTF-8 优先，UTF-16 认 BOM，疑似 GBK 的中文 txt 回退 GB18030。
  */
 export async function readPlainText(file: Blob): Promise<string> {
-  const raw = new TextDecoder('utf-8').decode(await readBytes(file))
-  // BOM 会变成正文第一个字符，进提示词与统计都不好看
-  return raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
+  return decodePlainText(new Uint8Array(await readBytes(file)))
 }
 
 /** jsdom 的 Blob 既没有 arrayBuffer 也没有 text：退回 FileReader（浏览器里走上面的快路径） */

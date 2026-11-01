@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { groupNotes, notesToMarkdown, MAX_COMMENT } from '@/notes/notes'
-import { createNoteResolver, type NoteResolver } from '@/notes/anchor'
+import { createNoteResolver, noteSearchText, type NoteResolver } from '@/notes/anchor'
 import { useNotesStore } from '@/notes/notesStore'
 import { cn } from '@/lib/utils'
 
@@ -37,7 +37,8 @@ export function NotesPanel({ bookTitle, chapters, onJumpChapter }: Props) {
       }
       let resolver = resolvers.get(g.chapter.index)
       if (!resolver) {
-        resolver = createNoteResolver(chapters[g.chapter.index]?.summary ?? '')
+        // 与正文高亮同一口径：围栏代码块里的文字画不出来，这里也不能报「还在」
+        resolver = createNoteResolver(noteSearchText(chapters[g.chapter.index]?.summary ?? ''))
         resolvers.set(g.chapter.index, resolver)
       }
       for (const n of g.notes) map.set(n.id, resolver.resolve(n) !== null)

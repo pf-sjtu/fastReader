@@ -13,6 +13,7 @@ import { logger } from '@/lib/logger'
 import i18n from '@/i18n'
 import type { BookPipelineResult, PipelineCache } from './bookPipeline'
 import { canHash, fileFingerprint } from './cacheKeys'
+import { decodePlainText, plainBookTitle, splitPlainText } from './plainText'
 import { createLocalPipelineCache, uploadMindMapBundle, type LocalCacheContext } from './persistence'
 import { createProcessor, extractionArgs, type ExtractionOptions } from './extract'
 import { buildMetaSidecar } from './metaSidecar'
@@ -89,7 +90,11 @@ export async function extractChaptersFromData(
   const file = new File([data], fileName, { type: getMimeType(fileName) })
   const format = detectBookFormat(file)
   if (!format) {
-    return [{ id: '1', title: '全文', content: new TextDecoder('utf-8').decode(data) }]
+    // 纯文本（.txt / .md 或任何没有解析器的格式）：与单本处理走同一套解码与切章，
+    // 书名用文件名主干，markdown 按一二级标题切章——不再整本塞成一章「全文」
+    const content = decodePlainText(new Uint8Array(data))
+    const title = plainBookTitle(fileName)
+    return splitPlainText(content, title)
   }
   const args = extractionArgs(options)
   const processor = await createProcessor(format)

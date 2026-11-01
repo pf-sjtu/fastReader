@@ -407,7 +407,17 @@ describe('BatchProcessingEngine 行为测试', () => {
       'note.txt',
       new TextEncoder().encode('纯文本').buffer
     )
-    expect(txt).toEqual([{ id: '1', title: '全文', content: '纯文本' }])
+    // 纯文本与单本处理同一条路径：书名取文件名主干，不再合成一章「全文」
+    expect(txt).toEqual([{ id: '1', title: 'note', content: '纯文本' }])
+
+    const md = await internals(engine).extractChapters(
+      '笔记.md',
+      new TextEncoder().encode('# 一\n正文一\n# 二\n正文二').buffer
+    )
+    expect(md).toEqual([
+      { id: '1', title: '一', content: '正文一' },
+      { id: '2', title: '二', content: '正文二' },
+    ])
   })
 
   it('默认选章与单书一致：忽略类标题不选，全被忽略时回退全选', () => {

@@ -40,8 +40,9 @@
 
 所以用 `BookCharts` 的数据离线重绘：**时间线复用应用内 `layoutEntityTimeline` 的几何算法**
 （同一套列宽 / 换行 / 行高规则），但**参数是按打印尺寸另配的一份 `TIMELINE_CONFIG`**
-（`colWidth 124` / `labelWidth 96` / `headerHeight 56` / `lineHeight 16`，界面上是
-`128 / 100 / 48 / 15` 且另注入 `theme.palette`），所以列位置与换行点会和界面**略有出入**，
+（`src/study/exportFigures.ts`：`colWidth 124` / `labelWidth 96` / `headerHeight 56` / `lineHeight 16`；
+应用内是 `EntityTimelineChart.tsx` 的 `140 / 104 / 64 / 17`，并另注入 `theme.palette`），
+所以列位置与换行点会和界面**略有出入**，
 不是逐像素复刻；
 **人物关系图用自写的圆环布局**（应用内是 cytoscape 的力导布局），节点、连线与关系文字都在，
 位置不逐字复刻。零新依赖，也不改既有图表组件。

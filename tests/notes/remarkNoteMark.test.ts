@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { createElement } from 'react'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { remarkNoteMark } from '@/notes/remarkNoteMark'
+import { createNoteResolver, noteSearchText } from '@/notes/anchor'
 import type { Note } from '@/notes/notes'
 
 const NOW = 1_700_000_000_000
@@ -182,5 +185,39 @@ describe('remarkNoteMark', () => {
     // 五条笔记重叠：都画上（嵌套 mark），文字本身仍只有一份
     expect(html.match(/class="note-mark"/g)?.length).toBe(5)
     expect(html.replace(/<[^>]+>/g, '')).toBe('第1段：编号1。')
+  })
+
+  it('围栏代码块里的引文：正文不标，且页签口径（noteSearchText）同样判成找不到', () => {
+    // 审查发现：在渲染后的代码块里选中文字照样能建笔记，页签会报「还在」而正文一处都画不出来。
+    // 两侧口径必须一致，所以页签改用 noteSearchText（围栏块不参与定位）来判。
+    const md = ['正文一。', '', '```js', 'const hot = true', '```', '', '正文二。'].join('\n')
+    const quote = 'const hot = true'
+    const html = render(md, [note({ quote })])
+    expect(html.match(/class="note-mark"/g)?.length ?? 0).toBe(0)
+    const searchable = noteSearchText(md)
+    expect(createNoteResolver(searchable).resolve({ quote })).toBeNull()
+    // 正文里的普通文字两侧都认
+    expect(createNoteResolver(searchable).resolve({ quote: '正文二。' })).not.toBeNull()
+  })
+})
+
+describe('.note-mark 的样式契约', () => {
+  // 重叠笔记是**嵌套**的 mark，每层各带 1px 水平内边距就会把文字横向推开（审查实测约 10px）。
+  // 只断言 textContent 拦不住这个回归，所以这里直接读 index.css。
+  const CSS = readFileSync(join(process.cwd(), 'src/index.css'), 'utf-8')
+
+  it('不带水平内边距（嵌套时不推挤文字）', () => {
+    const start = CSS.indexOf('.note-mark')
+    expect(start).toBeGreaterThan(-1)
+    const block = CSS.slice(start, CSS.indexOf('}', start))
+    // padding / padding-inline / padding-left|right 都不许出现
+    expect(block).not.toMatch(/padding(-inline|-left|-right)?\s*:/)
+    expect(block).toMatch(/background:/)
+  })
+
+  it('四个颜色槽位都映射到语义 token（与应用内笔记色一致）', () => {
+    for (const tone of ['--info', '--success', '--warning']) {
+      expect(CSS).toContain(`[data-color='${tone === '--info' ? 2 : tone === '--success' ? 3 : 4}']`)
+    }
   })
 })

@@ -1,11 +1,13 @@
 """
 章节提取器
-负责从 EPUB 和 PDF 文件中提取章节内容
+负责从 EPUB、PDF 与纯文本（.txt / .md / .markdown）文件中提取章节内容
 
 章节识别模式（与前端同名，CLI 支持其中两种，其余在启动校验时报错）：
 - normal：EPUB 按 spine 阅读顺序逐文档；PDF 按「第X章 / Chapter N」标记切分
 - epub-toc：EPUB 按目录（TOC）指定层级切分，相邻目录项之间的 spine 文档聚合为一章；
   PDF 无目录概念，按 normal 处理并给出提示
+- 纯文本（.txt / .md / .markdown）无视模式：正文就是文件本身，markdown 按一二级标题切章；
+  实现见 plain_text.py（与网页端 src/services/pipeline/plainText.ts 同语义）
 """
 
 import re
@@ -91,7 +93,7 @@ class BookContent:
     author: str
     chapters: list[Chapter]
     file_path: str
-    file_type: str  # 'epub' or 'pdf'
+    file_type: str  # 'epub' / 'pdf' / 'plain'
 
 
 class ChapterExtractor(ABC):
@@ -342,6 +344,12 @@ class ChapterExtractorFactory:
             return EPUBExtractor(detection_mode, toc_depth)
         if lower.endswith('.pdf'):
             return PDFExtractor(detection_mode, toc_depth)
+        # 纯文本：正文就是文件本身（与网页端 plainText.ts 同语义，实现见 plain_text.py）。
+        # 延迟导入：plain_text 需要本模块的 Chapter / BookContent / ChapterExtractor，模块级互相导入会成环
+        from .plain_text import PLAIN_TEXT_EXTENSIONS, PlainTextExtractor
+
+        if lower.endswith(PLAIN_TEXT_EXTENSIONS):
+            return PlainTextExtractor(detection_mode, toc_depth)
         raise ValueError(f"不支持的文件格式: {file_path}")
 
     @staticmethod

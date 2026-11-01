@@ -36,7 +36,7 @@ class BookFile:
     """电子书文件"""
     name: str
     path: str
-    extension: str  # .epub, .pdf
+    extension: str  # .epub, .pdf, .txt, .md
     size: int
     last_modified: datetime
 

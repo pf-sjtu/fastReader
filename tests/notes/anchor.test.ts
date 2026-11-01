@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createNoteResolver, foldText, normalizeText, resolveNote, type NoteAnchor } from '@/notes/anchor'
+import { createNoteResolver, foldText, normalizeText, noteSearchText, resolveNote, type NoteAnchor } from '@/notes/anchor'
 
 /** 断言命中并要求非空，后续访问才有类型收窄（与 notesSync.test.ts 的写法一致） */
 const mustAnchor = (anchor: NoteAnchor | null): NoteAnchor => {
@@ -238,6 +238,50 @@ describe('createNoteResolver：一章多条笔记共用折叠结果', () => {
     const elapsed = performance.now() - startedAt
     // 上限预筛（Σ min(引用计数, 正文计数) 达不到阈值就直接判 null）必须把这条路径压到毫秒级
     expect(elapsed).toBeLessThan(2500)
+  })
+})
+
+describe('noteSearchText：与正文高亮同一口径', () => {
+  it('围栏代码块（普通代码与富内容块）里的文字不算可定位正文', () => {
+    const md = [
+      '正文一。',
+      '',
+      '```js',
+      'const hot = true',
+      '```',
+      '',
+      '正文二。',
+      '',
+      '```mermaid',
+      'graph TD; A-->B',
+      '```',
+    ].join('\n')
+    const searchable = noteSearchText(md)
+    expect(searchable).toContain('正文一。')
+    expect(searchable).toContain('正文二。')
+    expect(searchable).not.toContain('const hot = true')
+    expect(searchable).not.toContain('graph TD')
+    // 与正文高亮同一套判定：这些引文在两侧都必须被判成「找不到」
+    expect(createNoteResolver(searchable).resolve({ quote: 'const hot = true' })).toBeNull()
+    expect(createNoteResolver(searchable).resolve({ quote: 'graph TD; A-->B' })).toBeNull()
+    expect(createNoteResolver(searchable).resolve({ quote: '正文二。' })).not.toBeNull()
+  })
+
+  it('未闭合的围栏按「之后都算块」处理（输出被截断时不残留可定位文字）', () => {
+    const md = '正文一。\n\n```genui\n{"type":"card"'
+    const searchable = noteSearchText(md)
+    expect(searchable).toContain('正文一。')
+    expect(searchable).not.toContain('card')
+  })
+
+  it('行内代码仍在可定位正文里（正文高亮会把它包进 mark）', () => {
+    const md = '用 `map` 记下这件事，很有用。'
+    expect(noteSearchText(md)).toContain('map')
+    expect(createNoteResolver(noteSearchText(md)).resolve({ quote: '用 map 记下这件事' })).not.toBeNull()
+  })
+
+  it('空输入返回空串，不抛异常', () => {
+    expect(noteSearchText('')).toBe('')
   })
 })
 

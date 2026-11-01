@@ -15,6 +15,13 @@ describe('isPlainTextBook', () => {
 
   it('MIME 说是文本也算（有些服务器不给扩展名）', () => {
     expect(isPlainTextBook(mkFile('download', 'x', 'text/plain'))).toBe(true)
+    expect(isPlainTextBook(mkFile('download', 'x', 'text/markdown'))).toBe(true)
+    expect(isPlainTextBook(mkFile('download', 'x', 'text/plain; charset=gbk'))).toBe(true)
+  })
+
+  it('text/html 之类的标签文本不算纯文本（按纯文本读出来是源码，不是书）', () => {
+    expect(isPlainTextBook(mkFile('page', '<p>x</p>', 'text/html'))).toBe(false)
+    expect(isPlainTextBook(mkFile('a.html', '<p>x</p>', 'text/html'))).toBe(false)
   })
 
   it('epub / pdf / mobi 不是纯文本', () => {
@@ -38,6 +45,35 @@ describe('plainBookTitle', () => {
 describe('readPlainText', () => {
   it('UTF-8 解码、去掉 BOM、CRLF 归一成 LF', async () => {
     expect(await readPlainText(mkFile('a.txt', '\uFEFF第一行\r\n第二行\r第三行'))).toBe('第一行\n第二行\n第三行')
+  })
+
+  it('GBK（GB18030）的中文 txt 不再整篇乱码', async () => {
+    // 「中文」的 GBK 字节；按 UTF-8 解会得到 4 个 U+FFFD（占比 100%），据此回退 GB18030
+    const gbk = new Uint8Array([0xd6, 0xd0, 0xce, 0xc4, 0xa1, 0xa3])
+    const text = await readPlainText(new File([gbk], 'gbk.txt'))
+    expect(text).toBe('中文。')
+    expect(text).not.toContain('\uFFFD')
+  })
+
+  it('带 BOM 的 UTF-16 按 BOM 指定端序解（不猜 GBK）', async () => {
+    const s = '第一行\n第二行'
+    const bytes = new Uint8Array(2 + s.length * 2)
+    bytes[0] = 0xff
+    bytes[1] = 0xfe
+    for (let i = 0; i < s.length; i += 1) {
+      const code = s.charCodeAt(i)
+      bytes[2 + i * 2] = code & 0xff
+      bytes[2 + i * 2 + 1] = code >> 8
+    }
+    expect(await readPlainText(new File([bytes], 'utf16.txt'))).toBe(s)
+  })
+
+  it('UTF-8 正文里偶尔一个坏字节不触发回退（不把好文本猜坏）', async () => {
+    const good = '这是一段足够长的中文正文，用来把坏字节占比压到百分之一以下。'
+    const bytes = new Uint8Array([...new TextEncoder().encode(good), 0xff])
+    const text = await readPlainText(new File([bytes], 'a.txt'))
+    expect(text).toContain('这是一段足够长的中文正文')
+    expect(text).toContain('\uFFFD')
   })
 })
 

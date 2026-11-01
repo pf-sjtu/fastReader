@@ -25,11 +25,14 @@ export function detectBookFormat(file: File): 'epub' | 'pdf' | null {
 /**
  * 纯文本类书籍：没有解析器，正文就是文件本身（见 `services/pipeline/plainText.ts`）。
  * WebDAV 文件浏览器与书库都列出 .txt/.md，所以这里必须认它们，否则用户一点就报「不支持的文件格式」。
+ * MIME 只认 text/plain 与 markdown：`text/html` 之类的标签文本按纯文本读出来是源码，不是书。
  */
+const PLAIN_TEXT_TYPES = new Set(['text/plain', 'text/markdown', 'text/x-markdown'])
+
 export function isPlainTextBook(file: File | null | undefined): boolean {
   const name = normalizeName(file)
-  const type = (file?.type || '').toLowerCase()
-  return /\.(txt|md|markdown)$/.test(name) || type.startsWith('text/')
+  const type = (file?.type || '').toLowerCase().split(';')[0].trim()
+  return /\.(txt|md|markdown)$/.test(name) || PLAIN_TEXT_TYPES.has(type)
 }
 
 /**

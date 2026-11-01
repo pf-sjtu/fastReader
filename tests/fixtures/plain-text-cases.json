@@ -1,0 +1,104 @@
+[
+  {
+    "name": "无标题纯文本：整篇一章，用兜底标题",
+    "content": "一段话。\n\n又一段。",
+    "fallbackTitle": "全文",
+    "expected": [
+      { "index": 0, "title": "全文", "content": "一段话。\n\n又一段。" }
+    ]
+  },
+  {
+    "name": "导语 + 一二级标题：导语算一章（兜底标题），标题各起一章",
+    "content": "导语一段。\n\n# 第一章\n\n正文一。\n\n## 第二节\n\n正文二。",
+    "fallbackTitle": "全书",
+    "expected": [
+      { "index": 0, "title": "全书", "content": "导语一段。" },
+      { "index": 1, "title": "第一章", "content": "正文一。" },
+      { "index": 2, "title": "第二节", "content": "正文二。" }
+    ]
+  },
+  {
+    "name": "标题行尾的 # 与多余空格去掉；三级标题不切章、留在正文里",
+    "content": "## 标题 ##\n正文\n### 这是三级标题，不进标题\n还在同一章",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "标题", "content": "正文\n### 这是三级标题，不进标题\n还在同一章" }
+    ]
+  },
+  {
+    "name": "只有三级及以下标题：不切章，退回整篇一章（标题行仍是正文）",
+    "content": "### 只有三级\n#### 还有四级\n正文",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "f", "content": "### 只有三级\n#### 还有四级\n正文" }
+    ]
+  },
+  {
+    "name": "连续标题 + 空段：不生成空章，只留最后一个标题",
+    "content": "# 一\n# 二\n正文",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "二", "content": "正文" }
+    ]
+  },
+  {
+    "name": "整篇只有标题没有正文：退回整篇一章（标题行作为正文）",
+    "content": "# 一\n\n# 二",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "f", "content": "# 一\n\n# 二" }
+    ]
+  },
+  {
+    "name": "CRLF 与单独 CR 都归一成 LF",
+    "content": "# 一\r\n\r\n正文一。\r## 二\r正文二。\r",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "一", "content": "正文一。" },
+      { "index": 1, "title": "二", "content": "正文二。" }
+    ]
+  },
+  {
+    "name": "首行 BOM 剥掉，不影响标题识别",
+    "content": "\uFEFF# 标题\n正文",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "标题", "content": "正文" }
+    ]
+  },
+  {
+    "name": "标题后紧跟正文（没有空行）同样能切",
+    "content": "# 一\n正文一\n# 二\n正文二",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "一", "content": "正文一" },
+      { "index": 1, "title": "二", "content": "正文二" }
+    ]
+  },
+  {
+    "name": "章节首尾空行裁掉；index 从 0 连续编号",
+    "content": "# a\n\n\nx\n\n\n# b\ny\n\n\n# c\nz\n\n",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "a", "content": "x" },
+      { "index": 1, "title": "b", "content": "y" },
+      { "index": 2, "title": "c", "content": "z" }
+    ]
+  },
+  {
+    "name": "标题文本内部的 # 与标点保留，只去行尾装饰",
+    "content": "## C# 与 前言：入门 ##\n正文",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "C# 与 前言：入门", "content": "正文" }
+    ]
+  },
+  {
+    "name": "行尾夹了 BOM 的标题仍算标题（JS 的 \\s 把 U+FEFF 当空白）",
+    "content": "# 标题\uFEFF\n正文",
+    "fallbackTitle": "f",
+    "expected": [
+      { "index": 0, "title": "标题", "content": "正文" }
+    ]
+  }
+]
