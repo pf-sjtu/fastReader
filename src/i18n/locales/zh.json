@@ -1296,6 +1296,23 @@
       "high": "高"
     }
   },
+  "palette": {
+    "title": "命令面板",
+    "description": "输入关键字跳转章节、查找实体、切换页签或执行操作",
+    "placeholder": "跳到章节 / 找人物 / 切页签…",
+    "empty": "没有匹配的命令",
+    "group": { "chapter": "章节", "entity": "实体", "tab": "页签", "action": "操作" },
+    "actions": { "focusMode": "专注模式（只留正文）", "help": "快捷键帮助" },
+    "keys": {
+      "title": "快捷键",
+      "description": "在输入框里不会触发单键快捷键",
+      "palette": "命令面板",
+      "chapter": "下一章 / 上一章",
+      "tab": "切换对照栏页签",
+      "focus": "专注模式",
+      "help": "显示本帮助"
+    }
+  },
   "notes": {
     "tab": "笔记",
     "toolbar": "划线与批注",

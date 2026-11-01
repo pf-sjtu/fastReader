@@ -32,6 +32,7 @@ import {
   NAV_MAX_WIDTH,
   NAV_MIN_WIDTH,
   useReadingFocusStore,
+  type CompanionTab,
 } from '@/stores/readingFocus'
 import type { BookSummary } from '@/hooks/useBookProcessing'
 import { CompanionDock, type DockTab } from './CompanionDock'
@@ -49,6 +50,7 @@ import { useStudyStore } from '@/study/studyStore'
 import { useWorkspaceLinking } from './useWorkspaceLinking'
 import { NotesPanel } from '@/components/notes/NotesPanel'
 import { SelectionToolbar } from '@/components/notes/SelectionToolbar'
+import { useReadingCommands } from './useReadingCommands'
 import { StepRetryNote } from '@/components/sections/StepRetryNote'
 import type { BookStepKind } from '@/hooks/useBookSteps'
 import { notesKeyOf, useNotesStore } from '@/notes/notesStore'
@@ -353,6 +355,29 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     return list
   }, [t, chartPanel, bookSummary, clearOverall, onRetryStep, stepRunning, isMobile, source, link.linking, link.openEntity, currentViewingChapter, handleNavClick])
 
+  // 命令面板（Ctrl/⌘+K）、j/k [ ] ? 快捷键、断点续读
+  const openTab = useCallback(
+    (tab: CompanionTab) => {
+      setCompanionTab(tab)
+      setCompanionOpen(true)
+      if (narrow) setDockSheetOpen(true)
+    },
+    [setCompanionTab, setCompanionOpen, narrow]
+  )
+  const commandLayer = useReadingCommands({
+    book: bookSummary,
+    chapters,
+    processing,
+    currentChapterId: currentViewingChapter,
+    navigateChapter: handleNavClick,
+    expandChapter,
+    tabs,
+    activeTab: companionTab,
+    openTab,
+    linking: link.linking,
+    toggleFocusMode,
+  })
+
   const body = (
     <>
       {kit && <DepthSwitch chapters={chapters} className="mb-2" />}
@@ -427,6 +452,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
         </main>
         {link.floating}
         {selectionToolbar}
+        {commandLayer.overlay}
         {backChip}
 
         <Sheet open={navOpen} onOpenChange={setNavOpen}>
@@ -509,6 +535,8 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
 
       {link.floating}
       {selectionToolbar}
+      {commandLayer.overlay}
+      {commandLayer.overlay}
       {backChip}
 
       <main

@@ -1296,6 +1296,23 @@
       "high": "High"
     }
   },
+  "palette": {
+    "title": "Command palette",
+    "description": "Type to jump to a chapter, find an entity, switch a tab or run an action",
+    "placeholder": "Jump to chapter / find entity / switch tab…",
+    "empty": "No matching commands",
+    "group": { "chapter": "Chapter", "entity": "Entity", "tab": "Tab", "action": "Action" },
+    "actions": { "focusMode": "Focus mode (body only)", "help": "Keyboard shortcuts" },
+    "keys": {
+      "title": "Keyboard shortcuts",
+      "description": "Single-key shortcuts are ignored while typing in a field",
+      "palette": "Command palette",
+      "chapter": "Next / previous chapter",
+      "tab": "Switch dock tab",
+      "focus": "Focus mode",
+      "help": "Show this help"
+    }
+  },
   "notes": {
     "tab": "Notes",
     "toolbar": "Highlight and annotate",
