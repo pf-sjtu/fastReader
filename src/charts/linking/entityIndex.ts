@@ -7,6 +7,8 @@
 export interface EntityRef {
   id: string
   name: string
+  /** 其它写法（缩写 / 全称 / 别名）：优先级低于所有实体的主名，不会抢走别人的名字 */
+  aliases?: readonly string[]
 }
 
 export interface IndexChapter {
@@ -85,10 +87,19 @@ export function nameVariants(name: string): string[] {
  */
 export function buildEntityMatcher(entities: readonly EntityRef[]): EntityMatcher {
   const taken = new Map<string, string>()
+  // 先全体主名，再别名：别名与另一实体的主名撞车时，主名赢
   for (const e of entities) {
     for (const v of nameVariants(e.name)) {
       const key = v.toLowerCase()
       if (!taken.has(key)) taken.set(key, e.id)
+    }
+  }
+  for (const e of entities) {
+    for (const alias of e.aliases ?? []) {
+      for (const v of nameVariants(alias)) {
+        const key = v.toLowerCase()
+        if (!taken.has(key)) taken.set(key, e.id)
+      }
     }
   }
   const byFirst = new Map<string, Variant[]>()

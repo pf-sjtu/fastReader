@@ -8,6 +8,7 @@ import {
   type BookCharts,
   type TimelineEvent,
 } from '../types'
+import { aliasesFromMetas, type MetaLike } from './entityAliases'
 import { buildEntityStyles, type EntityStyle } from './entityColors'
 import {
   buildEntityMatcher,
@@ -24,6 +25,8 @@ export interface LinkChapter {
   title: string
   /** 章节总结 Markdown；失败/未处理的章节传空串 */
   text: string
+  /** v3 旁路（实体规范名与别名）；没有就不提供 */
+  meta?: MetaLike | null
 }
 
 /** 卡片/人物志用的实体档案（图谱节点与时间线实体合并） */
@@ -75,7 +78,9 @@ export function buildEntityLinking(
   // 第一遍：按重要度定优先级 → 匹配器 → 索引；第二遍用全书出现次数细化同重要度的排序
   const firstPass = buildEntityStyles(charts)
   if (firstPass.size === 0) return null
-  const matcher = buildEntityMatcher([...firstPass.values()].map((s) => ({ id: s.id, name: s.name })))
+  const base = [...firstPass.values()].map((s) => ({ id: s.id, name: s.name }))
+  const aliases = aliasesFromMetas(base, chapters.map((c) => c.meta))
+  const matcher = buildEntityMatcher(base.map((e) => ({ ...e, aliases: aliases.get(e.id) })))
   const index = indexEntityChapters(
     matcher,
     chapters.map((c) => ({ id: c.id, title: c.title, text: c.text }))

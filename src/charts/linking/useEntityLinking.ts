@@ -7,6 +7,7 @@ interface SourceChapter {
   id: string
   title: string
   summary?: string
+  meta?: LinkChapter['meta']
 }
 
 /**
@@ -25,6 +26,7 @@ export function useEntityLinking(
       title: c.title,
       // 失败/跳过的章节带占位前缀，不参与匹配
       text: isUsableText(c.summary) ? (c.summary as string) : '',
+      meta: c.meta,
     }))
     return buildEntityLinking(charts, linkChapters)
   }, [charts, chapters, processing])
