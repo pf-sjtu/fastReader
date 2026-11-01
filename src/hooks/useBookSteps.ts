@@ -10,7 +10,7 @@ import { autoSyncService } from '@/services/autoSyncService'
 import { buildEntityTable } from '@/services/prompts/chapterMeta'
 import { useConfigStore } from '@/stores/configStore'
 import type { BookSummary } from '@/types/book'
-import { usableOrEmpty, usableSummaryChapters } from '@/utils/chapterResults'
+import { usableOrEmpty, promptChapters } from '@/utils/chapterResults'
 import { isUsableText } from '@/utils/resultStatus'
 import type { GenerationCounter } from '@/utils/runGuard'
 import { logger } from '@/lib/logger'
@@ -33,7 +33,7 @@ export function useBookSteps({ generationRef, bookSummary, setBookSummary, resol
   const retryBookStep = useCallback(
     async (kind: BookStepKind) => {
       if (!bookSummary || busyRef.current) return
-      const usable = usableSummaryChapters(bookSummary.chapters ?? [])
+      const usable = promptChapters(bookSummary.chapters ?? [])
       if (!usable.length) {
         toast.error(t('results.charts.needChapters'))
         return

@@ -263,3 +263,46 @@ describe('流水线：旁路、清理、一次定向重写、实体表', () => {
     expect(r.chapters[0].summary).not.toContain(META_MARK)
   })
 })
+
+describe('富内容块（mermaid / genui / html）与格式清理、质量闸', () => {
+  const F = '```'
+  const block = (lang: string, body: string) => `${F}${lang}\n${body}\n${F}`
+
+  it('块内的 **、#、--- 原样保留（不是被滥用的格式）；块外照常清理', () => {
+    const md = `# 标题\n\n正文 ***甲***\n\n${block('mermaid', 'graph LR\n  A["**粗**"] --> B\n  %% # 注释\n---')}\n\n${block('html', '<b>**x**</b>\n# h1')}`
+    const out = sanitizeSummary(md)
+    expect(out).not.toMatch(/^# 标题/m) // 块外的标题符号被去掉
+    expect(out).toContain('正文 **甲**') // 块外的加粗斜体降级
+    expect(out).toContain('A["**粗**"] --> B') // 块内原样
+    expect(out).toContain('%% # 注释')
+    expect(out).toContain('<b>**x**</b>\n# h1')
+  })
+
+  it('加粗上限只数正文：块里再多的 ** 不挤占名额，也不会被去掉', () => {
+    const inBlock = Array.from({ length: 10 }, (_, i) => `**块内${i}**`).join(' ')
+    const prose = Array.from({ length: 6 }, (_, i) => `**文${i}**`).join(' ') // 刚好 6 处，不超限
+    const out = sanitizeSummary(`${prose}\n\n${block('html', inBlock)}`)
+    for (let i = 0; i < 6; i++) expect(out).toContain(`**文${i}**`) // 正文 6 处全保留
+    for (let i = 0; i < 10; i++) expect(out).toContain(`**块内${i}**`) // 块内 10 处全保留
+  })
+
+  it('正文加粗超限时只处理正文，块内不动', () => {
+    const prose = Array.from({ length: 8 }, (_, i) => `**${'长'.repeat(i + 1)}**`).join(' ')
+    const out = sanitizeSummary(`${prose}\n\n${block('genui', '{"title":"**不动**"}')}`)
+    const proseOut = out.split(F)[0]
+    expect((proseOut.match(/\*\*/g) ?? []).length / 2).toBe(6) // 正文只剩 6 处
+    expect(out).toContain('"title":"**不动**"')
+  })
+
+  it('质量闸只看文字：文字极短、图很长 → 仍判「过短」；文字够长则不判', () => {
+    const longBlock = block('mermaid', 'graph LR\n' + '  A --> B\n'.repeat(200))
+    expect(checkSummaryQuality(`很短的一句。\n\n${longBlock}`, 5000, { expectMeta: true, hasMeta: true })).toContain('tooShort')
+    const prose = '这是一段足够长的正文，'.repeat(30)
+    expect(checkSummaryQuality(`${prose}\n\n${longBlock}`, 5000, { expectMeta: true, hasMeta: true })).not.toContain('tooShort')
+  })
+
+  it('未闭合的块（输出被截断）同样不计字数', () => {
+    const md = `短。\n\n${F}mermaid\ngraph LR\n` + '  A --> B\n'.repeat(100)
+    expect(checkSummaryQuality(md, 5000, { expectMeta: true, hasMeta: true })).toContain('tooShort')
+  })
+})

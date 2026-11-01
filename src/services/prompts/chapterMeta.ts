@@ -4,6 +4,8 @@
  * CLI 等价实现：src/cli/chapter_meta.py；跨端用例 tests/fixtures/prompts-v3/meta-cases.json
  */
 
+import { proseLength, splitByFences } from '@/lib/richBlocks'
+
 export const META_MARK = '<!--juhua:meta-->'
 /** 容忍模型改动空白/大小写 */
 const META_MARK_RE = /<!--\s*juhua:meta\s*-->/i
@@ -150,14 +152,12 @@ const BOLD_RE = /(?<!\*)\*\*(?!\*)([^*\n]+?)(?<!\*)\*\*(?!\*)/g
  * - 加粗超过上限：保留最短的几处（主旨句通常短），其余去掉加粗
  */
 export function sanitizeSummary(text: string): string {
-  // 围栏代码块（```…```）整体不动：里面的 # 是注释、--- 是内容，不是被滥用的标题/分割线
-  const parts = text.split(/(```[\s\S]*?```)/g)
-  let out = parts
-    .map((part, i) => (i % 2 === 1 ? part : sanitizeProse(part)))
-    .join('')
-    .replace(/\n{3,}/g, '\n\n')
+  // 围栏代码块（含 mermaid / genui / html 富内容块）整体不动：里面的 # 是注释、--- 是内容、** 是源码，不是被滥用的格式
+  const parts = splitByFences(text).map((part, i) => (i % 2 === 1 ? part : sanitizeProse(part)))
 
-  const bolds = [...out.matchAll(BOLD_RE)]
+  // 加粗上限只数正文里的（富内容块里的 ** 不计入，也不会被改写）；超限时保留最短的几处（主旨句通常短）
+  const prose = parts.filter((_, i) => i % 2 === 0)
+  const bolds = prose.flatMap((part) => [...part.matchAll(BOLD_RE)])
   if (bolds.length > MAX_BOLD_PER_CHAPTER) {
     const keep = new Set(
       bolds
@@ -167,9 +167,11 @@ export function sanitizeSummary(text: string): string {
         .map((x) => x.i)
     )
     let idx = -1
-    out = out.replace(BOLD_RE, (m, inner: string) => (keep.has(++idx) ? m : inner))
+    for (let k = 0; k < parts.length; k += 2) {
+      parts[k] = parts[k].replace(BOLD_RE, (m, inner: string) => (keep.has(++idx) ? m : inner))
+    }
   }
-  return out.replace(GREETING_LINE_RE, '').trim()
+  return parts.join('').replace(/\n{3,}/g, '\n\n').replace(GREETING_LINE_RE, '').trim()
 }
 
 export type QualityIssue = 'tooShort' | 'noMeta'
@@ -190,10 +192,12 @@ function sanitizeProse(part: string): string {
 export function checkSummaryQuality(text: string, inputChars: number, opts: { expectMeta: boolean; hasMeta: boolean }): QualityIssue[] {
   const issues: QualityIssue[] = []
   const body = text.trim()
+  // 字数只看文字：富内容块（mermaid / genui / html）不计入，否则「图很长、文字很短」会蒙混过关
+  const proseChars = proseLength(body)
   // 「无需总结」可能带引号/说明/译成英文：没有旁路的短输出一律不当作「过短」——
   // 只有模型按 v3 格式给了旁路、正文却极短，才是值得付费重写的真问题
   if (/^[\s"“'「《]*无需总结/.test(body)) return issues
-  if (opts.hasMeta && inputChars >= 1500 && body.length < 150) issues.push('tooShort')
+  if (opts.hasMeta && inputChars >= 1500 && proseChars < 150) issues.push('tooShort')
   if (opts.expectMeta && !opts.hasMeta) issues.push('noMeta')
   return issues
 }

@@ -8,7 +8,7 @@ import { AIService } from '@/services/ai'
 import { autoSyncService } from '@/services/autoSyncService'
 import { useConfigStore } from '@/stores/configStore'
 import type { BookSummary } from '@/types/book'
-import { usableOrEmpty, usableSummaryChapters } from '@/utils/chapterResults'
+import { usableOrEmpty, promptChapters } from '@/utils/chapterResults'
 import { isUsableText } from '@/utils/resultStatus'
 import type { GenerationCounter } from '@/utils/runGuard'
 import { logger } from '@/lib/logger'
@@ -71,7 +71,7 @@ export function useKeyCharts(deps: KeyChartsDeps) {
         if (!silent) toast.error(t('results.charts.needOverall'))
         return
       }
-      const usable = usableSummaryChapters(source.chapters ?? [])
+      const usable = promptChapters(source.chapters ?? [])
       if (!usable.length) {
         if (!silent) toast.error(t('results.charts.needChapters'))
         return

@@ -13,7 +13,7 @@ import type { AICallOptions } from '@/services/ai/types'
 import type { SupportedLanguage } from '@/services/prompts/utils'
 import { mapPoolOrdered } from '@/utils/async'
 import { prepareChapterInput } from '@/utils/chapterInput'
-import { markChapterFailed, usableOrEmpty, usableSummaryChapters } from '@/utils/chapterResults'
+import { markChapterFailed, usableOrEmpty, promptChapters } from '@/utils/chapterResults'
 import { flattenMindMapToText } from '@/utils/mindMapText'
 import { RESULT_PREFIX, failedText, isFailedText, isPlaceholderText, isUsableText } from '@/utils/resultStatus'
 import { createAbortError, isAbortError } from '@/utils/runGuard'
@@ -287,7 +287,7 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
   }
 
   if (mode === 'summary') {
-    const usable = usableSummaryChapters(chapters)
+    const usable = promptChapters(chapters)
     const entityTable = buildEntityTable(chapters.map((c) => c.meta))
     const bookOpts: AICallOptions = entityTable ? { ...opts, entityTable } : opts
     result.stats.usable = usable.length

@@ -17,6 +17,7 @@ import { prepareMarkdownForRender } from '@/lib/markdown'
 import { ViewContentDialog } from './ViewContentDialog'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { richMarkdownComponents } from '@/components/markdown/richComponents'
 
 // 模块级常量：避免每次渲染新建插件数组导致 ReactMarkdown 重新处理
 const REMARK_PLUGINS = [remarkGfm, remarkCjkFriendly]
@@ -201,7 +202,7 @@ export const MarkdownCard = memo(function MarkdownCard({
               强调作用域：micromark (CommonMark delimiter run) + remark-cjk-friendly
               预处理只清 AI 脏源文（内侧空格、段中 >），不手写配对。
             */}
-            <ReactMarkdown remarkPlugins={remarkPlugins}>
+            <ReactMarkdown remarkPlugins={remarkPlugins} components={richMarkdownComponents}>
               {renderedMarkdown}
             </ReactMarkdown>
           </div>

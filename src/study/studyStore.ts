@@ -7,7 +7,7 @@
 import { create } from 'zustand'
 import { AIService } from '@/services/ai'
 import { useConfigStore } from '@/stores/configStore'
-import { usableSummaryChapters } from '@/utils/chapterResults'
+import { usableSummaryChapters, promptChapters } from '@/utils/chapterResults'
 import { isUsableText } from '@/utils/resultStatus'
 import { logger } from '@/lib/logger'
 import type { BookSummary } from '@/types/book'
@@ -165,7 +165,7 @@ export const useStudyStore = create<StudyState>()((set, get) => {
     generateKit: async (book) => {
       const key = get().bookKey
       if (!key || get().running.kit) return
-      const chapters = usableSummaryChapters(book.chapters)
+      const chapters = promptChapters(book.chapters)
       if (!chapters.length) {
         set({ errors: { ...get().errors, kit: 'noChapters' } })
         return
@@ -188,7 +188,7 @@ export const useStudyStore = create<StudyState>()((set, get) => {
     generateQuiz: async (book, count = QUIZ_DEFAULT_COUNT, scopeChapterId = null) => {
       const key = get().bookKey
       if (!key || get().running.quiz) return
-      const all = usableSummaryChapters(book.chapters)
+      const all = promptChapters(book.chapters)
       const chapters = scopeChapterId ? all.filter((c) => c.id === scopeChapterId) : all
       if (!chapters.length) {
         set({ errors: { ...get().errors, quiz: 'noChapters' } })
@@ -223,7 +223,7 @@ export const useStudyStore = create<StudyState>()((set, get) => {
       const q = question.trim()
       if (!key || !q || get().running.ask) return
       const id = ++turnSeq
-      const chapters = usableSummaryChapters(book.chapters)
+      const chapters = promptChapters(book.chapters)
       const refs = chapters.map((c) => ({ id: c.id, title: c.title }))
       const hits = retrieveChapters(q, chapters.map((c) => ({ id: c.id, title: c.title, summary: c.summary ?? '' })), ASK_RETRIEVE_K)
       const context = hits.map((h) => `【${h.title}】\n${h.summary}`).join('\n\n')
