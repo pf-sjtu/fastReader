@@ -304,6 +304,27 @@ describe('fillLibraryMetadata', () => {
     expect(r.index!.entries['/s/a.epub'].coverKey).toBe('bk_fuzzy01') // 本地封面键也用云端 id
   })
 
+  it('换过的书解析不出封面：仍补传元数据（带 replace 与新 size），否则云端记录永远是旧的、补全按钮消不掉', async () => {
+    const mirror = await seeded(['/s/a.epub'])
+    const publish = vi.fn(async () => true)
+    const io = fakeIO({ readMirror: async () => mirror })
+    const entries = [{ ...mirror.entries['/s/a.epub'], size: 777, catalogChanged: true }]
+    await fillLibraryMetadata(io, entries, { inspect: async () => ({ meta: { title: 'T' }, thumb: null }), publishCover: publish })
+    expect(publish).toHaveBeenCalledWith(bookIdOf('/s/a.epub'), expect.objectContaining({ size: 777 }), null, { replace: true })
+  })
+
+  it('补传明确失败（返回 false / 抛错）：计入 retryable，不悄悄当成功', async () => {
+    const mirror = await seeded(['/s/a.epub', '/s/b.epub'])
+    const io = fakeIO({ readMirror: async () => mirror })
+    let n = 0
+    const publish = vi.fn(async () => {
+      if (n++ === 0) return false
+      throw new Error('quota')
+    })
+    const r = await fillLibraryMetadata(io, Object.values(mirror.entries), { inspect: async () => ({ meta: { title: 'T' }, thumb: new Blob(['t']) }), publishCover: publish })
+    expect(r.retryable).toBe(2)
+  })
+
   it('txt/md 没有内嵌元数据：不下载、直接清 stale（不白白下载整本）', async () => {
     const mirror = await seeded(['/s/笔记.md', '/s/文稿.txt', '/s/书.epub'])
     const readBinary = vi.fn(async () => new ArrayBuffer(8))

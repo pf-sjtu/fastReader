@@ -14,7 +14,7 @@ import { adoptCloudCovers, persistIndex, rebuildLibrary, recordMetadataBatch, re
 import { emptyIndex, migrateIndex } from './libraryIndex'
 import { fillLibraryMetadata, inspectBook, type FillResult } from './libraryFill'
 import { bookIdOf } from './bookId'
-import { buildCatalogMeta, buildShelf, findRealEntry } from './cloudCatalog'
+import { buildCatalogMeta, buildShelf, findRealEntry, isCatalogFile } from './cloudCatalog'
 import { deleteCovers, fetchCoverIndex, isCloudCoverKey, uploadCover, type CoverIndex, type CoverItem } from './cloudCovers'
 import type { BookStatus, LibraryEntry, LibraryIndex } from './types'
 
@@ -35,6 +35,8 @@ interface LibraryState {
   refreshing: boolean
   /** 本次会话内是否成功扫描过 WebDAV；false = 状态/进度来自镜像，可能不是最新 */
   fresh: boolean
+  /** 最近一次成功扫描「开始」的时间（0 = 没扫过）。比它新的云端条目，这次扫描可能还没看到 */
+  scannedAt: number
   error: string | null
   /** WebDAV 未启用 */
   unavailable: boolean
@@ -85,7 +87,14 @@ function waitForWebdav(timeoutMs = 15000): Promise<boolean> {
   })
 }
 
-const isIncomplete = (it: CoverItem | undefined) => !it || !it.cover || !it.subjects?.length || !it.file
+/** 扫描结果的有效期：超过它就在「判断书是否还在」之前重扫一次 */
+const SCAN_TTL_MS = 2 * 60_000
+/** 云端条目的 updatedAt 与扫描时间的容差（两端时钟、上传与扫描的先后） */
+export const ENTRY_GRACE_MS = 60_000
+
+/** PDF 没有 dc:subject 可取，不能因此永远判为「不完整」（每次点开都重新解析并发一次写） */
+const isIncomplete = (it: CoverItem | undefined, path: string) =>
+  !it || !it.cover || !it.file || (!it.subjects?.length && !/\.pdf$/i.test(it.file || path))
 
 export const useLibraryStore = create<LibraryState>()((set, get) => ({
   index: emptyIndex(0),
@@ -93,6 +102,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
   catalogLoaded: false,
   refreshing: false,
   fresh: false,
+  scannedAt: 0,
   error: null,
   unavailable: false,
   connecting: false,
@@ -141,9 +151,10 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
       return get().loadMirror()
     }
     set({ refreshing: true, unavailable: false, connecting: false })
+    const startedAt = Date.now()
     inflight = Promise.all([refreshLibrary(io, { onUpdate: (index) => set({ index }) }), get().loadCatalog()])
       .then(async ([r]) => {
-        set({ index: r.index, fresh: r.scanned, error: r.error ?? null })
+        set({ index: r.index, fresh: r.scanned, scannedAt: r.scanned ? startedAt : 0, error: r.error ?? null })
         // 扫描成功后把云端 metadata 固化进真实条目（stale 的书直接补齐，镜像离线也有）；失败静默
         if (r.scanned) {
           const next = await adoptCloudCovers(io, get().catalog).catch(() => null)
@@ -183,8 +194,10 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
     if (!(await waitForWebdav())) {
       return { kind: 'unreachable', reason: useConfigStore.getState().webdavConfig.enabled ? 'timeout' : 'off' }
     }
-    // 虚拟条目只有云端资料：要确认书在不在，必须有一次成功的扫描
-    if (!get().fresh) await get().refresh()
+    // 虚拟条目只有云端资料：要确认书在不在，必须有一次「够新」的成功扫描——
+    // 别的设备可能在本次扫描之后才上传了这本书（云端条目比扫描新），旧扫描的「没有」不能当结论
+    const stale = !get().fresh || Date.now() - get().scannedAt > SCAN_TTL_MS || entry.updatedAt > get().scannedAt - ENTRY_GRACE_MS
+    if (stale) await get().refresh()
     const s = get()
     if (!s.fresh) return { kind: 'unreachable', reason: 'scan-failed' }
     const real = findRealEntry(s.index, s.catalog, id)
@@ -257,8 +270,10 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
     const id = entry.catalogId ?? bookIdOf(entry.path)
     const item = get().catalog[id]
     // 书变了（大小和云端记录不一致）→ 重新提取；信息不全（缺封面 / 分类 / 文件名）→ 补齐；否则什么都不用做
-    const changed = !!item?.size && item.size !== file.size
-    if (item && !changed && !isIncomplete(item)) return
+    // 与别的书共用同一个云端 id（X.epub / X.pdf）而云端记的是另一个文件：既不是「换书」也不该去改它，别互相覆盖
+    if (item && !isCatalogFile(entry.path, item) && bookIdOf(entry.path) === id) return
+    const changed = !!item?.size && item.size !== file.size && isCatalogFile(entry.path, item)
+    if (item && !changed && !isIncomplete(item, entry.path)) return
     try {
       const { meta, thumb } = await inspectBook(await file.arrayBuffer(), entry.path)
       if (!thumb && !meta.title) return

@@ -88,6 +88,33 @@ describe('buildShelf', () => {
     expect(virtualEntries(shelf)).toHaveLength(0)
   })
 
+  it('一对一：X.epub 与 X.pdf 的云端 id 相同，只有云端记录的那个文件拿到它；另一个不再「补全」（否则互相覆盖）', () => {
+    const idx = scan('甲.epub', '甲.pdf')
+    const id = bookIdOf('甲.epub')
+    expect(bookIdOf('甲.pdf')).toBe(id)
+    const shelf = buildShelf(idx, { [id]: item('甲', { file: '甲.pdf', size: 1000 }) as never })
+    expect(shelf.entries['/EBook/甲.pdf'].catalogId).toBe(id)
+    expect(shelf.entries['/EBook/甲.epub'].catalogId).toBeUndefined()
+    expect(shelf.entries['/EBook/甲.epub'].stale).toBe(false)
+    expect(virtualEntries(shelf)).toHaveLength(0)
+  })
+
+  it('一对一：「X」与「X（第三版）」同时在，精确的那本拿云端条目，邻近版本不抢，仍可自己补全', () => {
+    const idx = scan('经济学原理.epub', '经济学原理（第三版）.epub')
+    const id = bookIdOf('经济学原理.epub')
+    const shelf = buildShelf(idx, { [id]: item('经济学原理', { size: 5000 }) as never })
+    expect(shelf.entries['/EBook/经济学原理.epub'].catalogId).toBe(id)
+    expect(shelf.entries['/EBook/经济学原理（第三版）.epub'].catalogId).toBeUndefined()
+    expect(shelf.entries['/EBook/经济学原理（第三版）.epub'].stale).toBe(true) // id 不同：补全会建自己的条目
+  })
+
+  it('文件名与云端记录不一致时，大小不同不算「书被换过」（否则邻近版本会反复覆盖封面）', () => {
+    const idx = scan('甲.epub')
+    const id = bookIdOf('甲.epub')
+    const e = buildShelf(idx, { [id]: item('甲', { file: '甲（旧版）.epub', size: 5000 }) as never }).entries['/EBook/甲.epub']
+    expect(e.catalogChanged).toBeUndefined()
+  })
+
   it('歧义宁可不配：两本很像的书不会互相抢封面（多出一个虚拟条目，由「点开时核对」兜底）', () => {
     const idx = scan('经济学原理（上册）.epub')
     const catalog: CoverIndex = {

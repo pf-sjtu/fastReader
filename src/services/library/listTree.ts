@@ -12,7 +12,7 @@ export const CONCURRENCY = 10
 /**
  * 列出同步目录下的全部文件。
  * 优先一次深度列表（`Depth: infinity`，1 次请求）；很多 WebDAV 服务（如 InfiniCLOUD）会对它返回 403，
- * 此时退回逐层 `Depth: 1` 的广度优先遍历。根目录读不出来 = 真失败；子目录读不出来只跳过该目录。
+ * 此时退回逐层 `Depth: 1` 的广度优先遍历。任何目录读不出来（重试一次后）都抛错，不返回残缺列表。
  * 以点开头的目录（`.juhua` 索引与封面）不进兜底遍历：里面没有书。
  * 兜底遍历超过上限会抛错（不返回残缺列表，避免 GC 误删）。
  */
@@ -35,17 +35,19 @@ export async function listTree(list: ListDir, root: string): Promise<WebDAVFileI
       Array.from({ length: Math.min(CONCURRENCY, batch.length) }, async () => {
         while (next < batch.length) {
           const i = next++
-          results[i] = await list(batch[i].dir, false)
+          let r = await list(batch[i].dir, false)
+          // 429 / 超时这类瞬时失败重试一次；还不行就整体失败（见下）
+          if (!r.success || !r.data) r = await list(batch[i].dir, false)
+          results[i] = r
         }
       })
     )
     const nextLevel: { dir: string; depth: number }[] = []
     batch.forEach(({ dir, depth }, i) => {
       const r = results[i]
-      if (!r.success || !r.data) {
-        if (dir === root) throw new Error(r.error ?? deep.error ?? '读取目录失败')
-        return
-      }
+      // 任何目录读不出来都不能算「扫描完成」：扫描结果是判断「书被删了」的唯一依据，
+      // 少一个子目录就会让里面的书全被当成已删除
+      if (!r.success || !r.data) throw new Error(r.error ?? deep.error ?? `读取目录失败：${dir}`)
       for (const f of r.data) {
         if (f.type === 'file') files.push(f)
         else if (f.type === 'directory' && depth < MAX_DEPTH && !f.basename.startsWith('.') && f.filename !== dir) {

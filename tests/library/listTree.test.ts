@@ -39,10 +39,22 @@ describe('listTree', () => {
     await expect(listTree(fs.list, '/s')).rejects.toThrow('/s')
   })
 
-  it('某个子目录读不出来：只跳过它，其余照常', async () => {
+  it('某个子目录读不出来：整体抛错（残缺列表会让里面的书被当成已删除）', async () => {
     const fs = fakeFs({ '/s': [dir('/s/ok'), dir('/s/bad')], '/s/ok': [file('/s/ok/a.epub')], '/s/bad': [file('/s/bad/x.epub')] }, { deepFails: true, failDirs: ['/s/bad'] })
-    const out = await listTree(fs.list, '/s')
-    expect(out.map((f) => f.filename)).toEqual(['/s/ok/a.epub'])
+    await expect(listTree(fs.list, '/s')).rejects.toThrow('/s/bad')
+  })
+
+  it('子目录瞬时失败（如 429）：重试一次成功就不算失败', async () => {
+    const calls: string[] = []
+    const list: ListDir = async (d, deep) => {
+      if (deep) return { success: false, error: '403' }
+      calls.push(d)
+      if (d === '/s/a' && calls.filter((c) => c === d).length === 1) return { success: false, error: '429' }
+      return { success: true, data: d === '/s' ? [dir('/s/a')] : [file('/s/a/1.epub')] }
+    }
+    const out = await listTree(list, '/s')
+    expect(out.map((f) => f.filename)).toEqual(['/s/a/1.epub'])
+    expect(calls.filter((c) => c === '/s/a')).toHaveLength(2)
   })
 
   it('兜底遍历跳过点开头的目录（.juhua 的索引与封面里没有书）', async () => {
@@ -91,9 +103,8 @@ describe('listTree', () => {
     expect(order[0]).toBe('/s')
   })
 
-  it('并行下某个子目录失败：只跳过它；根目录失败照样抛错', async () => {
+  it('并行下某个子目录持续失败：同样整体抛错', async () => {
     const fs = fakeFs({ '/s': [dir('/s/a'), dir('/s/b'), dir('/s/c')], '/s/a': [file('/s/a/1.epub')], '/s/b': [file('/s/b/2.epub')], '/s/c': [file('/s/c/3.epub')] }, { deepFails: true, failDirs: ['/s/b'] })
-    const out = await listTree(fs.list, '/s')
-    expect(out.map((f) => f.filename)).toEqual(['/s/a/1.epub', '/s/c/3.epub'])
+    await expect(listTree(fs.list, '/s')).rejects.toThrow('/s/b')
   })
 })

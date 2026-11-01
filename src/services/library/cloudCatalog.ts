@@ -53,6 +53,30 @@ export function catalogIdOf(path: string, catalog: CoverIndex): string | null {
   return id
 }
 
+const baseName = (path: string) => (path.split('/').pop() ?? path).toLowerCase()
+
+/** 这份云端资料记录的就是这个文件吗（没记文件名的老条目视为是） */
+export const isCatalogFile = (path: string, it: CoverItem | undefined) => !it?.file || it.file.toLowerCase() === baseName(path)
+
+/**
+ * 一对一分配：一个云端条目最多配给一本书。
+ * 争用同一条目时：id 精确相等的优先（模糊配到的邻近版本让位），再看文件名与云端记录一致的，最后按路径排序保证稳定。
+ */
+export function assignCatalogIds(paths: string[], catalog: CoverIndex): Map<string, string> {
+  const byId = new Map<string, string[]>()
+  for (const p of paths) {
+    const id = catalogIdOf(p, catalog)
+    if (id) byId.set(id, [...(byId.get(id) ?? []), p])
+  }
+  const out = new Map<string, string>()
+  for (const [id, ps] of byId) {
+    const rank = (p: string) => (bookIdOf(p) === id ? 0 : 2) + (isCatalogFile(p, catalog[id]) ? 0 : 1)
+    const best = [...ps].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))[0]
+    out.set(best, id)
+  }
+  return out
+}
+
 function enrich(e: LibraryEntry, id: string, it: CoverItem): LibraryEntry {
   const next: LibraryEntry = { ...e, catalogId: id }
   // 标题 / 作者：真实条目没补全（stale）或缺作者时才用云端的；已经有的不覆盖
@@ -63,7 +87,8 @@ function enrich(e: LibraryEntry, id: string, it: CoverItem): LibraryEntry {
   }
   // 但云端记录的大小与 WebDAV 上的不一致 = 同名书被换过，云端资料（封面、章数…）可能已过期：
   // 重新标为 stale（补全按钮会计入），并记下原因，补全重传时用 replace 覆盖旧封面
-  if (it.size && e.size && it.size !== e.size) {
+  // 只有「云端记的就是这个文件」时才算被换过：模糊配到的邻近版本（文件名不同）大小本来就不同
+  if (it.size && e.size && it.size !== e.size && isCatalogFile(e.path, it)) {
     next.stale = true
     next.catalogChanged = true
   }
@@ -108,11 +133,18 @@ function virtualEntry(id: string, it: CoverItem): LibraryEntry {
 export function buildShelf(index: LibraryIndex, catalog: CoverIndex): LibraryIndex {
   if (Object.keys(catalog).length === 0) return index
   const entries: Record<string, LibraryEntry> = {}
-  const matched = new Set<string>()
+  const winners = assignCatalogIds(Object.keys(index.entries), catalog)
+  const matched = new Set<string>(winners.values())
   for (const [path, e] of Object.entries(index.entries)) {
-    const id = catalogIdOf(path, catalog)
-    if (id) matched.add(id)
-    entries[path] = id ? enrich(e, id, catalog[id]) : e
+    const id = winners.get(path)
+    if (id) {
+      entries[path] = enrich(e, id, catalog[id])
+      continue
+    }
+    // 输家：与别的书共用同一个云端条目（X.epub / X.pdf：id 相同）。
+    // 它不能再「补全」，否则两本书会轮流覆盖同一份云端资料；id 本来就不同的（模糊配到的邻近版本）照常补全，会建自己的条目
+    const contested = catalogIdOf(path, catalog)
+    entries[path] = contested && bookIdOf(path) === contested ? { ...e, stale: false } : e
   }
   for (const [id, it] of Object.entries(catalog)) {
     if (matched.has(id)) continue

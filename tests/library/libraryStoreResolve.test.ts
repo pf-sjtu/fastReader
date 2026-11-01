@@ -112,7 +112,7 @@ describe('resolveEntry', () => {
     io.current = null
     const real = scan('只在云端.epub')
     const refresh = vi.fn(async () => {
-      set({ fresh: true, index: real })
+      set({ fresh: true, scannedAt: Date.now(), index: real })
     })
     set({ refresh })
     const p = state().resolveEntry(virtualX())
@@ -127,10 +127,25 @@ describe('resolveEntry', () => {
 
   it('本会话已经成功扫描过：不再重复扫描', async () => {
     const refresh = vi.fn()
-    set({ refresh, fresh: true, index: scan('只在云端.epub') })
+    set({ refresh, fresh: true, scannedAt: Date.now(), index: scan('只在云端.epub') })
     const r = await state().resolveEntry(virtualX())
     expect(r.kind).toBe('ok')
     expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('扫描已过期（超过有效期）：判断「书还在不在」之前重扫一次', async () => {
+    const refresh = vi.fn()
+    set({ refresh, fresh: true, scannedAt: Date.now() - 10 * 60_000, index: scan('别的书.epub') })
+    await state().resolveEntry(virtualX())
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('云端条目比这次扫描还新（别的设备刚上传）：重扫，不拿旧扫描的「没有」下结论', async () => {
+    const refresh = vi.fn()
+    const v = { ...virtualX(), updatedAt: Date.now() }
+    set({ refresh, fresh: true, scannedAt: Date.now() - 5_000, index: scan('别的书.epub') })
+    await state().resolveEntry(v)
+    expect(refresh).toHaveBeenCalledTimes(1)
   })
 
   it('扫描失败（fresh 仍为 false）→ unreachable(scan-failed)：不能据此断定书被删了', async () => {
@@ -140,12 +155,12 @@ describe('resolveEntry', () => {
 
   it('扫描成功、扫到了别的书，却没有这一本 → missing（交给用户决定是否删 metadata）', async () => {
     const v = virtualX()
-    set({ refresh: vi.fn(), fresh: true, index: scan('别的书.epub') })
+    set({ refresh: vi.fn(), fresh: true, scannedAt: Date.now(), index: scan('别的书.epub') })
     expect(await state().resolveEntry(v)).toEqual({ kind: 'missing', entry: v })
   })
 
   it('扫描「成功」却一本书都没扫到（多半是目录配错）→ unreachable，绝不得出 missing', async () => {
-    set({ refresh: vi.fn(), fresh: true, index: emptyIndex(0) })
+    set({ refresh: vi.fn(), fresh: true, scannedAt: Date.now(), index: emptyIndex(0) })
     expect(await state().resolveEntry(virtualX())).toEqual({ kind: 'unreachable', reason: 'scan-failed' })
   })
 

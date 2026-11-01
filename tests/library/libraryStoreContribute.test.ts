@@ -85,7 +85,7 @@ describe('libraryStore.contributeOpened', () => {
 
   describe('云端条目的更新生命周期', () => {
     const id = bookIdOf(PATH)
-    const complete = { stem: 's', title: 'T', file: 'f.epub', size: 3, subjects: ['Business'], cover: 1 as const }
+    const complete = { stem: 's', title: 'T', file: PATH.split('/').pop()!, size: 3, subjects: ['Business'], cover: 1 as const }
     const sized = (n: number) => ({ ...file(), size: n }) as unknown as File
 
     it('云端条目完整且文件大小一致：什么都不做（不解析、不上传、不烧写入额度）', async () => {

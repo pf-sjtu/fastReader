@@ -202,7 +202,7 @@ describe('云端有、WebDAV 没有：整批提示（只有一次成功扫描之
   const notice = () => Array.from(mounted!.container.querySelectorAll('[role="status"]')).find((e) => e.textContent?.includes('在 WebDAV 上找不到'))
 
   it('扫描成功且扫到了书：提示云端多出来的书数；点「查看并清理」列出并确认后才删除', async () => {
-    useLibraryStore.setState({ index: real('商业一.epub', '商业二.epub'), fresh: true }) // 云端 6 本，WebDAV 有 2 本
+    useLibraryStore.setState({ index: real('商业一.epub', '商业二.epub'), fresh: true, scannedAt: Date.now() }) // 云端 6 本，WebDAV 有 2 本
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     expect(notice()?.textContent).toContain('4 本')
     expect(useLibraryStore.getState().removeBooks).not.toHaveBeenCalled()
@@ -217,8 +217,25 @@ describe('云端有、WebDAV 没有：整批提示（只有一次成功扫描之
     expect(removed.every((e) => e.virtual)).toBe(true) // 只会删虚拟条目，WebDAV 上存在的书不在其列
   })
 
+  it('比这次扫描还新的云端条目（别的设备刚上传）不算「找不到」', () => {
+    const idx = real('商业一.epub', '商业二.epub')
+    useLibraryStore.setState({ index: idx, fresh: true, scannedAt: Date.now() - 5_000 })
+    // 云端 6 本里，4 本的 updatedAt 都晚于扫描开始：一本都不该被提示
+    const catalog = useLibraryStore.getState().catalog
+    useLibraryStore.setState({ catalog: Object.fromEntries(Object.entries(catalog).map(([k, v]) => [k, { ...v, updatedAt: Date.now() }])) })
+    mounted = mount(<LibraryView onOpenBook={() => {}} />)
+    expect(notice()).toBeUndefined()
+  })
+
+  it('一半以上的书都「找不到」且数量不少（多半目录配错）：不提供整批删除', () => {
+    const many = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`bk_${i}`, { stem: `书${i}`, title: `书${i}`, file: `书${i}.epub`, updatedAt: 1 }]))
+    useLibraryStore.setState({ catalog: many as never, index: real('书0.epub'), fresh: true, scannedAt: Date.now() })
+    mounted = mount(<LibraryView onOpenBook={() => {}} />)
+    expect(notice()).toBeUndefined()
+  })
+
   it('选「保留」不删除', () => {
-    useLibraryStore.setState({ index: real('商业一.epub'), fresh: true })
+    useLibraryStore.setState({ index: real('商业一.epub'), fresh: true, scannedAt: Date.now() })
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     click(findButton(/查看并清理/))
     click(findButton('保留'))
@@ -238,7 +255,7 @@ describe('云端有、WebDAV 没有：整批提示（只有一次成功扫描之
   })
 
   it('刷新进行中不提示（结果还没定）', () => {
-    useLibraryStore.setState({ index: real('商业一.epub'), fresh: true, refreshing: true })
+    useLibraryStore.setState({ index: real('商业一.epub'), fresh: true, scannedAt: Date.now(), refreshing: true })
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
     expect(notice()).toBeUndefined()
   })

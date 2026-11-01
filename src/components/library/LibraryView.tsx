@@ -8,7 +8,7 @@ import { useConfigStore } from '@/stores/configStore'
 import { continueReading, listEntries, type LibraryFilter, type LibrarySort } from '@/services/library/libraryIndex'
 import { groupEntries, limitGroups, recommendBooks, type GroupBy } from '@/services/library/libraryOrganize'
 import { buildShelf, categoryCounts, virtualEntries } from '@/services/library/cloudCatalog'
-import { useLibraryStore } from '@/services/library/libraryStore'
+import { ENTRY_GRACE_MS, useLibraryStore } from '@/services/library/libraryStore'
 import type { LibraryEntry } from '@/services/library/types'
 import { isFillable } from '@/services/library/libraryFill'
 import { formatFileSize } from '@/utils/file'
@@ -34,10 +34,12 @@ const PAGE_FIRST = 24
 const PAGE_STEP = 48
 /** 补全元数据要下载的总量超过它就先确认（约 200MB） */
 const FILL_CONFIRM_BYTES = 200 * 1024 * 1024
+/** 「找不到」的书超过这个数、且占云端书目一半以上，就不提供整批删除（多半是目录配错） */
+const MASS_ORPHAN_MIN = 20
 
 export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps) {
   const { t } = useTranslation()
-  const { index, catalog, catalogLoaded, refreshing, fresh, error, unavailable, refresh, loadCatalog, loadMirror, fillProgress, fillMetadata, cancelFill } =
+  const { index, catalog, catalogLoaded, refreshing, fresh, scannedAt, error, unavailable, refresh, loadCatalog, loadMirror, fillProgress, fillMetadata, cancelFill } =
     useLibraryStore()
   const davEnabled = useConfigStore((s) => s.webdavConfig.enabled)
   const [query, setQuery] = useState('')
@@ -97,10 +99,14 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
     void fillMetadata()
   }
   // 云端有、WebDAV 没有的书：只有「本次会话成功扫描过、且确实扫到了书」才可信（目录配错时扫到 0 本，不能据此断定书被删了）
-  const orphans = useMemo(
-    () => (fresh && !refreshing && Object.values(index.entries).some((e) => !e.virtual) ? virtualEntries(shelf) : []),
-    [fresh, refreshing, index, shelf]
-  )
+  const orphans = useMemo(() => {
+    if (!fresh || refreshing || !Object.values(index.entries).some((e) => !e.virtual)) return []
+    // 比这次扫描还新的云端条目（别的设备刚上传的）扫描可能没看到，不能算「找不到」
+    const list = virtualEntries(shelf).filter((e) => e.updatedAt <= scannedAt - ENTRY_GRACE_MS)
+    // 一半以上的书都「找不到」，更可能是目录配错 / 换了书库而不是真被删了：不提供「全部删除」，
+    // 真被删的书仍会在点开时经 existsStatus 确认后单本询问
+    return list.length > MASS_ORPHAN_MIN && list.length > Object.keys(catalog).length / 2 ? [] : list
+  }, [fresh, refreshing, scannedAt, index, shelf, catalog])
 
   // 没有 WebDAV、也没有云端书目 → 没什么可显示的，整块不渲染（和以前 WebDAV 未启用时一致）
   if (unavailable && catalogLoaded && total === 0) return null

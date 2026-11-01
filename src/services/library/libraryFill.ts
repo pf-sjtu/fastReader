@@ -26,7 +26,7 @@ export function coverKeyOf(path: string): string {
   return (h >>> 0).toString(36)
 }
 
-const defaultPublish = (id: string, meta: CoverMeta, thumb: Blob, o?: { replace?: boolean }) => uploadCover(id, meta, thumb, fetch, o)
+const defaultPublish = (id: string, meta: CoverMeta, thumb: Blob | null, o?: { replace?: boolean }) => uploadCover(id, meta, thumb, fetch, o)
 
 export interface Inspection {
   meta: BookMeta
@@ -47,7 +47,7 @@ export interface FillOptions {
   signal?: AbortSignal
   inspect?: (buf: ArrayBuffer, path: string) => Promise<Inspection>
   /** 把封面与元数据补传到云端（默认走 /api/covers）；失败只影响「下次别人能否直接命中」，不影响本机 */
-  publishCover?: (id: string, meta: CoverMeta, thumb: Blob, opts?: { replace?: boolean }) => Promise<unknown>
+  publishCover?: (id: string, meta: CoverMeta, thumb: Blob | null, opts?: { replace?: boolean }) => Promise<unknown>
   onProgress?: (done: number, total: number) => void
 }
 
@@ -102,15 +102,23 @@ export async function fillLibraryMetadata(io: LibraryIO, entries: readonly Libra
     try {
       const { meta, thumb } = await inspect(buf, e.path)
       let coverKey: string | undefined
+      // 模糊匹配到的条目带 catalogId：沿用它，不能按路径重新算（否则会在云端另起一条重复记录）
+      const id = e.catalogId ?? bookIdOf(e.path)
       if (thumb) {
-        // 模糊匹配到的条目带 catalogId：沿用它，不能按路径重新算（否则会在云端另起一条重复记录）
-        const id = e.catalogId ?? bookIdOf(e.path)
         coverKey = id
         await io.putLocalCover(id, thumb)
-        // 跨设备共享（云端 KV）：尽力而为，失败不影响本机。书被换过（catalogChanged）要覆盖旧封面
-        const meta2 = buildCatalogMeta(e.path, e.size, meta, e.title || titleFromPath(e.path))
-        uploads = uploads.then(() => publishCover(id, meta2, thumb, { replace: !!e.catalogChanged })).catch(() => {})
       }
+      // 跨设备共享（云端 KV）：尽力而为，失败不影响本机。书被换过（catalogChanged）要覆盖旧封面；
+      // 没解析出封面也要补传元数据（含新的 size），否则云端记录一直是旧的，「大小不一致」的标记永远消不掉
+      const meta2 = buildCatalogMeta(e.path, e.size, meta, e.title || titleFromPath(e.path))
+      uploads = uploads
+        .then(() => publishCover(id, meta2, thumb, { replace: !!e.catalogChanged }))
+        .then((ok) => {
+          if (ok === false) res.retryable++ // 明确失败（配额 / 限流 / 网络）：别悄悄当成功
+        })
+        .catch(() => {
+          res.retryable++
+        })
       pending.push({
         path: e.path,
         patch: {
