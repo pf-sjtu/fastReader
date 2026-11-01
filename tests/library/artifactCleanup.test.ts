@@ -319,6 +319,15 @@ describe('deleteStaleArtifacts', () => {
     expect(del).not.toHaveBeenCalled()
   })
 
+  it('单文件删除也挡路径穿越：以同步目录开头但含 `..`（含 %2e%2e 编码）一律拒绝', async () => {
+    const mk = (path: string) => ({ path, basename: 'x.md', size: 1, kind: 'legacy', reason: 'legacy', recommended: true }) as never
+    const del = vi.fn(async () => ({ success: true }))
+    const r = await deleteStaleArtifacts([mk(`${SYNC}/../别处/x.md`), mk(`${SYNC}/%2e%2e/别处/x.md`), mk(`${SYNC}/ok-完整摘要.md`)], del, 3, async () => ({ success: true }), SYNC)
+    expect(del).toHaveBeenCalledTimes(1)
+    expect(r.deleted).toHaveLength(1)
+    expect(r.failed).toHaveLength(2)
+  })
+
   it('整包（dir）走目录删除，不删单个文件', async () => {
     const item = { path: `${BOOKS_ROOT}/乙~1`, basename: '乙~1', size: 20, kind: 'artifact', reason: 'orphan', recommended: false, dir: true } as never
     const del = vi.fn(async () => ({ success: true }))

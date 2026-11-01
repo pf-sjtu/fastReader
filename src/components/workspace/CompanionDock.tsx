@@ -5,7 +5,7 @@
  * 页签尽量不折叠：宽度够就「图标 + 文字」全部直接显示；不够时按 dockLayout 的顺序退让
  * （次要页签先收成图标 → 主要页签也收成图标 → 折进「…」菜单；「…」本身也是先图文、再只剩图标）。
  */
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   BookOpen,
   CalendarClock,
@@ -82,7 +82,7 @@ export function CompanionDock({ tabs, active, onActiveChange, onCollapse, classN
   const labelKey = tabs.map((x) => `${x.id}:${x.label}`).join('|') + `|${moreLabel}`
 
   // 量「图标 + 文字」的自然宽度：画一排看不见的完整页签，标签文字（语言切换）变了才重量
-  useLayoutEffect(() => {
+  const measureNatural = useCallback(() => {
     const root = measureRef.current
     if (!root) return
     const next: Record<string, number> = {}
@@ -91,8 +91,12 @@ export function CompanionDock({ tabs, active, onActiveChange, onCollapse, classN
       const w = Math.ceil(el.getBoundingClientRect().width)
       if (w) next[id] = w
     })
+    // 被 display:none 藏着挂载时全是 0：什么都量不到就别覆盖（等显示出来由下面的观察器补量）
+    if (!Object.keys(next).length) return
     setNatural({ tabs: next, more: next.__more ?? 0 })
-  }, [labelKey])
+  }, [])
+
+  useLayoutEffect(measureNatural, [labelKey, measureNatural])
 
   useLayoutEffect(() => {
     const el = listRef.current
@@ -102,8 +106,15 @@ export function CompanionDock({ tabs, active, onActiveChange, onCollapse, classN
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+    // 隐藏着挂载、之后才显示（切到对照栏页签 / 折叠展开）：量尺寸的那排页签从 0 变成有宽度时要重量一次
+    const mroot = measureRef.current
+    const mro = mroot ? new ResizeObserver(measureNatural) : null
+    if (mroot) mro?.observe(mroot)
+    return () => {
+      ro.disconnect()
+      mro?.disconnect()
+    }
+  }, [measureNatural])
 
   const layout = useMemo(
     () =>

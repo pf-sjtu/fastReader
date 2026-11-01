@@ -130,11 +130,18 @@ function readAuto(): boolean {
   }
 }
 
-let abort: AbortController | null = null
+/** 每类生成各用一个控制器：问一句书不该把正在后台生成的速读 / 自测中断（已花的钱就白费了） */
+const aborts: Partial<Record<'kit' | 'quiz' | 'ask', AbortController>> = {}
+const abortAll = () => {
+  for (const k of Object.keys(aborts) as (keyof typeof aborts)[]) {
+    aborts[k]?.abort()
+    delete aborts[k]
+  }
+}
 let turnSeq = 0
-/** 本会话已自动尝试过的「书指纹:产物」：成功与否都不再自动重来 */
 /** 最近一次 bind 的加载过程（重复 bind 早退时返回它，让调用方等同一次加载） */
 let bindInflight: Promise<void> | null = null
+/** 本会话已自动尝试过的「书指纹:产物」：成功与否都不再自动重来 */
 const autoTried = new Set<string>()
 /** 仅测试用：清空「已尝试」记录 */
 export const resetAutoTried = () => autoTried.clear()
@@ -262,10 +269,11 @@ export const useStudyStore = create<StudyState>()((set, get) => {
     if (merged.changedRemote) scheduleSync(key)
   }
 
-  const begin = () => {
-    abort?.abort()
-    abort = new AbortController()
-    return abort.signal
+  const begin = (kind: 'kit' | 'quiz' | 'ask') => {
+    aborts[kind]?.abort()
+    const c = new AbortController()
+    aborts[kind] = c
+    return c.signal
   }
 
   return {
@@ -294,6 +302,8 @@ export const useStudyStore = create<StudyState>()((set, get) => {
       const key = get().bookKey
       if (!get().auto || !key || key !== studyKeyOf(book)) return
       if (!usableSummaryChapters(book.chapters).length) return
+      // 云端版本更高 / 读不懂 / 这一轮没读成：生成了也写不回去，钱白花；等云端状态恢复再说（手动生成不受限）
+      if (holdWrite()) return
       const busy = () => Object.values(get().running).some(Boolean)
       // 「按旧总结生成」的速读 / 自测视同没有：总结变了就该用新总结重做一次（失败则保留旧的，界面已标注）
       const fresh = (kind: StudyPart) => {
@@ -332,7 +342,7 @@ export const useStudyStore = create<StudyState>()((set, get) => {
       bookMeta = nextMeta
       // 指纹一样但书不一样（章节 id 与总结长度全撞上）时不能早退：那是两本书，信封都不同
       if (get().bookKey === key && meta?.bookKey === nextMeta.bookKey) return bindInflight ?? undefined
-      abort?.abort()
+      abortAll()
       if (syncTimer) {
         clearTimeout(syncTimer)
         syncTimer = null
@@ -377,7 +387,7 @@ export const useStudyStore = create<StudyState>()((set, get) => {
         set({ errors: { ...get().errors, kit: 'noChapters' } })
         return
       }
-      const signal = begin()
+      const signal = begin('kit')
       set({ running: { ...get().running, kit: true }, errors: { ...get().errors, kit: null }, kitProgress: { done: 0, total: 1 } })
       try {
         const kit = await studyDeps.createAI().generateStudyKit(book.title || '', chapters, language(), {
@@ -401,7 +411,7 @@ export const useStudyStore = create<StudyState>()((set, get) => {
         set({ errors: { ...get().errors, quiz: 'noChapters' } })
         return
       }
-      const signal = begin()
+      const signal = begin('quiz')
       set({ running: { ...get().running, quiz: true }, errors: { ...get().errors, quiz: null } })
       try {
         const quiz = await studyDeps.createAI().generateQuiz(book.title || '', chapters, count, language(), { signal })
@@ -440,7 +450,7 @@ export const useStudyStore = create<StudyState>()((set, get) => {
         .map((t) => `Q: ${t.question}\nA: ${t.answer}`)
         .join('\n\n')
 
-      const signal = begin()
+      const signal = begin('ask')
       set({ chat: [...get().chat, { id, question: q, citations: [], pending: true }], running: { ...get().running, ask: true } })
       const patchTurn = (p: Partial<AskTurn>) =>
         get().bookKey === key && set({ chat: get().chat.map((t) => (t.id === id ? { ...t, ...p, pending: false } : t)) })
@@ -467,9 +477,6 @@ export const useStudyStore = create<StudyState>()((set, get) => {
       }
     },
 
-    cancel: () => {
-      abort?.abort()
-      abort = null
-    },
+    cancel: abortAll,
   }
 })

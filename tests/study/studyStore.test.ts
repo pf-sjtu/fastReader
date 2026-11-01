@@ -405,3 +405,34 @@ describe('autoGenerate 与 bind 的竞态 / 答题记录保护（独立审查 M1
     expect(ai.generateQuiz).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('审查次要项：互不打断 / 云端不可写时不自动烧钱', () => {
+  it('问书不会中断正在后台生成的速读（各用各的 AbortController）；cancel 才全部中断', async () => {
+    const book = mkBook()
+    await useStudyStore.getState().bind(book)
+    let kitSignal: AbortSignal | undefined
+    ai.generateStudyKit.mockImplementation((...args: unknown[]) => {
+      kitSignal = (args[args.length - 1] as { signal: AbortSignal }).signal
+      return new Promise(() => {})
+    })
+    ai.askBook.mockResolvedValue({ answer: 'ok', citations: [] })
+    void useStudyStore.getState().generateKit(book)
+    await Promise.resolve()
+    await useStudyStore.getState().ask(book, '问')
+    expect(kitSignal?.aborted).toBe(false)
+    useStudyStore.getState().cancel()
+    expect(kitSignal?.aborted).toBe(true)
+  })
+
+  it('云端读失败（写不回去）：自动生成不动；手动生成不受限', async () => {
+    studyDeps.artifacts = { ctx: () => ({}) as never, load: async () => ({ status: 'error', error: new Error('boom') }) as never, save: async () => true }
+    const b = mkBook()
+    await useStudyStore.getState().bind(b)
+    await useStudyStore.getState().autoGenerate(b)
+    expect(ai.generateStudyKit).not.toHaveBeenCalled()
+    expect(ai.generateQuiz).not.toHaveBeenCalled()
+    ai.generateStudyKit.mockResolvedValue(kit)
+    await useStudyStore.getState().generateKit(b)
+    expect(ai.generateStudyKit).toHaveBeenCalledTimes(1)
+  })
+})

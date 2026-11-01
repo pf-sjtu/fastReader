@@ -190,8 +190,18 @@ export function isArtifactPackageDir(path: string, syncPath = ''): boolean {
 }
 
 /** 文件项也必须落在本次同步目录之下（`syncPath` 为空时不校验，兼容旧调用） */
-const inSyncDir = (path: string, syncPath: string): boolean =>
-  !syncPath || path.startsWith(`${syncPath.replace(/\/+$/, '')}/`)
+const inSyncDir = (path: string, syncPath: string): boolean => {
+  if (!syncPath) return true
+  if (!path.startsWith(`${syncPath.replace(/\/+$/, '')}/`)) return false
+  // 前缀对不代表没跳出去：`<同步目录>/../别处/x` 也以同步目录开头。原始与解码后的路径都不能含 `.` / `..` 段
+  let decoded = path
+  try {
+    decoded = decodeURIComponent(path)
+  } catch {
+    return false
+  }
+  return [path, decoded].every((p) => !p.split(/[/\\]/).some((seg) => seg === '..' || seg === '.'))
+}
 
 /**
  * 删除勾选的产物：并发 3，单个失败不影响其余；只接受 scanStaleArtifacts 给出的条目（调用方传入的就是它的子集）。
