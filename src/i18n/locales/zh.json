@@ -552,6 +552,9 @@
     }
   },
   "statusBar": {
+    "sections": "书库与处理",
+    "library": "书库",
+    "process": "处理",
     "enterProcessing": "进入处理界面",
     "enterProcessingShort": "结果",
     "backToConfig": "返回配置",
@@ -629,6 +632,7 @@
   },
   "library": {
     "title": "我的书库",
+    "backToLibrary": "返回书库",
     "search": "搜索书名或作者",
     "refresh": "刷新书库",
     "loading": "正在读取书库…",

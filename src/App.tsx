@@ -58,6 +58,8 @@ function App() {
 
   // 页面步骤状态 (1: 配置, 2: 结果)
   const [currentStepIndex, setCurrentStepIndex] = useState(1)
+  // 配置页内的两段：书库 / 处理。选中书后自动切到「处理」，顶栏分段可随时回书库
+  const [configSection, setConfigSection] = useState<'library' | 'process'>('library')
   const [navSheetOpen, setNavSheetOpen] = useState(false)
   const [previewSheetOpen, setPreviewSheetOpen] = useState(false)
 
@@ -134,6 +136,21 @@ function App() {
     handleWebDAVFileSelect: book.handleWebDAVFileSelect,
     handleLoadFromCloudCache,
   })
+
+  // 打开书就切到「处理」段，免得用户以为还在书库里
+  const handleOpenBook = useCallback(
+    (entry: Parameters<typeof openBook>[0]) => {
+      setConfigSection('process')
+      return openBook(entry)
+    },
+    [openBook]
+  )
+
+  // 文件就位（本地上传 / WebDAV / 书库打开）后自动切到「处理」段；清空后回书库。
+  // 只在 file 变化时跑，所以用户手动点分段不会被抢回去。
+  useEffect(() => {
+    setConfigSection(file ? 'process' : 'library')
+  }, [file])
 
   // 按当前配置重新处理（可先在配置页改设置再点）
   const handleRestartProcessing = useCallback(async () => {
@@ -217,6 +234,9 @@ function App() {
       onCancelProcessing={cancelProcessing}
       onRestartProcessing={file && extractedChapters && selectedChapters.size > 0 ? handleRestartProcessing : undefined}
       onAbortToConfig={handleAbortToConfig}
+      configSections={webdavConfig.enabled}
+      configSection={configSection}
+      onSelectConfigSection={setConfigSection}
     />
   )
 
@@ -284,9 +304,11 @@ function App() {
           <ConfigStep
             book={book}
             webdavEnabled={webdavConfig.enabled}
-            onOpenBook={openBook}
+            onOpenBook={handleOpenBook}
             openingPath={openingPath}
             autoOpening={autoOpening}
+            section={webdavConfig.enabled ? configSection : 'process'}
+            onSelectSection={setConfigSection}
             onLoadFromCloudCache={handleLoadFromCloudCache}
             onStartProcessing={handleStartProcessing}
             onSetSelection={handleSetSelection}

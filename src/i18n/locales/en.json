@@ -543,6 +543,9 @@
     }
   },
   "statusBar": {
+    "sections": "Library and processing",
+    "library": "Library",
+    "process": "Processing",
     "enterProcessing": "Enter Processing",
     "enterProcessingShort": "Results",
     "backToConfig": "Back to Config",
@@ -620,6 +623,7 @@
   },
   "library": {
     "title": "My library",
+    "backToLibrary": "Back to library",
     "search": "Search title or author",
     "refresh": "Refresh library",
     "loading": "Loading library…",

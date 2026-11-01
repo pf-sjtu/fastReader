@@ -8,7 +8,9 @@ import {
   Brain,
   ArrowLeft,
   ArrowRight,
+  BookMarked,
   Loader2,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -44,6 +46,10 @@ interface UnifiedStatusBarProps {
   onRestartProcessing?: () => void
   /** 中止并回到配置页改设置 */
   onAbortToConfig?: () => void
+  /** 配置视图里显示「书库 / 处理」分段（WebDAV 启用时才有书库） */
+  configSections?: boolean
+  configSection?: 'library' | 'process'
+  onSelectConfigSection?: (section: 'library' | 'process') => void
   className?: string
 }
 
@@ -64,6 +70,9 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
   onCancelProcessing,
   onRestartProcessing,
   onAbortToConfig,
+  configSections = false,
+  configSection = 'process',
+  onSelectConfigSection,
   className
 }: UnifiedStatusBarProps) {
   const { t } = useTranslation()
@@ -124,7 +133,36 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
       <div data-slot="status-bar" className={cn('w-full min-w-0 px-0.5 py-1 sm:px-1', className)}>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           {/* 切换按钮 + 模型信息（移动端同一行） */}
-          <div className="flex items-center justify-between gap-2 sm:justify-start sm:gap-3 shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-start sm:gap-3 shrink-0">
+            {/* 配置视图的「书库 / 处理」分段：书库要能随时回去看一眼，而不是选完书就被表单顶掉 */}
+            {currentView === 'config' && configSections && onSelectConfigSection && (
+              <div
+                role="tablist"
+                aria-label={t('statusBar.sections')}
+                className="flex items-center gap-0.5 rounded-md border p-0.5"
+              >
+                <Button
+                  role="tab"
+                  aria-selected={configSection === 'library'}
+                  variant={configSection === 'library' ? 'secondary' : 'ghost'}
+                  size="xs"
+                  onClick={() => onSelectConfigSection('library')}
+                >
+                  <BookMarked className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{t('statusBar.library')}</span>
+                </Button>
+                <Button
+                  role="tab"
+                  aria-selected={configSection === 'process'}
+                  variant={configSection === 'process' ? 'secondary' : 'ghost'}
+                  size="xs"
+                  onClick={() => onSelectConfigSection('process')}
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{t('statusBar.process')}</span>
+                </Button>
+              </div>
+            )}
             <Button
               variant="outline"
               size="sm"
