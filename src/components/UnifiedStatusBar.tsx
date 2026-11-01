@@ -161,11 +161,12 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
           <div className="flex-1 min-w-0 mx-0 sm:mx-6">
             {showProgress ? (
               <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-muted-foreground truncate min-w-0">
+                {/* 可换行：顶栏变窄时步骤文字让到下一行，而不是被压成 0 宽、让按钮组溢出到模型切换器上 */}
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm">
+                  <span className="text-muted-foreground truncate min-w-0 flex-1 basis-28">
                     {processing ? currentStep : t('statusBar.completed')}
                   </span>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 ml-auto">
                     <span className="text-muted-foreground tabular-nums">
                       {Math.round(progress)}%
                     </span>
