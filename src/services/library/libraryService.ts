@@ -236,6 +236,19 @@ export function recordProgress(io: LibraryIO, path: string, chapterId: string, p
   )
 }
 
+/**
+ * 阅读进度（按源文件名定位条目）。进度没变就不写：每次写都是一次整份远端索引的读-改-写，
+ * 读书时翻章很频繁，不能每翻一章都去打扰上游。条目不存在返回原索引。
+ */
+export function recordProgressByFileName(io: LibraryIO, fileName: string, chapterId: string, pct: number) {
+  const clamped = Math.min(100, Math.max(0, Math.round(pct)))
+  return mutate(io, (idx) => {
+    const entry = Object.values(idx.entries).find((e) => baseName(e.path) === fileName)
+    if (!entry || (entry.readProgress?.chapterId === chapterId && entry.readProgress.pct === clamped)) return idx
+    return patchEntry(idx, entry.path, { readProgress: { chapterId, pct: clamped } }, io.now())
+  })
+}
+
 /** 处理完成 / 清缓存 / 删摘要：状态与摘要文件名一次改完（按源文件名定位条目） */
 export function recordStatusByFileName(io: LibraryIO, fileName: string, status: BookStatus) {
   return mutate(io, (idx) => {

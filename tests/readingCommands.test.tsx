@@ -12,6 +12,9 @@ import {
   saveResume,
   type Command,
 } from '../src/reading/commands'
+const syncProgress = vi.hoisted(() => vi.fn())
+vi.mock('../src/services/library/libraryStore', () => ({ syncLibraryProgress: syncProgress }))
+
 import { useReadingCommands } from '../src/components/workspace/useReadingCommands'
 import type { CompanionTab } from '../src/stores/readingFocus'
 
@@ -93,7 +96,7 @@ describe('useReadingCommands（快捷键 / 命令面板 / 续读）', () => {
   const openTab = vi.fn()
   const focus = vi.fn()
 
-  function Harness(props: { current?: string; processing?: boolean; bare?: boolean; fresh?: boolean }) {
+  function Harness(props: { current?: string; processing?: boolean; bare?: boolean; fresh?: boolean; fileName?: string | null }) {
     const { overlay } = useReadingCommands({
       book,
       chapters: props.bare ? chapters.map((c) => ({ ...c, summary: undefined })) : props.fresh ? chapters.map((c) => ({ ...c })) : chapters,
@@ -106,6 +109,7 @@ describe('useReadingCommands（快捷键 / 命令面板 / 续读）', () => {
       openTab,
       linking: null,
       toggleFocusMode: focus,
+      fileName: props.fileName,
     })
     return <>{overlay}</>
   }
@@ -178,6 +182,26 @@ describe('useReadingCommands（快捷键 / 命令面板 / 续读）', () => {
     m = mount(<Harness bare current="c1" />)
     await act(async () => void (await new Promise((r) => setTimeout(r, 700))))
     expect(loadResume(resumeKeyOf(book))?.chapterId).toBe('c3')
+  })
+
+  it('书库进度：停留 5 秒才同步（快速翻章只同步最后一章）；没有源文件名不同步', async () => {
+    vi.useFakeTimers()
+    try {
+      m = mount(<Harness current="c1" fileName="a.epub" />)
+      await act(async () => void (await vi.advanceTimersByTimeAsync(2000)))
+      m.rerender(<Harness current="c3" fileName="a.epub" />)
+      await act(async () => void (await vi.advanceTimersByTimeAsync(4900)))
+      expect(syncProgress).not.toHaveBeenCalled()
+      await act(async () => void (await vi.advanceTimersByTimeAsync(200)))
+      expect(syncProgress).toHaveBeenCalledTimes(1)
+      expect(syncProgress).toHaveBeenCalledWith('a.epub', 'c3', 100)
+      syncProgress.mockClear()
+      m.rerender(<Harness current="c2" />)
+      await act(async () => void (await vi.advanceTimersByTimeAsync(6000)))
+      expect(syncProgress).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('续读：阅读位置变化 600ms 后写入存档；恢复完成前不覆盖旧存档', async () => {

@@ -376,6 +376,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     openTab,
     linking: link.linking,
     toggleFocusMode,
+    fileName: file?.name ?? null,
   })
 
   const body = (

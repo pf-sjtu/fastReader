@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { logger } from '@/lib/logger'
 import { createLibraryIO, readLibraryMirror } from './libraryIO'
 import { useConfigStore } from '@/stores/configStore'
-import { rebuildLibrary, recordOpened, recordStatusByFileName, refreshLibrary } from './libraryService'
+import { rebuildLibrary, recordOpened, recordProgressByFileName, recordStatusByFileName, refreshLibrary } from './libraryService'
 import { emptyIndex, migrateIndex } from './libraryIndex'
 import { fillLibraryMetadata, type FillResult } from './libraryFill'
 import type { BookStatus, LibraryEntry, LibraryIndex } from './types'
@@ -124,6 +124,17 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
  * 处理完成/清缓存时同步书库状态。尽力而为：书库没启用、条目不存在、网络失败都静默跳过
  * （下一次扫描会按摘要文件是否存在自动校正，所以丢一次同步不会留下错误状态）。
  */
+/** 阅读进度同步：同样尽力而为，失败静默（进度只是体验，不值得打断阅读） */
+export function syncLibraryProgress(fileName: string, chapterId: string, pct: number): void {
+  const io = createLibraryIO()
+  if (!io) return
+  void recordProgressByFileName(io, fileName, chapterId, pct)
+    .then((idx) => {
+      if (idx) useLibraryStore.setState({ index: idx })
+    })
+    .catch((e) => logger.warn('[library] 进度同步失败', e))
+}
+
 export function syncLibraryStatus(fileName: string, status: BookStatus): void {
   const io = createLibraryIO()
   if (!io) return

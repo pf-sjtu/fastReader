@@ -10,6 +10,7 @@ import type { CompanionTab } from '@/stores/readingFocus'
 import { useReadingFocusStore } from '@/stores/readingFocus'
 import { adjacentChapter, cycleTab, loadResume, resolveResume, resumeKeyOf, saveResume, type Command } from '@/reading/commands'
 import { CommandPalette } from './CommandPalette'
+import { syncLibraryProgress } from '@/services/library/libraryStore'
 
 interface Params {
   book: { title?: string; author?: string }
@@ -23,6 +24,8 @@ interface Params {
   openTab: (tab: CompanionTab) => void
   linking: EntityLinking | null
   toggleFocusMode: () => void
+  /** 源文件名：有且书库里有对应条目时，把阅读进度同步到书库（封面上的进度条） */
+  fileName?: string | null
 }
 
 /** 输入框 / 对话框里不触发单键快捷键 */
@@ -31,6 +34,8 @@ function isTyping(t: EventTarget | null): boolean {
   if (!el) return false
   return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable || !!el.closest?.('[role="dialog"]')
 }
+
+const PROGRESS_SYNC_MS = 5000
 
 export function useReadingCommands(p: Params): { overlay: ReactNode; openPalette: () => void } {
   const { t } = useTranslation()
@@ -100,6 +105,16 @@ export function useReadingCommands(p: Params): { overlay: ReactNode; openPalette
       () => saveResume(resumeKey, { chapterId: p.currentChapterId, chapterIndex: index, chapterTitle: live.current.chapters[index]?.title ?? '', at: Date.now() }),
       600
     )
+    return () => window.clearTimeout(timer)
+  }, [resumeKey, p.currentChapterId, p.processing])
+
+  // 书库进度：停留 5 秒才写（快速翻章不写），且进度没变时服务层会跳过
+  useEffect(() => {
+    const name = live.current.fileName
+    if (!name || p.processing || restoredFor.current !== resumeKey || !p.currentChapterId) return
+    const index = idsRef.current.indexOf(p.currentChapterId)
+    if (index < 0) return
+    const timer = window.setTimeout(() => syncLibraryProgress(name, p.currentChapterId, ((index + 1) / idsRef.current.length) * 100), PROGRESS_SYNC_MS)
     return () => window.clearTimeout(timer)
   }, [resumeKey, p.currentChapterId, p.processing])
 

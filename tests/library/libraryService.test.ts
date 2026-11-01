@@ -5,6 +5,7 @@ import {
   rebuildLibrary,
   recordOpened,
   recordProgress,
+  recordProgressByFileName,
   recordStatusByFileName,
   refreshLibrary,
   splitListing,
@@ -209,6 +210,18 @@ describe('条目级更新', () => {
     await recordProgress(t.io, `${SYNC}/a.epub`, 'c3', 180)
     const remote = migrateIndex(JSON.parse(t.state.remote!))!
     expect(remote.entries[`${SYNC}/a.epub`].readProgress).toEqual({ chapterId: 'c3', pct: 100 })
+  })
+
+  it('recordProgressByFileName：按文件名定位；进度没变不写远端；未知文件名不抛', async () => {
+    const t = await seeded()
+    await recordProgressByFileName(t.io, 'a.epub', 'c2', 33.4)
+    const first = t.state.remote
+    expect(migrateIndex(JSON.parse(first!))!.entries[`${SYNC}/a.epub`].readProgress).toEqual({ chapterId: 'c2', pct: 33 })
+    await recordProgressByFileName(t.io, 'a.epub', 'c2', 33.1) // 取整后相同
+    expect(t.state.remote).toBe(first)
+    await recordProgressByFileName(t.io, 'a.epub', 'c3', 120)
+    expect(migrateIndex(JSON.parse(t.state.remote!))!.entries[`${SYNC}/a.epub`].readProgress).toEqual({ chapterId: 'c3', pct: 100 })
+    await expect(recordProgressByFileName(t.io, 'nope.epub', 'c1', 10)).resolves.toBeTruthy()
   })
 
   it('recordStatusByFileName：按文件名定位；未知文件名/无镜像不抛错', async () => {
