@@ -15,6 +15,7 @@ import type { BookPipelineResult, PipelineCache } from './bookPipeline'
 import { canHash, fileFingerprint } from './cacheKeys'
 import { createLocalPipelineCache, uploadMindMapBundle, type LocalCacheContext } from './persistence'
 import { createProcessor, extractionArgs, type ExtractionOptions } from './extract'
+import { buildMetaSidecar } from './metaSidecar'
 
 /** 进度文案（i18n，缺键时回退中文默认值） */
 export const batchMsg = (key: string, defaultValue: string, vars?: Record<string, unknown>): string =>
@@ -181,6 +182,12 @@ export async function saveBatchSummary(
   if (result.charts) {
     const chartsUp = await cloudCacheService.uploadChartsJson(fileName, result.charts)
     if (!chartsUp.success) logger.warn('[batch] 图表 JSON 上传失败:', chartsUp.error)
+  }
+  // 序号须与上面写入 MD 的章节顺序一致（同一份过滤结果）
+  const sidecar = buildMetaSidecar(result.chapters.filter((ch) => isUsableText(ch.summary)))
+  if (sidecar) {
+    const metaUp = await cloudCacheService.uploadMetaJson(fileName, sidecar)
+    if (!metaUp.success) logger.warn('[batch] 章节旁路上传失败:', metaUp.error)
   }
   return { outputPath, content }
 }

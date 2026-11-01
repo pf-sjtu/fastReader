@@ -3,6 +3,8 @@ import { useConfigStore } from '../stores/configStore'
 import { metadataFormatter, type ProcessResultInfo } from './metadataFormatter'
 import { cloudCacheService } from './cloudCacheService'
 import { logger } from '../lib/logger'
+import { buildMetaSidecar } from './pipeline/metaSidecar'
+import type { ChapterMeta } from './prompts/chapterMeta'
 
 // 定义本地类型（避免循环依赖）
 interface BookSummary {
@@ -14,6 +16,7 @@ interface BookSummary {
     content: string
     summary?: string
     processed: boolean
+    meta?: ChapterMeta
   }>
   connections: string
   overallSummary: string
@@ -113,6 +116,13 @@ export class AutoSyncService {
           console.warn('关键图表 JSON 同步失败:', chartsUp.error)
           // MD 已成功；图表失败单独告警，整体仍返回 true 但由调用方可查
         }
+      }
+
+      // v3 章节旁路（别名等）：MD 里没有，单独存同名 .meta.json；没有旁路不写、失败不影响主流程
+      const sidecar = buildMetaSidecar(bookSummary.chapters)
+      if (sidecar) {
+        const metaUp = await cloudCacheService.uploadMetaJson(fileName, sidecar)
+        if (!metaUp.success) console.warn('章节旁路同步失败:', metaUp.error)
       }
 
       useConfigStore.getState().updateWebDAVLastSyncTime()

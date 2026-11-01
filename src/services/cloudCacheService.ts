@@ -123,6 +123,38 @@ export class CloudCacheService {
     return `${syncPath}/${chartsName}`
   }
 
+  /** v3 章节旁路云存档：`书名-完整摘要.meta.json`（MD 里没有旁路，别名等靠它还原） */
+  getMetaCacheFilePath(fileName: string): string {
+    const metaName = this.getCacheFileName(fileName).replace(/\.md$/i, '.meta.json')
+    const syncPath = useConfigStore.getState().webdavConfig.syncPath || '/fastReader'
+    return `${syncPath}/${metaName}`
+  }
+
+  /** 读章节旁路 JSON：任何失败（含 404）都只是「没有」，不抛、不告警 */
+  async readMetaJson(fileName: string): Promise<string | null> {
+    try {
+      const result = await this.webdavService.getFileContents(this.getMetaCacheFilePath(fileName), 'text')
+      return result.success && result.data != null ? String(result.data) : null
+    } catch {
+      return null
+    }
+  }
+
+  /** 上传章节旁路 JSON（锦上添花：失败只返回 error，由调用方记日志） */
+  async uploadMetaJson(
+    fileName: string,
+    sidecar: unknown
+  ): Promise<{ success: boolean; path?: string; error?: string }> {
+    try {
+      if (sidecar == null) return { success: false, error: '无旁路数据' }
+      const path = this.getMetaCacheFilePath(fileName)
+      const upload = await this.webdavService.uploadFile(path, JSON.stringify(sidecar))
+      return upload.success ? { success: true, path } : { success: false, error: upload.error || '上传旁路失败' }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : '未知错误' }
+    }
+  }
+
   /**
    * 检查缓存是否存在
    * @param fileName 原始文件名

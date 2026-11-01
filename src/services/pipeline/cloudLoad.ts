@@ -8,12 +8,15 @@ import { isPartialCache, toLoadedChapters } from '@/utils/chapterResults'
 import { isUsableText } from '@/utils/resultStatus'
 import { logger } from '@/lib/logger'
 import { readChartsArtifact, recordHistory, saveChartsArtifact } from './persistence'
+import { applyMetaSidecar, parseMetaSidecar, type MetaSidecar } from './metaSidecar'
 
 export interface CloudSnapshot {
   content: string
   metadata?: ProcessingMetadata | null
   chartsJson?: string | null
   chartsFileFound?: boolean
+  /** 章节旁路 JSON 原文；undefined = 尚未读取（buildCloudBook 会现读），null = 确认没有 */
+  metaJson?: string | null
 }
 
 export type CloudLoadNotice = 'chartsParseFailed' | 'partial'
@@ -71,6 +74,17 @@ export async function refreshChartsJson(
   }
 }
 
+/** 读章节旁路（别名等）：缺失 / 读失败 / 损坏都当作没有，不影响加载 */
+async function loadMetaSidecar(snapshot: CloudSnapshot, fileName: string | null): Promise<MetaSidecar | null> {
+  try {
+    const text = snapshot.metaJson !== undefined ? snapshot.metaJson : fileName ? await cloudCacheService.readMetaJson(fileName) : null
+    return parseMetaSidecar(text)
+  } catch (e) {
+    logger.warn('[cloudLoad] 读取章节旁路失败:', e)
+    return null
+  }
+}
+
 /** 解析云端快照；无章节且无全书总结时返回 null（视为解析失败） */
 export async function buildCloudBook(
   snapshot: CloudSnapshot,
@@ -81,10 +95,11 @@ export async function buildCloudBook(
 
   const metadata = snapshot.metadata ?? parsed.metadata ?? null
   const charts = await resolveCloudCharts(parsed.charts, snapshot.chartsJson, opts.fileName)
+  const sidecar = await loadMetaSidecar(snapshot, opts.fileName)
   const summary: BookSummary = {
     title: parsed.title || opts.fallbackTitle,
     author: parsed.author || '',
-    chapters: toLoadedChapters(parsed.chapters, opts.idPrefix),
+    chapters: applyMetaSidecar(toLoadedChapters(parsed.chapters, opts.idPrefix), sidecar),
     connections: parsed.connections,
     overallSummary: parsed.overallSummary,
     charts,

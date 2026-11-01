@@ -105,5 +105,5 @@ const testPrompt = getSystemPrompt('testConnection')
 
 - `v3-prompts.yaml` 只改 `chapterSummary`：输出「正文 + `<!--juhua:meta-->` + JSON 旁路」（一句话 / 要点 / 规范实体名与别名 / 术语；小说另含 events）。其余段落与 v2 相同。
 - 解析与清理：前端 `services/prompts/chapterMeta.ts`，CLI `src/cli/chapter_meta.py`，共用 `tests/fixtures/prompts-v3/meta-cases.json`。旁路损坏只会退化为「无旁路」，不会使章节失败。
-- 旁路随章节缓存（缓存值是 `正文 + 标记 + JSON`），不写入云端 MD；各章实体合并成「实体表」，作为 `entityTable` 追加到关联分析 / 全书总结 / 关键图表的提示词末尾。
+- 旁路随章节缓存（缓存值是 `正文 + 标记 + JSON`），不写入云端 MD，而是另存同名 `{书名}-完整摘要.meta.json`（`pipeline/metaSidecar.ts`，按章节序号还原）；各章实体合并成「实体表」，作为 `entityTable` 追加到关联分析 / 全书总结 / 关键图表的提示词末尾。
 - 旧导出配置（1.0.0 / v2 时代）按 **v2 默认文本**求覆盖项：没改过的条目跟随 v3，改过的保持原样。CLI 在配置里找不到 v3 条目时回落到 v2 条目，所以旧的自定义提示词仍然生效。

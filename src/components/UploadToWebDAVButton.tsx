@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from './ui/alert'
 import { useWebDAVConfig, useAIConfig, useProcessingOptions } from '../stores/configStore'
 import { webdavService } from '../services/webdavService'
 import { cloudCacheService } from '../services/cloudCacheService'
+import { buildMetaSidecar } from '../services/pipeline/metaSidecar'
 import { metadataFormatter } from '../services/metadataFormatter'
 import { toast } from 'sonner'
 import type { BookSummary } from '../hooks/useBookProcessing'
@@ -162,6 +163,13 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
         if (!chartsUp.success) {
           console.warn('图表 JSON 上传失败:', chartsUp.error)
         }
+      }
+
+      // v3 章节旁路（别名等）单独存；失败不打扰用户
+      const sidecar = buildMetaSidecar(bookSummary.chapters)
+      if (sidecar) {
+        const metaUp = await cloudCacheService.uploadMetaJson(file.name, sidecar)
+        if (!metaUp.success) console.warn('章节旁路上传失败:', metaUp.error)
       }
 
       setUploadStatus('uploaded')

@@ -51,6 +51,25 @@ describe('autoSyncService.syncSummary', () => {
     expect(useConfigStore.getState().webdavConfig.lastSyncTime).not.toBeNull()
   })
 
+  it('章节带 v3 旁路 → 另写 .meta.json（序号 + 章节总数）；无旁路不写；旁路失败不影响 MD 成功', async () => {
+    vi.spyOn(webdavService, 'uploadFile').mockResolvedValue(ok)
+    const metaUp = vi.spyOn(cloudCacheService, 'uploadMetaJson').mockResolvedValue({ success: true })
+    expect(await autoSyncService.syncSummary(book, 'b.epub')).toBe(true)
+    expect(metaUp).not.toHaveBeenCalled()
+
+    const meta = { oneLine: 'x', takeaways: [], entities: [{ name: 'KKR', aliases: ['K'] }], terms: [] }
+    const withMeta = { ...book, chapters: [book.chapters[0], { ...book.chapters[1], meta }] }
+    expect(await autoSyncService.syncSummary(withMeta, 'b.epub')).toBe(true)
+    expect(metaUp).toHaveBeenCalledOnce()
+    const [fileName, sidecar] = metaUp.mock.calls[0] as [string, { count: number; chapters: { index: number }[] }]
+    expect(fileName).toBe('b.epub')
+    expect(sidecar.count).toBe(2)
+    expect(sidecar.chapters.map((c) => c.index)).toEqual([1])
+
+    metaUp.mockResolvedValue({ success: false, error: 'x' })
+    expect(await autoSyncService.syncSummary(withMeta, 'b.epub')).toBe(true)
+  })
+
   it('图表 JSON 失败不影响 MD 成功', async () => {
     vi.spyOn(webdavService, 'uploadFile').mockResolvedValue(ok)
     vi.spyOn(cloudCacheService, 'uploadChartsJson').mockResolvedValue({ success: false, error: 'x' })

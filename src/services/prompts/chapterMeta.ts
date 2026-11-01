@@ -59,7 +59,7 @@ function firstJsonObject(raw: string): string | null {
   return null
 }
 
-function coerceMeta(obj: unknown): ChapterMeta | null {
+export function coerceMeta(obj: unknown): ChapterMeta | null {
   if (!obj || typeof obj !== 'object') return null
   const o = obj as Record<string, unknown>
   const entities: ChapterEntity[] = Array.isArray(o.entities)
