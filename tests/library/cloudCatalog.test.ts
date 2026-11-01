@@ -88,6 +88,16 @@ describe('buildShelf', () => {
     expect(virtualEntries(shelf)).toHaveLength(0)
   })
 
+  it('封面键带封面版本（coverAt）：换封面后键变，各端缓存失效；老条目（无 coverAt）键仍是纯 id', () => {
+    const id = bookIdOf('甲.epub')
+    const withAt = buildShelf(scan('甲.epub'), { [id]: item('甲', { cover: 1, coverAt: 1700 }) as never }).entries['/EBook/甲.epub']
+    expect(withAt.coverKey).toBe(`${id}@1700`)
+    const legacy = buildShelf(scan('甲.epub'), { [id]: item('甲', { cover: 1 }) as never }).entries['/EBook/甲.epub']
+    expect(legacy.coverKey).toBe(id)
+    const virtual = Object.values(buildShelf(emptyIndex(0), { [id]: item('甲', { cover: 1, coverAt: 1700 }) as never }).entries)[0]
+    expect(virtual.coverKey).toBe(`${id}@1700`)
+  })
+
   it('一对一：X.epub 与 X.pdf 的云端 id 相同，只有云端记录的那个文件拿到它；另一个不再「补全」（否则互相覆盖）', () => {
     const idx = scan('甲.epub', '甲.pdf')
     const id = bookIdOf('甲.epub')

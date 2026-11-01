@@ -130,6 +130,32 @@ describe('书被换过（replace）：整条替换，不残留旧书的资料', 
   })
 })
 
+describe('coverAt：封面真正写入的时间', () => {
+  const put = (env: unknown, q: string, meta: object, body?: Uint8Array) =>
+    call(env, `/api/covers/${ID}${q}`, { method: 'PUT', body, headers: { 'X-Book-Meta': enc(meta) } })
+  const item = async (env: unknown) => ((await (await index(env)).json()) as Idx).items[ID]
+
+  it('写入封面时记录；只补元数据不改它（否则每次补元数据都让各端缓存的封面失效）；replace 换封面则更新', async () => {
+    const env = createEnv()
+    await put(env, '', { stem: 'a', title: 'A' }, bytes(60, 1))
+    const first = (await item(env)).coverAt as number
+    expect(first).toBeGreaterThan(0)
+    await put(env, '', { stem: 'a', title: 'A', subjects: ['History'] }) // 元数据补传
+    expect((await item(env)).coverAt).toBe(first)
+    await put(env, '', { stem: 'a', title: 'A' }, bytes(60, 2)) // 封面已存在且不 replace：不覆盖
+    expect((await item(env)).coverAt).toBe(first)
+    await put(env, '?replace=1', { stem: 'a', title: 'A' }, bytes(60, 3))
+    expect((await item(env)).coverAt as number).toBeGreaterThan(first)
+  })
+
+  it('replace 且新文件没有封面：封面与 coverAt 一起去掉', async () => {
+    const env = createEnv()
+    await put(env, '', { stem: 'a', title: 'A' }, bytes(60, 1))
+    await put(env, '?replace=1', { stem: 'a', title: 'A2' })
+    expect(await item(env)).not.toHaveProperty('coverAt')
+  })
+})
+
 describe('索引写入：限流重试', () => {
   it('KV 对同一键限 1 次写/秒：索引写入第一次失败会等待后重试一次，而不是整体 500', async () => {
     vi.useFakeTimers()

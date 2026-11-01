@@ -9,7 +9,7 @@
  */
 import type { BookMeta } from './bookMeta'
 import { bookIdOf, bookStem } from './bookId'
-import { buildNormIndex, matchCoverId, type CoverIndex, type CoverItem, type CoverMeta } from './cloudCovers'
+import { buildNormIndex, cloudCoverKey, isCloudCoverKey, matchCoverId, type CoverIndex, type CoverItem, type CoverMeta } from './cloudCovers'
 import type { LibraryEntry, LibraryIndex } from './types'
 
 const VIRTUAL_PREFIX = 'cloud://'
@@ -95,7 +95,8 @@ function enrich(e: LibraryEntry, id: string, it: CoverItem): LibraryEntry {
   if (!next.author && good(it.author)) next.author = it.author
   if (!next.pages && it.pages) next.pages = it.pages
   if (!next.chapterCount && it.chapterCount) next.chapterCount = it.chapterCount
-  if (it.cover && !(e.coverKey && e.coverKey.startsWith('bk_'))) next.coverKey = id
+  // 本地有 WebDAV 旧封面（路径哈希键）就不动；没有或已是云端键，就用云端的（带封面版本，换封面后缓存失效）
+  if (it.cover && !(e.coverKey && !isCloudCoverKey(e.coverKey))) next.coverKey = cloudCoverKey(id, it)
   if (it.subjects?.length) next.subjects = it.subjects
   if (it.desc) next.desc = it.desc
   if (it.publisher) next.publisher = it.publisher
@@ -114,7 +115,7 @@ function virtualEntry(id: string, it: CoverItem): LibraryEntry {
     author: good(it.author),
     pages: it.pages,
     chapterCount: it.chapterCount,
-    coverKey: it.cover ? id : undefined,
+    coverKey: it.cover ? cloudCoverKey(id, it) : undefined,
     status: 'unprocessed',
     stale: false,
     missingScans: 0,

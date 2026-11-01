@@ -4,7 +4,7 @@
  * 同一封面的并发请求合并；失败在本次会话内记住，不会因为滚动反复重试同一个 404。
  */
 import { coverRemotePath, type LibraryIO } from './libraryService'
-import { fetchCoverBlob, isCloudCoverKey } from './cloudCovers'
+import { fetchCoverBlob, isCloudCoverKey, parseCloudCoverKey } from './cloudCovers'
 
 /** WebDAV 旧封面（路径哈希键）对并发敏感：2 */
 export const COVER_FETCH_CONCURRENCY = 4
@@ -15,10 +15,10 @@ interface Options {
   getIO: () => LibraryIO | null
   concurrency?: number
   cloudConcurrency?: number
-  fetchCloud?: (id: string) => Promise<Blob | null>
+  fetchCloud?: (id: string, version?: string) => Promise<Blob | null>
 }
 
-export function createCoverLoader({ getIO, concurrency = COVER_FETCH_CONCURRENCY, cloudConcurrency = CLOUD_COVER_CONCURRENCY, fetchCloud = fetchCoverBlob }: Options) {
+export function createCoverLoader({ getIO, concurrency = COVER_FETCH_CONCURRENCY, cloudConcurrency = CLOUD_COVER_CONCURRENCY, fetchCloud = (id, v) => fetchCoverBlob(id, fetch, v) }: Options) {
   const inflight = new Map<string, Promise<Blob | null>>()
   const failed = new Set<string>()
   let active = 0
@@ -51,11 +51,13 @@ export function createCoverLoader({ getIO, concurrency = COVER_FETCH_CONCURRENCY
   }
 
   /** io 可为空：云端封面不依赖 WebDAV（书架在 WebDAV 连上之前就要显示）；此时不写本地缓存，交给浏览器的 HTTP 缓存（不可变资源） */
-  async function fetchCloudCover(io: LibraryIO | null, id: string): Promise<Blob | null> {
+  async function fetchCloudCover(io: LibraryIO | null, key: string): Promise<Blob | null> {
     await cloudAcquire()
     try {
-      const blob = await fetchCloud(id)
-      if (blob && io) await io.putLocalCover(id, blob).catch(() => {})
+      const { id, v } = parseCloudCoverKey(key)
+      const blob = await fetchCloud(id, v)
+      // 本地缓存按「带版本的键」存：封面被替换后（版本变了）旧缓存不会再命中
+      if (blob && io) await io.putLocalCover(key, blob).catch(() => {})
       return blob
     } finally {
       cloudRelease()

@@ -150,7 +150,7 @@ describe('createCoverLoader：WebDAV 未连接时', () => {
     const fetchCloud = vi.fn(async () => img)
     const loader = createCoverLoader({ getIO: () => null, fetchCloud })
     expect(await loader.load('bk_abcdef')).toBe(img)
-    expect(fetchCloud).toHaveBeenCalledWith('bk_abcdef')
+    expect(fetchCloud).toHaveBeenCalledWith('bk_abcdef', undefined)
   })
 
   it('WebDAV 封面（旧的路径哈希键）仍然必须有 IO：没有就返回 null，且不记失败（连上后可重试）', async () => {
@@ -169,6 +169,23 @@ describe('createCoverLoader：WebDAV 未连接时', () => {
     const loader = createCoverLoader({ getIO: () => fakeIO({ getLocalCover: async () => local }), fetchCloud })
     expect(await loader.load('bk_abcdef')).toBe(local)
     expect(fetchCloud).not.toHaveBeenCalled()
+  })
+
+  it('带版本的云端封面键（bk_x@coverAt）：按 id 取图并带版本；本地缓存也按带版本的键存取——换封面后旧缓存不再命中', async () => {
+    const stored = new Map<string, Blob>()
+    const fetchCloud = vi.fn(async () => new Blob(['new']))
+    const io = fakeIO({
+      getLocalCover: async (k: string) => stored.get(k) ?? null,
+      putLocalCover: async (k: string, b: Blob) => void stored.set(k, b),
+    })
+    stored.set('bk_abcdef', new Blob(['old'])) // 旧版本留下的缓存（键无版本）
+    const loader = createCoverLoader({ getIO: () => io, fetchCloud })
+    await loader.load('bk_abcdef@1700000000000')
+    expect(fetchCloud).toHaveBeenCalledWith('bk_abcdef', '1700000000000') // 没有命中旧缓存，重新取
+    expect(stored.has('bk_abcdef@1700000000000')).toBe(true)
+    fetchCloud.mockClear()
+    await createCoverLoader({ getIO: () => io, fetchCloud }).load('bk_abcdef@1700000000000')
+    expect(fetchCloud).not.toHaveBeenCalled() // 同一版本：命中本地缓存
   })
 
   it('本地缓存写入失败不影响拿到封面', async () => {

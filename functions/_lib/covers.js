@@ -150,16 +150,18 @@ export async function putItems(env, items, { overwrite = false } = {}) {
       await kv.delete(coverKey(id))
       hasCover = false
     }
-    changes.push({ id, meta, hasCover })
+    changes.push({ id, meta, hasCover, stored: status === 'stored' })
     results.push({ id, status })
   }
   await commitIndex(env, (cur) => {
     let dirty = false
-    for (const { id, meta, hasCover } of changes) {
+    for (const { id, meta, hasCover, stored } of changes) {
       const prev = cur.items[id]
       // 默认只合并（补缺，不抹掉已有字段）；overwrite 是「这是另一本书了」，旧值（分类 / 简介 / 出版社…）不能残留
       const base = overwrite ? {} : (prev ?? {})
+      // coverAt：封面真正被写入的时间。只有「新写 / 覆盖」才更新；元数据补传不动它，否则每次补元数据都会让各端缓存的封面失效
       const next = { ...base, ...meta, ...(hasCover ? { cover: 1 } : {}) }
+      if (stored) next.coverAt = prev?.coverAt && prev.coverAt >= Date.now() ? prev.coverAt + 1 : Date.now()
       if (JSON.stringify(next) !== JSON.stringify(prev)) {
         cur.items[id] = { ...next, updatedAt: Date.now() }
         dirty = true

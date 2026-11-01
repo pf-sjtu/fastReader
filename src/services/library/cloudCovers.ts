@@ -22,6 +22,8 @@ export interface CoverItem {
   lang?: string
   cover?: 1
   updatedAt?: number
+  /** 封面最近一次被写入的时间（服务端维护）：换封面后其他设备据此让本地缓存失效；老条目没有 */
+  coverAt?: number
 }
 export type CoverIndex = Record<string, CoverItem>
 /** 写入时提交的元数据（cover / updatedAt 由服务端维护） */
@@ -29,7 +31,17 @@ export type CoverMeta = Omit<CoverItem, 'cover' | 'updatedAt'>
 
 export const CLOUD_COVER_PREFIX = 'bk_'
 export const isCloudCoverKey = (key: string | undefined): key is string => !!key && key.startsWith(CLOUD_COVER_PREFIX)
-export const cloudCoverUrl = (id: string) => `/api/covers/${id}`
+/**
+ * 云端封面的键：`<id>` 或 `<id>@<coverAt>`。带版本的键同时是本地缓存键，封面被替换（coverAt 变了）后
+ * 旧缓存自然失效；没有 coverAt 的老条目沿用纯 id，已有的本地缓存不受影响。
+ */
+export const cloudCoverKey = (id: string, it?: Pick<CoverItem, 'coverAt'>) => (it?.coverAt ? `${id}@${it.coverAt}` : id)
+export const parseCloudCoverKey = (key: string): { id: string; v?: string } => {
+  const [id, v] = key.split('@')
+  return { id, v: v || undefined }
+}
+/** v 只用来绕开浏览器对「不可变」封面的 24 小时缓存，服务端忽略它 */
+export const cloudCoverUrl = (id: string, v?: string) => `/api/covers/${id}${v ? `?v=${encodeURIComponent(v)}` : ''}`
 
 type FetchLike = typeof fetch
 
@@ -45,9 +57,9 @@ export async function fetchCoverIndex(fetchImpl: FetchLike = fetch): Promise<Cov
   }
 }
 
-export async function fetchCoverBlob(id: string, fetchImpl: FetchLike = fetch): Promise<Blob | null> {
+export async function fetchCoverBlob(id: string, fetchImpl: FetchLike = fetch, v?: string): Promise<Blob | null> {
   try {
-    const r = await fetchImpl(cloudCoverUrl(id), { credentials: 'same-origin' })
+    const r = await fetchImpl(cloudCoverUrl(id, v), { credentials: 'same-origin' })
     if (!r.ok) return null
     const blob = await r.blob()
     return blob.size > 0 ? new Blob([blob], { type: 'image/webp' }) : null
