@@ -74,3 +74,29 @@ describe('ChartsPanel 工具栏：插槽 + 一个「图表操作」菜单', () =
     expect(document.querySelector('[role="separator"]')).toBeNull()
   })
 })
+
+describe('ChartsPanel：生成前预估与生成中取消', () => {
+  it('空状态：「生成」按钮下方显示预估插槽', () => {
+    m = mount(<ChartsPanel charts={null} canRegenerate onRegenerate={vi.fn()} estimateSlot={<p data-testid="est">约 3 万 token</p>} />)
+    expect(m.container.querySelector('[data-testid="est"]')?.textContent).toBe('约 3 万 token')
+  })
+
+  it('生成中（尚无图表）：显示「取消生成」并触发回调；没传 onCancel 则不显示', () => {
+    const onCancel = vi.fn()
+    m = mount(<ChartsPanel charts={null} generating onCancel={onCancel} />)
+    const btn = Array.from(m.container.querySelectorAll('button')).find((b) => b.textContent?.includes('取消生成'))!
+    act(() => btn.click())
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    m.rerender(<ChartsPanel charts={null} generating />)
+    expect(Array.from(m.container.querySelectorAll('button')).some((b) => b.textContent?.includes('取消生成'))).toBe(false)
+  })
+
+  it('已有图表重新生成时，「图表操作」菜单里出现「取消生成」', async () => {
+    const onCancel = vi.fn()
+    m = mount(<ChartsPanel charts={charts} onlyPlugin="entity-graph" generating canRegenerate onRegenerate={vi.fn()} onCancel={onCancel} />)
+    await openMenu()
+    const cancel = items().find((i) => i.textContent?.includes('取消生成'))!
+    act(() => cancel.click())
+    expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+})

@@ -106,7 +106,7 @@ const S1_KEYS = [
   'handleFileSelect', 'extractChapters', 'processBook', 'cancelProcessing', 'restartProcessing',
   'handleChapterSelect', 'handleSelectAll', 'handleViewChapterContent', 'handleCloseRightPanel',
   'handleChapterExpandChange', 'clearChapterCache', 'clearChapterMindMapCache', 'clearSpecificCache',
-  'regenerateKeyCharts', 'clearBookCache', 'increasePreviewFontSize', 'decreasePreviewFontSize',
+  'regenerateKeyCharts', 'cancelKeyCharts', 'clearBookCache', 'increasePreviewFontSize', 'decreasePreviewFontSize',
   'togglePreviewFullscreen', 'loadFromCloudCache', 'handleWebDAVFileSelect', 'openWebDAVBrowser',
   'handleChapterSummaryNavigation', 'handleChapterNavigation', 'loadFromHistoryRecord',
   'setCustomPrompt', 'setSelectedChapters', 'setIsWebDAVBrowserOpen', 'setBookSummary',
@@ -196,6 +196,53 @@ describe('useBookProcessing 组合入口', () => {
     await flush()
     expect(h.ai.charts).toHaveBeenCalledTimes(1)
     expect(h.autoSync.syncChartsJson.mock.calls[0][0]).toBe('cloud.epub')
+    m.unmount()
+  })
+
+  it('生成关键图表中途取消：不记失败（无 chartsError）、不上传，状态复位，之后还能再生成', async () => {
+    const content = formatUnifiedMarkdown(
+      { title: '云书', author: '', chapters: [{ id: '1', title: '一', summary: '摘一' }], overallSummary: '总' },
+      generateMetadata({
+        fileName: 'cx.epub', model: 'm', chapterDetectionMode: 'normal',
+        selectedChapters: [1], chapterCount: 1, originalCharCount: 1, processedCharCount: 1,
+      })
+    )
+    h.webdav.getFileContents.mockImplementation(async (path: string) =>
+      path.endsWith('.md') ? { success: true, data: content } : { success: false, error: '404 Not Found' }
+    )
+    const m = mount(<Harness />)
+    await act(async () => {
+      await api().loadFromHistoryRecord('cx.epub')
+    })
+    await flush()
+    // 调用挂起，直到收到 abort 信号才以 AbortError 结束（与真实 fetch 一致）
+    h.ai.charts.mockImplementationOnce(
+      (...args: unknown[]) =>
+        new Promise((_, reject) => {
+          const signal = (args[5] as { signal?: AbortSignal } | undefined)?.signal
+          signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+        })
+    )
+    let pending!: Promise<void>
+    act(() => {
+      pending = api().regenerateKeyCharts() as Promise<void>
+    })
+    await flush()
+    expect(api().chartsGenerating).toBe(true)
+    act(() => api().cancelKeyCharts())
+    await act(async () => {
+      await pending
+    })
+    expect(api().chartsGenerating).toBe(false)
+    expect(api().bookSummary?.chartsError ?? null).toBeNull()
+    expect(api().bookSummary?.charts ?? null).toBeNull()
+    expect(h.autoSync.syncChartsJson).not.toHaveBeenCalled()
+    // 取消后还能正常再生成
+    await act(async () => {
+      await api().regenerateKeyCharts()
+    })
+    await flush()
+    expect(api().bookSummary?.charts).not.toBeNull()
     m.unmount()
   })
 

@@ -145,6 +145,8 @@
       "failed": "Key charts generation failed",
       "empty": "No key charts yet",
       "generate": "Generate key charts",
+      "cancel": "Cancel",
+      "cancelled": "Key chart generation cancelled",
       "generateHint": "Makes one AI call from the overall summary and incurs a small cost. You can keep reading meanwhile.",
       "clearCache": "Clear charts cache",
       "noPersonGraph": "No entity graph data",

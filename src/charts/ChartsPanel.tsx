@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { Trash2, RefreshCw, MoreHorizontal } from 'lucide-react'
+import { Trash2, RefreshCw, MoreHorizontal, X } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,10 @@ export interface ChartsPanelProps {
   /** 手动重新生成关键图表 */
   onRegenerate?: () => void | Promise<void>
   canRegenerate?: boolean
+  /** 取消正在进行的生成 */
+  onCancel?: () => void
+  /** 生成前的用量预估（显示在「生成」按钮下方） */
+  estimateSlot?: ReactNode
   /** 只渲染该插件（不显示内层页签）：对照栏每个图表占一个页签时使用 */
   onlyPlugin?: string
   /** 联动入参（焦点/回调/配色），原样透传给插件；不传则插件只做展示 */
@@ -38,6 +42,8 @@ export function ChartsPanel({
   onClearCache,
   onRegenerate,
   canRegenerate = false,
+  onCancel,
+  estimateSlot,
   onlyPlugin,
   pluginProps,
   toolbarSlot,
@@ -97,6 +103,12 @@ export function ChartsPanel({
                   {t('results.charts.regenerate')}
                 </DropdownMenuItem>
               )}
+              {generating && onCancel && (
+                <DropdownMenuItem onSelect={onCancel}>
+                  <X className="size-4" />
+                  {t('results.charts.cancel')}
+                </DropdownMenuItem>
+              )}
               {canRegen && canClear && <DropdownMenuSeparator />}
               {canClear && (
                 <DropdownMenuItem variant="destructive" onSelect={onClearCache}>
@@ -115,6 +127,11 @@ export function ChartsPanel({
       <div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
         <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
         {t('results.charts.generating')}
+        {onCancel && (
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={onCancel}>
+            {t('results.charts.cancel')}
+          </Button>
+        )}
       </div>
     )
   }
@@ -147,6 +164,7 @@ export function ChartsPanel({
                 <RefreshCw className="size-4" />
                 {t('results.charts.generate')}
               </Button>
+              {estimateSlot}
               <p className="t-caption mx-auto max-w-xs">{t('results.charts.generateHint')}</p>
             </>
           )}

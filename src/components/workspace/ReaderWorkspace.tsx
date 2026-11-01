@@ -5,7 +5,10 @@
  * - 移动端：目录为左抽屉，对照栏为底部抽屉
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { usableSummaryChapters } from '@/utils/chapterResults'
+import { usableOrEmpty, usableSummaryChapters } from '@/utils/chapterResults'
+import { useConfigStore } from '@/stores/configStore'
+import { estimateRun } from '@/services/runEstimate'
+import { RunEstimateLine } from '@/components/study/RunEstimateLine'
 import { useTranslation } from 'react-i18next'
 import { useViewportWidth } from '@/hooks/useViewportWidth'
 import { containerWidth, fitColumns, isCompactWidth } from './columns'
@@ -73,6 +76,7 @@ export interface ReaderWorkspaceProps {
   onReadChapter: (chapterId: string) => void
   onDownloadAllMarkdown: () => void
   onRegenerateKeyCharts?: () => void | Promise<void>
+  onCancelKeyCharts?: () => void
 }
 
 /** 键盘快捷键不应在输入框里触发 */
@@ -104,6 +108,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     onReadChapter,
     onDownloadAllMarkdown,
     onRegenerateKeyCharts,
+    onCancelKeyCharts,
   } = props
   const { t } = useTranslation()
   // 窄于约 1000px 的窗口（小平板、缩小的桌面窗口）硬挤三栏会把正文压成窄条：改用紧凑布局（抽屉）
@@ -243,6 +248,13 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
   const clearOverall = useCallback(() => onClearSpecificCache('overall_summary'), [onClearSpecificCache])
   const canRegenerate = isUsableText(bookSummary.overallSummary) && chapters.length > 0
 
+  // 生成关键图表要读全部章节总结 + 关联 + 全书总结：先估一下告诉用户（价格未知只给 token）
+  const model = useConfigStore((s) => s.aiConfig.model)
+  const chartsEstimate = useMemo(
+    () => estimateRun([...usableSummaryChapters(chapters).map((c) => c.summary ?? ''), usableOrEmpty(bookSummary.connections), usableOrEmpty(bookSummary.overallSummary)], model),
+    [chapters, bookSummary.connections, bookSummary.overallSummary, model]
+  )
+
   const chartPanel = useCallback(
     (plugin: string, toolbarSlot?: ReactNode) => (
       <ErrorBoundary section={t('results.tabs.keyCharts')}>
@@ -253,13 +265,15 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
           generating={chartsGenerating}
           onClearCache={clearCharts}
           onRegenerate={onRegenerateKeyCharts}
+          onCancel={onCancelKeyCharts}
+          estimateSlot={<RunEstimateLine tokens={chartsEstimate.inputTokens + chartsEstimate.outputTokens} costRMB={chartsEstimate.costRMB} />}
           canRegenerate={canRegenerate}
           onlyPlugin={plugin}
           pluginProps={link.pluginProps}
         />
       </ErrorBoundary>
     ),
-    [t, mergedCharts, bookSummary.chartsError, chartsGenerating, clearCharts, onRegenerateKeyCharts, canRegenerate, link.pluginProps]
+    [t, mergedCharts, bookSummary.chartsError, chartsGenerating, clearCharts, onRegenerateKeyCharts, onCancelKeyCharts, chartsEstimate, canRegenerate, link.pluginProps]
   )
 
   const tabs = useMemo<DockTab[]>(() => {

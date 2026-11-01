@@ -47,12 +47,21 @@ export function useKeyCharts(deps: KeyChartsDeps) {
   const [chartsGenerating, setChartsGenerating] = useState(false)
   const busyRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
+  /** 区分「用户点了取消」与真正的失败：前者不记 chartsError、不弹错误 */
+  const userCancelRef = useRef(false)
 
   const resetCharts = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
     busyRef.current = false
     setChartsGenerating(false)
+  }, [])
+
+  /** 用户取消本次生成（不影响已有图表） */
+  const cancelKeyCharts = useCallback(() => {
+    if (!abortRef.current) return
+    userCancelRef.current = true
+    abortRef.current.abort()
   }, [])
 
   const runKeyChartsGeneration = useCallback(
@@ -76,6 +85,7 @@ export function useKeyCharts(deps: KeyChartsDeps) {
       const isStale = () => !generationRef.current.isCurrent(generation)
       const controller = new AbortController()
       abortRef.current = controller
+      userCancelRef.current = false
       busyRef.current = true
       setChartsGenerating(true)
       setBookSummary((prev) => (prev ? { ...prev, chartsError: null } : prev))
@@ -141,6 +151,10 @@ export function useKeyCharts(deps: KeyChartsDeps) {
           toast.dismiss(toastId)
           return
         }
+        if (userCancelRef.current) {
+          toast.message(t('results.charts.cancelled'), { id: toastId })
+          return
+        }
         const msg = err instanceof Error ? err.message : t('progress.unknownError', { defaultValue: '未知错误' })
         logger.error('[runKeyChartsGeneration] failed', err)
         setBookSummary((prev) => (prev ? { ...prev, chartsError: msg } : prev))
@@ -169,5 +183,5 @@ export function useKeyCharts(deps: KeyChartsDeps) {
   }, [bookSummary, runKeyChartsGeneration, resolveUploadKey, t])
 
   // 打开已精读的书不自动调用 AI：缺图表时由对照栏的「生成」按钮让用户确认后再生成（规格 ux-audit）
-  return { chartsGenerating, regenerateKeyCharts, resetCharts }
+  return { chartsGenerating, regenerateKeyCharts, cancelKeyCharts, resetCharts }
 }

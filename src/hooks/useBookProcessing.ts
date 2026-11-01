@@ -371,6 +371,7 @@ export function useBookProcessing() {
     clearChapterMindMapCache,
     clearSpecificCache,
     regenerateKeyCharts: charts.regenerateKeyCharts,
+    cancelKeyCharts: charts.cancelKeyCharts,
     clearBookCache,
     increasePreviewFontSize: reader.increasePreviewFontSize,
     decreasePreviewFontSize: reader.decreasePreviewFontSize,

@@ -146,6 +146,8 @@
       "failed": "关键图表生成失败",
       "empty": "还没有关键图表",
       "generate": "生成关键图表",
+      "cancel": "取消生成",
+      "cancelled": "已取消生成关键图表",
       "generateHint": "将调用一次 AI（基于全书总结），会产生少量费用；生成期间可以继续阅读。",
       "clearCache": "清除图表缓存",
       "noPersonGraph": "暂无实体关系数据",
