@@ -400,7 +400,8 @@ export function PersonGraphChart({
       </div>
       <div
         ref={containerRef}
-        className="w-full h-[min(60vh,640px)] min-h-[280px] border border-border rounded-lg bg-card"
+        // 随视口高度伸缩（不再封顶 640px）：减去页头 / 页签 / 工具条 / 图例 / 提示占的约 19rem，最小 280px
+        className="w-full h-[max(280px,calc(100dvh-19rem))] border border-border rounded-lg bg-card"
       />
       <GraphLegend
         groups={legendGroups}

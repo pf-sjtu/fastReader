@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseQuiz, parseStudyKit, STUDY_LIMITS } from '@/study/schema'
-import { extractCitations, retrieveChapters, tokenize } from '@/study/retrieve'
+import { extractCitations, linkifyCitations, retrieveChapters, tokenize } from '@/study/retrieve'
 
 const chapters = [
   { id: 'c1', title: '第1章 序幕' },
@@ -138,6 +138,21 @@ describe('tokenize / retrieveChapters', () => {
       { id: 'c', title: 'C', summary: '公司' },
     ]
     expect(retrieveChapters('公司的稀有术语', d)[0].id).toBe('b')
+  })
+})
+
+describe('linkifyCitations', () => {
+  it('【标题】→ [【标题】](cite:id)：与 extractCitations 同一套匹配；映射不上的原样保留', () => {
+    expect(linkifyCitations('方案【第2章】与【不存在】', chapters)).toBe('方案[【第2章】](cite:c2)与【不存在】')
+    expect(linkifyCitations('无引用', chapters)).toBe('无引用')
+    expect(linkifyCitations('', chapters)).toBe('')
+  })
+
+  it('标题里的方括号 / id 里的特殊字符不会破坏链接语法', () => {
+    const cs = [{ id: 'a b)', title: '第[1]章' }]
+    const out = linkifyCitations('见【第[1]章】', cs)
+    expect(out).toContain('［1］') // 方括号转全角，不会截断链接文字
+    expect(out).toContain('(cite:a%20b%29)')
   })
 })
 

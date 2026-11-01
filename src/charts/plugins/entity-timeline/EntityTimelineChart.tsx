@@ -129,7 +129,7 @@ export function EntityTimelineChart({
     <>
       <div
         ref={scrollRef}
-        className="w-full max-h-[min(70vh,720px)] overflow-auto border border-border rounded-lg bg-card relative"
+        className="w-full max-h-[max(280px,calc(100dvh-13rem))] overflow-auto border border-border rounded-lg bg-card relative"
       >
         <div className="min-w-max" style={{ width: Math.max(layout.width, 320) }}>
           {/* 表头行：纵向 sticky；「时间」角格同时横向 sticky */}

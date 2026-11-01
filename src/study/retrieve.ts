@@ -63,6 +63,23 @@ export function retrieveChapters(question: string, chapters: readonly Retrievabl
  * 从回答里取出引用的章节：约定写法「【章节标题】」或「【第 N 章】」。
  * 映射不上的引用丢掉（不猜），同一章只出现一次，保持首次出现顺序。
  */
+/** 引用链接的协议：`cite:<章节 id>`；渲染层据此把链接画成可点击/悬浮的章节标签 */
+export const CITE_SCHEME = 'cite:'
+
+/**
+ * 把答案里的「【章节标题】」改写成 Markdown 链接 `[【标题】](cite:<id>)`，渲染时变成章节标签。
+ * 与 extractCitations 同一套匹配（matchChapterHint）；映射不上的保持原文，不猜。
+ */
+export function linkifyCitations(answer: string, chapters: readonly { id: string; title: string }[]): string {
+  return (answer ?? '').replace(/【([^】]{1,80})】/g, (whole, hint: string) => {
+    const id = matchChapterHint(hint, chapters)
+    // 方括号会截断链接文字，转成全角；id 做 URI 编码，避免括号 / 空格破坏链接语法
+    // encodeURIComponent 不编码 ( )，而它们会提前结束 Markdown 链接，所以补编
+    const safeId = encodeURIComponent(id ?? '').replace(/\(/g, '%28').replace(/\)/g, '%29')
+    return id ? `[【${hint.replace(/\[/g, '［').replace(/\]/g, '］')}】](${CITE_SCHEME}${safeId})` : whole
+  })
+}
+
 export function extractCitations(answer: string, chapters: readonly { id: string; title: string }[]): string[] {
   const ids: string[] = []
   for (const m of (answer ?? '').matchAll(/【([^】]{1,80})】/g)) {

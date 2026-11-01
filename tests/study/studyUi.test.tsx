@@ -206,6 +206,33 @@ describe('AskPanel', () => {
     expect(onJump).toHaveBeenCalledWith('c2')
   })
 
+  it('答案按 Markdown 渲染（粗体、列表），行内【章节】变成可点击的章节标签，不再显示成原始符号', async () => {
+    ai.askBook.mockResolvedValue('**结论：杠杆收购**。【第2章】\n\n- **要点甲**：说明【第3章】\n- 要点乙')
+    const onJump = vi.fn()
+    mounted = mount(<AskPanel bookSummary={book} onJumpChapter={onJump} />)
+    key(type('问'), 'Enter')
+    await flush()
+    const root = mounted.container
+    expect(root.querySelector('strong')?.textContent).toBe('结论：杠杆收购')
+    expect(root.querySelectorAll('ul li')).toHaveLength(2) // 外层对话列表是 ol，这里只数答案里的要点
+    expect(root.textContent).not.toContain('**')
+    // 行内标签：保留【】原文，点击跳到对应章节
+    const chip = Array.from(root.querySelectorAll('button')).find((b) => b.textContent === '【第3章】')!
+    click(chip)
+    expect(onJump).toHaveBeenCalledWith('c3')
+  })
+
+  it('映射不上的【…】保持原文，不生成链接（不猜）；外链在新标签打开且带 noopener', async () => {
+    ai.askBook.mockResolvedValue('见【不存在的章节】与 [官网](https://example.com)')
+    mounted = mount(<AskPanel bookSummary={book} onJumpChapter={() => {}} />)
+    key(type('问'), 'Enter')
+    await flush()
+    expect(mounted.container.textContent).toContain('【不存在的章节】')
+    expect(Array.from(mounted.container.querySelectorAll('button')).some((b) => b.textContent === '【不存在的章节】')).toBe(false)
+    const a = mounted.container.querySelector('a')!
+    expect(a).toMatchObject({ target: '_blank', rel: 'noopener noreferrer' })
+  })
+
   it('Shift+Enter 换行不发送；空白内容不发送；发送按钮在空输入时禁用', () => {
     mounted = mount(<AskPanel bookSummary={book} onJumpChapter={() => {}} />)
     const ta = type('问题')

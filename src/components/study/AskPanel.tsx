@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { useStudyStore } from '@/study/studyStore'
 import type { BookSummary } from '@/types/book'
+import { AskAnswer } from './AskAnswer'
 
 interface Props {
   bookSummary: BookSummary
@@ -43,7 +44,8 @@ export function AskPanel({ bookSummary, onJumpChapter }: Props) {
   }
 
   return (
-    <div className="flex min-h-[18rem] flex-col gap-3">
+    // h-full：撑满对照栏的纵向空间，输入框贴底、对话在中间滚动，而不是只占内容那么高
+    <div className="flex h-full min-h-[18rem] flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{t('study.ask.hint')}</p>
         {chat.length > 0 && (
@@ -69,7 +71,7 @@ export function AskPanel({ bookSummary, onJumpChapter }: Props) {
                 <span className="text-destructive">{turn.error === 'aborted' ? t('study.ask.aborted') : t('study.failed', { error: turn.error })}</span>
               ) : (
                 <>
-                  <p className="whitespace-pre-wrap break-words">{turn.answer}</p>
+                  <AskAnswer answer={turn.answer ?? ''} chapters={bookSummary.chapters} onJumpChapter={onJumpChapter} />
                   {turn.citations.length > 0 && (
                     <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
                       <span className="text-xs text-muted-foreground">{t('study.ask.sources')}</span>
