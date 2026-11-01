@@ -20,11 +20,11 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import type { PromptConfig } from '../../types/ai'
-import type { ProcessingOptions } from '../../stores/types'
+import type { ProcessingOptions, PromptOverrides } from '../../stores/types'
 import { useProcessingOptions } from '../../stores/configStore'
 import { usePromptStore, type PromptPath } from '../../stores/prompts'
-import { hasPromptOverrides, isPromptOverridden } from '../../services/prompts/overrides'
-import { DEFAULT_PROMPT_VERSION } from '../../services/prompts/templates'
+import { diffPromptOverrides, hasPromptOverrides, isPromptOverridden } from '../../services/prompts/overrides'
+import { DEFAULT_PROMPT_CONFIG, DEFAULT_PROMPT_VERSION, LEGACY_V2_PROMPT_CONFIG } from '../../services/prompts/templates'
 import { buildPromptPreview, type MindmapVariant, type PromptTab } from './promptPreview'
 
 interface PromptEntry {
@@ -174,6 +174,35 @@ function PromptEntryEditor({ entry, value, overridden, inUse, preview }: PromptE
   )
 }
 
+/** v2 内置提示词相对当前默认（v3）的覆盖项：套上它就等于整体回到 v2；「恢复默认」即回到 v3 */
+const V2_OVERRIDES = diffPromptOverrides(LEGACY_V2_PROMPT_CONFIG, DEFAULT_PROMPT_CONFIG)
+
+/** v3 默认还没有真实模型评测：给一个一键回退到 v2 的出口（会覆盖已有的自定义，先确认） */
+function UseV2Button({ overrides }: { overrides: PromptOverrides }) {
+  const { t } = useTranslation()
+  const replacePrompts = usePromptStore((s) => s.replacePrompts)
+  const alreadyV2 = JSON.stringify(overrides) === JSON.stringify(V2_OVERRIDES)
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" size="sm" disabled={alreadyV2 || Object.keys(V2_OVERRIDES).length === 0}>
+          {t('promptEditor.useV2')}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t('promptEditor.useV2Title')}</AlertDialogTitle>
+          <AlertDialogDescription>{t('promptEditor.useV2Description')}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+          <AlertDialogAction onClick={() => replacePrompts(V2_OVERRIDES)}>{t('promptEditor.useV2')}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 function ResetAllButton({ disabled }: { disabled: boolean }) {
   const { t } = useTranslation()
   const resetAllPrompts = usePromptStore((s) => s.resetAllPrompts)
@@ -261,6 +290,7 @@ export function PromptEditor() {
               <Eye className="mr-1.5 h-3.5 w-3.5" />
               {previewMode ? t('promptEditor.editMode') : t('promptEditor.previewMode')}
             </Button>
+            <UseV2Button overrides={overrides} />
             <ResetAllButton disabled={!hasPromptOverrides(overrides)} />
           </div>
         </div>

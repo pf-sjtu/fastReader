@@ -5,6 +5,8 @@ import { buildPromptPreview } from '../src/components/project/promptPreview'
 import { PromptEditor } from '../src/components/project/PromptEditor'
 import { useConfigStore } from '../src/stores/configStore'
 import { chapterVars } from '../src/services/ai/promptInputs'
+import { usePromptStore } from '../src/stores/prompts'
+import { LEGACY_V2_PROMPT_CONFIG } from '../src/services/prompts/templates'
 
 const CONTENT_LABEL = chapterVars('', '')[1].label
 
@@ -55,5 +57,36 @@ describe('PromptEditor 预览模式', () => {
     const title = t('promptEditor.preview.title')
     expect(textarea().value).toBe(`${title} / ${title} / ${t('promptEditor.preview.content')}`)
     expect(textarea().disabled).toBe(true)
+  })
+})
+
+describe('PromptEditor：改用 v2 提示词（v3 评测未完成时的回退出口）', () => {
+  let m: Mounted | null = null
+  afterEach(() => {
+    m?.unmount()
+    m = null
+    document.body.innerHTML = ''
+    usePromptStore.getState().resetAllPrompts()
+  })
+
+  it('确认后三类提示词整体换成 v2（无旁路标记）并覆盖已有自定义；「恢复默认」回到 v3；已是 v2 时按钮禁用', () => {
+    stubDomForRadix()
+    const store = () => usePromptStore.getState()
+    store().resetAllPrompts() // 前一个用例设置过章节提示词
+    store().setOverallSummaryPrompt('我的全书提示词')
+    expect(store().promptConfig.chapterSummary.nonFiction).toContain('<!--juhua:meta-->')
+    m = mount(<PromptEditor />)
+
+    click(findButton(t('promptEditor.useV2')))
+    const confirm = Array.from(document.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === t('promptEditor.useV2'))!
+    click(confirm)
+    const cfg = store().promptConfig
+    expect(cfg.chapterSummary.nonFiction).not.toContain('<!--juhua:meta-->')
+    expect(cfg.chapterSummary.nonFiction).toBe(LEGACY_V2_PROMPT_CONFIG.chapterSummary.nonFiction)
+    expect(cfg.overallSummary).toBe(LEGACY_V2_PROMPT_CONFIG.overallSummary) // 自定义被覆盖
+    expect(findButton(t('promptEditor.useV2'))!.disabled).toBe(true)
+
+    store().resetAllPrompts()
+    expect(store().promptConfig.chapterSummary.nonFiction).toContain('<!--juhua:meta-->')
   })
 })
