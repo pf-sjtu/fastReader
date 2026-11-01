@@ -9,7 +9,8 @@
   uv run --no-sync --with pillow python scripts/covers_prepare.py --epubs "<epub 目录>" --out .tmp/covers
       只生成本地 bundle（不联网）
   ... --upload
-      同时上传（.env 里需要 FASTREADER_SERVER_URL 与 FASTREADER_APP_PASSWORD；已存在的封面不会覆盖）
+      同时直写 Cloudflare KV（REST API）。token 取环境变量 CLOUDFLARE_API_TOKEN 或 cloudflare-cli skill 的 .env，
+      需 Workers KV Storage 编辑权限；账户自动发现，命名空间读 wrangler.toml；已存在的封面不会覆盖
 
 book_id 与 src/services/library/bookId.ts 逐字节等价（契约：tests/fixtures/book-id-cases.json）。
 只用标准库解析 epub（zip + OPF），不依赖 ebooklib；压缩封面才需要 Pillow。
@@ -24,6 +25,8 @@ import posixpath
 import re
 import sys
 import unicodedata
+import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -138,32 +141,60 @@ def compress_cover(raw: bytes) -> bytes | None:
     return None
 
 
-def post_bulk(server: str, cookie: str, items: list[dict]) -> list[dict]:
-    req = urllib.request.Request(
-        server.rstrip("/") + "/api/covers/bulk",
-        data=json.dumps({"items": items}).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Cookie": cookie},
-    )
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return json.loads(r.read().decode("utf-8"))["results"]
+INDEX_KEY = "covers:index"  # 与 functions/_lib/covers.js 的键约定一致
 
 
-def login(server: str, password: str) -> str:
-    req = urllib.request.Request(
-        server.rstrip("/") + "/api/auth/login",
-        data=json.dumps({"password": password}).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=60) as r:
-        cookies = r.headers.get_all("Set-Cookie") or []
-    if not cookies:
-        raise RuntimeError("登录失败：没有拿到会话 Cookie")
-    return "; ".join(c.split(";", 1)[0] for c in cookies)
+def _clip(v, n: int) -> str:
+    return v.strip()[:n] if isinstance(v, str) else ""
 
 
-def read_env(path: str = ".env") -> dict:
+def clean_meta(m: dict) -> dict:
+    """与 functions/_lib/covers.js#cleanMeta 同口径：只留已知字段并限长"""
+    out: dict = {"stem": _clip(m.get("stem"), 240), "title": _clip(m.get("title"), 240)}
+    if _clip(m.get("author"), 120):
+        out["author"] = _clip(m.get("author"), 120)
+    for k in ("pages", "chapterCount"):
+        try:
+            n = int(m.get(k) or 0)
+        except (TypeError, ValueError):
+            n = 0
+        if n > 0:
+            out[k] = min(n, 100000)
+    return out
+
+
+def build_kv_writes(items: list[dict], index: dict, overwrite: bool = False) -> tuple[list[dict], dict, dict]:
+    """
+    把 bundle 变成要写入 KV 的键值对，并合并进已有索引。
+    已有封面不覆盖（重跑不白烧每日 1000 次的写入额度）；元数据总是合并。
+    返回 (writes, new_index, tally)。
+    """
+    idx = {"items": dict((index or {}).get("items") or {})}
+    writes: list[dict] = []
+    tally = {"stored": 0, "exists": 0, "meta": 0}
+    for it in items:
+        bid, prev = it["id"], idx["items"].get(it["id"])
+        has_cover = bool(prev and prev.get("cover"))
+        status = "meta"
+        if it.get("image"):
+            if has_cover and not overwrite:
+                status = "exists"
+            else:
+                writes.append({"key": f"cover:{bid}", "value": it["image"]})
+                has_cover, status = True, "stored"
+        idx["items"][bid] = {**(prev or {}), **clean_meta(it.get("meta") or {}), **({"cover": 1} if has_cover else {})}
+        tally[status] += 1
+    writes.append({"key": INDEX_KEY, "value": json.dumps(idx, ensure_ascii=False)})
+    return writes, idx, tally
+
+
+# ---- Cloudflare KV 直写（REST API）：不经应用登录，也不需要项目 .env 里的任何变量 ----
+CF_API = "https://api.cloudflare.com/client/v4"
+SKILL_ENV = Path.home() / ".agents/skills/cloudflare-cli/scripts/.env"
+
+
+def _read_env_file(p: Path) -> dict:
     out: dict = {}
-    p = Path(path)
     if p.exists():
         for line in p.read_text(encoding="utf-8").splitlines():
             line = line.strip()
@@ -173,13 +204,54 @@ def read_env(path: str = ".env") -> dict:
     return out
 
 
+def cf_token() -> str | None:
+    import os
+
+    return os.environ.get("CLOUDFLARE_API_TOKEN") or _read_env_file(SKILL_ENV).get("CLOUDFLARE_API_TOKEN")
+
+
+def kv_namespace_id(toml_path: Path = Path("wrangler.toml")) -> str | None:
+    m = re.search(r'binding\s*=\s*"FASTREADER_KV"\s*,\s*id\s*=\s*"([0-9a-f]{32})"', toml_path.read_text(encoding="utf-8"))
+    return m.group(1) if m else None
+
+
+def cf_call(token: str, method: str, path: str, body: bytes | None = None, ctype: str = "application/json"):
+    req = urllib.request.Request(CF_API + path, data=body, method=method, headers={"Authorization": f"Bearer {token}", "Content-Type": ctype})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        raw = r.read()
+    return json.loads(raw) if raw[:1] in (b"{", b"[") else raw.decode("utf-8")
+
+
+def kv_upload(items: list[dict], batch: int = 100, overwrite: bool = False) -> dict:
+    token, ns = cf_token(), kv_namespace_id()
+    if not token or not ns:
+        raise RuntimeError("缺少 Cloudflare token（CLOUDFLARE_API_TOKEN，或 cloudflare-cli skill 的 .env）或 wrangler.toml 里的 KV id")
+    accounts = cf_call(token, "GET", "/accounts")["result"]
+    if len(accounts) != 1:
+        raise RuntimeError(f"期望恰好 1 个 Cloudflare 账户，实际 {len(accounts)}；请设置只含一个账户的 token")
+    base = f"/accounts/{accounts[0]['id']}/storage/kv/namespaces/{ns}"
+    try:  # 读现有索引（不存在 = 空）
+        cur = cf_call(token, "GET", f"{base}/values/{urllib.parse.quote(INDEX_KEY, safe='')}")
+        index = cur if isinstance(cur, dict) else json.loads(cur)
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            raise
+        index = {"items": {}}
+    writes, _, tally = build_kv_writes(items, index, overwrite)
+    for i in range(0, len(writes), batch):  # 索引是最后一条：封面都写成功后才更新索引，中途失败不会留下指向空封面的条目
+        cf_call(token, "PUT", f"{base}/bulk", json.dumps(writes[i : i + batch]).encode("utf-8"))
+        print(f"  已写入 {min(i + batch, len(writes))}/{len(writes)}")
+    return tally
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--epubs", required=True)
     ap.add_argument("--out", default=".tmp/covers")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--upload", action="store_true")
-    ap.add_argument("--batch", type=int, default=25)
+    ap.add_argument("--batch", type=int, default=100, help="每次 KV bulk 请求写多少个键")
+    ap.add_argument("--overwrite", action="store_true", help="覆盖云端已有封面（会消耗每日 1000 次写入额度）")
     args = ap.parse_args()
 
     files = sorted(Path(args.epubs).glob("*.epub"))
@@ -218,19 +290,11 @@ def main() -> int:
         print(f"平均封面 {stats['bytes'] // stats['with_cover']} 字节")
 
     if args.upload:
-        env = read_env()
-        server = env.get("FASTREADER_SERVER_URL")
-        pwd = env.get("FASTREADER_APP_PASSWORD")
-        if not server or not pwd:
-            print("缺少 FASTREADER_SERVER_URL / FASTREADER_APP_PASSWORD（.env），已跳过上传；bundle 在", out)
+        try:
+            print("上传结果", kv_upload(items, args.batch, args.overwrite))
+        except Exception as e:  # noqa: BLE001
+            print(f"上传失败：{e}；bundle 在 {out}")
             return 2
-        cookie = login(server, pwd)
-        tally: dict = {}
-        for i in range(0, len(items), args.batch):
-            for r in post_bulk(server, cookie, items[i : i + args.batch]):
-                tally[r["status"]] = tally.get(r["status"], 0) + 1
-            print(f"  已上传 {min(i + args.batch, len(items))}/{len(items)}")
-        print("上传结果", tally)
     return 0
 
 

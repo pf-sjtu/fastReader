@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import sys
@@ -205,6 +206,7 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=20261101)
     ap.add_argument("--out", default=".tmp/eval-v3")
     ap.add_argument("--sensenova", action="store_true", help="改用 gen-image-sensenova skill 的 .env（SENSENOVA_API_BASE/KEY）作为网关")
+    ap.add_argument("--no-effort", action="store_true", help="不发 reasoning_effort（网关不接受该参数时用，如智谱 GLM）")
     ap.add_argument("--judge-model", default=None, help="评判用的模型（默认与 --model 相同；建议换成另一家以避免自评偏向）")
     args = ap.parse_args()
     sys.stdout.reconfigure(line_buffering=True)  # pyright: ignore[reportAttributeAccessIssue]  重定向到文件时也能实时看到进度
@@ -213,12 +215,12 @@ def main() -> int:
         env = read_env(str(Path.home() / ".claude/skills/gen-image-sensenova/.env"))
         base, key = env.get("SENSENOVA_API_BASE"), env.get("SENSENOVA_API_KEY")
     else:
-        env = read_env(".env")
+        env = {**(read_env(".env") if Path(".env").exists() else {}), **{k: v for k, v in os.environ.items() if k.startswith("VITE_TEST_LLM_")}}  # 进程环境变量优先：密钥可只放内存
         base, key = env.get("VITE_TEST_LLM_BASE_URL"), env.get("VITE_TEST_LLM_API_KEY")
     if not base or not key:
         print("缺少网关配置（.env 的 VITE_TEST_LLM_BASE_URL / VITE_TEST_LLM_API_KEY，或 --sensenova 的 SENSENOVA_*）")
         return 2
-    effort = None if args.sensenova else "low"
+    effort = None if (args.sensenova or args.no_effort) else "low"
     model = Model(base, key, args.model, effort)
     judge_model = Model(base, key, args.judge_model, effort) if args.judge_model else model
     rng = random.Random(args.seed)

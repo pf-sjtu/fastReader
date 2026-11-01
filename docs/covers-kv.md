@@ -9,7 +9,7 @@
 
 | KV 键 | 内容 |
 |---|---|
-| `covers:index` | JSON `{items: {[id]: {stem, title, author?, pages?, chapterCount?, cover?}}}`（646 本约 100KB） |
+| `covers:index` | JSON `{items: {[id]: {stem, title, author?, pages?, chapterCount?, cover?}}}`（646 本约 136KB） |
 | `cover:<id>` | 封面 webp 的 base64（≤48KB；预处理产物约 120×160、2–3KB） |
 
 `id = bk_ + 64 位 FNV-1a(归一后的书名主干) 的 base36`。归一：NFKC → 小写 → 去掉所有空白 / 标点 / 符号 / 控制字符。
@@ -33,7 +33,11 @@ KV 免费额度写入 1000 次/天：全库 646 本 ≈ 646 次封面写 + 每�
    uv run --no-sync --with pillow python scripts/covers_prepare.py --epubs "<epub 目录>" --out .tmp/covers --upload   # 并上传
    ```
 
-   上传需要 `.env` 里有 `FASTREADER_SERVER_URL` 与 `FASTREADER_APP_PASSWORD`。646 本实测：643 本有封面，平均 2335 字节，共 1.5MB。
+   `--upload` 直接调 Cloudflare REST API 批量写 KV，**不经应用登录，项目 `.env` 不需要任何变量**：token 取环境变量
+   `CLOUDFLARE_API_TOKEN` 或 cloudflare-cli skill 的 `.env`（需 Workers KV Storage 编辑权限），账户自动发现，
+   命名空间 id 读 `wrangler.toml`。已有封面不覆盖（重跑不烧额度）；索引在封面之后最后一次写入。
+   646 本实测：643 本有封面，平均 2335 字节，共 1.5MB；索引约 136KB；已于 2026-11-01 上传并回读验证。
+   （`/api/covers/bulk` 接口保留，供无法直连 Cloudflare API 的环境经应用登录后使用，脚本不再调用它。）
 2. **运行时采用**：书库每次扫描成功后读一次索引，按书名主干匹配（先精确，再模糊：二元组 Dice ≥ 0.86 且领先第二名 ≥ 0.06，
    有歧义宁可不配），命中的 stale 条目直接补齐书名 / 作者 / 页数 / 章数并清 `stale`，封面键设为云端 id。「补全书籍信息」按钮随之消失。
 3. **匹配不上的书**：用户点开（下载）后，应用顺手解析封面与元数据，补传云端（`contributeOpened`），之后谁都能直接命中。
