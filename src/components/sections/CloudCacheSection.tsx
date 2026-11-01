@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Loader2, Check, ArrowRight, AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { ProcessingMetadata } from '@/services/cloudCacheService'
@@ -51,46 +51,56 @@ export function CloudCacheSection({
   if (cloudCacheMetadata && !isCheckingCloudCache) {
     // 费用必须用 `> 0` 判断：`costUSD && …` 在费用为 0 时会把数字 0 原样渲染到页面上
     const hasCost = (cloudCacheMetadata.costUSD ?? 0) > 0
+    // 元数据药丸：「标签 值」一枚一枚排开，窄屏自动折行（比两列表格更像一张「收藏卡」，也不会让长模型名撑坏布局）
+    const chip = 'inline-flex max-w-full items-baseline gap-1.5 rounded-full border bg-background/70 px-2.5 py-0.5 text-xs'
     return (
-      <div data-slot="cloud-cache" className="rounded-lg border border-success/30 bg-success/5 p-3">
-        {/* 标题行：状态在左、主操作在右（不再埋在卡片底部整行铺开）；窄屏自动换行 */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 shrink-0 text-success" />
-            <span className="text-sm font-medium text-foreground">{t('cloudCache.found')}</span>
+      <div data-slot="cloud-cache" className="relative overflow-hidden rounded-lg border border-success/30 bg-success/5">
+        {/* 书脊：左缘一道成功色竖条，一眼分出「这是已有成果」而不是普通提示 */}
+        <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-success" />
+        <div className="flex flex-wrap items-center gap-3 p-3 pl-5">
+          <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-full bg-success text-success-foreground">
+            <Check className="size-5" strokeWidth={3} />
+          </span>
+          <div className="min-w-0 flex-1 basis-40">
+            <p className="t-title">{t('cloudCache.found')}</p>
+            <p className="t-caption tabular-nums">{new Date(cloudCacheMetadata.processedAt).toLocaleString()}</p>
           </div>
-          <Button type="button" size="sm" onClick={onLoadFromCloudCache}>
+          <Button type="button" onClick={onLoadFromCloudCache} className="gap-1.5">
             {t('cloudCache.useCache')}
+            <ArrowRight className="size-4" aria-hidden />
           </Button>
         </div>
-        {/* 标签 / 数值两列对齐；整句说明（关键图表、不完整）横跨两列 */}
-        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-          <dt className="text-muted-foreground">{t('cloudCache.processedAt')}</dt>
-          <dd className="min-w-0 tabular-nums">{new Date(cloudCacheMetadata.processedAt).toLocaleString()}</dd>
-          <dt className="text-muted-foreground">{t('cloudCache.model')}</dt>
-          <dd className="min-w-0 break-all">{cloudCacheMetadata.model}</dd>
-          <dt className="text-muted-foreground">{t('cloudCache.chapterCount')}</dt>
-          <dd className="min-w-0 tabular-nums">{cloudCacheMetadata.chapterCount}</dd>
-          {hasCost && (
-            <>
-              <dt className="text-muted-foreground">{t('cloudCache.cost')}</dt>
-              <dd className="min-w-0 tabular-nums">${cloudCacheMetadata.costUSD!.toFixed(4)} / ¥{cloudCacheMetadata.costRMB?.toFixed(2)}</dd>
-            </>
-          )}
-          <dd className={includesKeyCharts ? 'col-span-2 text-foreground/80' : 'col-span-2 text-muted-foreground'}>
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-3 pl-5">
+          <dl className="contents">
+            <div className={chip}>
+              <dt className="text-muted-foreground">{t('cloudCache.model')}</dt>
+              <dd className="min-w-0 break-all font-medium">{cloudCacheMetadata.model}</dd>
+            </div>
+            <div className={chip}>
+              <dt className="text-muted-foreground">{t('cloudCache.chapterCount')}</dt>
+              <dd className="font-medium tabular-nums">{cloudCacheMetadata.chapterCount}</dd>
+            </div>
+            {hasCost && (
+              <div className={chip}>
+                <dt className="text-muted-foreground">{t('cloudCache.cost')}</dt>
+                <dd className="font-medium tabular-nums">${cloudCacheMetadata.costUSD!.toFixed(4)} / ¥{cloudCacheMetadata.costRMB?.toFixed(2)}</dd>
+              </div>
+            )}
+          </dl>
+          <span className={includesKeyCharts ? `${chip} border-success/40 text-success` : `${chip} border-dashed text-muted-foreground`}>
             {includesKeyCharts
               ? cloudChartsFileFound
                 ? t('cloudCache.includesKeyChartsJson')
                 : t('cloudCache.includesKeyCharts')
               : t('cloudCache.noKeyChartsYet')}
-          </dd>
-          {cloudCacheIsPartial && (
-            <dd className="col-span-2 flex items-start gap-1 text-warning">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              {t('cloudCache.partialLoaded')}
-            </dd>
-          )}
-        </dl>
+          </span>
+        </div>
+        {cloudCacheIsPartial && (
+          <p className="flex items-start gap-1.5 border-t border-warning/30 bg-warning/10 py-2 pl-5 pr-3 text-xs text-warning">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            {t('cloudCache.partialLoaded')}
+          </p>
+        )}
       </div>
     )
   }

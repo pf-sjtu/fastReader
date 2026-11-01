@@ -285,12 +285,13 @@ describe('CloudCacheSection 云缓存状态提示', () => {
     expect(dl.textContent).not.toContain(i18n.t('cloudCache.cost')) // 0 费用整行不显示
   })
 
-  it('有费用时显示一行；元数据是标签 / 数值对齐的 dl，主操作「使用云端缓存」在标题行', () => {
+  it('有费用时多一枚费用标签；元数据是「标签 值」药丸（dl），处理时间是标题下的副标题，主操作在标题行', () => {
     m = found({ costUSD: 0.1234, costRMB: 0.89 })
     const dl = m.container.querySelector('dl')!
     expect(dl.textContent).toContain('$0.1234 / ¥0.89')
     const labels = Array.from(dl.querySelectorAll('dt')).map((d) => d.textContent)
-    expect(labels).toEqual([i18n.t('cloudCache.processedAt'), i18n.t('cloudCache.model'), i18n.t('cloudCache.chapterCount'), i18n.t('cloudCache.cost')])
+    expect(labels).toEqual([i18n.t('cloudCache.model'), i18n.t('cloudCache.chapterCount'), i18n.t('cloudCache.cost')])
+    expect(m.container.textContent).toContain(new Date('2026-11-01T22:55:39Z').toLocaleString()) // 处理时间仍显示（在副标题里）
     const btn = Array.from(m.container.querySelectorAll('button')).find((b) => b.textContent === i18n.t('cloudCache.useCache'))!
     expect(dl.contains(btn)).toBe(false) // 不在元数据列表里
     expect(btn.className).not.toContain('w-full') // 不再整行铺开

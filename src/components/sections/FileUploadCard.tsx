@@ -4,19 +4,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Upload, FileText, Loader2, List, Trash2, Network } from 'lucide-react'
+import { Upload, Loader2, List, Trash2 } from 'lucide-react'
 import { ConfigDialog } from '@/components/project/ConfigDialog'
 import { BatchProcessingDialog } from '@/components/project/BatchProcessingDialog'
 import { CloudCacheSection } from './CloudCacheSection'
+import { FileDropZone } from './FileDropZone'
+import { ProcessingModePicker } from './ProcessingModePicker'
 import type { ProcessingMetadata } from '@/services/cloudCacheService'
 import { useConfigStore } from '@/stores/configStore'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 
 interface FileUploadCardProps {
   file: File | null
@@ -82,62 +77,23 @@ export function FileUploadCard({
         <CardDescription>{t('upload.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* 处理模式：主路径可见，不必进配置 Dialog */}
+        {/* 处理模式：主路径可见，不必进配置 Dialog；三张选择卡一眼看全、一句话看懂差别 */}
         <div className="space-y-2">
           <Label>{t('config.processingMode')}</Label>
-          <Select
-            value={processingMode}
-            onValueChange={(value: 'summary' | 'mindmap' | 'combined-mindmap') =>
-              setProcessingMode(value)
-            }
-            disabled={processing}
-          >
-            <SelectTrigger className="w-full min-h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="summary">{t('config.summaryMode')}</SelectItem>
-              <SelectItem value="mindmap">{t('config.mindmapMode')}</SelectItem>
-              <SelectItem value="combined-mindmap">
-                {t('config.combinedMindmapMode')}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          <ProcessingModePicker value={processingMode} onChange={setProcessingMode} disabled={processing} />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="file">{t('upload.selectFile')}</Label>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 border border-dashed rounded-lg bg-background/60 gap-3">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 flex-1 overflow-hidden">
-              <FileText className="h-4 w-4 shrink-0" />
-              <span className="truncate block">{file?.name || t('upload.noFileSelected')}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={triggerFileInput}
-                disabled={processing}
-                className="flex items-center gap-2 min-h-9"
-              >
-                <Upload className="h-4 w-4" />
-                {t('upload.localUpload')}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onOpenWebDAVBrowser}
-                disabled={processing}
-                className="flex items-center gap-2 min-h-9"
-              >
-                <Network className="h-4 w-4" />
-                WebDAV
-              </Button>
-              <BatchProcessingDialog />
-            </div>
-          </div>
+          <FileDropZone
+            file={file}
+            disabled={processing}
+            onPickLocal={triggerFileInput}
+            onOpenWebDAV={onOpenWebDAVBrowser}
+            onDropFile={onFileSelect}
+          >
+            <BatchProcessingDialog />
+          </FileDropZone>
           <Input
             ref={fileInputRef}
             id="file"

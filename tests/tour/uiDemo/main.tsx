@@ -19,6 +19,7 @@ const entry = {
   year: 2015,
   subjects: ['商业', '传记', '经济', '投资', '历史', '管理'],
   desc: long,
+  readProgress: { pct: 37 },
   size: 1.2 * 1024 * 1024,
   chapterCount: 6,
   mtime: '',
@@ -31,18 +32,22 @@ const entry = {
 const meta = { processedAt: '2026-11-01T22:55:39Z', model: 'claude-opus-5-5', chapterCount: 12 } as never
 const q = new URLSearchParams(location.search)
 const costly = q.get('cost') === '1'
+const onlyTooltip = q.get('only') === 'tooltip' // 只渲染悬浮卡：让它直接出现在视口里
 
 createRoot(document.getElementById('root')!).render(
   <ThemeProvider defaultTheme={(q.get('theme') as 'light' | 'dark') || 'light'} storageKey="ui-demo-theme">
     <div style={{ maxWidth: 980, margin: '0 auto', padding: 24 }} className="space-y-8">
+      {!onlyTooltip && (
       <section data-demo="statusbar">
         <h2 className="t-label mb-2 text-muted-foreground">状态栏（配置视图 + 书库分段）</h2>
         <UnifiedStatusBar currentView="config" configSections configSection="process" onSelectConfigSection={noop} onToggleView={noop} />
       </section>
+      )}
 
+      {!onlyTooltip && (
       <section data-demo="upload">
         <FileUploadCard
-          file={null}
+          file={q.get('file') === '1' ? new File([new Uint8Array(1.2 * 1024 * 1024)], '约翰·聂夫的成功投资.epub') : null}
           processing={false}
           extractingChapters={false}
           isCheckingCloudCache={false}
@@ -59,8 +64,9 @@ createRoot(document.getElementById('root')!).render(
           onLoadFromCloudCache={noop}
         />
       </section>
+      )}
 
-      <section data-demo="tooltip" style={{ paddingTop: 460 }}>
+      <section data-demo="tooltip" style={{ paddingTop: onlyTooltip ? 440 : 460 }}>
         <h2 className="t-label mb-2 text-muted-foreground">悬浮卡（强制展开）</h2>
         <Tooltip open>
           <TooltipTrigger asChild>

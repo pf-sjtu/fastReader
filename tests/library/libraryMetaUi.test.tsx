@@ -176,7 +176,7 @@ describe('详情对话框', () => {
     mounted = mount(<BookTooltipBody entry={entry} />)
     const root = mounted.container.firstElementChild as HTMLElement
     expect(root.textContent).toContain('结尾句。') // 以前 line-clamp-4 会把后半段藏掉
-    expect(mounted.container.querySelectorAll('ul li')).toHaveLength(subjects.length) // 以前最多 4 个
+    expect(mounted.container.querySelector('ul')!.querySelectorAll('li')).toHaveLength(subjects.length) // 第一个 ul 是分类标签；以前最多显示 4 个
     expect(root.className).toMatch(/overflow-y-auto/)
     expect(root.className).toMatch(/max-h-\[/) // 有最大高度，才轮得到滚动
     expect(mounted.container.querySelector('p.line-clamp-4, p[class*="line-clamp"]')).toBeNull()

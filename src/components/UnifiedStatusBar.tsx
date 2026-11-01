@@ -134,7 +134,7 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
         <Brain className="h-4 w-4 shrink-0" />
         <span className="hidden sm:inline">{t('statusBar.enterProcessing')}</span>
         <span className="sm:hidden">{t('statusBar.enterProcessingShort')}</span>
-        <ArrowRight className="h-4 w-4 shrink-0" />
+        <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
       </>
     ) : (
       <>
@@ -180,13 +180,13 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                     <span className="hidden sm:inline">{t('statusBar.process')}</span>
                   </Button>
                 </div>
-                <span aria-hidden className="mx-0.5 h-4 w-px shrink-0 bg-border" />
-                <Button variant="ghost" size="xs" onClick={handleToggleView} className="gap-1.5">
+                {/* 朱砂实心的「印」：整个分组的落点，层级高于两个标签页；箭头悬停时前移 */}
+                <Button variant="default" size="xs" onClick={handleToggleView} className="group ml-1 gap-1.5 shadow-sm">
                   {toggleContent}
                 </Button>
               </div>
             ) : (
-              <Button variant="outline" size="sm" onClick={handleToggleView} className="gap-1.5">
+              <Button variant="outline" size="sm" onClick={handleToggleView} className="group gap-1.5">
                 {toggleContent}
               </Button>
             )}
