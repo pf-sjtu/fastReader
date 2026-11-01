@@ -79,7 +79,9 @@ git push -u origin HEAD
 **咀华 Juhua**（原名 fastReader）- AI 电子书精读工具，EPUB/PDF 转章节总结、思维导图与全书综述。
 品牌：朱砂印章 logo（`public/logo.svg`，小尺寸用 `favicon.svg`）、宣纸/松烟墨/朱砂配色（`src/index.css` 的 token）、
 标题衬线 `.font-brand`。仓库名、Pages 项目 `fast-read`、存储键与 `FASTREADER_*` 环境变量为兼容保留原名，不要改。
-样式一律用语义 token（`bg-muted`/`text-muted-foreground`…），不要写 `gray-*`/`slate-*` 这类冷灰硬编码。
+样式一律用语义 token（`bg-muted`/`text-muted-foreground`/`text-success|warning|info|destructive`…），不要写 `gray-*`/`slate-*`/`green-500` 这类调色板硬编码；
+标题只用文字角色类 `t-display/t-title/t-section/t-label/t-caption`（`index.css`），圆角只用 `rounded-md|lg|full`；
+`tests/designSystem.test.ts` 会拦截违规（例外要登记理由）。字体全是系统字体栈（`--font-sans/serif/mono`），不下载字体，设置→「字体」可检测是否已安装。
 
 ## Architecture
 - **SPA**: React 19 + TypeScript + Vite
@@ -101,7 +103,9 @@ git push -u origin HEAD
   `setWebDAVPassword` 暂存于内存 pending，随写回提交后被清掉。服务端 `functions/_lib/secrets.js` 负责脱敏与合并。
 - **AI 请求**一律走 `/api/ai`（`services/ai/utils.ts#proxyFetch`）：客户端只传 `X-Provider-Id` 与相对 baseUrl 的端点路径，
   base 与凭据由服务端注入。Ollama 例外（本机地址，浏览器直连）。
-- Prompts 只有 v2（`services/prompts/config/v2-prompts.yaml`）；用户自定义以「相对默认的覆盖项」存于 `prompts` 分区，
+- Prompts 默认 v3（`services/prompts/config/v3-prompts.yaml`，v2 保留）：章节输出「正文 + `<!--juhua:meta-->` JSON 旁路」，
+  拆分/清理见 `services/prompts/chapterMeta.ts` ↔ CLI `chapter_meta.py`（契约 `tests/fixtures/prompts-v3/meta-cases.json`）；
+  旧导出配置按 v2 基线求覆盖项；用户自定义以「相对默认的覆盖项」存于 `prompts` 分区，
   前端 `renderPrompt` 与 CLI `render_prompt` 同语义（见该目录 README）
 - 章节缓存：IndexedDB，键含文件指纹/内容/模型/prompt/语言（`services/pipeline/cacheKeys.ts`）
 - 模型参数全部由目录元数据（models.dev / OpenRouter / 网关，`meta.*`）自动驱动，规则在 `services/ai/outputBudget.ts` ↔ CLI `src/cli/model_budget.py`，契约 `tests/fixtures/model-budget-cases.json`：
@@ -115,6 +119,10 @@ git push -u origin HEAD
   `setExchangeRateProvider` 注入（`services/pricingBridge.ts` 在启动时接好）；查不到价格时标 `pricingKnown:false`，不估价
 - 前端与 CLI 的共享契约以 `tests/fixtures/` 下的样例为准（两端测试都读）。1.0.0 与 2.0.0 配置都能读：
   `tests/fixtures/config/legacy-export-2026-08.yaml`（1.0.0）与 `export-v2.sample.yaml`（2.0.0）
+
+## Library Covers (Cloudflare KV)
+- 书库封面与元数据放 KV（`/api/covers`，实现 `functions/_lib/covers.js`）：`id = bookIdOf(书名主干)`，前端 `bookId.ts` ↔ 脚本 `scripts/covers_prepare.py` 同一算法，契约 `tests/fixtures/book-id-cases.json`
+- 书库扫描后 `adoptCloudCovers` 按书名匹配（精确 → 模糊，歧义不配）补齐 stale 条目；匹配不上的书点开后 `contributeOpened` 解析并补传。细节见 `docs/covers-kv.md`
 
 ## Cloud Cache Reading
 - 检查 WebDAV 上 `{syncPath}/{sanitizedName}-完整摘要.md` 是否存在
