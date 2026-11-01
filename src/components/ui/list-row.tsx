@@ -1,4 +1,4 @@
-import type { ElementType, ReactNode } from 'react'
+import type { ElementType, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 interface ListRowProps {
@@ -16,8 +16,13 @@ interface ListRowProps {
   disabled?: boolean
   /** 紧凑行高（列表密集处用） */
   dense?: boolean
-  /** 选中态 */
+  /** 选中态（视觉底色；若同时给了 `role="checkbox"`，也作为 aria-checked） */
   selected?: boolean
+  /**
+   * 非 button 语义的可交互行（如可勾选的文件行 `role="checkbox"`、进入目录的 `role="button"`）：
+   * 自动补 tabIndex=0、Enter / 空格触发 onClick、焦点环——整行承担语义与键盘交互，行内的勾选框只作视觉。
+   */
+  role?: 'checkbox' | 'button' | 'option'
   /** 语义标签，默认按是否可点自动选 button / div */
   as?: ElementType
   className?: string
@@ -36,10 +41,26 @@ export function ListRow({
   disabled,
   dense,
   selected,
+  role,
   as,
   className
 }: ListRowProps) {
-  const Tag = (as ?? (onClick ? 'button' : 'div')) as ElementType
+  const Tag = (as ?? (onClick && !role ? 'button' : 'div')) as ElementType
+  // div + role 的交互行：键盘可达（button 原生就有，不重复补）
+  const roleProps =
+    Tag !== 'button' && role && onClick
+      ? {
+          role,
+          tabIndex: 0,
+          ...(role === 'checkbox' ? { 'aria-checked': !!selected } : {}),
+          onKeyDown: (e: ReactKeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onClick()
+            }
+          },
+        }
+      : {}
   return (
     <Tag
       {...(Tag === 'button'
@@ -47,10 +68,12 @@ export function ListRow({
         : onClick
           ? { onClick }
           : {})}
+      {...roleProps}
       className={cn(
         'flex w-full min-w-0 items-center gap-2 rounded-md text-left',
         dense ? 'px-2 py-1' : 'px-2 py-1.5',
         (onClick || Tag === 'button') && 'transition-colors hover:bg-accent hover:text-accent-foreground',
+        role && onClick && 'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
         disabled && 'pointer-events-none opacity-50',
         selected && 'bg-accent text-accent-foreground',
         className

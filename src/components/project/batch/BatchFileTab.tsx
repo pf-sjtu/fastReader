@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ListRow } from '@/components/ui/list-row'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -93,58 +94,49 @@ export function BatchFileTab({ selection: sel, options, onOptionsChange }: Batch
                     const isSelected = sel.selectedFiles.some((f) => f.basename === file.basename)
                     const cached = isDirectory ? undefined : sel.hasCache(file)
                     return (
-                      <div
+                      <ListRow
                         key={file.filename}
-                        // 书籍行是可勾选项；目录行是进入子目录的按钮
+                        // 书籍行是可勾选项；目录行是进入子目录的按钮（整行承担语义与键盘交互，见 ListRow 的 role）
                         role={isDirectory ? 'button' : 'checkbox'}
-                        aria-checked={isDirectory ? undefined : isSelected}
-                        tabIndex={0}
-                        className={`flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${isSelected ? 'bg-accent' : ''}`}
+                        selected={isSelected}
                         onClick={() => sel.toggleEntry(file)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            sel.toggleEntry(file)
-                          }
-                        }}
-                      >
-                        {isDirectory ? (
-                          // 占位保持图标列对齐
-                          <span className="size-4 shrink-0" aria-hidden="true" />
-                        ) : (
-                          // 纯视觉勾选框：交互与语义由整行承担，避免嵌套可聚焦控件
-                          <Checkbox
-                            checked={isSelected}
-                            tabIndex={-1}
-                            aria-hidden="true"
-                            className="pointer-events-none"
-                          />
-                        )}
-                        {isDirectory ? (
-                          <FolderOpen className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
-                        ) : extOf(file.basename) === '.pdf' ? (
-                          <Book className="h-4 w-4 text-destructive shrink-0" aria-hidden="true" />
-                        ) : (
-                          <FileText className="h-4 w-4 text-info shrink-0" aria-hidden="true" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate" title={file.basename}>
-                            {file.basename}
-                          </div>
-                          {!isDirectory && <div className="text-xs text-muted-foreground">{formatFileSize(file.size)}</div>}
-                        </div>
-                        {cached === true && (
-                          <Badge variant="outline" className="text-success border-success/40 shrink-0">
-                            <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                            {t('batch.cached')}
-                          </Badge>
-                        )}
-                        {cached === false && options.skipProcessed && (
-                          <Badge variant="secondary" className="text-warning shrink-0">
-                            {t('batch.unprocessed')}
-                          </Badge>
-                        )}
-                      </div>
+                        className="rounded-none border-b px-3 py-2"
+                        leading={
+                          <span className="flex items-center gap-2">
+                            {isDirectory ? (
+                              // 占位保持图标列对齐
+                              <span className="size-4 shrink-0" aria-hidden="true" />
+                            ) : (
+                              // 纯视觉勾选框：交互与语义由整行承担，避免嵌套可聚焦控件
+                              <Checkbox checked={isSelected} tabIndex={-1} aria-hidden="true" className="pointer-events-none" />
+                            )}
+                            {isDirectory ? (
+                              <FolderOpen className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
+                            ) : extOf(file.basename) === '.pdf' ? (
+                              <Book className="h-4 w-4 text-destructive shrink-0" aria-hidden="true" />
+                            ) : (
+                              <FileText className="h-4 w-4 text-info shrink-0" aria-hidden="true" />
+                            )}
+                          </span>
+                        }
+                        title={<span title={file.basename}>{file.basename}</span>}
+                        description={isDirectory ? undefined : formatFileSize(file.size)}
+                        trailing={
+                          <>
+                            {cached === true && (
+                              <Badge variant="outline" className="text-success border-success/40 shrink-0">
+                                <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                                {t('batch.cached')}
+                              </Badge>
+                            )}
+                            {cached === false && options.skipProcessed && (
+                              <Badge variant="secondary" className="text-warning shrink-0">
+                                {t('batch.unprocessed')}
+                              </Badge>
+                            )}
+                          </>
+                        }
+                      />
                     )
                   })}
                 </div>
