@@ -7,6 +7,10 @@ import { UnifiedStatusBar } from '@/components/UnifiedStatusBar'
 import { FileUploadCard } from '@/components/sections/FileUploadCard'
 import { BookTooltipBody } from '@/components/library/BookInfo'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { LibraryView } from '@/components/library/LibraryView'
+import { useLibraryStore } from '@/services/library/libraryStore'
+import { useConfigStore } from '@/stores/configStore'
+import { applyScan, emptyIndex, patchEntry } from '@/services/library/libraryIndex'
 import type { LibraryEntry } from '@/services/library/types'
 
 // 三处 UI 改动的真实浏览器验收页：状态栏分组 / 云端缓存卡片与操作行 / 悬浮卡完整 metadata + 滚动
@@ -59,6 +63,32 @@ export function UploadDemo() {
   )
 }
 
+/** 书架「最近阅读」演示：8 本书，其中 4 本读过（含 1 本读完），最后阅读时间各不相同 */
+function seedLibrary() {
+  const names = ['穷查理宝典', '聪明的投资者', '原则', '思考，快与慢', '浪潮之巅', '人类简史', '置身事内', '黑天鹅']
+  const files = names.map((n) => ({ path: `/s/${n}.epub`, size: 2_097_152, mtime: 'm' }))
+  const sum = (n: string) => `${n.replace(/\.[^/.]+$/, '')}-完整摘要.md`
+  let idx = applyScan(emptyIndex(0), files, { now: 1, summaryNameOf: sum, summaryNames: new Set(names.map((n) => sum(`${n}.epub`))) }).index
+  const read = (n: string, pct: number, at: number, chapterCount = 12) =>
+    (idx = patchEntry(idx, `/s/${n}.epub`, { chapterCount, lastOpenedAt: at, readProgress: { chapterId: 'c1', pct, at } }, 2))
+  read('原则', 100, 5_000) // 读完了，但最近读过 → 仍在最近阅读里
+  read('聪明的投资者', 63, 4_000)
+  read('思考，快与慢', 18, 3_000)
+  read('置身事内', 85, 6_000) // 最近一次
+  useConfigStore.setState((s) => ({ webdavConfig: { ...s.webdavConfig, enabled: true } }))
+  useLibraryStore.setState({ index: idx, fresh: true, error: null, loadCatalog: async () => {}, loadMirror: async () => {} })
+}
+
+if (q.get('view') === 'library') {
+  seedLibrary()
+  createRoot(document.getElementById('root')!).render(
+    <ThemeProvider defaultTheme={(q.get('theme') as 'light' | 'dark') || 'light'} storageKey="ui-demo-theme">
+      <div style={{ maxWidth: 980, margin: '0 auto', padding: 24 }}>
+        <LibraryView onOpenBook={noop} />
+      </div>
+    </ThemeProvider>,
+  )
+} else
 createRoot(document.getElementById('root')!).render(
   <ThemeProvider defaultTheme={(q.get('theme') as 'light' | 'dark') || 'light'} storageKey="ui-demo-theme">
     <div style={{ maxWidth: 980, margin: '0 auto', padding: 24 }} className="space-y-8">
@@ -85,7 +115,8 @@ createRoot(document.getElementById('root')!).render(
           <TooltipTrigger asChild>
             <button type="button" className="rounded-md border px-3 py-2 text-sm">书卡（悬浮卡在其上方）</button>
           </TooltipTrigger>
-          <TooltipContent side="top" className="bg-popover text-popover-foreground shadow-md ring-1 ring-border">
+          {/* 与 BookCard 里的写法一致：浅色信息卡不画朱砂底的箭头，留 8px 间距 */}
+          <TooltipContent side="top" sideOffset={8} arrow={false} className="bg-popover text-popover-foreground shadow-md ring-1 ring-border">
             <BookTooltipBody entry={entry} />
           </TooltipContent>
         </Tooltip>

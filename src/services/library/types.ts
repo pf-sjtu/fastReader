@@ -13,6 +13,8 @@ export interface ReadProgress {
   chapterId: string
   /** 0–100 */
   pct: number
+  /** 这条进度最后一次变化的时间（毫秒）：「最近阅读」按它排序；老数据没有，退回打开时间 */
+  at?: number
 }
 
 export interface LibraryEntry {

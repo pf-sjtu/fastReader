@@ -640,7 +640,7 @@
     "scanFailed": "Couldn't read the sync folder: {{error}}",
     "retry": "Retry",
     "stale": "Showing cached data; it may be out of date",
-    "continue": "Continue reading",
+    "recentRead": "Recently read",
     "chapters": "{{count}} chapters",
     "status": {
       "done": "Read",

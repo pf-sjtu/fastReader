@@ -649,7 +649,7 @@
     "connectingCached": "正在连接云端，先显示上次的书架",
     "scanFailed": "读取同步目录失败：{{error}}",
     "retry": "重试",
-    "continue": "继续阅读",
+    "recentRead": "最近阅读",
     "chapters": "{{count}} 章",
     "status": {
       "done": "已精读",

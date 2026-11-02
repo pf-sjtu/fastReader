@@ -204,7 +204,8 @@ export function BookCard({ entry, opening, disabled, onOpen, onInfo, caption, sh
 
     </button>
     </TooltipTrigger>
-    <TooltipContent side="top" className="bg-popover text-popover-foreground shadow-md ring-1 ring-border">
+    {/* 浅色信息卡：不画（朱砂底的）箭头，留 8px 间距代替，否则会剩一个孤零零的红菱形 */}
+    <TooltipContent side="top" sideOffset={8} arrow={false} className="bg-popover text-popover-foreground shadow-md ring-1 ring-border">
       <BookTooltipBody entry={entry} />
     </TooltipContent>
     </Tooltip>

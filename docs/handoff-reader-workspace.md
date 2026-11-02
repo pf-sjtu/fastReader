@@ -12,8 +12,8 @@
 | 联动 | 悬停(300ms)/单击展开实体卡、事件卡；**防剧透折叠（折叠内容不进 DOM）**；跳转到正文第 N 次出现/时间线/图谱，到达闪烁，「返回上一位置」 | `useArtifactNavigation.ts`、`EntityCard.tsx`、`charts/linking/entityCard.ts` |
 | 图谱/时间线 | 与正文同色、类型图例过滤、本章高亮、「截至本章」渐进模式、点击展开卡片 | `charts/plugins/person-graph/*`、`entity-timeline/` |
 | 目录栏 | 拖宽 160–360、折叠为 14px 竖向圆点进度条（每章一点；>40 章只画线）、状态持久化；对照栏页签过多时横向滚动并自动滚入当前页签（`CompanionDock`） | `NavRail.tsx`、`ResizeHandle.tsx`(`edge`) |
-| 书库 | WebDAV 索引全生命周期（迁移/合并/失效/GC/体积上限/镜像 SWR）、封面墙、继续阅读、已精读书一键直达 | `src/services/library/*`、`src/components/library/*`、`src/hooks/useLibraryOpen.ts` |
-| 书架组织 | 分类/排序/带种子随机推荐/换一批/与继续阅读去重 | `libraryOrganize.ts`、`LibraryView.tsx` |
+| 书库 | WebDAV 索引全生命周期（迁移/合并/失效/GC/体积上限/镜像 SWR）、封面墙、最近阅读（含读完，按最后阅读时间降序）、已精读书一键直达 | `src/services/library/*`、`src/components/library/*`、`src/hooks/useLibraryOpen.ts` |
+| 书架组织 | 分类/排序/带种子随机推荐/换一批/与最近阅读去重 | `libraryOrganize.ts`、`LibraryView.tsx` |
 | 书卡设计 | 书名·作者·章数在封面内部底部阴影层；EPUB 与体积不占位 | `BookCard.tsx`、`BookCover.tsx` |
 | 元数据与封面 | 用户触发补全（并发 2、可取消）；EPUB 自带 ZIP 读 OPF；真实封面 webp 懒加载（队列并发 2）；索引 gzip 单文件 | `bookMeta.ts`、`libraryFill.ts`、`coverLoader.ts`、`gzip.ts` |
 | 选章页 | token/费用预估（价格未知不估金额，不估耗时） | `services/runEstimate.ts` |

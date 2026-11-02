@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { SectionHeading } from '@/components/ui/section-heading'
 import { cn } from '@/lib/utils'
 import { useConfigStore } from '@/stores/configStore'
-import { continueReading, listEntries, type LibraryFilter, type LibrarySort } from '@/services/library/libraryIndex'
+import { listEntries, recentlyRead, type LibraryFilter, type LibrarySort } from '@/services/library/libraryIndex'
 import { groupEntries, limitGroups, recommendBooks, type GroupBy } from '@/services/library/libraryOrganize'
 import { buildShelf, categoryCounts, virtualEntries } from '@/services/library/cloudCatalog'
 import { ENTRY_GRACE_MS, useLibraryStore } from '@/services/library/libraryStore'
@@ -67,22 +67,23 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
   const allEntries = useMemo(() => listEntries(shelf, { query, filter, sort, category }), [shelf, query, filter, sort, category])
   const categories = useMemo(() => categoryCounts(Object.values(shelf.entries)), [shelf])
   const browsing = !query && filter === 'all' && !category
-  const resume = useMemo(() => (browsing ? continueReading(shelf, cols) : []), [shelf, browsing, cols])
+  // 「最近阅读」一行：读过的书（含读完的）按最后阅读时间降序，始终在书架最上面（搜索 / 筛选 / 分类时隐藏）
+  const recent = useMemo(() => (browsing ? recentlyRead(shelf, cols) : []), [shelf, browsing, cols])
   const total = Object.keys(shelf.entries).length
   const recs = useMemo(
-    () => (browsing && total >= 3 ? recommendBooks(shelf, { seed, count: recommendCount, exclude: prevBatch, omit: resume.map((e) => e.path) }) : []),
-    [shelf, browsing, total, seed, prevBatch, resume, recommendCount]
+    () => (browsing && total >= 3 ? recommendBooks(shelf, { seed, count: recommendCount, exclude: prevBatch, omit: recent.map((e) => e.path) }) : []),
+    [shelf, browsing, total, seed, prevBatch, recent, recommendCount]
   )
-  // 「继续阅读 / 推荐」已经展示的书不在下面的全量网格里再出现一遍（同一屏相邻重复）；
+  // 「最近阅读 / 推荐」已经展示的书不在下面的全量网格里再出现一遍（同一屏相邻重复）；
   // 分组/排序模式下网格本身就是主视图，不排除
   const entries = useMemo(() => {
     if (!browsing || group !== 'none') return allEntries
-    const featured = new Set([...resume.map((e) => e.path), ...recs.map((r) => r.entry.path)])
+    const featured = new Set([...recent.map((e) => e.path), ...recs.map((r) => r.entry.path)])
     return featured.size ? allEntries.filter((e) => !featured.has(e.path)) : allEntries
-  }, [allEntries, browsing, group, resume, recs])
-  // 默认浏览态（有「继续阅读 / 推荐」、最近排序、不分组）下，其余书籍收起：首屏只放几行，按需展开
+  }, [allEntries, browsing, group, recent, recs])
+  // 默认浏览态（有「最近阅读 / 推荐」、最近排序、不分组）下，其余书籍收起：首屏只放几行，按需展开
   const [expanded, setExpanded] = useState(false)
-  const collapsed = browsing && group === 'none' && sort === 'recent' && !expanded && resume.length + recs.length > 0
+  const collapsed = browsing && group === 'none' && sort === 'recent' && !expanded && recent.length + recs.length > 0
   const groups = useMemo(() => groupEntries(entries, group), [entries, group])
   // 显示上限：筛选/排序/分组/搜索一变就回到首屏数量
   const resetKey = `${query}|${filter}|${sort}|${group}|${category}`
@@ -207,10 +208,10 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
         />
       )}
 
-      {resume.length > 0 && (
-        <div className="space-y-1.5">
-          <SectionHeading role="label" title={t('library.continue')} />
-          <div className={GRID}>{resume.map((e) => card(e))}</div>
+      {recent.length > 0 && (
+        <div className="space-y-1.5" aria-label={t('library.recentRead')}>
+          <SectionHeading role="label" title={t('library.recentRead')} />
+          <div className={GRID}>{recent.map((e) => card(e))}</div>
         </div>
       )}
 
@@ -249,8 +250,8 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
           )}
           {pagedGroups.map((g) => (
             <div key={g.key} className="space-y-1.5">
-              {/* 上面有「继续阅读 / 推荐」时，全量网格也要有自己的标题，否则读起来是同一排 */}
-              {group === 'none' && browsing && (resume.length > 0 || recs.length > 0) && (
+              {/* 上面有「最近阅读 / 推荐」时，全量网格也要有自己的标题，否则读起来是同一排 */}
+              {group === 'none' && browsing && (recent.length > 0 || recs.length > 0) && (
                 <SectionHeading role="label" bordered title={t('library.all')} hint={g.total} />
               )}
               {group !== 'none' && (

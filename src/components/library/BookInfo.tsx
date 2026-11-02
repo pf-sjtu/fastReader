@@ -60,8 +60,8 @@ const SOFT_TONE: Record<CategoryTone, string> = {
 }
 
 /**
- * 悬浮 / 聚焦时的信息卡：像一页书签——衬线书名 + 朱砂题签短线、作者与出版信息、彩色分类标签、完整简介、
- * 格式 / 体积 / 章数标签与阅读进度条。显示全部 metadata（不截断）；内容超过可用高度时在卡内纵向滚动，
+ * 悬浮 / 聚焦时的信息卡：像一页书签——衬线书名 + 朱砂题签短线、作者与出版信息，然后是阅读进度条、
+ * 格式 / 体积 / 章数标签、彩色分类标签，**简介最长、放最底**。显示全部 metadata（不截断）；内容超过可用高度时在卡内纵向滚动，
  * 滚动区下方还有内容时底边渐隐，提示「还有」，滚到底自动消失。
  * 高度取 Radix 给出的「当前方向上的可用高度」，再封顶 24rem：矮窗口里也不会顶出视口。
  * Tooltip 内容默认可悬停（鼠标能移进来），所以滚轮滚动可用；overscroll-contain 避免滚到底后带动页面。
@@ -92,33 +92,15 @@ export function BookTooltipBody({ entry }: { entry: LibraryEntry }) {
       ref={scroller}
       onScroll={measure}
       style={more ? { maskImage: 'linear-gradient(to bottom, black calc(100% - 2rem), transparent)' } : undefined}
-      className="max-h-[min(24rem,var(--radix-tooltip-content-available-height,24rem))] max-w-[20rem] space-y-2.5 overflow-y-auto overscroll-contain py-0.5 pr-1 text-left [scrollbar-width:thin]"
+      className="max-h-[min(24rem,var(--radix-tooltip-content-available-height,24rem))] max-w-[20rem] space-y-2.5 overflow-y-auto overscroll-contain py-0.5 pr-1 text-left [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]"
     >
       <div className="space-y-1.5">
         <p className="t-title">{entry.title}</p>
         <span aria-hidden className="block h-0.5 w-8 rounded-full bg-primary" />
         {byline.length > 0 && <p className="t-caption">{byline.join(' · ')}</p>}
       </div>
-      {entry.subjects && entry.subjects.length > 0 && (
-        <ul className="flex flex-wrap gap-1" aria-label={t('library.info.categories')}>
-          {entry.subjects.map((s) => (
-            <li key={s} className={`rounded-full px-2 py-0.5 text-xs ${SOFT_TONE[categoryTone(s)]}`}>
-              {categoryLabel(t, s)}
-            </li>
-          ))}
-        </ul>
-      )}
-      {entry.desc && <p className="whitespace-pre-line text-xs leading-relaxed text-foreground/90">{descText(entry.desc)}</p>}
-      {facts.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5 text-xs tabular-nums text-muted-foreground">
-          {facts.map((f) => (
-            <li key={f} className="rounded-md border px-1.5 py-0.5">
-              {f}
-            </li>
-          ))}
-        </ul>
-      )}
-      {pct > 0 && pct < 100 && (
+      {/* 重要的在上、长的在下：阅读进度 → 格式 / 体积 / 章数 → 分类 → 简介（最长，放最底，溢出时渐隐的也是它） */}
+      {pct > 0 && (
         <div className="space-y-1">
           <p className="t-caption flex justify-between tabular-nums">
             <span>{t('library.info.progress')}</span>
@@ -129,6 +111,25 @@ export function BookTooltipBody({ entry }: { entry: LibraryEntry }) {
           </div>
         </div>
       )}
+      {facts.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5 text-xs tabular-nums text-muted-foreground">
+          {facts.map((f) => (
+            <li key={f} className="rounded-md border px-1.5 py-0.5">
+              {f}
+            </li>
+          ))}
+        </ul>
+      )}
+      {entry.subjects && entry.subjects.length > 0 && (
+        <ul className="flex flex-wrap gap-1" aria-label={t('library.info.categories')}>
+          {entry.subjects.map((s) => (
+            <li key={s} className={`rounded-full px-2 py-0.5 text-xs ${SOFT_TONE[categoryTone(s)]}`}>
+              {categoryLabel(t, s)}
+            </li>
+          ))}
+        </ul>
+      )}
+      {entry.desc && <p className="whitespace-pre-line text-xs leading-relaxed text-foreground/90">{descText(entry.desc)}</p>}
     </div>
   )
 }

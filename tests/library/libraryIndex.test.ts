@@ -1,18 +1,20 @@
 import { describe, it, expect } from 'vitest'
 import {
   applyScan,
-  continueReading,
   emptyIndex,
   enforceSizeCap,
+  lastReadAt,
   listEntries,
   mergeIndexes,
   migrateIndex,
   parseFileName,
   patchEntry,
+  recentlyRead,
   setStatus,
   titleFromPath,
 } from '@/services/library/libraryIndex'
-import type { LibraryIndex, ScannedFile } from '@/services/library/types'
+import { LIBRARY_SCHEMA_VERSION } from '@/services/library/types'
+import type { LibraryEntry, LibraryIndex, ScannedFile } from '@/services/library/types'
 
 const summaryNameOf = (f: string) => `${f.replace(/\.[^/.]+$/, '')}-完整摘要.md`
 const opts = (now: number, names: string[] = []) => ({ now, summaryNameOf, summaryNames: new Set(names) })
@@ -220,9 +222,36 @@ describe('listEntries / continueReading', () => {
     expect(listEntries(idx, { sort: 'status' }).map((e) => e.status)).toEqual(['partial', 'unprocessed', 'done'])
   })
 
-  it('继续阅读：打开过、已处理、未读完；最近在前；未处理的不出现', () => {
-    expect(continueReading(idx).map((e) => e.title)).toEqual(['丙', '乙'])
+  it('最近阅读：读过的书按最后阅读时间降序，读完的也在；没读过 / 只是未处理点开过的不出现', () => {
+    // 丙 lastOpenedAt 90、乙 lastOpenedAt 50 → 丙在前；甲什么都没有
+    expect(recentlyRead(idx).map((e) => e.title)).toEqual(['丙', '乙'])
+    // 乙读完了：仍在（这是「我最近在读什么」的轨迹，不是待办）
     const finished = patchEntry(idx, '/fastReader/乙.epub', { readProgress: { chapterId: 'c9', pct: 100 } }, 3)
-    expect(continueReading(finished).map((e) => e.title)).toEqual(['丙'])
+    expect(recentlyRead(finished).map((e) => e.title)).toEqual(['丙', '乙'])
+  })
+
+  it('最近阅读按「进度最后变化」与「打开」里更晚的那个排序；limit 生效；未处理且没进度的不算读过', () => {
+    // 乙的进度在 200 变化过（比丙的打开时间 90 晚）→ 乙排到丙前面
+    const moved = patchEntry(idx, '/fastReader/乙.epub', { readProgress: { chapterId: 'c4', pct: 60, at: 200 } }, 3)
+    expect(recentlyRead(moved).map((e) => e.title)).toEqual(['乙', '丙'])
+    expect(recentlyRead(moved, 1).map((e) => e.title)).toEqual(['乙'])
+    // 甲没处理、只是点开过：不算读过
+    const opened = patchEntry(idx, '/fastReader/甲.epub', { lastOpenedAt: 999 }, 3)
+    expect(recentlyRead(opened).map((e) => e.title)).not.toContain('甲')
+  })
+
+  it('lastReadAt：取更晚者；老数据只有同步来的进度（没有 at、没打开过）退回条目更新时间；什么痕迹都没有 = 0', () => {
+    const e = (p: Partial<LibraryEntry>) => ({ ...idx.entries['/fastReader/甲.epub'], ...p }) as LibraryEntry
+    expect(lastReadAt(e({ lastOpenedAt: 10, readProgress: { chapterId: 'c', pct: 5, at: 30 } }))).toBe(30)
+    expect(lastReadAt(e({ lastOpenedAt: 40, readProgress: { chapterId: 'c', pct: 5, at: 30 } }))).toBe(40)
+    expect(lastReadAt(e({ lastOpenedAt: undefined, readProgress: { chapterId: 'c', pct: 5 }, updatedAt: 77 }))).toBe(77)
+    expect(lastReadAt(e({ lastOpenedAt: undefined, readProgress: undefined }))).toBe(0)
+  })
+
+  it('readProgress.at 经清洗往返保留；非法值（字符串 / NaN）丢弃而不是带进索引', () => {
+    const raw = { schemaVersion: LIBRARY_SCHEMA_VERSION, updatedAt: 1, entries: { '/s/a.epub': { path: '/s/a.epub', size: 1, mtime: '', title: 'a', status: 'done', stale: false, missingScans: 0, updatedAt: 1, readProgress: { chapterId: 'c', pct: 50, at: 123 } }, '/s/b.epub': { path: '/s/b.epub', size: 1, mtime: '', title: 'b', status: 'done', stale: false, missingScans: 0, updatedAt: 1, readProgress: { chapterId: 'c', pct: 50, at: 'x' } } } }
+    const out = migrateIndex(raw)!
+    expect(out.entries['/s/a.epub'].readProgress).toEqual({ chapterId: 'c', pct: 50, at: 123 })
+    expect(out.entries['/s/b.epub'].readProgress).toEqual({ chapterId: 'c', pct: 50 })
   })
 })

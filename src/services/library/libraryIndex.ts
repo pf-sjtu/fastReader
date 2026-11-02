@@ -73,7 +73,11 @@ function sanitizeEntry(raw: unknown): LibraryEntry | null {
     lastOpenedAt: typeof r.lastOpenedAt === 'number' ? r.lastOpenedAt : undefined,
     readProgress:
       progress && typeof progress.chapterId === 'string' && typeof progress.pct === 'number'
-        ? { chapterId: progress.chapterId, pct: Math.min(100, Math.max(0, progress.pct)) }
+        ? {
+            chapterId: progress.chapterId,
+            pct: Math.min(100, Math.max(0, progress.pct)),
+            ...(typeof progress.at === 'number' && Number.isFinite(progress.at) ? { at: progress.at } : {}),
+          }
         : undefined,
     updatedAt: num(r.updatedAt),
   }
@@ -280,10 +284,22 @@ export function listEntries(
   return list.sort((a, b) => recency(b) - recency(a) || byName(a, b))
 }
 
-/** "继续阅读"：打开过且没读完的书，最近的在前 */
-export function continueReading(index: LibraryIndex, limit = 4): LibraryEntry[] {
+/**
+ * 最后阅读时间：进度最后一次变化与最后一次打开，取更晚的那个。
+ * 老数据（还没有 `readProgress.at`、也没记过打开时间，只有同步来的进度）退回条目的 `updatedAt` 作近似；什么读书痕迹都没有 = 0。
+ */
+export function lastReadAt(e: LibraryEntry): number {
+  const t = Math.max(e.readProgress?.at ?? 0, e.lastOpenedAt ?? 0)
+  return t || (e.readProgress ? e.updatedAt : 0)
+}
+
+/**
+ * "最近阅读"：读过（或打开过）的书，按最后阅读时间降序——**读完的也在**，这是「我最近在读什么」的轨迹，不是待办清单。
+ * 没处理过又没有任何进度的书（只是点开过）不算读过。
+ */
+export function recentlyRead(index: LibraryIndex, limit = 4): LibraryEntry[] {
   return Object.values(index.entries)
-    .filter((e) => e.lastOpenedAt && e.status !== 'unprocessed' && (e.readProgress?.pct ?? 0) < 100)
-    .sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
+    .filter((e) => lastReadAt(e) > 0 && (e.status !== 'unprocessed' || !!e.readProgress))
+    .sort((a, b) => lastReadAt(b) - lastReadAt(a) || a.title.localeCompare(b.title, 'zh'))
     .slice(0, limit)
 }

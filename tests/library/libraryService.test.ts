@@ -235,18 +235,20 @@ describe('条目级更新', () => {
     const t = await seeded()
     await recordProgress(t.io, `${SYNC}/a.epub`, 'c3', 180)
     const remote = migrateIndex(JSON.parse(t.state.remote!))!
-    expect(remote.entries[`${SYNC}/a.epub`].readProgress).toEqual({ chapterId: 'c3', pct: 100 })
+    // `at` = 进度最后一次变化的时间，「最近阅读」按它排序
+    expect(remote.entries[`${SYNC}/a.epub`].readProgress).toEqual({ chapterId: 'c3', pct: 100, at: expect.any(Number) })
+    expect(remote.entries[`${SYNC}/a.epub`].readProgress!.at).toBeGreaterThan(0)
   })
 
   it('recordProgressByFileName：按文件名定位；进度没变不写远端；未知文件名不抛', async () => {
     const t = await seeded()
     await recordProgressByFileName(t.io, 'a.epub', 'c2', 33.4)
     const first = t.state.remote
-    expect(migrateIndex(JSON.parse(first!))!.entries[`${SYNC}/a.epub`].readProgress).toEqual({ chapterId: 'c2', pct: 33 })
+    expect(migrateIndex(JSON.parse(first!))!.entries[`${SYNC}/a.epub`].readProgress).toEqual({ chapterId: 'c2', pct: 33, at: expect.any(Number) })
     await recordProgressByFileName(t.io, 'a.epub', 'c2', 33.1) // 取整后相同
     expect(t.state.remote).toBe(first)
     await recordProgressByFileName(t.io, 'a.epub', 'c3', 120)
-    expect(migrateIndex(JSON.parse(t.state.remote!))!.entries[`${SYNC}/a.epub`].readProgress).toEqual({ chapterId: 'c3', pct: 100 })
+    expect(migrateIndex(JSON.parse(t.state.remote!))!.entries[`${SYNC}/a.epub`].readProgress).toEqual({ chapterId: 'c3', pct: 100, at: expect.any(Number) })
     await expect(recordProgressByFileName(t.io, 'nope.epub', 'c1', 10)).resolves.toBeTruthy()
   })
 

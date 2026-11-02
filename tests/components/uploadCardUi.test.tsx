@@ -5,7 +5,8 @@
 import i18n from '../../src/i18n'
 import { describe, it, expect, afterEach, beforeAll, afterAll, vi } from 'vitest'
 import { act } from 'react'
-import { mount, click, type Mounted } from '../uiTestUtils'
+import { mount, click, stubDomForRadix, type Mounted } from '../uiTestUtils'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ProcessingModePicker } from '@/components/sections/ProcessingModePicker'
 import { FileDropZone } from '@/components/sections/FileDropZone'
 import { BookTooltipBody } from '@/components/library/BookInfo'
@@ -106,20 +107,58 @@ describe('落笔区', () => {
   })
 })
 
+describe('Tooltip 箭头开关', () => {
+  const render = (arrow?: boolean) => {
+    stubDomForRadix()
+    m = mount(
+      <Tooltip open>
+        <TooltipTrigger asChild>
+          <button type="button">触发</button>
+        </TooltipTrigger>
+        <TooltipContent {...(arrow === undefined ? {} : { arrow })}>内容</TooltipContent>
+      </Tooltip>
+    )
+  }
+  it('默认画箭头（其它 Tooltip 不受影响）；arrow={false} 不画——浅色信息卡不能剩一个孤零零的红菱形', () => {
+    render()
+    expect(document.querySelector('[data-slot="tooltip-content"] svg')).toBeTruthy()
+    m!.unmount()
+    render(false)
+    expect(document.querySelector('[data-slot="tooltip-content"]')).toBeTruthy()
+    expect(document.querySelector('[data-slot="tooltip-content"] svg')).toBeNull()
+  })
+})
+
 describe('悬浮卡：阅读进度与渐隐提示', () => {
   const entry = { path: 'a.epub', title: 'A', size: 1, mtime: '', status: 'unprocessed', stale: false, missingScans: 0, updatedAt: 0, readProgress: { pct: 37 } } as unknown as LibraryEntry
 
-  it('读到一半的书画出进度条（aria 值正确）；没读或读完不画', () => {
+  it('读过的书画出进度条（aria 值正确，读完是满格 100%）；没读过（0）不画', () => {
     m = mount(<BookTooltipBody entry={entry} />)
     const bar = document.querySelector('[role="progressbar"]')!
     expect(bar.getAttribute('aria-valuenow')).toBe('37')
     m.unmount()
-    for (const pct of [0, 100]) {
-      m = mount(<BookTooltipBody entry={{ ...entry, readProgress: { pct } } as unknown as LibraryEntry} />)
-      expect(document.querySelector('[role="progressbar"]')).toBeNull()
-      m.unmount()
-    }
-    m = null
+    m = mount(<BookTooltipBody entry={{ ...entry, readProgress: { pct: 100 } } as unknown as LibraryEntry} />)
+    expect(document.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('100') // 读完同样是重要信息
+    m.unmount()
+    m = mount(<BookTooltipBody entry={{ ...entry, readProgress: { pct: 0 } } as unknown as LibraryEntry} />)
+    expect(document.querySelector('[role="progressbar"]')).toBeNull()
+  })
+
+  it('信息顺序：书名 → 阅读进度 → 格式 / 体积 / 章数 → 分类 → 简介（最长的放最底）', () => {
+    const full = { ...entry, size: 2048, chapterCount: 6, subjects: ['商业', '传记'], desc: '这是一段简介。', author: '作者甲' } as unknown as LibraryEntry
+    m = mount(<BookTooltipBody entry={full} />)
+    const root = m.container.firstElementChild as HTMLElement
+    const at = (el: Element | null) => (el ? Array.from(root.querySelectorAll('*')).indexOf(el) : -1)
+    const title = at(root.querySelector('.t-title'))
+    const progress = at(root.querySelector('[role="progressbar"]'))
+    const facts = at(Array.from(root.querySelectorAll('li')).find((li) => li.textContent === '2 KB') ?? null)
+    const categories = at(root.querySelector('ul[aria-label]'))
+    const desc = at(Array.from(root.querySelectorAll('p')).find((p) => p.textContent?.includes('这是一段简介')) ?? null)
+    expect([title, progress, facts, categories, desc].every((i) => i >= 0)).toBe(true)
+    expect(title).toBeLessThan(progress)
+    expect(progress).toBeLessThan(facts)
+    expect(facts).toBeLessThan(categories)
+    expect(categories).toBeLessThan(desc) // 简介在最后
   })
 
   it('内容没超出时不渐隐；超出（还有内容）时底边渐隐，滚到底后消失', () => {

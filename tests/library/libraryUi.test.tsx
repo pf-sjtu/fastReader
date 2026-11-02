@@ -278,12 +278,30 @@ describe('LibraryView', () => {
     expect(mounted.container.querySelector('[style*="width: 40%"]')).not.toBeNull()
   })
 
-  it('"继续阅读"只列打开过且未读完的已处理书；筛选/搜索时隐藏该区', () => {
+  it('"最近阅读"列出读过的已处理书；筛选/搜索时隐藏该区', () => {
     mounted = mount(<LibraryView onOpenBook={() => {}} />)
-    expect(mounted.container.textContent).toContain('继续阅读')
+    expect(mounted.container.textContent).toContain('最近阅读')
     typeInto(mounted.container.querySelector('input')!, '甲')
-    expect(mounted.container.textContent).not.toContain('继续阅读')
+    expect(mounted.container.textContent).not.toContain('最近阅读')
     expect(cards()).toHaveLength(1)
+  })
+
+  it('"最近阅读"一行按最后阅读时间降序，读完的书也在；点书卡仍能打开', () => {
+    let idx = seededIndex()
+    // 乙：读完（pct 100），最后一次进度变化在 300；丙：打开过、读了一点，打开时间 200；甲：没读过
+    idx = patchEntry(idx, '/s/乙.epub', { readProgress: { chapterId: 'c9', pct: 100, at: 300 } }, 3)
+    idx = patchEntry(idx, '/s/丙.pdf', { status: 'partial', lastOpenedAt: 200, readProgress: { chapterId: 'c1', pct: 10, at: 200 } }, 3)
+    useLibraryStore.setState({ index: idx, fresh: true, error: null })
+    const onOpen = vi.fn()
+    mounted = mount(<LibraryView onOpenBook={onOpen} />)
+    const row = mounted.container.querySelector('[aria-label="最近阅读"]')!
+    expect(row).toBeTruthy()
+    const titles = Array.from(row.querySelectorAll('button[data-book-card]')).map((b) => b.getAttribute('aria-label') ?? '')
+    expect(titles).toHaveLength(2) // 甲没读过，不在
+    expect(titles[0]).toContain('乙') // 最后阅读时间 300 在前，且读完了仍在
+    expect(titles[1]).toContain('丙')
+    click(row.querySelector('button[data-book-card]'))
+    expect(onOpen).toHaveBeenCalledTimes(1)
   })
 
   it('筛选：已精读 / 未精读；无匹配时给出提示', () => {

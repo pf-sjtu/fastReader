@@ -263,7 +263,7 @@ export function adoptCloudCovers(io: LibraryIO, coverIndex: CoverIndex) {
 
 export function recordProgress(io: LibraryIO, path: string, chapterId: string, pct: number) {
   return mutate(io, (idx) =>
-    patchEntry(idx, path, { readProgress: { chapterId, pct: Math.min(100, Math.max(0, pct)) } }, io.now())
+    patchEntry(idx, path, { readProgress: { chapterId, pct: Math.min(100, Math.max(0, pct)), at: io.now() } }, io.now())
   )
 }
 
@@ -276,7 +276,7 @@ export function recordProgressByFileName(io: LibraryIO, fileName: string, chapte
   return mutate(io, (idx) => {
     const entry = Object.values(idx.entries).find((e) => baseName(e.path) === fileName)
     if (!entry || (entry.readProgress?.chapterId === chapterId && entry.readProgress.pct === clamped)) return idx
-    return patchEntry(idx, entry.path, { readProgress: { chapterId, pct: clamped } }, io.now())
+    return patchEntry(idx, entry.path, { readProgress: { chapterId, pct: clamped, at: io.now() } }, io.now())
   })
 }
 
