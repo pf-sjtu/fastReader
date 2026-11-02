@@ -36,7 +36,6 @@ afterEach(() => {
 })
 
 const text = () => document.body.textContent ?? ''
-const buttonByText = (re: RegExp) => Array.from(document.querySelectorAll('button')).find((b) => re.test(b.textContent ?? ''))
 
 describe('App 外壳', () => {
   it('配置步：品牌标题与副标题、文件选择入口、构建号页脚都在', async () => {
@@ -49,16 +48,19 @@ describe('App 外壳', () => {
     expect(text()).not.toContain('准备就绪') // 同上：没有历史时留白，不复述界面状态
   })
 
-  it('尚无结果时切到结果步：显示空状态，点「返回配置」回到配置步', async () => {
+  it('尚无结果时切到「处理」阶段：显示空状态，点「设置」回到配置步', async () => {
     m = mount(<App />)
     await flush()
-    click(buttonByText(/结果/))
+    const tab = (name: string) => document.querySelector<HTMLElement>(`[role="tablist"] [role="tab"][aria-label="${name}"]`)
+    click(tab('处理'))
     await flush()
     expect(text()).toContain('暂无处理结果')
     expect(text()).not.toContain('查看处理结果') // 状态栏不复述「你正在看结果」
     expect(document.querySelector('input[type="file"]')).toBeFalsy()
-    click(buttonByText(/^返回配置$/))
+    expect(tab('处理')?.getAttribute('aria-selected')).toBe('true') // 结果视图里三段仍在，停在「处理」
+    click(tab('设置'))
     await flush()
     expect(document.querySelector('input[type="file"]')).toBeTruthy()
+    expect(tab('设置')?.getAttribute('aria-selected')).toBe('true')
   })
 })

@@ -39,8 +39,12 @@ createRoot(document.getElementById('root')!).render(
     <div style={{ maxWidth: 980, margin: '0 auto', padding: 24 }} className="space-y-8">
       {!onlyTooltip && (
       <section data-demo="statusbar">
-        <h2 className="t-label mb-2 text-muted-foreground">状态栏（配置视图 + 书库分段）</h2>
-        <UnifiedStatusBar currentView="config" configSections configSection="process" onSelectConfigSection={noop} onToggleView={noop} />
+        <h2 className="t-label mb-2 text-muted-foreground">状态栏：三阶段切换（书库 · 设置 · 处理），分别停在三个阶段</h2>
+        <div className="space-y-1">
+          <UnifiedStatusBar currentView="config" configSections configSection="library" onSelectConfigSection={noop} onToggleView={noop} />
+          <UnifiedStatusBar currentView="config" configSections configSection="process" onSelectConfigSection={noop} onToggleView={noop} />
+          <UnifiedStatusBar currentView="processing" configSections configSection="process" onSelectConfigSection={noop} onToggleView={noop} />
+        </div>
       </section>
       )}
 

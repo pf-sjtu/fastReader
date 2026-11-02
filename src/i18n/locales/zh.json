@@ -557,13 +557,10 @@
     }
   },
   "statusBar": {
-    "sections": "书库与处理",
+    "sections": "书库、设置与处理",
     "library": "书库",
+    "settings": "设置",
     "process": "处理",
-    "enterProcessing": "进入处理界面",
-    "enterProcessingShort": "结果",
-    "backToConfig": "返回配置",
-    "backToConfigShort": "配置",
     "completed": "已完成",
     "mode": {
       "summary": "总结",

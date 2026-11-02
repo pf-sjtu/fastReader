@@ -548,13 +548,10 @@
     }
   },
   "statusBar": {
-    "sections": "Library and processing",
+    "sections": "Library, settings and processing",
     "library": "Library",
+    "settings": "Settings",
     "process": "Processing",
-    "enterProcessing": "Enter Processing",
-    "enterProcessingShort": "Results",
-    "backToConfig": "Back to Config",
-    "backToConfigShort": "Config",
     "completed": "Completed",
     "mode": {
       "summary": "Summary",

@@ -80,57 +80,59 @@ describe('配置页的「书库 / 处理」两段', () => {
   })
 })
 
-describe('顶栏的「书库 / 处理」分段', () => {
-  it('配置视图且 WebDAV 启用时显示两个分段，点击会切段', () => {
-    const onSelect = vi.fn()
-    m = mount(
-      <UnifiedStatusBar
-        currentView="config"
-        configSections
-        configSection="library"
-        onSelectConfigSection={onSelect}
-      />
-    )
-    const libraryTab = m.container.querySelector('[role="tablist"] [role="tab"][aria-selected="true"]')
-    expect(libraryTab?.textContent).toContain('书库')
+describe('顶栏的三阶段切换：书库 · 设置 · 处理', () => {
+  const tabs = () => Array.from(document.querySelectorAll<HTMLElement>('[role="tablist"] [role="tab"]'))
+  const names = () => tabs().map((t) => t.getAttribute('aria-label'))
+  const selected = () => tabs().filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.getAttribute('aria-label'))
 
-    click(findButton(/^处理$/))
-    expect(onSelect).toHaveBeenCalledWith('process')
+  it('WebDAV 启用时是三段「书库 · 设置 · 处理」，只有当前阶段选中', () => {
+    m = mount(<UnifiedStatusBar currentView="config" configSections configSection="library" onSelectConfigSection={vi.fn()} />)
+    expect(names()).toEqual(['书库', '设置', '处理'])
+    expect(selected()).toEqual(['书库'])
   })
 
-  it('「进入处理界面」与「书库 / 处理」合在同一个分组里：在分隔线之后、不是标签页，点击触发视图跳转', () => {
+  it('没有特殊按钮：不再有「进入处理界面」，三段都是平等的标签页', () => {
+    m = mount(<UnifiedStatusBar currentView="config" configSections configSection="process" onSelectConfigSection={vi.fn()} onToggleView={vi.fn()} />)
+    expect(findButton(/进入处理界面|返回配置/)).toBeUndefined()
+    expect(m.container.querySelectorAll('[data-slot="status-nav"] button')).toHaveLength(3)
+    expect(tabs().every((t) => t.getAttribute('role') === 'tab')).toBe(true)
+  })
+
+  it('配置页里点「书库 / 设置」只切段，不切视图；点「处理」进入处理视图', () => {
+    const onSelect = vi.fn()
     const onToggle = vi.fn()
-    m = mount(<UnifiedStatusBar currentView="config" configSections configSection="process" onSelectConfigSection={vi.fn()} onToggleView={onToggle} />)
-    const nav = m.container.querySelector('[data-slot="status-nav"]')!
-    const enter = findButton(/进入处理界面/)!
-    expect(nav.contains(enter)).toBe(true) // 同一个分组，而不是旁边另一个独立按钮
-    expect(enter.getAttribute('role')).not.toBe('tab') // 视图跳转保持按钮语义
-    expect(nav.querySelectorAll('[role="tablist"] [role="tab"]')).toHaveLength(2) // 标签页仍只有两个
-    expect(nav.querySelector('[role="tablist"]')!.contains(enter)).toBe(false)
-    click(enter)
+    m = mount(<UnifiedStatusBar currentView="config" configSections configSection="process" onSelectConfigSection={onSelect} onToggleView={onToggle} />)
+    click(tabs()[1]) // 当前就在「设置」：无动作
+    expect(onSelect).not.toHaveBeenCalled()
+    click(tabs()[0]) // 书库
+    expect(onSelect).toHaveBeenCalledWith('library')
+    expect(onToggle).not.toHaveBeenCalled() // 只切段，不切视图
+    click(tabs()[2]) // 处理
     expect(onToggle).toHaveBeenCalledTimes(1)
   })
 
-  it('没有分段时（未启用书库）「进入处理界面」仍是独立的描边按钮', () => {
-    m = mount(<UnifiedStatusBar currentView="config" onToggleView={vi.fn()} />)
-    expect(m.container.querySelector('[data-slot="status-nav"]')).toBeNull()
-    expect(findButton(/进入处理界面/)).toBeTruthy()
-  })
-
-  it('未启用书库时不显示分段', () => {
+  it('未启用书库时只有「设置 · 处理」两段', () => {
     m = mount(<UnifiedStatusBar currentView="config" onSelectConfigSection={vi.fn()} />)
-    expect(m.container.querySelector('[role="tablist"]')).toBeNull()
+    expect(names()).toEqual(['设置', '处理'])
+    expect(selected()).toEqual(['设置'])
   })
 
-  it('处理视图不显示分段（结果页只保留「返回配置」）', () => {
-    m = mount(
-      <UnifiedStatusBar
-        currentView="processing"
-        configSections
-        configSection="process"
-        onSelectConfigSection={vi.fn()}
-      />
-    )
-    expect(m.container.querySelector('[role="tablist"]')).toBeNull()
+  it('处理视图里同样显示三段，当前停在「处理」；点当前段无动作', () => {
+    const onToggle = vi.fn()
+    m = mount(<UnifiedStatusBar currentView="processing" configSections configSection="process" onSelectConfigSection={vi.fn()} onToggleView={onToggle} />)
+    expect(names()).toEqual(['书库', '设置', '处理'])
+    expect(selected()).toEqual(['处理'])
+    click(tabs()[2])
+    expect(onToggle).not.toHaveBeenCalled()
+  })
+
+  it('从处理视图点「书库」：先切到书库这一段、再回配置页（没在跑，不弹确认）', () => {
+    const onSelect = vi.fn()
+    const onToggle = vi.fn()
+    m = mount(<UnifiedStatusBar currentView="processing" configSections configSection="process" onSelectConfigSection={onSelect} onToggleView={onToggle} onAbortToConfig={vi.fn()} />)
+    click(tabs()[0])
+    expect(onSelect).toHaveBeenCalledWith('library')
+    expect(onToggle).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
   })
 })

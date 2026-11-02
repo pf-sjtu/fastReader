@@ -77,26 +77,40 @@ describe('ErrorBoundary 局部边界与 chunk 失效识别', () => {
 })
 
 describe('UnifiedStatusBar 中止二次确认', () => {
-  it('处理中点「返回配置」先弹确认，确认后才中止', () => {
+  it('处理中点「设置」先弹确认，确认后才中止，并切到设置这一段', () => {
     const onAbortToConfig = vi.fn()
     const onToggleView = vi.fn()
+    const onSelect = vi.fn()
     m = mount(
       <UnifiedStatusBar
         currentView="processing"
         processing
         progress={30}
         onToggleView={onToggleView}
+        onSelectConfigSection={onSelect}
         onAbortToConfig={onAbortToConfig}
         onCancelProcessing={vi.fn()}
       />
     )
-    click(findButton(new RegExp(i18n.t('statusBar.backToConfig'))))
+    click(findButton(new RegExp(`^${i18n.t('statusBar.settings')}$`)))
     expect(onAbortToConfig).not.toHaveBeenCalled()
     expect(onToggleView).not.toHaveBeenCalled()
+    expect(onSelect).not.toHaveBeenCalled() // 确认之前什么都不动
     expect(document.body.textContent).toContain(i18n.t('progress.confirmAbortToConfigTitle'))
 
     click(findButton(i18n.t('progress.abortAndEditSettings')))
     expect(onAbortToConfig).toHaveBeenCalledTimes(1)
+    expect(onSelect).toHaveBeenCalledWith('process')
+  })
+
+  it('处理中点「设置」后取消确认：不中止、也不切段', () => {
+    const onAbortToConfig = vi.fn()
+    const onSelect = vi.fn()
+    m = mount(<UnifiedStatusBar currentView="processing" processing progress={30} onSelectConfigSection={onSelect} onAbortToConfig={onAbortToConfig} onCancelProcessing={vi.fn()} />)
+    click(findButton(new RegExp(`^${i18n.t('statusBar.settings')}$`)))
+    click(findButton(i18n.t('common.cancel')))
+    expect(onAbortToConfig).not.toHaveBeenCalled()
+    expect(onSelect).not.toHaveBeenCalled()
   })
 
   it('「中止」按钮取消确认时不中止', () => {
@@ -118,7 +132,7 @@ describe('UnifiedStatusBar 中止二次确认', () => {
   it('非处理中切换视图不弹确认', () => {
     const onToggleView = vi.fn()
     m = mount(<UnifiedStatusBar currentView="processing" onToggleView={onToggleView} onAbortToConfig={vi.fn()} />)
-    click(findButton(new RegExp(i18n.t('statusBar.backToConfig'))))
+    click(findButton(new RegExp(`^${i18n.t('statusBar.settings')}$`)))
     expect(onToggleView).toHaveBeenCalledTimes(1)
     expect(document.querySelector('[role="alertdialog"]')).toBeNull()
   })

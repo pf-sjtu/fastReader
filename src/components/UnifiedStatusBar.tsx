@@ -3,15 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { ModelSwitcher } from './ModelSwitcher'
 import { Badge } from '@/components/ui/badge'
-import {
-  Settings,
-  Brain,
-  ArrowLeft,
-  ArrowRight,
-  BookMarked,
-  Loader2,
-  SlidersHorizontal,
-} from 'lucide-react'
+import { Brain, BookMarked, Loader2, SlidersHorizontal, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useProcessingHistoryStore } from '@/stores/processingHistory'
@@ -33,6 +25,9 @@ import {
 /** 需二次确认的破坏性操作：仅中止 / 中止并返回配置 */
 type PendingAction = 'abort' | 'abortToConfig' | null
 
+/** 工作台的三个阶段：书库 → 设置 → 处理 */
+type Stage = 'library' | 'settings' | 'processing'
+
 interface UnifiedStatusBarProps {
   currentView: 'config' | 'processing'
   processing?: boolean
@@ -46,7 +41,7 @@ interface UnifiedStatusBarProps {
   onRestartProcessing?: () => void
   /** 中止并回到配置页改设置 */
   onAbortToConfig?: () => void
-  /** 配置视图里显示「书库 / 处理」分段（WebDAV 启用时才有书库） */
+  /** 三阶段切换里显示「书库」（WebDAV 启用时才有书库）；「设置」「处理」始终有 */
   configSections?: boolean
   configSection?: 'library' | 'process'
   onSelectConfigSection?: (section: 'library' | 'process') => void
@@ -96,12 +91,28 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
     }
   }
 
-  // 处理中点「返回配置」会中止处理：先确认，避免误触丢失进度
-  const handleToggleView = () => {
-    if (processing && currentView === 'processing' && onAbortToConfig) {
+  // 三个阶段：书库 → 设置 → 处理，平等的一组切换。书库只在 WebDAV 启用时有；「设置」与「书库」是配置页的两段，「处理」是结果视图
+  const stage: Stage = currentView === 'processing' ? 'processing' : configSections && configSection === 'library' ? 'library' : 'settings'
+  // 从结果视图切回「书库 / 设置」要中止正在跑的处理：先确认，确认后再切到点的那一段
+  const [targetSection, setTargetSection] = useState<'library' | 'process' | null>(null)
+
+  const goStage = (next: Stage) => {
+    if (next === stage) return
+    if (next === 'processing') {
+      onToggleView?.()
+      return
+    }
+    const section = next === 'library' ? 'library' : 'process'
+    if (currentView === 'config') {
+      onSelectConfigSection?.(section)
+      return
+    }
+    if (processing && onAbortToConfig) {
+      setTargetSection(section)
       setPendingAction('abortToConfig')
       return
     }
+    onSelectConfigSection?.(section)
     onToggleView?.()
   }
 
@@ -112,7 +123,11 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
 
   const handleConfirmPending = () => {
     if (pendingAction === 'abort') onCancelProcessing?.()
-    else if (pendingAction === 'abortToConfig') onAbortToConfig?.()
+    else if (pendingAction === 'abortToConfig') {
+      onAbortToConfig?.()
+      if (targetSection) onSelectConfigSection?.(targetSection)
+    }
+    setTargetSection(null)
     setPendingAction(null)
   }
 
@@ -127,24 +142,11 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
     records.length > 0 &&
     !!onLoadFromHistory
 
-  // 视图跳转按钮的内容：配置视图「进入处理界面 →」，处理视图「← 返回配置」
-  const toggleContent =
-    currentView === 'config' ? (
-      <>
-        <Brain className="h-4 w-4 shrink-0" />
-        <span className="hidden sm:inline">{t('statusBar.enterProcessing')}</span>
-        <span className="sm:hidden">{t('statusBar.enterProcessingShort')}</span>
-        <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
-      </>
-    ) : (
-      <>
-        <ArrowLeft className="h-4 w-4 shrink-0" />
-        <span className="hidden sm:inline">{t('statusBar.backToConfig')}</span>
-        <span className="sm:hidden">{t('statusBar.backToConfigShort')}</span>
-        <Settings className="h-4 w-4 shrink-0" />
-      </>
-    )
-  const groupedNav = currentView === 'config' && configSections && !!onSelectConfigSection
+  const stages: { id: Stage; icon: LucideIcon; label: string }[] = [
+    ...(configSections ? [{ id: 'library' as const, icon: BookMarked, label: t('statusBar.library') }] : []),
+    { id: 'settings', icon: SlidersHorizontal, label: t('statusBar.settings') },
+    { id: 'processing', icon: Brain, label: t('statusBar.process') },
+  ]
 
   return (
     <>
@@ -154,42 +156,24 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 lg:flex-nowrap">
           {/* 切换按钮 + 模型信息（移动端同一行） */}
           <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-start sm:gap-3 shrink-0">
-            {/* 配置视图的「书库 / 处理」分段 + 「进入处理界面」合成一个分组：三者都是在工作台里换去处，不该是两个互不相干的控件。
-                书库要能随时回去看一眼，而不是选完书就被表单顶掉；最右的「进入处理界面」是视图跳转（不是标签页），用分隔线与两个标签隔开、保持按钮语义 */}
-            {groupedNav ? (
-              <div data-slot="status-nav" className="flex items-center gap-0.5 rounded-md border p-0.5">
-                <div role="tablist" aria-label={t('statusBar.sections')} className="flex items-center gap-0.5">
-                  <Button
-                    role="tab"
-                    aria-selected={configSection === 'library'}
-                    variant={configSection === 'library' ? 'secondary' : 'ghost'}
-                    size="xs"
-                    onClick={() => onSelectConfigSection?.('library')}
-                  >
-                    <BookMarked className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">{t('statusBar.library')}</span>
-                  </Button>
-                  <Button
-                    role="tab"
-                    aria-selected={configSection === 'process'}
-                    variant={configSection === 'process' ? 'secondary' : 'ghost'}
-                    size="xs"
-                    onClick={() => onSelectConfigSection?.('process')}
-                  >
-                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">{t('statusBar.process')}</span>
-                  </Button>
-                </div>
-                {/* 朱砂实心的「印」：整个分组的落点，层级高于两个标签页；箭头悬停时前移 */}
-                <Button variant="default" size="xs" onClick={handleToggleView} className="group ml-1 gap-1.5 shadow-sm">
-                  {toggleContent}
+            {/* 三阶段切换：书库 · 设置 · 处理。就是一组平等的分段，没有特殊按钮；结果视图里同样显示，当前停在「处理」。
+                书库要能随时回去看一眼，而不是选完书就被表单顶掉；处理中切回前两段会先确认（要中止处理） */}
+            <div role="tablist" aria-label={t('statusBar.sections')} data-slot="status-nav" className="flex items-center gap-0.5 rounded-md border p-0.5">
+              {stages.map(({ id, icon: Icon, label }) => (
+                <Button
+                  key={id}
+                  role="tab"
+                  aria-selected={stage === id}
+                  aria-label={label}
+                  variant={stage === id ? 'secondary' : 'ghost'}
+                  size="xs"
+                  onClick={() => goStage(id)}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{label}</span>
                 </Button>
-              </div>
-            ) : (
-              <Button variant="outline" size="sm" onClick={handleToggleView} className="group gap-1.5">
-                {toggleContent}
-              </Button>
-            )}
+              ))}
+            </div>
 
             <div className="flex items-center gap-2 sm:hidden">
               {/* 模型徽章即切换器：换模型 / 调思考强度 都在这里 */}
