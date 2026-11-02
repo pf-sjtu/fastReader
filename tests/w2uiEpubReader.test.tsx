@@ -4,10 +4,10 @@ import i18n from '../src/i18n'
 import { mount, click, findButton, flush, waitFor, type Mounted } from './uiTestUtils'
 
 // 边界 mock：epubjs 解析
-const { getSingleChapterHTML } = vi.hoisted(() => ({ getSingleChapterHTML: vi.fn() }))
+const { getChapterHTML } = vi.hoisted(() => ({ getChapterHTML: vi.fn() }))
 vi.mock('../src/services/epubProcessor', () => ({
   EpubProcessor: class {
-    getSingleChapterHTML = getSingleChapterHTML
+    getChapterHTML = getChapterHTML
   },
 }))
 
@@ -23,7 +23,7 @@ const bookData = { title: 't', author: 'x', book: {} } as unknown as EpubBookDat
 
 let m: Mounted | null = null
 beforeEach(() => {
-  getSingleChapterHTML.mockReset()
+  getChapterHTML.mockReset()
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
 })
 afterEach(() => {
@@ -100,7 +100,7 @@ describe('EpubReader 交互', () => {
 
   it('加载章节 HTML：成功写入、空内容或失败时回退原始内容', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    getSingleChapterHTML.mockResolvedValueOnce('<p>章节HTML</p>')
+    getChapterHTML.mockResolvedValueOnce('<p>章节HTML</p>')
     m = mount(<EpubReader chapter={chapter} bookData={bookData} onClose={vi.fn()} />)
     expect(m.container.textContent).toContain(t('reader.epub.loadingContent'))
     await act(async () => {
@@ -111,14 +111,14 @@ describe('EpubReader 交互', () => {
     m.unmount()
 
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    getSingleChapterHTML.mockResolvedValueOnce('   ')
+    getChapterHTML.mockResolvedValueOnce('   ')
     m = mount(<EpubReader chapter={{ ...chapter, id: 'b' }} bookData={bookData} onClose={vi.fn()} />)
     await waitFor(() => expect(shadowText(m!.container)).toBe('原始内容'))
     warn.mockRestore()
     m.unmount()
 
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    getSingleChapterHTML.mockRejectedValueOnce(new Error('bad epub'))
+    getChapterHTML.mockRejectedValueOnce(new Error('bad epub'))
     m = mount(<EpubReader chapter={{ ...chapter, id: 'c' }} bookData={bookData} onClose={vi.fn()} />)
     await waitFor(() => expect(shadowText(m!.container)).toBe('原始内容'))
     await flush()

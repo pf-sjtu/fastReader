@@ -195,6 +195,9 @@ importers:
       jsdom:
         specifier: ^27.1.0
         version: 27.4.0(supports-color@7.2.0)
+      jszip:
+        specifier: 3.10.1
+        version: 3.10.1
       stylelint:
         specifier: ^16.25.0
         version: 16.26.1(supports-color@7.2.0)(typescript@5.8.3)

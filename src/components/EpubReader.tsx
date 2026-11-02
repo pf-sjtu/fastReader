@@ -365,7 +365,8 @@ export function EpubReader({
       try {
         // 原先此处有 50ms 人为延迟“等待 Shadow DOM”，但写入由上方 effect 在内容变化后执行，延迟无实际作用，已移除
         const processor = await getEpubProcessor()
-        const htmlContent = await processor.getSingleChapterHTML(bookData.book, chapter.href || '')
+        // 按章节区间（起始锚点 → 下一目录项）渲染，而不是整个 spine 文件，否则永远从文件开头显示
+        const htmlContent = await processor.getChapterHTML(bookData.book, chapter)
         if (cancelled) return
         
         // 确保HTML内容有效后再设置

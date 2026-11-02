@@ -5,7 +5,7 @@ import i18n from '../src/i18n'
 import { mount, click, findButton, flush, waitFor, type Mounted } from './uiTestUtils'
 
 // ---- 边界 mock：epub 解析（重型依赖）、mind-elixir（canvas/SVG 渲染）、章节预览服务 ----
-const { getSingleChapterHTML, meInstances, MockMindElixir, previewChapters } = vi.hoisted(() => {
+const { getChapterHTML, meInstances, MockMindElixir, previewChapters } = vi.hoisted(() => {
   const meInstances: Array<Record<string, ReturnType<typeof vi.fn>> & { opts: Record<string, unknown> }> = []
   class MockMindElixir {
     static THEME = { name: 'light' }
@@ -26,7 +26,7 @@ const { getSingleChapterHTML, meInstances, MockMindElixir, previewChapters } = v
     }
   }
   return {
-    getSingleChapterHTML: vi.fn(),
+    getChapterHTML: vi.fn(),
     meInstances,
     MockMindElixir,
     previewChapters: vi.fn(),
@@ -35,7 +35,7 @@ const { getSingleChapterHTML, meInstances, MockMindElixir, previewChapters } = v
 
 vi.mock('../src/services/epubProcessor', () => ({
   EpubProcessor: class {
-    getSingleChapterHTML = getSingleChapterHTML
+    getChapterHTML = getChapterHTML
   },
 }))
 vi.mock('mind-elixir', () => ({ default: MockMindElixir }))
@@ -67,7 +67,10 @@ const shadowDiv = (container: HTMLElement) =>
   container.querySelector('.epub-reader-content > div')?.shadowRoot?.querySelector('div') ?? null
 
 describe('EpubReader', () => {
-  beforeEach(() => getSingleChapterHTML.mockReset())
+  beforeEach(() => {
+    // 花括号体：mockReset() 返回 mock 本身，直接作为箭头函数返回值会被 vitest 当成清理钩子在用例后再调用一次
+    getChapterHTML.mockReset()
+  })
 
   it('书籍 HTML 写入 Shadow DOM 前净化（去掉事件属性与脚本）', () => {
     m = mount(
@@ -97,13 +100,13 @@ describe('EpubReader', () => {
   it('快速切章：旧章节晚到的结果不会覆盖新章节', async () => {
     const a = deferred<string>()
     const b = deferred<string>()
-    getSingleChapterHTML.mockImplementation((_book: unknown, href: string) => (href === 'a' ? a.promise : b.promise))
+    getChapterHTML.mockImplementation((_book: unknown, ch: { href?: string }) => (ch.href === 'a' ? a.promise : b.promise))
     const bookData = { title: 't', author: 'x', book: {} } as unknown as EpubBookData
 
     m = mount(<EpubReader chapter={{ id: 'a', title: 'A', content: 'A', href: 'a' }} bookData={bookData} onClose={vi.fn()} />)
-    await waitFor(() => expect(getSingleChapterHTML).toHaveBeenCalledWith({}, 'a'))
+    await waitFor(() => expect(getChapterHTML).toHaveBeenCalledWith({}, expect.objectContaining({ href: 'a' })))
     m.rerender(<EpubReader chapter={{ id: 'b', title: 'B', content: 'B', href: 'b' }} bookData={bookData} onClose={vi.fn()} />)
-    await waitFor(() => expect(getSingleChapterHTML).toHaveBeenCalledWith({}, 'b'))
+    await waitFor(() => expect(getChapterHTML).toHaveBeenCalledWith({}, expect.objectContaining({ href: 'b' })))
 
     await act(async () => b.resolve('<p>章节B</p>'))
     const mounted = m

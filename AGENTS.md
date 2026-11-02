@@ -120,6 +120,11 @@ git push -u origin HEAD
   旧导出配置按 v2 基线求覆盖项；用户自定义以「相对默认的覆盖项」存于 `prompts` 分区，
   前端 `renderPrompt` 与 CLI `render_prompt` 同语义（见该目录 README）
 - 章节缓存：IndexedDB，键含文件指纹/内容/模型/prompt/语言（`services/pipeline/cacheKeys.ts`）
+- EPUB 按目录切章（epub-toc）：一个 spine 文件常塞多章（Mobi 转 EPUB 典型：5 个文件 55 章，锚点是**空 `<span id>`**、标题在后继兄弟里）。
+  切片是纯 DOM 函数 `services/epub/sectionSlice.ts`（Range 按文档顺序切 `[本章锚点, 下一目录项锚点)`，精确匹配 id/name，不做子串模糊）；
+  `epubProcessor.planSpineParts` 是提取（文本）与阅读面板（`getChapterHTML`）**共用**的区间计划，章节上的 `endSpineIndex`/`endAnchor` 就是它的输入——
+  两边必须看到同一段内容，别再各写一套。epubjs `render()` 的输出常带重复 `xmlns`，XHTML 解析会整体失败，所以 `parseSectionDoc` 先去重再解析、失败退宽松 HTML 解析，不要再加正则兜底。
+  回归测试 `tests/services/epubProcessor.mobiAnchors.test.ts`（jszip 现场造 Mobi 风格书，真 epubjs）与 `sectionSlice.test.ts`
 - 模型参数全部由目录元数据（models.dev / OpenRouter / 网关，`meta.*`）自动驱动，规则在 `services/ai/outputBudget.ts` ↔ CLI `src/cli/model_budget.py`，契约 `tests/fixtures/model-budget-cases.json`：
   输出上限 = `meta.output`（不超窗口，超限按报错重发）；输入超预算的章节按段落分段总结再合并；后处理压缩阈值按窗口计算；
   `meta.temperature/reasoning === false` 时不发对应参数，未知照常发、被拒降级重试。不要再写死 token / 字数上限

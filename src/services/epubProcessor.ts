@@ -9,21 +9,38 @@ import type Section from '@ssshooter/epubjs/types/section'
 import {
   formatChapterNumber,
   cleanChapterTitle,
-  cleanAndFormatText,
-  extractContentByAnchorImproved,
   asHrefString,
   normalizeHref,
   hrefMatches,
 } from './epub'
+import {
+  parseSectionDoc,
+  sliceSection,
+  fragmentToText,
+  fragmentToHtml,
+  isNavigationLike,
+} from './epub/sectionSlice'
 import type { ChapterData, BookData, ChapterInfo, ChapterNamingMode, ChapterDetectionMode } from './epub/types'
 import { ConcurrencyLimiter } from '../utils/async'
 
 export type { ChapterData, BookData }
 
+/** 一章在 spine 上的一段：起止锚点只在起始文件上有意义 */
+interface SpinePart {
+  index: number
+  anchor?: string
+  endAnchor?: string
+}
+
 export class EpubProcessor {
   private processingFiles = new Set<string>()
   /** parseEpub 打开的 Book 实例，destroy() 时统一释放 */
   private openBooks = new Set<Book>()
+  /**
+   * 一次 extractChapters 期间的 spine 文档缓存（spine 下标 → 解析后的 Document）。
+   * 一个大文件里常有几十章，不缓存就会被 render + 解析几十遍；结束后整体丢弃以免占内存。
+   */
+  private docCache = new WeakMap<Book, Map<number, Promise<Document | null>>>()
 
   /** 释放本实例打开的全部 EPUB（幂等） */
   destroy(): void {
@@ -107,6 +124,7 @@ export class EpubProcessor {
     chapterDetectionMode: ChapterDetectionMode = 'normal',
     epubTocDepth: number = 1
   ): Promise<ChapterData[]> {
+    this.docCache.set(book, new Map())
     try {
       const chapters: ChapterData[] = []
 
@@ -204,7 +222,11 @@ export class EpubProcessor {
                   content: chapterContent,
                   href: chapterInfo.href,
                   tocItem: chapterInfo.tocItem,
-                  depth: chapterInfo.depth
+                  depth: chapterInfo.depth,
+                  // 阅读面板据此渲染与提取同一区间，避免"目录对、右侧内容错"
+                  ...(spineRangeEnds
+                    ? { endSpineIndex: spineRangeEnds[index], endAnchor: endAnchors?.[index] }
+                    : {})
                 } as ChapterData
               }
               return null
@@ -233,6 +255,8 @@ export class EpubProcessor {
     } catch (error) {
       console.error('提取章节失败:', error)
       throw new Error(`提取章节失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      this.docCache.delete(book)
     }
   }
 
@@ -417,6 +441,37 @@ export class EpubProcessor {
   }
 
   /**
+   * 一章覆盖的 spine 片段：[起始文件, endSpineIndexExclusive)。
+   * 提取（文本）与阅读面板（HTML）共用这一份计划，两边看到的就是同一段内容。
+   * 起始 href 在 spine 里找不到时返回 null。
+   */
+  private planSpineParts(
+    book: Book,
+    startHref: unknown,
+    endSpineIndexExclusive: number | undefined,
+    endAnchor?: string
+  ): SpinePart[] | null {
+    const raw = asHrefString(startHref)
+    if (!raw) return null
+    const anchor = raw.split('#')[1] || undefined
+    const startIdx = this.resolveSpineIndex(book, raw)
+    if (startIdx < 0) return null
+
+    const spineLen = book.spine?.spineItems?.length ?? 0
+    const endIdx =
+      endSpineIndexExclusive === undefined || endSpineIndexExclusive < 0
+        ? startIdx + 1
+        : Math.min(Math.max(endSpineIndexExclusive, startIdx + 1), spineLen)
+
+    const parts: SpinePart[] = []
+    for (let i = startIdx; i < endIdx; i++) {
+      // 仅起始文件使用起止锚点；中间页无锚点
+      parts.push(i === startIdx ? { index: i, anchor, endAnchor } : { index: i })
+    }
+    return parts
+  }
+
+  /**
    * 聚合 [startHref, endSpineIndexExclusive) 区间内所有有实质文本的 spine 页。
    * 用于 epub-toc：TOC 只指扉页、正文在后续文件的情况。
    */
@@ -430,29 +485,23 @@ export class EpubProcessor {
     const [cleanHref, anchor] = raw.split('#')
     try {
       if (!raw) return ''
-      const spineItems = book.spine?.spineItems ?? []
-      const startIdx = this.resolveSpineIndex(book, raw)
-
-      if (startIdx < 0) {
+      const plan = this.planSpineParts(book, raw, endSpineIndexExclusive, endAnchor)
+      if (!plan) {
         return this.getSingleChapterContent(book, cleanHref, anchor, endAnchor)
       }
-
-      const endIdx =
-        endSpineIndexExclusive < 0
-          ? startIdx + 1
-          : Math.min(Math.max(endSpineIndexExclusive, startIdx + 1), spineItems.length)
 
       const parts: string[] = []
       // 跳过近空页（插图 SVG 页通常只有书名等极短文本）
       const minPartLength = 20
 
-      for (let i = startIdx; i < endIdx; i++) {
-        // 仅起始文件使用起止锚点；中间页无锚点
-        const partStartAnchor = i === startIdx ? anchor : undefined
-        const partEndAnchor = i === startIdx ? endAnchor : undefined
-        const text = await this.renderSpineItemText(book, i, partStartAnchor, partEndAnchor)
-        if (text.trim().length >= minPartLength) {
-          parts.push(text.trim())
+      for (const part of plan) {
+        const doc = await this.loadSectionDoc(book, part.index)
+        if (!doc) continue
+        // 区间里夹带的目录/导航页（整页都是链接）不是正文，起始页除外
+        if (part !== plan[0] && isNavigationLike(doc)) continue
+        const text = this.sectionText(doc, part.anchor, part.endAnchor, raw)
+        if (text.length >= minPartLength) {
+          parts.push(text)
         }
       }
 
@@ -468,6 +517,48 @@ export class EpubProcessor {
     }
   }
 
+  /**
+   * 渲染并解析一个 spine 文档。extractChapters 期间按 (book, 下标) 缓存解析结果；
+   * 缓存里放的是 Promise，并发请求同一文件只会渲染一次。
+   */
+  private loadSectionDoc(book: Book, spineIndex: number): Promise<Document | null> {
+    const cache = this.docCache.get(book)
+    const cached = cache?.get(spineIndex)
+    if (cached) return cached
+
+    const pending = this.renderSectionDoc(book, spineIndex)
+    cache?.set(spineIndex, pending)
+    return pending
+  }
+
+  private async renderSectionDoc(book: Book, spineIndex: number): Promise<Document | null> {
+    const section = book.spine.get(spineIndex)
+    if (!section) return null
+
+    try {
+      const html = await section.render(book.load.bind(book))
+      return parseSectionDoc(html)
+    } catch (error) {
+      console.warn(`[EpubProcessor] spine[${spineIndex}] 渲染失败:`, error)
+      return null
+    } finally {
+      try {
+        section.unload()
+      } catch {
+        // ignore unload errors
+      }
+    }
+  }
+
+  /** 切出 [anchor, endAnchor) 并转纯文本；锚点缺失时告警并按文件开头起算 */
+  private sectionText(doc: Document, anchor: string | undefined, endAnchor: string | undefined, href: string): string {
+    const { fragment, anchorMissing } = sliceSection(doc, anchor, endAnchor)
+    if (anchorMissing) {
+      console.warn(`[EpubProcessor] 锚点 #${anchor} 在文件内不存在，按文件开头起算 (href: ${href})`)
+    }
+    return fragmentToText(fragment)
+  }
+
   /** 按 spine 下标渲染并提取纯文本 */
   private async renderSpineItemText(
     book: Book,
@@ -475,23 +566,9 @@ export class EpubProcessor {
     anchor?: string,
     endAnchor?: string
   ): Promise<string> {
-    const section = book.spine.get(spineIndex)
-    if (!section) return ''
-
-    try {
-      const chapterHTML = await section.render(book.load.bind(book))
-      const textContent = this.extractTextFromXHTML(chapterHTML, anchor, endAnchor)
-      section.unload()
-      return textContent
-    } catch (error) {
-      try {
-        section.unload()
-      } catch {
-        // ignore unload errors
-      }
-      console.warn(`[EpubProcessor] spine[${spineIndex}] 渲染失败:`, error)
-      return ''
-    }
+    const doc = await this.loadSectionDoc(book, spineIndex)
+    if (!doc) return ''
+    return this.sectionText(doc, anchor, endAnchor, `spine[${spineIndex}]`)
   }
 
   private async getSingleChapterContent(
@@ -530,156 +607,6 @@ export class EpubProcessor {
       console.warn(`获取单个章节内容失败 (href: ${href}):`, error)
       return ''
     }
-  }
-
-  private extractTextFromXHTML(
-    xhtmlContent: string,
-    anchor?: string,
-    endAnchor?: string
-  ): string {
-    try {
-      const parser = new DOMParser()
-      const doc = parser.parseFromString(xhtmlContent, 'application/xhtml+xml')
-
-      const parseError = doc.querySelector('parsererror')
-      if (parseError) {
-        throw new Error('DOM解析失败')
-      }
-
-      const body = doc.querySelector('body')
-      if (!body) {
-        throw new Error('未找到body元素')
-      }
-
-      const scripts = body.querySelectorAll('script, style')
-      scripts.forEach(el => el.remove())
-
-      let textContent = ''
-
-      if (anchor) {
-        textContent = this.extractContentByAnchor(doc, anchor, xhtmlContent, endAnchor)
-      }
-
-      if (!textContent.trim()) {
-        textContent = body.textContent || ''
-      }
-
-      // 正文保留换行；标题清洗会把 \s+ 压成单空格
-      return cleanAndFormatText(textContent)
-    } catch {
-      return this.extractTextWithRegex(xhtmlContent, anchor)
-    }
-  }
-
-  private extractContentByAnchor(
-    doc: Document,
-    anchor: string,
-    originalHtml: string,
-    endAnchor?: string
-  ): string {
-    try {
-      // 首先使用 getElementById，它对 XHTML 命名空间更可靠
-      let anchorElement: Element | null = doc.getElementById(anchor)
-
-      // 如果 getElementById 失败，尝试 querySelector 备选方案
-      if (!anchorElement) {
-        try {
-          anchorElement = doc.querySelector(`[id="${anchor}"]`)
-        } catch { /* ignore */ }
-      }
-
-      if (!anchorElement) {
-        try {
-          const escapedAnchor = CSS.escape(anchor)
-          anchorElement = doc.querySelector(`[id="${escapedAnchor}"]`)
-        } catch { /* ignore */ }
-      }
-
-      if (!anchorElement) {
-        try {
-          anchorElement = doc.querySelector(`[name="${anchor}"]`)
-        } catch { /* ignore */ }
-      }
-
-      if (!anchorElement) {
-        try {
-          anchorElement = doc.querySelector(`[id*="${anchor}"]`)
-        } catch { /* ignore */ }
-      }
-
-      // 如果找到了锚点元素，使用 DOM 方法提取内容
-      if (anchorElement) {
-        let endElement: Element | null = null
-        if (endAnchor) {
-          endElement =
-            doc.getElementById(endAnchor) ||
-            doc.querySelector(`[id="${CSS.escape(endAnchor)}"]`) ||
-            doc.querySelector(`[name="${endAnchor}"]`)
-        }
-        const content = this.extractContentFromElement(anchorElement, endElement)
-        if (content.length > 100) {
-          return content
-        }
-        // DOM 提取内容太短，尝试正则提取
-        const improvedContent = extractContentByAnchorImproved(originalHtml, anchor)
-        if (improvedContent.length > content.length) {
-          return improvedContent
-        }
-        return content
-      }
-
-      // 最后尝试正则提取
-      return extractContentByAnchorImproved(originalHtml, anchor)
-    } catch (error) {
-      console.warn('锚点内容提取失败:', error)
-      return ''
-    }
-  }
-
-  private extractContentFromElement(
-    anchorElement: Element,
-    endElement?: Element | null
-  ): string {
-    // 首先包含锚点元素本身的文本（通常是章节标题）
-    let content = anchorElement.textContent || ''
-
-    // 然后添加后续兄弟元素的内容，直到下一 TOC 锚点
-    let currentElement: Element | null = anchorElement.nextElementSibling
-    while (currentElement) {
-      if (endElement && (currentElement === endElement || currentElement.contains(endElement))) {
-        break
-      }
-      if (
-        endElement &&
-        (currentElement.id === endElement.id ||
-          currentElement.getAttribute('name') === endElement.getAttribute('name'))
-      ) {
-        break
-      }
-      content += '\n' + (currentElement.textContent || '')
-      currentElement = currentElement.nextElementSibling
-    }
-
-    return cleanAndFormatText(content.trim())
-  }
-
-  private extractTextWithRegex(xhtmlContent: string, anchor?: string): string {
-    let cleanContent = xhtmlContent
-      .replace(/<\?xml[^>]*\?>/gi, '')
-      .replace(/<!DOCTYPE[^>]*>/gi, '')
-
-    cleanContent = cleanContent
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-
-    if (anchor) {
-      const result = extractContentByAnchorImproved(cleanContent, anchor)
-      if (result) return result
-    }
-
-    const bodyMatch = cleanContent.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
-    const textContent = bodyMatch ? bodyMatch[1] : cleanContent
-    return cleanAndFormatText(textContent.replace(/<[^>]*>/g, ' '))
   }
 
   private shouldSkipChapter(title: string): boolean {
@@ -724,14 +651,7 @@ export class EpubProcessor {
 
       if (isNewChapter || !currentChapter) {
         if (currentChapter && currentChapter.content.trim().length > 200) {
-          detectedChapters.push({
-            id: currentChapter.id,
-            title: currentChapter.title,
-            content: currentChapter.content.trim(),
-            href: currentChapter.href,
-            tocItem: currentChapter.tocItem,
-            depth: currentChapter.depth
-          })
+          detectedChapters.push({ ...currentChapter, content: currentChapter.content.trim() })
         }
 
         chapterCount++
@@ -739,12 +659,10 @@ export class EpubProcessor {
           ? `第${formatChapterNumber(chapterCount, chapters.length)}章`
           : `第 ${chapterCount} 章`
         currentChapter = {
+          ...chapter,
           id: chapter.id || `chapter-${chapterCount}`,
           title: chapterTitle || fallbackTitle,
-          content: content,
-          href: chapter.href,
-          tocItem: chapter.tocItem,
-          depth: chapter.depth
+          content: content
         }
       } else {
         currentChapter.content += '\n\n' + content
@@ -752,17 +670,46 @@ export class EpubProcessor {
     }
 
     if (currentChapter && currentChapter.content.trim().length > 200) {
-      detectedChapters.push({
-        id: currentChapter.id,
-        title: currentChapter.title,
-        content: currentChapter.content.trim(),
-        href: currentChapter.href,
-        tocItem: currentChapter.tocItem,
-        depth: currentChapter.depth
-      })
+      detectedChapters.push({ ...currentChapter, content: currentChapter.content.trim() })
     }
 
     return detectedChapters.length > 0 ? detectedChapters : chapters
+  }
+
+  /**
+   * 阅读面板用：渲染"这一章"的 HTML，区间与提取阶段完全一致
+   * （起始锚点 → 下一目录项锚点，跨文件时按 endSpineIndex 聚合）。
+   * 没有区间信息的旧章节（normal 模式 / 旧缓存）退化为按 href 的锚点起点渲染整文件剩余部分。
+   */
+  async getChapterHTML(
+    book: Book,
+    chapter: { href?: string; endSpineIndex?: number; endAnchor?: string }
+  ): Promise<string> {
+    const href = chapter.href ?? ''
+    try {
+      const plan = this.planSpineParts(book, href, chapter.endSpineIndex, chapter.endAnchor)
+      if (!plan) return this.getSingleChapterHTML(book, href)
+
+      const htmlParts: string[] = []
+      for (const part of plan) {
+        const doc = await this.loadSectionDoc(book, part.index)
+        if (!doc) continue
+        if (part !== plan[0] && isNavigationLike(doc)) continue
+        const { fragment } = sliceSection(doc, part.anchor, part.endAnchor)
+        // 必须先取文本：fragmentToHtml 会把节点移进临时容器，之后 fragment 就是空的
+        const textLength = fragmentToText(fragment).length
+        const html = fragmentToHtml(doc, fragment)
+        // 近空页（纯插图 SVG 页等）只在文字或图片存在时保留
+        if (textLength >= 20 || /<img\b|<svg\b|<image\b/i.test(html)) {
+          htmlParts.push(html)
+        }
+      }
+      // 切片为空（锚点异常等）：退回整文件，宁可多显示也不要空白
+      return htmlParts.length > 0 ? htmlParts.join('\n') : this.getSingleChapterHTML(book, href)
+    } catch (error) {
+      console.warn(`获取章节HTML失败 (href: ${href}):`, error)
+      return this.getSingleChapterHTML(book, href)
+    }
   }
 
   async getSingleChapterHTML(book: Book, href: string): Promise<string> {

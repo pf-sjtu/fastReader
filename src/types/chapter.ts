@@ -26,6 +26,10 @@ export interface EpubChapterData extends ChapterData {
   tocItem?: NavItem
   /** 目录层级深度 */
   depth?: number
+  /** epub-toc：本章覆盖的 spine 区间右开边界（下一目录项所在 spine 下标），阅读面板据此渲染同一区间 */
+  endSpineIndex?: number
+  /** epub-toc：同一 spine 文件内下一目录项的锚点，本章内容到此为止 */
+  endAnchor?: string
 }
 
 /**
