@@ -78,6 +78,13 @@ ${fence('mermaid', mermaidSamples.sequence)}
 
 ${fence('mermaid', mermaidSamples.timeline)}
 
+正文里的行内元素（验证链接 / 引用 / 行内代码 / 高亮 / 上下标是否跟随主题 token）：
+一句话里既有 [一个链接](https://example.com) 也有 \`行内代码\`，还有 **加粗** 与 *斜体*，以及 <mark>高亮</mark> 与 H<sub>2</sub>O、x<sup>2</sup>。
+
+> 引用块：颜色取 --muted-foreground，左边框取 --border，深浅主题各自跟随。
+
+---
+
 一个坏的 mermaid 块：
 
 ${fence('mermaid', '这根本不是图 ???')}

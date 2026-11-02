@@ -200,8 +200,8 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                     {processing && onCancelProcessing && (
                       <Button
                         variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
+                        size="xs"
+                        className="px-2 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
                         onClick={() => setPendingAction('abort')}
                       >
                         {t('progress.abort')}
@@ -210,8 +210,8 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                     {processing && onAbortToConfig && (
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs hidden sm:inline-flex"
+                        size="xs"
+                        className="px-2 text-xs hidden sm:inline-flex"
                         onClick={() => setPendingAction('abortToConfig')}
                         title={t('progress.abortAndEditSettings')}
                       >
@@ -222,8 +222,8 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
                       <Button
                         // 未完成（中断）时强调为主操作；已完成时降为次要
                         variant={progress < 100 ? 'default' : 'outline'}
-                        size="sm"
-                        className="h-7 px-2 text-xs"
+                        size="xs"
+                        className="px-2 text-xs"
                         onClick={onRestartProcessing}
                       >
                         {t('progress.restart')}

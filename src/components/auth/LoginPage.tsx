@@ -85,8 +85,8 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1 h-8 w-8"
+                    size="icon-sm"
+                    className="absolute right-1 top-1"
                     onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   >

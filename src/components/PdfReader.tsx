@@ -54,8 +54,7 @@ function PdfPager({ current, total, pdfPage, onPrevious, onNext, compact = false
       >
         <Button
           variant="outline"
-          size="icon"
-          className="size-8"
+          size="icon-sm"
           onClick={onPrevious}
           disabled={isFirst}
           aria-label={t('reader.pdf.previousPage')}
@@ -68,8 +67,7 @@ function PdfPager({ current, total, pdfPage, onPrevious, onNext, compact = false
         </span>
         <Button
           variant="outline"
-          size="icon"
-          className="size-8"
+          size="icon-sm"
           onClick={onNext}
           disabled={isLast}
           aria-label={t('reader.pdf.nextPage')}

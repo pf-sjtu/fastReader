@@ -62,7 +62,7 @@ export function ExportPackButton({ bookSummary }: { bookSummary: BookSummary }) 
       size="sm"
       onClick={run}
       disabled={busy || !hasSummary}
-      className="flex items-center gap-1.5 h-8 min-h-8 text-xs"
+      className="flex items-center gap-1.5 min-h-8 text-xs"
       title={busy ? t('study.pack.building') : t('study.pack.title')}
     >
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}

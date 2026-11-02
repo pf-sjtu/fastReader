@@ -598,7 +598,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
           <Button
             variant="outline"
             size="icon"
-            className="size-9"
+            
             onClick={() => setCompanionOpen(true)}
             title={t('workspace.dock.expand')}
             aria-label={t('workspace.dock.expand')}

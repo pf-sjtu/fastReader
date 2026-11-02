@@ -26,19 +26,8 @@
   background: var(--border);
 }
 
-/* 黑暗模式下的滚动条样式 - 使用 CSS 变量 */
-.dark ::-webkit-scrollbar-track {
-  background: var(--muted);
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: var(--muted-foreground);
-  opacity: 0.5;
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: var(--border);
-}
+/* 滚动条不需要 .dark 副本：track / thumb 用的都是会跟随主题的 var(--muted)/var(--muted-foreground)，
+   原先那条 .dark 只额外加了 opacity:0.5，反而让深浅主题的滚动条粗细感不一致。 */
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
@@ -106,7 +95,9 @@
   --secondary: oklch(0.9300 0.0150 75.0);
   --secondary-foreground: oklch(0.3100 0.0120 55.0);
   --muted: oklch(0.9230 0.0140 75.0);
-  --muted-foreground: oklch(0.5300 0.0200 60.0);
+  /* 次要文字：需同时压得住 --muted 与 --accent 两种淡底（Tabs 容器、分类胶囊、分面切换都在用），
+     实测 L=0.53 时 vs muted 只有 4.22 → 取 0.50（4.80 / 4.52），守卫 tests/themeContrast.test.ts */
+  --muted-foreground: oklch(0.5000 0.0200 60.0);
   --accent: oklch(0.9050 0.0280 55.0);          /* 淡朱：悬停底色 */
   --accent-foreground: oklch(0.2450 0.0110 55.0);
   --destructive: oklch(0.5200 0.1900 25.0);
@@ -127,6 +118,15 @@
   --info-muted: color-mix(in oklab, var(--info) 14%, var(--card));
   --destructive-muted: color-mix(in oklab, var(--destructive) 14%, var(--card));
   --danger-muted: var(--destructive-muted);
+  /* 正文里的链接：跟品牌色走（原先 .prose a 写死 Tailwind 蓝 #2563eb，与朱砂主色不一致） */
+  --link: var(--primary);
+  --link-hover: oklch(0.4450 0.1500 32.0);
+  --link-visited: oklch(0.4600 0.1100 305.0); /* 黛紫，与实体色同一套色相 */
+  /* 马克笔 / 高亮：正文里的加粗与斜体底色（原先是 rgba 硬编码，靠复制一条 .dark 规则换色） */
+  --marker: oklch(0.8200 0.1600 85.0);
+  /* <mark> 高亮（Tailwind typography 的 prose mark） */
+  --mark: oklch(0.9300 0.0700 85.0);
+  --mark-foreground: var(--foreground);
   --border: oklch(0.8650 0.0170 72.0);
   --input: oklch(0.8650 0.0170 72.0);
   --ring: oklch(0.5150 0.1680 32.0);
@@ -185,7 +185,7 @@
   --secondary: oklch(0.2600 0.0100 50.0);
   --secondary-foreground: oklch(0.9200 0.0120 75.0);
   --muted: oklch(0.2700 0.0100 50.0);
-  --muted-foreground: oklch(0.6600 0.0150 70.0);
+  --muted-foreground: oklch(0.6700 0.0150 70.0);
   --accent: oklch(0.3000 0.0300 35.0);
   --accent-foreground: oklch(0.9200 0.0120 75.0);
   --destructive: oklch(0.6400 0.1800 25.0);
@@ -205,8 +205,15 @@
   --success-muted: color-mix(in oklab, var(--success) 18%, var(--card));
   --warning-muted: color-mix(in oklab, var(--warning) 18%, var(--card));
   --info-muted: color-mix(in oklab, var(--info) 18%, var(--card));
-  --destructive-muted: color-mix(in oklab, var(--destructive) 18%, var(--card));
+  /* 危险色的淡底在深色下要压得更暗：与 card 混合时 danger 文字只有 3.85，改用 background 混 12% 得 4.59 */
+  --destructive-muted: color-mix(in oklab, var(--destructive) 12%, var(--background));
   --danger-muted: var(--destructive-muted);
+  --link: var(--primary);
+  --link-hover: oklch(0.7600 0.1400 35.0);
+  --link-visited: oklch(0.7200 0.1100 305.0);
+  --marker: oklch(0.7600 0.1400 70.0);
+  --mark: oklch(0.3600 0.0700 70.0);
+  --mark-foreground: oklch(0.9200 0.0800 90.0);
   --border: oklch(0.3200 0.0110 50.0);
   --input: oklch(0.3200 0.0110 50.0);
   --ring: oklch(0.6650 0.1600 35.0);
@@ -314,40 +321,37 @@
     font-family: var(--font-serif);
   }
   
-  /* 全局HTML标签样式支持 */
-  .prose {
-    font-size: calc(var(--base-font-size) * var(--font-scale));
-    line-height: 1.6;
-  }
-  
-  /* 确保 CardContent 内文字应用字体缩放。
-     切勿在此写 padding（尤其 !important）——会盖掉组件 Tailwind 的 px/py，
-     导致移动端「收紧边距」永远不生效。水平/垂直内边距由 card.tsx 与各卡片控制。 */
-  [data-slot="card-content"] {
-    font-size: calc(var(--base-font-size) * var(--font-scale)) !important;
-    width: 100% !important;
-    max-width: none !important;
-  }
-  
+  /*
+   * 可缩放字号：**唯一入口**。
+   * 为什么必须 !important：`.prose` 来自 tailwind typography，落在 utilities 层，而本文件的主体在 base 层，
+   * 层序上 utilities 永远赢——去掉 !important 就会退回 prose-sm 的固定 14px。
+   * 为什么只有一个规则：原先同一句声明被复制了 5 遍（.prose / [data-slot=card-content] / 它的 .prose /
+   * `.card-content` / `.card-content .prose`），而 `.card-content` 这个类在组件里其实没有任何使用
+   * （卡片用的是 `data-slot="card-content"`），已删除。新增「会包正文的容器」时**加到这里**，不要另写一份。
+   */
+  .prose,
+  .markdown-card-content,
+  [data-slot="card-content"],
   [data-slot="card-content"] .prose {
     font-size: calc(var(--base-font-size) * var(--font-scale)) !important;
   }
-  
-  /* CardContent内的所有文本元素都应该应用字体缩放 */
-  .card-content {
-    font-size: calc(var(--base-font-size) * var(--font-scale)) !important;
+
+  .prose {
+    line-height: 1.6;
   }
-  
-  .card-content .prose {
-    font-size: calc(var(--base-font-size) * var(--font-scale)) !important;
+
+  /* 卡片内容与章节正文都撑满可用宽度（不走 prose 的 65ch 限制） */
+  [data-slot="card-content"],
+  .markdown-card-content {
+    width: 100% !important;
+    max-width: none !important;
   }
-  
+
+  /* 切勿在这里写 padding（尤其 !important）——会盖掉组件 Tailwind 的 px/py，
+     导致移动端「收紧边距」永远不生效。水平/垂直内边距由 card.tsx 与各卡片控制。 */
   .markdown-card-content {
     color: var(--foreground);
     line-height: var(--reading-line-height);
-    font-size: calc(var(--base-font-size) * var(--font-scale));
-    max-width: none !important;
-    width: 100% !important;
     word-wrap: break-word;
     margin: 0 !important;
     padding: 0 !important;
@@ -421,156 +425,58 @@
   .markdown-card-content h4,
   .markdown-card-content h5,
   .markdown-card-content h6 {
-    color: var(--foreground) !important;
     font-weight: 600;
   }
 
-  .dark .markdown-card-content h1,
-  .dark .markdown-card-content h2,
-  .dark .markdown-card-content h3,
-  .dark .markdown-card-content h4,
-  .dark .markdown-card-content h5,
-  .dark .markdown-card-content h6 {
-    color: var(--foreground) !important;
-    font-weight: 600;
-  }
-  
   /* 特别优化2级标题 */
+  /* 标题 / 段落 / 列表的正文色统一走 --foreground（换主题只改变量，不需要 .dark 副本） */
   .markdown-card-content h2 {
-    color: var(--foreground) !important;
     font-size: 1.2em;
     margin-top: 1.4em;
     margin-bottom: 0.6em;
   }
 
-  .dark .markdown-card-content h2 {
-    color: var(--foreground) !important;
-    font-size: 1.2em;
-    margin-top: 1.4em;
-    margin-bottom: 0.6em;
-  }
   
-  /* 段落样式 */
-  .markdown-card-content p {
-    color: var(--foreground);
-  }
-
-  .dark .markdown-card-content p {
-    color: var(--foreground);
-  }
-  
-  /* 列表样式 */
-  .markdown-card-content li {
-    color: var(--foreground);
-  }
-
-  .dark .markdown-card-content li {
-    color: var(--foreground);
-  }
-  
-  /* 加粗文本样式 - 中等浓度黄色马克笔（bottom 50-150%） */
+  /*
+   * 加粗 / 斜体的「马克笔」底色：颜色走 --marker，浓度只在这里定一次。
+   * 明暗两套主题只换 --marker 的色相（暖黄 → 琥珀），浓度保持一致——此前每种组合都复制一条
+   * `.dark` 规则并各自写 rgba()，同一种强调在深浅主题里的强弱并不一致。
+   */
   .markdown-card-content strong {
-    background: linear-gradient(to bottom, transparent 72%, rgba(251, 191, 36, 0.22) 72%, rgba(251, 191, 36, 0.22) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 72%, color-mix(in oklab, var(--marker) 22%, transparent) 72%, color-mix(in oklab, var(--marker) 22%, transparent) 150%, transparent 150%) !important;
     font-weight: 600 !important;
     padding: 0 0.125rem !important;
     color: inherit !important;
   }
-  
-  .dark .markdown-card-content strong {
-    background: linear-gradient(to bottom, transparent 72%, rgba(245, 158, 11, 0.2) 72%, rgba(245, 158, 11, 0.2) 150%, transparent 150%) !important;
-    color: inherit !important;
-  }
-  
-  /* 斜体加粗文本样式 - 次浓度黄色马克笔（bottom 50-150%） */
+
   .markdown-card-content em strong,
   .markdown-card-content strong em {
-    background: linear-gradient(to bottom, transparent 72%, rgba(251, 191, 36, 0.14) 72%, rgba(251, 191, 36, 0.14) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 72%, color-mix(in oklab, var(--marker) 16%, transparent) 72%, color-mix(in oklab, var(--marker) 16%, transparent) 150%, transparent 150%) !important;
     font-weight: 600 !important;
     font-style: italic !important;
     padding: 0 0.125rem !important;
     color: inherit !important;
   }
-  
-  .dark .markdown-card-content em strong,
-  .dark .markdown-card-content strong em {
-    background: linear-gradient(to bottom, transparent 50%, rgba(245, 158, 11, 0.35) 50%, rgba(245, 158, 11, 0.35) 150%, transparent 150%) !important;
-    color: inherit !important;
-  }
-  
-  /* 斜体文本样式 - 淡浓度黄色马克笔（bottom 50-150%） */
+
   .markdown-card-content em {
-    background: linear-gradient(to bottom, transparent 50%, rgba(251, 191, 36, 0.2) 50%, rgba(251, 191, 36, 0.2) 150%, transparent 150%) !important;
+    background: linear-gradient(to bottom, transparent 50%, color-mix(in oklab, var(--marker) 18%, transparent) 50%, color-mix(in oklab, var(--marker) 18%, transparent) 150%, transparent 150%) !important;
     font-style: italic !important;
     padding: 0 0.125rem !important;
     color: inherit !important;
   }
   
-  .dark .markdown-card-content em {
-    background: linear-gradient(to bottom, transparent 72%, rgba(245, 158, 11, 0.2) 50%, rgba(245, 158, 11, 0.2) 150%, transparent 150%) !important;
-    color: inherit !important;
-  }
-  
-  /* 代码样式 - 移除底色，让高亮效果直接显示 */
+  /* 代码样式 - 移除底色，让高亮效果直接显示。
+     字号只写 em：父级已经乘过 --font-scale，再乘一次会变成 scale²（用户调到 1.3 时行内代码会比正文大 30%）。 */
   .markdown-card-content code {
     background-color: transparent !important;
-    color: var(--foreground) !important;
-    /* padding: 0.1rem 0.1rem !important; */
-    /* border-radius: 0.25rem !important; */
-    font-size: calc(0.99em * var(--font-scale)) !important;
+    font-size: 0.99em !important;
     font-family: var(--font-mono) !important;
-    /* border: 1px solid rgba(229, 231, 235, 0.5) !important; */
-  }
-  
-  .dark .markdown-card-content code {
-    background-color: transparent !important;
-    color: var(--foreground) !important;
-    /* border: 1px solid rgba(75, 85, 99, 0.5) !important; */
   }
 
   .markdown-card-content code::before,
   .markdown-card-content code::after {
     display: none !important;
   }
-  
-  /* 代码内的加粗、斜体文本使用标准高亮效果 */
-  /* .markdown-card-content code strong {
-    background: linear-gradient(to bottom, transparent 72%, rgba(251, 191, 36, 0.22) 72%, rgba(251, 191, 36, 0.22) 150%, transparent 150%) !important;
-    font-weight: 600 !important;
-    padding: 0 0.125rem !important;
-    color: inherit !important;
-  }
-  
-  .dark .markdown-card-content code strong {
-    background: linear-gradient(to bottom, transparent 50%, rgba(34, 211, 238, 0.6) 50%, rgba(34, 211, 238, 0.6) 150%, transparent 150%) !important;
-    color: inherit !important;
-  }
-  
-  .markdown-card-content code em {
-    background: linear-gradient(to bottom, transparent 72%, rgba(251, 191, 36, 0.14) 72%, rgba(251, 191, 36, 0.14) 150%, transparent 150%) !important;
-    font-style: italic !important;
-    padding: 0 0.125rem !important;
-    color: inherit !important;
-  }
-  
-  .dark .markdown-card-content code em {
-    background: linear-gradient(to bottom, transparent 50%, rgba(34, 211, 238, 0.4) 50%, rgba(34, 211, 238, 0.4) 150%, transparent 150%) !important;
-    color: inherit !important;
-  }
-  
-  .markdown-card-content code em strong,
-  .markdown-card-content code strong em {
-    background: linear-gradient(to bottom, transparent 50%, rgba(251, 191, 36, 0.5) 50%, rgba(251, 191, 36, 0.5) 150%, transparent 150%) !important;
-    font-weight: 600 !important;
-    font-style: italic !important;
-    padding: 0 0.125rem !important;
-    color: inherit !important;
-  }
-  
-  .dark .markdown-card-content code em strong,
-  .dark .markdown-card-content code strong em {
-    background: linear-gradient(to bottom, transparent 50%, rgba(34, 211, 238, 0.5) 50%, rgba(34, 211, 238, 0.5) 150%, transparent 150%) !important;
-    color: inherit !important;
-  } */
   
   /* EpubReader专用样式 - 简单的prose样式 */
   .epub-reader-content {
@@ -579,6 +485,16 @@
     max-width: none;
   }
   
+  /* 链接的 hover / visited：typography 没有对应变量，只能写规则；
+     `.prose a` 的基色走 --tw-prose-links（见上），这两条只补状态色。 */
+  .markdown-card-content a:hover {
+    color: var(--link-hover);
+  }
+
+  .markdown-card-content a:visited {
+    color: var(--link-visited);
+  }
+
   /* 文本对齐和布局 */
   .prose center {
     text-align: center;
@@ -619,50 +535,34 @@
     text-decoration: underline;
   }
   
-  .prose del {
-    text-decoration: line-through;
-  }
-  
+  .prose del,
   .prose s {
     text-decoration: line-through;
   }
   
-  .prose strikethrough {
-    text-decoration: line-through;
-  }
-  
   .prose mark {
-    background-color: oklch(0.9300 0.0700 85.0);
+    background-color: var(--mark);
+    color: var(--mark-foreground);
     padding: 0.125rem 0.25rem;
     border-radius: 0.25rem;
   }
   
-  .dark .prose mark {
-    background-color: oklch(0.3600 0.0700 70.0);
-    color: oklch(0.9200 0.0800 90.0);
-  }
-  
   /* 字体大小和样式 */
   .prose sub {
-    font-size: calc(0.75em * var(--font-scale));
+    font-size: 0.75em; /* 只写 em：父级已缩放，再乘 --font-scale 会变成 scale² */
     vertical-align: sub;
     line-height: 0;
   }
   
   .prose sup {
-    font-size: calc(0.75em * var(--font-scale));
+    font-size: 0.75em; /* 只写 em：父级已缩放，再乘 --font-scale 会变成 scale² */
     vertical-align: super;
     line-height: 0;
   }
   
   .prose small {
-    font-size: calc(0.875em * var(--font-scale));
+    font-size: 0.875em; /* 只写 em：父级已缩放，再乘 --font-scale 会变成 scale² */
     opacity: 0.8;
-  }
-  
-  .prose big {
-    font-size: calc(1.25em * var(--font-scale));
-    font-weight: bold;
   }
   
   .prose tt {
@@ -673,141 +573,70 @@
     font-size: 0.9em;
   }
   
-  .dark .prose tt {
-    background-color: var(--muted);
-    color: var(--foreground);
-  }
-  
   /* 引用和缩进 */
-  .prose blockquote {
-    border-left: 4px solid #d1d5db;
-    padding-left: 1rem;
-    margin: 1rem 0;
-    font-style: italic;
-    color: #6b7280;
+  /* 划线高亮（阅读工作台）：颜色槽位由 data-color 选择，与笔记页签的左边条同一套语义色，
+     换明暗主题只改变量；同样放在 @layer components（理由见上面的实体标注段）。
+     注意：不要给水平内边距——同一条笔记与别的笔记重叠时是嵌套的 mark，每层 1px 会累积把文字推开。 */
+  .note-mark {
+    --note-color: var(--primary);
+    background: color-mix(in oklab, var(--note-color) 16%, transparent);
+    border-bottom: 2px solid color-mix(in oklab, var(--note-color) 60%, transparent);
+    border-radius: 2px;
+    color: inherit;
   }
-  
-  .dark .prose blockquote {
-    border-left-color: #4b5563;
-    color: #9ca3af;
-  }
-  
-  .prose hr {
-    border: none;
-    height: 1px;
-    background-color: #e5e7eb;
-    margin: 2rem 0;
-  }
-  
-  .dark .prose hr {
-    background-color: #4b5563;
-  }
-  
-  /* 链接样式 - 修复深色模式显示问题 */
-  .prose a {
-    color: #2563eb;
-    text-decoration: underline;
-    transition: color 0.2s ease;
-  }
-  
-  .prose a:hover {
-    color: #1d4ed8;
-    text-decoration: underline;
-  }
-  
-  .prose a:visited {
-    color: #7c3aed;
-  }
-  
-  .prose a:active {
-    color: #1e40af;
-  }
-  
-  /* 深色模式链接样式 */
-  .dark .prose a {
-    color: #60a5fa;
-    text-decoration: underline;
-  }
-  
-  .dark .prose a:hover {
-    color: #93c5fd;
-    text-decoration: underline;
-  }
-  
-  .dark .prose a:visited {
-    color: #c084fc;
-  }
-  
-  .dark .prose a:active {
-    color: #3b82f6;
-  }
-}
+  .note-mark[data-color='2'] { --note-color: var(--info); }
+  .note-mark[data-color='3'] { --note-color: var(--success); }
+  .note-mark[data-color='4'] { --note-color: var(--warning); }
 
-/* ───────── 实体标注 / 到达高亮（阅读工作台） ─────────
-   颜色槽位由 data-slot 选择（--entity-1..10 / n=中性），换明暗主题只改变量，正文无需重渲染。
-   写在 @layer 之外：无层样式优先于层内的 .prose 规则。 */
-.entity-mark {
-  --entity-color: var(--entity-neutral);
-  cursor: pointer;
-  border-radius: 3px;
-  padding: 0 1px;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 3px;
-  text-decoration-color: color-mix(in oklab, var(--entity-color) 75%, transparent);
-  background: color-mix(in oklab, var(--entity-color) 9%, transparent);
-  transition: background-color 0.15s ease;
-}
-.entity-mark[data-slot='1'] { --entity-color: var(--entity-1); }
-.entity-mark[data-slot='2'] { --entity-color: var(--entity-2); }
-.entity-mark[data-slot='3'] { --entity-color: var(--entity-3); }
-.entity-mark[data-slot='4'] { --entity-color: var(--entity-4); }
-.entity-mark[data-slot='5'] { --entity-color: var(--entity-5); }
-.entity-mark[data-slot='6'] { --entity-color: var(--entity-6); }
-.entity-mark[data-slot='7'] { --entity-color: var(--entity-7); }
-.entity-mark[data-slot='8'] { --entity-color: var(--entity-8); }
-.entity-mark[data-slot='9'] { --entity-color: var(--entity-9); }
-.entity-mark[data-slot='10'] { --entity-color: var(--entity-10); }
-.entity-mark:hover,
-.entity-mark[data-active='true'] {
-  background: color-mix(in oklab, var(--entity-color) 24%, transparent);
-}
-
-/* 划线高亮（阅读工作台）：颜色槽位由 data-color 选择，与笔记页签的左边条同一套语义色，
-   换明暗主题只改变量。写在 @layer 之外：无层样式优先于层内的 .prose mark 规则。
-   注意：不要给水平内边距——同一条笔记与别的笔记重叠时是嵌套的 mark，每层 1px 会累积把文字推开。 */
-.note-mark {
-  --note-color: var(--primary);
-  background: color-mix(in oklab, var(--note-color) 16%, transparent);
-  border-bottom: 2px solid color-mix(in oklab, var(--note-color) 60%, transparent);
-  border-radius: 2px;
-  color: inherit;
-}
-.note-mark[data-color='2'] { --note-color: var(--info); }
-.note-mark[data-color='3'] { --note-color: var(--success); }
-.note-mark[data-color='4'] { --note-color: var(--warning); }
-
-/* 跳转到达后的短暂高亮（≤2s）；reduced-motion 下改为静态描边 */
-.link-flash {
-  --flash-color: var(--entity-color, var(--primary));
-  animation: link-flash 1.6s ease-out;
-}
-@keyframes link-flash {
-  0%,
-  35% {
-    background: color-mix(in oklab, var(--flash-color) 45%, transparent);
-    outline: 2px solid var(--flash-color);
-    outline-offset: 2px;
-  }
-  100% {
-    outline: 2px solid transparent;
-    outline-offset: 2px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
+  /* 跳转到达后的短暂高亮（≤2s）；reduced-motion 下改为静态描边 */
   .link-flash {
-    animation: none;
-    outline: 2px solid var(--flash-color);
-    outline-offset: 2px;
+    --flash-color: var(--entity-color, var(--primary));
+    animation: link-flash 1.6s ease-out;
   }
+  @keyframes link-flash {
+    0%,
+    35% {
+      background: color-mix(in oklab, var(--flash-color) 45%, transparent);
+      outline: 2px solid var(--flash-color);
+      outline-offset: 2px;
+    }
+    100% {
+      outline: 2px solid transparent;
+      outline-offset: 2px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .link-flash {
+      animation: none;
+      outline: 2px solid var(--flash-color);
+      outline-offset: 2px;
+    }
+  }
+}
+
+/*
+ * 正文配色：全部通过 typography 插件的 `--tw-prose-*` 变量接管。
+ * 为什么不直接写 `.prose a { color: … }`：插件的规则在 components 层、本文件主体在 base 层，
+ * 层序上 base 输给 components；连「给 .prose 设变量」也会被插件自己那条 `.prose { --tw-prose-links: … }`
+ * 盖掉（实测：链接显示成 Tailwind 的 slate 而不是品牌朱砂，引用边框也是冷灰）。
+ * 所以这块**必须写在 @layer 之外**——无层样式优先于所有 layer，才能真正接管。
+ * 改变量的好处：不用 !important，也不需要为深色主题复制 `.dark` 副本（变量指向的 token 自己跟随主题）。
+ */
+.markdown-card-content {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--link);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--border);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--muted-foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--muted);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
 }

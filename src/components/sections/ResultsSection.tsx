@@ -122,7 +122,7 @@ export const ResultsSection = memo(function ResultsSection({
                   variant="outline"
                   size="sm"
                   onClick={onDownloadAllMarkdown}
-                  className="flex items-center gap-1.5 h-8 min-h-8 text-xs"
+                  className="flex items-center gap-1.5 min-h-8 text-xs"
                   title={t('download.downloadAllMarkdown')}
                 >
                   <Download className="h-3.5 w-3.5" />

@@ -88,8 +88,7 @@ export function SyncStatusIndicator() {
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8"
+              size="icon-sm"
               onClick={() => {
                 void handleLogout().catch(() => toast.error(t('auth.logoutFailed')))
               }}

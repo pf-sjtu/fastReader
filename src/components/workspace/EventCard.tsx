@@ -108,8 +108,8 @@ export function EventCard({ linking, eventId, currentChapterId, onOpenEntity, on
           const jump = (
             <Button
               variant="outline"
-              size="sm"
-              className="h-7 gap-1 text-xs"
+              size="xs"
+              className="gap-1 text-xs"
               disabled={!chapterId || !show}
               title={!chapterId ? t('eventCard.noChapter') : undefined}
               onClick={() => chapterId && onJumpChapter(chapterId)}

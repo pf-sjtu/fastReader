@@ -89,7 +89,7 @@ export function ProviderCard({
           <Button
             size="sm"
             variant={isActive ? 'default' : 'outline'}
-            className="h-8 px-3 text-xs"
+            className="px-3 text-xs"
             onClick={onUse}
             disabled={isActive || enabledCount === 0}
             title={enabledCount === 0 ? t('aiProvider.noEnabledModels') : undefined}
@@ -111,7 +111,7 @@ export function ProviderCard({
           <Button
             size="sm"
             variant="ghost"
-            className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive"
+            className="px-2 text-xs text-muted-foreground hover:text-destructive"
             onClick={onDelete}
             aria-label={`${t('common.delete')} ${provider.name}`}
           >
@@ -121,7 +121,7 @@ export function ProviderCard({
           <Button
             size="sm"
             variant="ghost"
-            className="ml-auto h-8 px-2 text-xs"
+            className="ml-auto px-2 text-xs"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
             aria-controls={listId}

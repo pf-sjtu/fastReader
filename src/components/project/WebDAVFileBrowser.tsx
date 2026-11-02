@@ -250,9 +250,8 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
               {sortBy === 'random' ? (
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="icon"
                   onClick={() => setShuffleSeed((n) => n + 1)}
-                  className="w-10 p-0"
                   title={t('webdav.browser.reshuffle')}
                   aria-label={t('webdav.browser.reshuffle')}
                 >
@@ -261,9 +260,8 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
               ) : (
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="icon"
                   onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                  className="w-10 p-0"
                   aria-label={t('webdav.browser.toggleOrder')}
                 >
                   {sortOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
@@ -338,8 +336,7 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
                             {file.type === 'file' && (
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                className="w-8 h-8 p-0 flex-shrink-0 ml-1"
+                                size="icon-sm" className="ml-1 shrink-0"
                                 onClick={(e: React.MouseEvent) => {
                                   e.stopPropagation()
                                   setSelectedFile(file)

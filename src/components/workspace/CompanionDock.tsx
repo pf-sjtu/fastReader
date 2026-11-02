@@ -216,8 +216,8 @@ export function CompanionDock({ tabs, active, onActiveChange, onCollapse, classN
         {onCollapse && (
           <Button
             variant="ghost"
-            size="icon"
-            className="size-8 shrink-0"
+            size="icon-sm"
+            className="shrink-0"
             onClick={onCollapse}
             title={t('workspace.dock.collapse')}
             aria-label={t('workspace.dock.collapse')}

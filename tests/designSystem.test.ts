@@ -27,7 +27,14 @@ const EXEMPT: Record<string, Record<string, string>> = {
   'src/components/app/AppHeader.tsx': { 'heading-role': 'h1 只是品牌字标 BrandMark 的语义容器，字样式在字标内部' },
   'src/components/BrandMark.tsx': { px: '品牌字标的装饰尺寸', 'raw-color': '印章 logo 的品牌色是固定值，不跟主题走' },
   'src/components/library/BookCover.tsx': { px: '封面水印大字' },
-  'src/components/library/BookCard.tsx': { 'empty-state': '封面加载态的遮罩，不是页级空状态，需要绝对定位覆盖在封面上' },
+  'src/components/library/BookCard.tsx': {
+    'empty-state': '封面加载态的遮罩，不是页级空状态，需要绝对定位覆盖在封面上',
+    'theme-locked-color': '封面上压的白色文字与黑色蒙层随封面图走，与明暗主题无关（蒙层也不该在深色下变白）',
+  },
+  'src/components/library/BookCover.tsx': { 'px': '封面水印大字', 'theme-locked-color': '同 BookCard：图上的白字与描边随图走' },
+  'src/components/ui/dialog.tsx': { 'theme-locked-color': '遮罩 scrim（bg-black/50）与主题无关，深浅主题都应是压暗层' },
+  'src/components/ui/alert-dialog.tsx': { 'theme-locked-color': '遮罩 scrim（bg-black/50）与主题无关' },
+  'src/components/ui/sheet.tsx': { 'theme-locked-color': '遮罩 scrim（bg-black/50）与主题无关' },
   'src/charts/plugins/entity-timeline/EntityTimelineChart.tsx': { 'empty-state': '时间轴的空白格（网格单元内居中），不是页级空状态' },
   'src/study/pack/buildPack.ts': { 'heading-role': '离线学习包是独立 HTML 文档，h1–h4 是导出产物的标签，用不到应用内角色类', 'raw-color': '离线学习包的内嵌样式表是独立 HTML 文档，读不到宿主 CSS 变量' },
   'src/study/pack/richStatic.ts': { 'raw-color': '离线学习包里 genui 静态版的内嵌样式，同 buildPack：独立 HTML 文档读不到宿主 CSS 变量' },
@@ -39,7 +46,7 @@ const EXEMPT: Record<string, Record<string, string>> = {
 }
 
 /** unless：行里出现它就不算违规（用来表达「必须带某个类」，避免写难读的负向先行断言） */
-const RULES: { id: string; re: RegExp; unless?: RegExp; hint: string; skipDirs?: string[]; except?: string[] }[] = [
+const RULES: { id: string; re: RegExp; inner?: RegExp; unless?: RegExp; hint: string; skipDirs?: string[]; except?: string[]; multiline?: boolean }[] = [
   {
     id: 'palette',
     re: /\b(?:text|bg|border|ring|fill|stroke)-(?:gray|slate|zinc|neutral|stone|red|green|blue|amber|yellow|orange|emerald|purple|teal|cyan|sky|indigo|violet|pink|rose|lime)-\d{2,3}/,
@@ -47,9 +54,17 @@ const RULES: { id: string; re: RegExp; unless?: RegExp; hint: string; skipDirs?:
   },
   { id: 'radius', re: /(?<![\w-])rounded(?:-sm|-xl|-2xl)?(?![\w-])/, hint: '圆角只用 rounded-md（控件）/ rounded-lg（容器）/ rounded-full', skipDirs: ['src/charts'] },
   { id: 'px', re: /text-\[(?:9|10|11)px\]/, hint: '不使用 ≤11px 文字；用 text-xs（12px）' },
-  { id: 'title-size', re: /<(?:CardTitle|DialogTitle|SheetTitle)\b[^>]*\btext-(?:xs|sm|base|lg|xl|2xl)\b/, hint: '标题用组件默认（t-title）或 t-display，不覆写字号' },
+  { id: 'title-size', re: /<(?:CardTitle|DialogTitle|SheetTitle|AlertDialogTitle)\b[^>]*\btext-(?:xs|sm|base|lg|xl|2xl)\b/, hint: '标题用组件默认（t-title）或 t-display，不覆写字号' },
   { id: 'heading-role', re: /<h[1-6]/, unless: /t-(?:display|title|section|label|caption|body|note)/, hint: '标题标签必须带文字角色类 t-display / t-title / t-section / t-label / t-body / t-caption' },
-  { id: 'button-height', re: /<Button(?![\w])[^>]*className="[^"]*(?<![\w-])(?:h|size)-(?:7|8|9|10)(?![\w-])/, hint: '按钮高度用 size 档位：xs(h-7) / sm(h-8) / default(h-9) / lg(h-10) / icon-xs|icon-sm|icon，不在 className 里覆写' },
+  {
+    id: 'button-height',
+    // 按 `<Button …>` **整段**匹配（属性经常跨行），只检查它自己的 className，不误伤别的组件
+    // 先把每个 <Button …> 切成一段（`=>` 当整体消费，不会在箭头函数处截断），再看段内 className
+    re: /<Button(?:(?:=>)|[^>])*?>/g,
+    inner: /className="[^"]*(?<![\w-])(?:h|size)-(?:7|8|9|10)(?![\w-])/,
+    hint: '按钮高度用 size 档位：xs(h-7) / sm(h-8) / default(h-9) / lg(h-10) / icon-xs|icon-sm|icon，不在 className 里覆写',
+    multiline: true,
+  },
   { id: 'heading-size', re: /<h[1-6]\b[^>]*\btext-(?:base|lg|xl|2xl)\b/, hint: '标题用 t-title / t-section / t-label 角色类' },
   {
     id: 'skeleton',
@@ -72,8 +87,8 @@ const RULES: { id: string; re: RegExp; unless?: RegExp; hint: string; skipDirs?:
   {
     // 只拦「把颜色函数塞进 Tailwind 的任意值颜色工具类」：阴影/渐变里的 rgb(...) 之类不算
     id: 'raw-color-fn',
-    re: /\b(?:text|bg|border|ring|fill|stroke|from|via|to)-\[(?:#|rgba?\(|hsla?\(|oklch\(|oklab\()/,
-    hint: '不用任意值颜色函数（text-[rgb(...)] / bg-[#fff]）；用语义 token',
+    re: /\b(?:text|bg|border|ring|fill|stroke|from|via|to|shadow)-\[(?:#|rgba?\(|hsla?\(|oklch\(|oklab\()/,
+    hint: '不用任意值颜色函数（text-[rgb(...)] / shadow-[…rgba()] / bg-[#fff]）；用语义 token',
     skipDirs: ['src/charts', 'src/components/markdown/genui'],
   },
   {
@@ -82,6 +97,14 @@ const RULES: { id: string; re: RegExp; unless?: RegExp; hint: string; skipDirs?:
     re: /(?<![\w-])(?:text|bg|border|ring|fill|stroke|from|via|to)-\$\{/,
     hint: '颜色类不能用模板插值拼（`text-${tone}-500`）；改成显式映射或语义 token',
     skipDirs: ['src/charts', 'src/components/markdown/genui'],
+  },
+  {
+    // 写死的 white/black 不跟主题走：要么换成语义 token，要么在同一处给 dark: 变体。
+    // 受控场景（遮罩 scrim、封面图上的白字、危险按钮的 dark:bg-destructive/60）登记在 EXEMPT。
+    id: 'theme-locked-color',
+    re: /\b(?:bg|text|border|ring|fill|stroke)-(?:white|black)(?:\/\d+)?\b/,
+    unless: /dark:/,
+    hint: '不写死 white/black：用语义 token；确需（遮罩、图上的白字）请配 dark: 变体并登记豁免',
   },
 ]
 
@@ -96,11 +119,22 @@ describe('设计一致性守卫', () => {
         if (rule.skipDirs?.some((d) => r.startsWith(d))) continue
         if (rule.except?.includes(r)) continue
         if (EXEMPT[r]?.[rule.id]) continue
-        readFileSync(file, 'utf-8')
-          .split(/\r?\n/)
-          .forEach((line, i) => {
-            if (rule.re.test(line) && !rule.unless?.test(line)) hits.push(`${r}:${i + 1}  ${line.trim().slice(0, 100)}`)
-          })
+        const text = readFileSync(file, 'utf-8')
+        if (rule.multiline) {
+          // 跨行规则：遍历整段内容里的每个匹配（exec 前归零 lastIndex，避免 /g 残留状态）
+          const re = new RegExp(rule.re.source, rule.re.flags.includes('g') ? rule.re.flags : `${rule.re.flags}g`)
+          let m: RegExpExecArray | null
+          while ((m = re.exec(text))) {
+            if (rule.inner && !rule.inner.test(m[0])) continue
+            if (rule.unless?.test(m[0])) continue
+            const line = text.slice(0, m.index).split(/\r?\n/).length
+            hits.push(`${r}:${line}  ${m[0].replace(/\s+/g, ' ').trim().slice(0, 100)}`)
+          }
+          continue
+        }
+        text.split(/\r?\n/).forEach((line, i) => {
+          if (rule.re.test(line) && !rule.unless?.test(line)) hits.push(`${r}:${i + 1}  ${line.trim().slice(0, 100)}`)
+        })
       }
       expect(hits, `\n${hits.join('\n')}\n`).toEqual([])
     })

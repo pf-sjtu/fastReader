@@ -166,7 +166,7 @@ export function BookDetailDialog({ entry, onClose, onOpen, onPickCategory, disab
           <DialogDescription>{entry.author ?? t('library.info.title')}</DialogDescription>
         </DialogHeader>
         <div className="flex gap-4">
-          <div ref={ref} className="relative aspect-[3/4] w-28 shrink-0 overflow-hidden rounded-lg ring-1 ring-black/10 sm:w-32">
+          <div ref={ref} className="relative aspect-[3/4] w-28 shrink-0 overflow-hidden rounded-lg ring-1 ring-black/10 sm:w-32 dark:ring-white/10">
             {url ? <img src={url} alt="" draggable={false} className="size-full object-cover" /> : <BookCover title={entry.title} seed={entry.path} />}
           </div>
           <dl className="grid min-w-0 flex-1 grid-cols-[auto_1fr] content-start gap-x-3 gap-y-1 text-sm">

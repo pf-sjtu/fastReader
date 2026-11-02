@@ -151,8 +151,8 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
           staleCount > 0 && (
             <Button
               variant="outline"
-              size="sm"
-              className="h-9 gap-1 text-xs"
+              size="default"
+              className="gap-1 text-xs"
               onClick={startFill}
               title={t('library.fill.hintSize', { count: staleCount, size: sizeText })}
               aria-label={t('library.fill.button', { count: staleCount })}
@@ -167,7 +167,6 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
           <Button
             variant="ghost"
             size="icon"
-            className="size-9"
             onClick={() => void refresh()}
             disabled={refreshing}
             aria-label={t('library.refresh')}

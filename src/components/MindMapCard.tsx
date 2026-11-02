@@ -80,8 +80,7 @@ export const MindMapCard: React.FC<MindMapCardProps> = ({
             {showOpenInMindElixir && onOpenInMindElixir && (
               <Button
                 variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0"
+                size="icon-sm"
                 onClick={() => onOpenInMindElixir(mindMapData, title)}
                 title={t('common.openInMindElixir')}
               >
@@ -105,8 +104,7 @@ export const MindMapCard: React.FC<MindMapCardProps> = ({
             {showClearCache && onClearCache && (
               <Button
                 variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0"
+                size="icon-sm"
                 onClick={() => onClearCache(id)}
                 title={t('common.clearCache')}
               >

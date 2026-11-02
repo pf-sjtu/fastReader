@@ -143,7 +143,7 @@ function PromptEntryEditor({ entry, value, overridden, inUse, preview }: PromptE
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 px-2 text-xs"
+            className="px-2 text-xs"
             disabled={!overridden}
             onClick={() => resetPrompt(entry.path)}
             aria-label={t('promptEditor.resetEntryFor', { name: label })}

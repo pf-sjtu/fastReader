@@ -38,7 +38,7 @@ function QuestionCard({ q, index, answered, onAnswer, onJumpChapter }: QuestionP
   const [revealed, setRevealed] = useState(false)
   return (
     <li
-      className={cn('space-y-2 rounded-lg border bg-card p-3', answered && (answered.correct ? 'border-success/50' : 'border-destructive/50'))}
+      className={cn('space-y-2 rounded-lg border bg-card p-3', answered && (answered.correct ? 'border-success/30' : 'border-destructive/30'))}
       data-answered={answered ? (answered.correct ? 'correct' : 'wrong') : undefined}
     >
       <p className="text-sm font-medium leading-snug">
@@ -61,8 +61,8 @@ function QuestionCard({ q, index, answered, onAnswer, onJumpChapter }: QuestionP
                 className={cn(
                   'flex min-h-9 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-ring',
                   !answered && 'hover:bg-accent',
-                  answered && isRight && 'border-success/40 bg-success/10',
-                  answered && isPicked && !isRight && 'border-destructive bg-destructive/10'
+                  answered && isRight && 'border-success/30 bg-success/5',
+                  answered && isPicked && !isRight && 'border-destructive/50 bg-destructive/5'
                 )}
               >
                 <span className="w-4 shrink-0 text-xs text-muted-foreground">{String.fromCharCode(65 + i)}</span>
@@ -177,7 +177,7 @@ export function QuizPanel({ bookSummary, currentChapterId, onJumpChapter }: Prop
           <Button
             size="sm"
             variant={quiz ? 'outline' : 'default'}
-            className="ml-auto h-8 gap-1.5"
+            className="ml-auto gap-1.5"
             disabled={!scoped.length}
             onClick={() => void generateQuiz(bookSummary, count, scope === 'chapter' ? currentChapterId : null)}
           >

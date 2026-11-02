@@ -88,9 +88,9 @@ function ModelRow({ provider, model, isActive, defaultTemperature }: ModelRowPro
           aria-label={t('aiProvider.models.enableFor', { model: label })}
         />
         <Button
-          size="sm"
           variant="ghost"
-          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+          size="icon-sm"
+          className="text-muted-foreground hover:text-destructive"
           onClick={() => {
             removeModel(provider.id, model.id)
             reconcileActiveModel()

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { CheckCircle, Info, Loader2, Play, Plus, Server, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -67,7 +68,6 @@ function ActiveModelBar() {
           type="button"
           size="sm"
           variant="outline"
-          className="h-8"
           onClick={() => void test()}
           disabled={isTesting || !hasActive}
         >
@@ -228,7 +228,7 @@ export function AIProviderConfig() {
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className={buttonVariants({ variant: 'destructive' })}
             >
               {t('common.delete')}
             </AlertDialogAction>

@@ -37,8 +37,9 @@ function Quiz({ node }: { node: Extract<GenUiNode, { type: 'quiz' }> }) {
               className={cn(
                 'rounded-md border px-3 py-1.5 text-left transition-colors',
                 !done && 'hover:bg-muted',
-                right && 'border-success/50 bg-success/10',
-                wrong && 'border-destructive/50 bg-destructive/10'
+                // 与 QuizPanel 同一档（判分后的红/绿不要压过正文）
+                right && 'border-success/30 bg-success/5',
+                wrong && 'border-destructive/50 bg-destructive/5'
               )}
             >
               {o}

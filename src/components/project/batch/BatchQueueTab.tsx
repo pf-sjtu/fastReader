@@ -108,8 +108,7 @@ export function BatchQueueTab({ onClearQueue }: { onClearQueue: () => void }) {
                           {item.status !== 'processing' && (
                             <Button
                               variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
+                              size="icon-xs"
                               onClick={() => removeFromQueue(item.id)}
                               aria-label={t('batch.removeItemNamed', { name: item.fileName })}
                               title={t('batch.removeItem')}

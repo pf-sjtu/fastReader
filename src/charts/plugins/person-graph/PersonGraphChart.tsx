@@ -366,7 +366,7 @@ export function PersonGraphChart({
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 text-xs"
+          className="text-xs"
           onClick={() => cyRef.current && runForceLayout(cyRef.current, force, true)}
         >
           <RefreshCw className="h-3 w-3 mr-1" />
@@ -376,7 +376,7 @@ export function PersonGraphChart({
           type="button"
           variant={showForce ? 'secondary' : 'outline'}
           size="sm"
-          className="h-8 text-xs"
+          className="text-xs"
           aria-expanded={showForce}
           onClick={() => setShowForce((v) => !v)}
         >

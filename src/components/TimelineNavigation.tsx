@@ -120,8 +120,8 @@ export const TimelineNavigation = memo(function TimelineNavigation({
         <div className="px-3 py-2 border-t shrink-0">
           <Button
             variant="outline"
-            size="sm"
-            className="w-full text-xs h-7"
+            size="xs"
+            className="w-full text-xs"
             onClick={() => {
               const firstCompleted = chapters.find(ch => ch.processed)
               if (firstCompleted) onChapterClick(firstCompleted.id)

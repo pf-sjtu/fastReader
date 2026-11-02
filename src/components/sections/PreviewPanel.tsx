@@ -71,10 +71,9 @@ export function PreviewPanel({
               <>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="icon-sm"
                   onClick={onDecreaseFontSize}
                   disabled={fontSize <= 12}
-                  className="h-8 w-8 p-0"
                   title={t('reader.epub.decreaseFontSize')}
                 >
                   <Minus className="h-3.5 w-3.5" />
@@ -84,10 +83,9 @@ export function PreviewPanel({
                 </span>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="icon-sm"
                   onClick={onIncreaseFontSize}
                   disabled={fontSize >= 24}
-                  className="h-8 w-8 p-0"
                   title={t('reader.epub.increaseFontSize')}
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -99,9 +97,8 @@ export function PreviewPanel({
             {isEpub && !isSheet && (
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon-sm"
                 onClick={onToggleFullscreen}
-                className="h-8 w-8 p-0"
                 title={isFullscreen ? t('reader.epub.exitFullscreen') : t('reader.epub.enterFullscreen')}
               >
                 {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
@@ -112,9 +109,8 @@ export function PreviewPanel({
             {variant === 'sidebar' && (
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-sm"
                 onClick={onClose}
-                className="size-8"
                 aria-label={t('common.close')}
                 title={t('common.close')}
               >

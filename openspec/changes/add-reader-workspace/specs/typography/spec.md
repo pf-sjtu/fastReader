@@ -45,3 +45,20 @@
 #### Scenario: 字体栈只有一处具体值
 - **WHEN** 有人给某个图重新写一份 `system-ui, …` 字体栈
 - **THEN** `tests/figureType.test.ts` 失败（常量必须等于 `--font-sans`，且四个产物文件必须引用同一来源）
+
+### Requirement: 明暗主题的对比度与 token 单一来源
+两套主题的语义 token SHALL 满足可读性：正文与次要文字压在其实际使用的底色上（含 `--muted`、`--accent`、`--*-muted` 淡底）对比度 ≥ 4.5；实心状态底上的前景色 ≥ 4.5；焦点环压在底色上 ≥ 3:1。装饰性边框与实体色只做「可见/可分辨」要求（≥1.2 与 ≥3:1），不得为凑 3:1 而加粗到压过内容的程度。两套主题的 token SHALL 一一对应（`.dark` 不得引入 `:root` 没有的 token）。
+
+组件 SHALL NOT 用「复制一条 `.dark` 规则改颜色」的方式做主题适配——颜色差异只能来自 token；写死的 `white/black` SHALL 配 `dark:` 变体（遮罩、图上的白字等确需场景 SHALL 在守卫里登记理由）。正文里的链接、引用、高亮、马克笔底色 SHALL 走 `--link*` / `--mark*` / `--marker` token，不得写调色板 hex 或 rgba。凡覆盖 Tailwind Typography 的正文样式，SHALL 写在 `@layer components`（高于 base 的 `.prose`、低于 utilities），不得依赖无层样式（无层会连工具类一起压掉）。行内元素的字号 SHALL 只写 `em`，不得再乘 `--font-scale`（父级已缩放，二次相乘会让行内代码在放大字号时超出正文）。
+
+#### Scenario: 次要文字压在淡底上
+- **WHEN** 渲染 `bg-muted text-muted-foreground` 的 Tabs 容器或分类胶囊
+- **THEN** 两套主题下对比度都不低于 4.5
+
+#### Scenario: 改 token 时越界会被发现
+- **WHEN** 有人把某个 token 的明度调低到让上述配对跌破阈值
+- **THEN** `tests/themeContrast.test.ts` 失败并指出是哪个 token 对哪个背景
+
+#### Scenario: 不靠 .dark 副本
+- **WHEN** 需要让某个元素在深色下换色
+- **THEN** 改 token（或它的 `-foreground`/`-muted` 配套），而不是再加一条 `.dark …` 规则
