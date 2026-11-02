@@ -1,23 +1,18 @@
-// 批量队列项状态徽标：BatchProcessingDialog 与 BatchQueuePanel 共用
 import { useTranslation } from 'react-i18next'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
 import type { BatchQueueItem } from '../../../stores/batchQueueStore'
 
-const VARIANTS: Record<BatchQueueItem['status'], { variant: 'default' | 'secondary' | 'destructive' | 'outline'; cls?: string }> = {
-  pending: { variant: 'secondary' },
-  processing: { variant: 'default', cls: 'bg-primary' },
-  completed: { variant: 'default', cls: 'bg-success' },
-  failed: { variant: 'destructive' },
-  skipped: { variant: 'outline' },
-}
-
+/**
+ * 批量队列项状态徽标：BatchProcessingDialog / BatchQueueTab / BatchQueuePanel 共用。
+ *
+ * 外观由 `ui/status-badge.tsx` 统一（语义 → 颜色只有一张表，见 utils/statusTone.ts），
+ * 本组件只负责把状态名翻成文案。
+ */
 export function BatchStatusBadge({ status, className = '' }: { status: BatchQueueItem['status']; className?: string }) {
   const { t } = useTranslation()
-  const v = VARIANTS[status]
-  if (!v) return null
   return (
-    <Badge variant={v.variant} className={`${v.cls ?? ''} ${className}`.trim()}>
+    <StatusBadge status={status} className={className}>
       {t(`batch.status.${status}`)}
-    </Badge>
+    </StatusBadge>
   )
 }

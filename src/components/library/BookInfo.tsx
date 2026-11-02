@@ -3,10 +3,12 @@ import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { LibraryEntry } from '@/services/library/types'
+import { toneFromCategory } from '@/utils/statusTone'
 import { BookCover } from './BookCover'
-import { categoryLabel, categoryTone, formatBookSize, type CategoryTone } from './labels'
+import { categoryLabel, categoryTone, formatBookSize } from './labels'
 import { useCoverUrl } from './useCoverUrl'
 
 /** 与服务端 / 脚本的简介上限一致（functions/_lib/covers.js cleanMeta） */
@@ -48,15 +50,6 @@ function CategoryChips({ subjects, limit, onPick }: { subjects: string[]; limit?
       ))}
     </ul>
   )
-}
-
-/** 悬浮卡里的分类标签：淡底 + 同色字（语义 token），不抢书名的风头；颜色与书卡右上角的分类胶囊同一套色调 */
-const SOFT_TONE: Record<CategoryTone, string> = {
-  primary: 'bg-primary/10 text-primary',
-  info: 'bg-info/10 text-info',
-  success: 'bg-success/10 text-success',
-  warning: 'bg-warning/10 text-warning',
-  destructive: 'bg-destructive/10 text-destructive',
 }
 
 /**
@@ -123,8 +116,8 @@ export function BookTooltipBody({ entry }: { entry: LibraryEntry }) {
       {entry.subjects && entry.subjects.length > 0 && (
         <ul className="flex flex-wrap gap-1" aria-label={t('library.info.categories')}>
           {entry.subjects.map((s) => (
-            <li key={s} className={`rounded-full px-2 py-0.5 text-xs ${SOFT_TONE[categoryTone(s)]}`}>
-              {categoryLabel(t, s)}
+            <li key={s}>
+              <StatusBadge tone={toneFromCategory(categoryTone(s))}>{categoryLabel(t, s)}</StatusBadge>
             </li>
           ))}
         </ul>

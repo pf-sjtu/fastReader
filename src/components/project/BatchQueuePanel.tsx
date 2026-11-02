@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChevronDown, ChevronUp, Play, Pause, Square, Trash2, Loader2, CheckCircle, XCircle, DollarSign, FolderOpen, X } from 'lucide-react'
@@ -78,12 +79,8 @@ export function BatchQueuePanel() {
             <FolderOpen className="h-4 w-4" />
             <span className="font-medium text-sm">{t('batch.panelTitle')}</span>
             <Badge variant="secondary">{queue.length}</Badge>
-            <Badge variant="default" className="bg-success">
-              {stats.completed}
-            </Badge>
-            {stats.failed > 0 && (
-              <Badge variant="destructive">{stats.failed}</Badge>
-            )}
+            <StatusBadge tone="success">{stats.completed}</StatusBadge>
+            {stats.failed > 0 && <StatusBadge tone="danger">{stats.failed}</StatusBadge>}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">
@@ -132,7 +129,7 @@ export function BatchQueuePanel() {
                   <span className="w-5 text-muted-foreground">{index + 1}.</span>
                   <BatchStatusBadge status={item.status} className="text-xs" />
                   {item.status === 'completed' && item.metadata?.isPartial && (
-                    <Badge variant="outline" className="text-xs">{t('batch.partial')}</Badge>
+                    <StatusBadge tone="warning" className="text-xs">{t('batch.partial')}</StatusBadge>
                   )}
                   <span className="truncate flex-1">{item.fileName}</span>
                   {item.status === 'completed' && (

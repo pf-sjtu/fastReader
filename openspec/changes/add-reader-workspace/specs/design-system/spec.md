@@ -49,3 +49,41 @@
 #### Scenario: 深色主题下的状态色前景
 - **WHEN** 深色主题重新定义 `--success/--warning/--info/--destructive`
 - **THEN** 四个实心底前景 token 取值同一墨色（近白前景在提亮后的深色状态色上对比不足），且由守卫测试锁定
+
+### Requirement: 状态徽标与提示各只有一个实现
+表示「状态 / 结果 / 分类」的小标签 SHALL 统一由 `ui/status-badge.tsx` 的 `StatusBadge` 渲染：入参是一个**语义状态**（`pending | processing | completed | skipped | failed | warning | info | success | neutral`，或分类色调 `tone`），而不是直接传颜色类；状态到颜色的映射 SHALL 只有一张表（`statusTone` 工具），业务组件不得各自拼 `bg-*/5|10` + `text-*` + `border-*` 组合。
+
+「一行提示 / 框式警告 / 错误态」SHALL 统一由 `ui/hint.tsx` 的 `Hint` 渲染，`tone` 限定 `info | success | warning | danger`，形状限定「纯文字」与「带框」两种；无框用于旁注，带框用于需要用户注意的提示。`role` SHALL 由语义决定：成功 / 进行中的状态播报用 `status`，需要立刻注意的错误用 `alert`，普通旁注不加 role。业务组件 SHALL NOT 再自拼「`rounded-md border-warning/40 bg-warning/10`」这类一次性样式，也不得随意在 `status` / `note` / 无 role 之间挑选。
+
+#### Scenario: 同一批处理状态在两处显示
+- **WHEN** 同一批量任务的状态同时出现在队列表与队列面板
+- **THEN** 两处用同一个 `StatusBadge` 与同一张映射表，颜色、图标、文案位置一致
+
+#### Scenario: 错误提示的可达性
+- **WHEN** 渲染一个需要用户立刻处理的错误（如密码错误、保存失败）
+- **THEN** 使用 `<Hint tone="danger">`，其 `role` 为 `alert`；旁注类提示不得用 `alert`
+
+### Requirement: 淡底只用 -muted token
+状态的淡色背景 SHALL 使用对应的 `--*-muted` token（`--success-muted / --warning-muted / --info-muted / --destructive-muted`，由 `color-mix` 与卡片底色混合而来、随主题变化），SHALL NOT 用 `bg-success/5`、`bg-warning/10`、`bg-info/10`、`bg-destructive/5` 这类任意透明度叠色——透明度与卡片底色叠加后，同一语义在不同页面的浓淡不一致，也无法随主题自动调整。同理，带框提示的描边 SHALL 取自 `--*-muted` 或状态色本身的一个固定档，不得出现 `border-*/30|40|50|60` 四种不同浓度混用。
+
+#### Scenario: 同一语义的两种提示
+- **WHEN** 比较书库的「缓存缺失」提示与设置页的「WebDAV 未配置」提示
+- **THEN** 两者同为 warning 语义，淡底与描边的浓淡完全一致
+
+#### Scenario: token 不再无人使用
+- **WHEN** 检查 `index.css` 里定义的状态 token
+- **THEN** `--*-muted` 至少在一个共享组件（`StatusBadge` / `Hint`）里被使用，守卫断言其不是死 token
+
+### Requirement: 元件属性与命名一致
+同类元件的属性名 SHALL 一致：控制可见性的弹层属性一律为 `open` / `onOpenChange`（不得出现 `isOpen` / `visible` / `show` 并存）；色调一律为 `tone`（`variant` 只用于 shadcn 按钮/徽标的形态变体）；尺寸一律为 `size` 且取值来自既有档位表。轻提示 API SHALL 只用一种（`toast.info` 表示中性提示，`toast.success` / `toast.error` 表达结果），不得 `toast.message` 与 `toast.info` 混用。
+
+#### Scenario: 新增一个弹层
+- **WHEN** 开发者新增一个受控弹层
+- **THEN** 属性是 `open` / `onOpenChange`，与既有的 Dialog / Sheet / AlertDialog 一致
+
+### Requirement: 图表与画布的颜色与主题对齐
+图表（cytoscape / 自绘 SVG / 时间线布局）SHALL 从宿主 CSS 变量读色（`--primary`、`--foreground`、`--entity-N`、`--muted-foreground`、`--border`），并在主题切换时重新取色；读取失败的**回退值** SHALL 与当前亮色 token 的实际取值保持一致（不得停留在历史调色板），否则变量读取失败时图表会与正文脱色。回退值集中在一处（`charts/theme.ts` 的 `FALLBACK_LIGHT / FALLBACK_DARK`），并由守卫断言其与 `index.css` 的 token 同源。
+
+#### Scenario: CSS 变量读不到
+- **WHEN** 在无法读取 `getComputedStyle` 的环境（服务端渲染、导出脚本）渲染图表
+- **THEN** 用的是与现行 token 一致的兜底色，画面不出现「正文朱砂、图表旧暖灰」的割裂

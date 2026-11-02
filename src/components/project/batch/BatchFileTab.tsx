@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { ListRow } from '@/components/ui/list-row'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { formatFileSize } from '../../../utils/file'
@@ -124,15 +125,15 @@ export function BatchFileTab({ selection: sel, options, onOptionsChange }: Batch
                         trailing={
                           <>
                             {cached === true && (
-                              <Badge variant="outline" className="text-success border-success/40 shrink-0">
-                                <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                              <StatusBadge tone="success" className="shrink-0">
+                                <CheckCircle className="h-3.5 w-3.5" />
                                 {t('batch.cached')}
-                              </Badge>
+                              </StatusBadge>
                             )}
                             {cached === false && options.skipProcessed && (
-                              <Badge variant="secondary" className="text-warning shrink-0">
+                              <StatusBadge tone="warning" className="shrink-0">
                                 {t('batch.unprocessed')}
-                              </Badge>
+                              </StatusBadge>
                             )}
                           </>
                         }

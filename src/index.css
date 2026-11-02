@@ -55,6 +55,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-muted: var(--destructive-muted);
   --color-success-foreground: var(--success-foreground);
+  --color-primary-muted: var(--primary-muted);
   --color-success-muted: var(--success-muted);
   --color-warning-foreground: var(--warning-foreground);
   --color-warning-muted: var(--warning-muted);
@@ -113,6 +114,7 @@
   --info-foreground: oklch(0.9800 0.0100 255.0);
   --destructive-foreground: oklch(0.9850 0.0080 25.0);
   --danger-foreground: var(--destructive-foreground);
+  --primary-muted: color-mix(in oklab, var(--primary) 14%, var(--card));
   --success-muted: color-mix(in oklab, var(--success) 14%, var(--card));
   --warning-muted: color-mix(in oklab, var(--warning) 14%, var(--card));
   --info-muted: color-mix(in oklab, var(--info) 14%, var(--card));
@@ -202,6 +204,7 @@
      `dark:bg-destructive/60`（更暗的底），那三处继续用 text-white 才对，不要改成这个 token。 */
   --destructive-foreground: oklch(0.1750 0.0080 50.0);
   --danger-foreground: var(--destructive-foreground);
+  --primary-muted: color-mix(in oklab, var(--primary) 18%, var(--card));
   --success-muted: color-mix(in oklab, var(--success) 18%, var(--card));
   --warning-muted: color-mix(in oklab, var(--warning) 18%, var(--card));
   --info-muted: color-mix(in oklab, var(--info) 18%, var(--card));
