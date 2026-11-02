@@ -125,6 +125,14 @@ git push -u origin HEAD
   `epubProcessor.planSpineParts` 是提取（文本）与阅读面板（`getChapterHTML`）**共用**的区间计划，章节上的 `endSpineIndex`/`endAnchor` 就是它的输入——
   两边必须看到同一段内容，别再各写一套。epubjs `render()` 的输出常带重复 `xmlns`，XHTML 解析会整体失败，所以 `parseSectionDoc` 先去重再解析、失败退宽松 HTML 解析，不要再加正则兜底。
   回归测试 `tests/services/epubProcessor.mobiAnchors.test.ts`（jszip 现场造 Mobi 风格书，真 epubjs）与 `sectionSlice.test.ts`
+- **扁平目录还原层级**（`services/epub/tocOutline.ts`）：Mobi 转出的 NCX 几乎全是一层（646 本里 225 本扁平：`第N章` + `N.M` 节 + 无编号小标题混排）。
+  `epubProcessor.restructureFlatToc` 在 epub-toc 模式下先判 `isFlatToc`（全 0 层且 ≥10 条），再 `classifyLabel` 把标题归类（部/章/节/中文序号/裸数字/罗马/括号/多级小数/其他）、`inferOutline` 按种类排序推层级：
+  **有把握（≥2 种编号体系且夹在中间的无编号条目 ≤15%）直接用算法，零成本**；没把握或完全没编号但 ≥30 条（`llmCandidate`）才走 LLM（`tocLevelResolver.ts`，**与处理阶段同一份 AI 配置**，
+  提示词 `prompts/config/toc-levels.md` + `toc-levels.schema.json`，只回 `{levels:[{id,level}]}`；覆盖率 ≥90% 且 ≥2 个一级才采信，结果按「模型 + 提示词 + 标题序列」缓存，无凭据 / 失败静默退回算法或保持扁平）。
+  **LLM 只给层级，不碰 href/锚点**：`buildOutlineTree` 按下标把层级挂回原 `NavItem`，区间仍由 `planSpineParts` 的锚点算，所以内容边界永远确定。
+  「部/篇」(level 0) 是**仅边界节点**（`isBoundaryNode`，不输出成章，但会截断上一章右边界，否则下篇扉页会被并进上一章最后一节）。
+  `epubTocDepth` 在还原后的书里 1 = 章、2 = 节；比目标层级浅的条目不输出但留作区间边界（`emitOnly`），章节 id 按**输出序号**编号。开关 `processingOptions.epubTocRestructure`（默认开，ChapterSection 里的「还原层级」）。
+  测试 `tocOutline.test.ts`、`epubProcessor.flatToc.test.ts`；CLI 没有 epub-toc 模式，所以不镜像该提示词。
 - 模型参数全部由目录元数据（models.dev / OpenRouter / 网关，`meta.*`）自动驱动，规则在 `services/ai/outputBudget.ts` ↔ CLI `src/cli/model_budget.py`，契约 `tests/fixtures/model-budget-cases.json`：
   输出上限 = `meta.output`（不超窗口，超限按报错重发）；输入超预算的章节按段落分段总结再合并；后处理压缩阈值按窗口计算；
   `meta.temperature/reasoning === false` 时不发对应参数，未知照常发、被拒降级重试。不要再写死 token / 字数上限

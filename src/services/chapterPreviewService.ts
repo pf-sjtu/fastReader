@@ -3,6 +3,8 @@ import type { EpubProcessor, ChapterData } from './epubProcessor'
 import type { PdfProcessor } from './pdfProcessor'
 import { detectBookFormat, isPlainTextBook } from '../utils/file'
 import { plainBookTitle, readPlainText, splitPlainText } from './pipeline/plainText'
+import { applyTocRestructure } from './epub/tocLevelResolver'
+import { useConfigStore } from '../stores/configStore'
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
@@ -43,6 +45,11 @@ export class ChapterPreviewService {
         throwIfAborted(signal)
         const epubProcessor = new EpubProcessor()
         processor = epubProcessor
+        applyTocRestructure(
+          epubProcessor,
+          useConfigStore.getState().processingOptions.epubTocRestructure !== false,
+          signal
+        )
         const bookData = await epubProcessor.parseEpub(file)
         throwIfAborted(signal)
         chapters = await epubProcessor.extractChapters(

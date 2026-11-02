@@ -45,6 +45,11 @@ export interface ProcessingOptions {
   chapterDetectionMode: 'normal' | 'smart' | 'epub-toc'
   epubTocDepth: number
   /**
+   * 扁平目录还原（epub-toc 模式）：目录没有嵌套时按标题编号推断「部 / 章 / 节」，
+   * 算法拿不准的书再请当前模型判一次层级（结果缓存）。默认开启；关闭则扁平目录逐条成章。
+   */
+  epubTocRestructure: boolean
+  /**
    * 章节级 AI 并行上限（1–10）。默认 3。
    * 并行执行时结果仍按章节选择顺序提交/呈现。
    */

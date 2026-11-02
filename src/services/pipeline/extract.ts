@@ -17,6 +17,8 @@ export interface ExtractionOptions {
   chapterNamingMode: 'auto' | 'numbered'
   chapterDetectionMode: 'normal' | 'smart' | 'epub-toc'
   epubTocDepth: number
+  /** 扁平目录还原；缺省视为开启（与 processingOptions 默认一致） */
+  epubTocRestructure?: boolean
 }
 
 export function extractionArgs(o: ExtractionOptions) {

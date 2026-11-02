@@ -6,10 +6,10 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { getAskBookPrompt, getQuizPrompt, getRichRepairPrompt, getStudyKitPrompt } from '../src/services/prompts/study'
+import { getAskBookPrompt, getQuizPrompt, getRichRepairPrompt, getStudyKitPrompt, getTocLevelsPrompt } from '../src/services/prompts/study'
 import { getKeyChartsPrompt } from '../src/services/prompts/keyCharts'
 import { getLanguageInstruction } from '../src/services/prompts/utils'
-import { STUDY_KIT_FORMAT, QUIZ_FORMAT, RICH_REPAIR_FORMAT } from '../src/services/ai/structured'
+import { STUDY_KIT_FORMAT, QUIZ_FORMAT, RICH_REPAIR_FORMAT, TOC_LEVELS_FORMAT } from '../src/services/ai/structured'
 
 const DIR = join(__dirname, '..', 'src', 'services', 'prompts')
 const CFG = join(DIR, 'config')
@@ -35,6 +35,7 @@ describe('提示词单一来源', () => {
     expect(getQuizPrompt()).toBe(read('quiz.md'))
     expect(getAskBookPrompt()).toBe(read('ask-book.md'))
     expect(getRichRepairPrompt()).toBe(read('rich-repair.md'))
+    expect(getTocLevelsPrompt()).toBe(read('toc-levels.md'))
     expect(getKeyChartsPrompt()).toBe(read('key-charts.md'))
   })
 
@@ -43,6 +44,7 @@ describe('提示词单一来源', () => {
     expect(getQuizPrompt()).toMatch(/\{\{count\}\}[\s\S]*\{\{chapterSummaries\}\}/)
     expect(getAskBookPrompt()).toMatch(/\{\{question\}\}/)
     expect(getRichRepairPrompt()).toContain('{{blocks}}')
+    expect(getTocLevelsPrompt()).toMatch(/\{\{prior\}\}[\s\S]*\{\{entries\}\}/)
   })
 
   it('语言指令来自共享 JSON（auto 由前端按界面语言决定）', () => {
@@ -54,5 +56,6 @@ describe('提示词单一来源', () => {
     expect(STUDY_KIT_FORMAT).toEqual(JSON.parse(read('study-kit.schema.json')))
     expect(QUIZ_FORMAT).toEqual(JSON.parse(read('quiz.schema.json')))
     expect(RICH_REPAIR_FORMAT).toEqual(JSON.parse(read('rich-repair.schema.json')))
+    expect(TOC_LEVELS_FORMAT).toEqual(JSON.parse(read('toc-levels.schema.json')))
   })
 })

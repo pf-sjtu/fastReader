@@ -104,6 +104,8 @@ export interface ChapterInfo {
   subitems?: NavItem[]
   tocItem: NavItem
   depth: number
+  /** 扁平目录还原出的「部 / 篇」：不单独成章，但它的锚点仍是前一章的右边界 */
+  boundaryOnly?: boolean
 }
 
 /**

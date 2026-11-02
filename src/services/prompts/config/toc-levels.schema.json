@@ -1,0 +1,22 @@
+{
+  "name": "toc_levels",
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["levels"],
+    "properties": {
+      "levels": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "level"],
+          "properties": {
+            "id": { "type": "integer" },
+            "level": { "type": "integer" }
+          }
+        }
+      }
+    }
+  }
+}

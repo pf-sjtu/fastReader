@@ -428,6 +428,8 @@
     "epubTocDepth4": "Level 4 (Detailed Sections)",
     "epubTocDepth5": "Level 5 (Finest Granularity)",
     "epubTocDepthDescription": "Extract only chapters at the selected level, excluding parent or child chapters. For example, selecting Level 2 returns only Level 2 sub-chapters, not Level 1 main chapters",
+    "epubTocRestructure": "Restore flat table-of-contents levels",
+    "epubTocRestructureDescription": "Some books list parts, chapters and sections in one flat TOC. When on, levels are rebuilt from title numbering (Level 1 = chapters, Level 2 = sections); books with irregular numbering ask the current model once (cached; on failure the TOC is left as is)",
     "chapterAndNotificationSettings": "Chapter and Notification Settings",
     "chapterNamingMode": "Chapter Naming Mode",
     "selectChapterNamingMode": "Select Chapter Naming Mode",

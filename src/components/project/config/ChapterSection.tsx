@@ -197,6 +197,18 @@ export function ChapterSection({ processing }: { processing: boolean }) {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">{t('config.epubTocDepthDescription')}</p>
+              <div className="flex items-center space-x-2 pt-2">
+                <Switch
+                  id="epub-toc-restructure"
+                  checked={opts.epubTocRestructure !== false}
+                  onCheckedChange={(v) => s().setEpubTocRestructure(v)}
+                  disabled={processing}
+                />
+                <Label htmlFor="epub-toc-restructure" className="text-sm">
+                  {t('config.epubTocRestructure')}
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground">{t('config.epubTocRestructureDescription')}</p>
             </div>
           )}
         </div>

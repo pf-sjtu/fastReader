@@ -18,6 +18,7 @@ export const defaultProcessingOptions: ProcessingOptions = {
   enableNotification: true,
   chapterDetectionMode: 'normal',
   epubTocDepth: 1,
+  epubTocRestructure: true,
   chapterConcurrency: 3,
 }
 
@@ -44,6 +45,7 @@ export interface ProcessingState extends ProcessingSectionData {
   setEnableNotification: (enabled: boolean) => void
   setChapterDetectionMode: (mode: 'normal' | 'smart' | 'epub-toc') => void
   setEpubTocDepth: (depth: number) => void
+  setEpubTocRestructure: (enabled: boolean) => void
   setChapterConcurrency: (concurrency: number) => void
   setExchangeRateUsdToCny: (rate: number) => void
   setMaxRetries: (maxRetries: number) => void
@@ -119,6 +121,7 @@ export const useProcessingStore = create<ProcessingState>()((set, get) => {
     setEnableNotification: (v) => setOption('enableNotification', v),
     setChapterDetectionMode: (v) => setOption('chapterDetectionMode', v),
     setEpubTocDepth: (v) => setOption('epubTocDepth', v),
+    setEpubTocRestructure: (v) => setOption('epubTocRestructure', v),
     setChapterConcurrency: (v) => setOption('chapterConcurrency', clampConcurrency(v)),
 
     setExchangeRateUsdToCny: (rate) => commit({ exchangeRateUsdToCny: rate }),

@@ -23,6 +23,7 @@ import {
   getStudyKitPrompt,
   getQuizPrompt,
   getRichRepairPrompt,
+  getTocLevelsPrompt,
   getAskBookPrompt,
   getTestConnectionPrompt,
   getChapterMindMapPrompt,
@@ -32,7 +33,7 @@ import {
 import { parseCharts, type BookCharts } from '../../charts'
 import { extractJsonObject } from '../../charts/parseCharts'
 import sharedStrings from '../prompts/config/shared-strings.json'
-import { JSON_MODE, QUIZ_FORMAT, RICH_REPAIR_FORMAT, STUDY_KIT_FORMAT } from './structured'
+import { JSON_MODE, QUIZ_FORMAT, RICH_REPAIR_FORMAT, STUDY_KIT_FORMAT, TOC_LEVELS_FORMAT } from './structured'
 import { parseQuiz, parseStudyKit, type Quiz, type StudyChapter, type StudyKit } from '../../study/schema'
 import { getLanguageInstruction } from '../prompts/utils'
 import { createAIProvider } from './factory'
@@ -49,6 +50,7 @@ import {
   studyKitVars,
   quizVars,
   richRepairVars,
+  tocLevelsVars,
   askVars,
   overallVars,
   groupChaptersByChars,
@@ -546,6 +548,32 @@ export class AIService {
       return (Array.isArray(fixes) ? fixes : [])
         .filter((f) => Number.isInteger(f?.id))
         .map((f) => ({ id: f.id as number, code: typeof f.code === 'string' ? f.code : null }))
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * 扁平目录的层级判定：一批目录条目一次调用，只回传 {id, level}；解析不出来返回空数组（调用方当作放弃，保持扁平）。
+   * 与处理阶段共用同一份服务商配置，不另设模型。
+   */
+  async refineTocLevels(
+    entries: { id: number; label: string }[],
+    prior: { id: number; label: string; level: number }[],
+    opts?: AICallOptions
+  ): Promise<{ id: number; level: number }[]> {
+    // 目录标题是原文，不随「输出语言」翻译；输出是纯 JSON，不需要语言指令
+    const response = await this.generateContent(renderPrompt(getTocLevelsPrompt(), tocLevelsVars(entries, prior)), undefined, {
+      ...opts,
+      format: TOC_LEVELS_FORMAT,
+    })
+    const json = extractJsonObject(response)
+    if (!json) return []
+    try {
+      const levels = (JSON.parse(json) as { levels?: { id?: unknown; level?: unknown }[] }).levels
+      return (Array.isArray(levels) ? levels : [])
+        .filter((l) => Number.isInteger(l?.id) && Number.isInteger(l?.level))
+        .map((l) => ({ id: l.id as number, level: l.level as number }))
     } catch {
       return []
     }

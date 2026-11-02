@@ -58,6 +58,7 @@ export interface ConfigState {
   setEnableNotification: (enabled: boolean) => void
   setChapterDetectionMode: (mode: ProcessingOptions['chapterDetectionMode']) => void
   setEpubTocDepth: (depth: number) => void
+  setEpubTocRestructure: (enabled: boolean) => void
   setChapterConcurrency: (concurrency: number) => void
   setExchangeRateUsdToCny: (rate: number) => void
   updateProcessingOptions: (options: Partial<ProcessingOptions>) => void
@@ -162,6 +163,7 @@ export const useConfigStore = create<ConfigState>()((_set, get) => ({
   setEnableNotification: (v) => useProcessingStore.getState().setEnableNotification(v),
   setChapterDetectionMode: (v) => useProcessingStore.getState().setChapterDetectionMode(v),
   setEpubTocDepth: (v) => useProcessingStore.getState().setEpubTocDepth(v),
+  setEpubTocRestructure: (v) => useProcessingStore.getState().setEpubTocRestructure(v),
   setChapterConcurrency: (v) => useProcessingStore.getState().setChapterConcurrency(v),
   setExchangeRateUsdToCny: (rate) => useProcessingStore.getState().setExchangeRateUsdToCny(rate),
   updateProcessingOptions: (options) => useProcessingStore.getState().updateProcessingOptions(options),

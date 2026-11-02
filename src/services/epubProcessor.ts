@@ -20,10 +20,23 @@ import {
   fragmentToHtml,
   isNavigationLike,
 } from './epub/sectionSlice'
+import { buildOutlineTree, inferOutline, isBoundaryNode, isFlatToc } from './epub/tocOutline'
 import type { ChapterData, BookData, ChapterInfo, ChapterNamingMode, ChapterDetectionMode } from './epub/types'
 import { ConcurrencyLimiter } from '../utils/async'
 
 export type { ChapterData, BookData }
+
+/**
+ * 扁平目录还原（仅 epub-toc 模式）。enabled 时：目录无任何嵌套且条目 ≥ 10，就按标题编号推断「部 / 章 / 节」层级；
+ * 算法拿不准时才调 resolveLevels（LLM，由调用方注入，返回各条目层级或 null=放弃）。
+ */
+export interface TocRestructureOptions {
+  enabled: boolean
+  resolveLevels?: (labels: string[], signal?: AbortSignal) => Promise<number[] | null>
+  signal?: AbortSignal
+}
+
+const isAbortLike = (e: unknown): boolean => (e as { name?: string } | null)?.name === 'AbortError'
 
 /** 一章在 spine 上的一段：起止锚点只在起始文件上有意义 */
 interface SpinePart {
@@ -41,6 +54,33 @@ export class EpubProcessor {
    * 一个大文件里常有几十章，不缓存就会被 render + 解析几十遍；结束后整体丢弃以免占内存。
    */
   private docCache = new WeakMap<Book, Map<number, Promise<Document | null>>>()
+  private tocRestructure: TocRestructureOptions = { enabled: true }
+
+  /** 配置扁平目录还原（默认开启、纯算法；注入 resolveLevels 后算法拿不准的书会请 LLM 判一次层级） */
+  configureTocRestructure(options: TocRestructureOptions): void {
+    this.tocRestructure = options
+  }
+
+  /** 扁平目录 → 带层级的目录树；不是扁平 / 编号信息不足 / 校验不通过时原样返回 */
+  private async restructureFlatToc(toc: NavItem[]): Promise<NavItem[]> {
+    const opts = this.tocRestructure
+    if (!opts.enabled || !isFlatToc(toc)) return toc
+    const labels = toc.map((t) => (t.label ?? '').trim())
+    const inferred = inferOutline(labels)
+
+    let levels: number[] | null = null
+    if (inferred.llmCandidate && opts.resolveLevels) {
+      try {
+        levels = await opts.resolveLevels(labels, opts.signal)
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e
+        console.warn('[EpubProcessor] LLM 目录层级判定失败，退回算法结果:', e)
+      }
+    }
+    if (!levels && inferred.levels && (inferred.confident || inferred.applyWithoutLlm)) levels = inferred.levels
+    if (!levels) return toc
+    return buildOutlineTree(toc, levels) ?? toc
+  }
 
   /** 释放本实例打开的全部 EPUB（幂等） */
   destroy(): void {
@@ -130,6 +170,8 @@ export class EpubProcessor {
 
       try {
         let chapterInfos: ChapterInfo[] = []
+        /** 哪些目录项真正输出成章（其余只参与区间计算）；非 epub-toc 模式全部输出 */
+        let emitOnly: (info: ChapterInfo) => boolean = () => true
 
         // 确保 navigation 已加载（部分 epubjs 版本 ready 后 navigation 仍需 await）
         const navigation =
@@ -141,18 +183,23 @@ export class EpubProcessor {
 
         if (chapterDetectionMode === 'epub-toc') {
           const estimatedTotal = Math.max(toc.length, spineItems.length)
+          // 扁平目录先还原层级（部 / 章 / 节），层级选项才有意义
+          const tocTree = await this.restructureFlatToc(toc)
           // 收集所有层级的章节信息
           chapterInfos = await this.extractChaptersFromToc(
-            book, toc, 0, epubTocDepth, chapterNamingMode, estimatedTotal, true
+            book, tocTree, 0, epubTocDepth, chapterNamingMode, estimatedTotal, true
           )
 
-          // 精确层级过滤：仅保留目标层级的章节
+          // 精确层级：只输出目标层级的章节；比它更浅的条目（上级章、「部 / 篇」）不输出，但仍留在列表里当区间边界，
+          // 否则一章里最后一节会一路读到下一章 / 结语 / 后记（深层目录同理）
           const targetDepth = Math.max(0, epubTocDepth - 1)
-          const filteredChapterInfos = chapterInfos.filter(info => info.depth === targetDepth)
-
-          // 如果目标层级有章节则使用，否则保留全部（兜底）
-          if (filteredChapterInfos.length > 0) {
-            chapterInfos = filteredChapterInfos
+          const hasTarget = chapterInfos.some(info => info.depth === targetDepth && !info.boundaryOnly)
+          if (hasTarget) {
+            chapterInfos = chapterInfos.filter(info => info.depth <= targetDepth || info.boundaryOnly)
+            emitOnly = (info) => info.depth === targetDepth && !info.boundaryOnly
+          } else {
+            // 目标层级没有章节：保留全部（兜底）
+            emitOnly = (info) => !info.boundaryOnly
           }
 
           if (chapterInfos.length === 0) {
@@ -187,8 +234,13 @@ export class EpubProcessor {
               ? this.computeEndAnchors(chapterInfos)
               : null
 
+          // 章节 id 按「输出序号」编号，不随边界条目漂移
+          let emitted = 0
+          const ordinals = chapterInfos.map((info) => (emitOnly(info) ? ++emitted : 0))
+
           const chapterPromises = chapterInfos.map((chapterInfo, index) => {
             return limiter.execute(async () => {
+              if (!emitOnly(chapterInfo)) return null
               if (skipNonEssentialChapters && this.shouldSkipChapter(chapterInfo.title)) {
                 return null
               }
@@ -217,7 +269,7 @@ export class EpubProcessor {
 
               if ((chapterContent || '').trim().length > 100) {
                 return {
-                  id: `chapter-${index + 1}`,
+                  id: `chapter-${ordinals[index]}`,
                   title: chapterInfo.title,
                   content: chapterContent,
                   href: chapterInfo.href,
@@ -241,6 +293,8 @@ export class EpubProcessor {
           })
         }
       } catch (tocError) {
+        // 用户取消不是「目录坏了」：必须原样向上抛，否则会悄悄得到 0 章
+        if (isAbortLike(tocError)) throw tocError
         console.warn('无法获取EPUB目录:', tocError)
       }
 
@@ -253,6 +307,7 @@ export class EpubProcessor {
 
       return finalChapters
     } catch (error) {
+      if (isAbortLike(error)) throw error
       console.error('提取章节失败:', error)
       throw new Error(`提取章节失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
@@ -312,7 +367,8 @@ export class EpubProcessor {
             href: href,
             subitems: item.subitems,
             tocItem: item,
-            depth: currentDepth
+            depth: currentDepth,
+            ...(isBoundaryNode(item) ? { boundaryOnly: true } : {})
           }
           chapterInfos.push(chapterInfo)
           currentIndex++

@@ -413,6 +413,8 @@
     "epubTocDepth4": "第4级目录（详细小节）",
     "epubTocDepth5": "第5级目录（最细粒度）",
     "epubTocDepthDescription": "仅提取所选层级的章节，不包含父级或子级章节。例如选择第2级时，只返回第2级子章节，不返回第1级主章节",
+    "epubTocRestructure": "还原扁平目录的层级",
+    "epubTocRestructureDescription": "有些电子书的目录没有嵌套（部、章、节混成一长串）。开启后按标题编号还原为「部 / 章 / 节」，第1级即章，第2级即节；编号不规整的书会请当前模型判一次层级（结果会缓存，失败则保持原样）",
     "chapterAndNotificationSettings": "章节和通知设置",
     "chapterNamingMode": "章节命名模式",
     "selectChapterNamingMode": "选择章节命名模式",

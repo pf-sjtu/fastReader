@@ -13,6 +13,7 @@ import type { StructuredFormat } from '@/types/ai'
 import richRepairFormat from '../prompts/config/rich-repair.schema.json'
 import studyKitFormat from '../prompts/config/study-kit.schema.json'
 import quizFormat from '../prompts/config/quiz.schema.json'
+import tocLevelsFormat from '../prompts/config/toc-levels.schema.json'
 
 /** 只要求「输出合法 JSON」而不给 schema：结构复杂 / 递归 / 字段大量可选的输出（关键图表、思维导图） */
 export const JSON_MODE: StructuredFormat = { name: 'json' }
@@ -23,6 +24,9 @@ export const QUIZ_FORMAT: StructuredFormat = quizFormat
 
 /** 富内容块修复：只回传「块编号 + 修好的源码（或 null 放弃）」，不回传正文。schema 与 CLI 共用 config/rich-repair.schema.json */
 export const RICH_REPAIR_FORMAT: StructuredFormat = richRepairFormat
+
+/** 扁平目录的层级判定：只回传「条目编号 + 层级」。schema 与提示词同在 config/ 下，供前端与脚本共用 */
+export const TOC_LEVELS_FORMAT: StructuredFormat = tocLevelsFormat
 
 /** 上游是否因为「不认识 / 不支持结构化输出参数」而拒绝（400/422 且正文提到相关字段） */
 export function isStructuredFormatError(status: number | undefined, body: string | undefined): boolean {

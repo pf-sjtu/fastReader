@@ -169,6 +169,14 @@ export function groupChaptersByChars<T extends { summary?: string }>(chapters: r
   return groups
 }
 
+/** 目录层级判定：{{entries}} 待判条目，{{prior}} 上一批末尾已判好的条目 */
+export function tocLevelsVars(entries: unknown[], prior: unknown[]): PromptVar[] {
+  return [
+    { name: 'entries', label: '待判断的目录条目', value: JSON.stringify(entries) },
+    { name: 'prior', label: '已判好的上文', value: JSON.stringify(prior) },
+  ]
+}
+
 /** 富内容块修复：{{blocks}} */
 export function richRepairVars(blocks: unknown[]): PromptVar[] {
   return [{ name: 'blocks', label: '待修复的块', value: JSON.stringify(blocks) }]

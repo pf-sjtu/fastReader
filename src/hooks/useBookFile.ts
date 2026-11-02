@@ -15,6 +15,7 @@ import { isPartialCache } from '@/utils/chapterResults'
 import type { GenerationCounter } from '@/utils/runGuard'
 import { logger } from '@/lib/logger'
 import { fileFingerprint, canHash } from '@/services/pipeline/cacheKeys'
+import { applyTocRestructure } from '@/services/epub/tocLevelResolver'
 import {
   createProcessor,
   extractionArgs,
@@ -121,6 +122,7 @@ export function useBookFile(generationRef: MutableRefObject<GenerationCounter>) 
         let result: AnyBookData & { chapters: ChapterData[] }
         if (format) {
           processor = await createProcessor(format)
+          applyTocRestructure(processor, processingOptions.epubTocRestructure !== false)
           result = await processor.extractBookData(targetFile, ...extractionArgs(processingOptions))
         } else {
           // .txt / .md：没有解析器，正文就是文件本身（批量处理一直是这么做的）

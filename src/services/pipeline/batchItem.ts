@@ -16,6 +16,7 @@ import { canHash, fileFingerprint } from './cacheKeys'
 import { decodePlainText, plainBookTitle, splitPlainText } from './plainText'
 import { createLocalPipelineCache, uploadMindMapBundle, type LocalCacheContext } from './persistence'
 import { createProcessor, extractionArgs, type ExtractionOptions } from './extract'
+import { applyTocRestructure } from '@/services/epub/tocLevelResolver'
 import { buildMetaSidecar } from './metaSidecar'
 
 /** 进度文案（i18n，缺键时回退中文默认值） */
@@ -101,6 +102,7 @@ export async function extractChaptersFromData(
   try {
     if (format === 'epub') {
       const epub = processor as EpubProcessor
+      applyTocRestructure(epub, options.epubTocRestructure !== false)
       return (await epub.extractBookData(file, ...args)).chapters
     }
     const pdf = processor as PdfProcessor
