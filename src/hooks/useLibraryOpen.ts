@@ -16,9 +16,14 @@ interface Params {
   file: File | null
   cloudCacheContent: string | null | undefined
   isCheckingCloudCache: boolean
-  handleWebDAVFileSelect: (file: File) => Promise<void>
+  handleWebDAVFileSelect: (file: File, opts?: { deferExtract?: boolean }) => Promise<void>
   /** 加载云端缓存并进入阅读工作台 */
   handleLoadFromCloudCache: () => void
+  /**
+   * 已精读的书：先从云端缓存直接进结果（不下载 epub），随后在后台把 epub 补上。
+   * 返回 false 表示「没有可用缓存」，调用方应走常规流程（下载 + 处理）。
+   */
+  openCachedResults?: (fileName: string, opts: { sourcePath: string; title?: string }) => Promise<boolean>
 }
 
 /**
@@ -33,6 +38,7 @@ export function useLibraryOpen({
   isCheckingCloudCache,
   handleWebDAVFileSelect,
   handleLoadFromCloudCache,
+  openCachedResults,
 }: Params) {
   const { t } = useTranslation()
   const markOpened = useLibraryStore((s) => s.markOpened)
@@ -76,6 +82,20 @@ export function useLibraryOpen({
         // 真实条目来自 WebDAV 索引，没有云端 id：沿用书架条目上叠加的 catalogId
         const entry: LibraryEntry = { ...resolved.entry, catalogId: shelfEntry.catalogId ?? resolved.entry.catalogId }
         const name = baseName(entry.path)
+
+        // 已精读的书（云端有缓存）：**先直接进结果**，epub 在后台补上。
+        // 用户点开就能看到总结与图表，不必等大文件下载完；「原文」页签随后自己可用。
+        if (entry.status === 'done' && openCachedResults) {
+          const cached = await openCachedResults(name, { sourcePath: entry.path, title: entry.title })
+          if (cached) {
+            void markOpened(entry)
+            progress.clear()
+            toast.dismiss(toastId)
+            setOpeningPath(null)
+            return
+          }
+          // 缓存不可用 → 落回常规流程（下载 + 处理）
+        }
         // 下载：可取消；久无数据提示「连接较慢」；总量优先用服务器的 Content-Length，没有就用书库索引里记的大小
         const ac = new AbortController()
         let lastDataAt = Date.now()
@@ -134,7 +154,7 @@ export function useLibraryOpen({
         setOpeningPath(null)
       }
     },
-    [handleWebDAVFileSelect, markOpened, contributeOpened, resolveEntry, askRemove, t]
+    [handleWebDAVFileSelect, markOpened, contributeOpened, resolveEntry, askRemove, t, openCachedResults]
   )
 
   useEffect(() => {

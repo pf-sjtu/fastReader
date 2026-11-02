@@ -1,18 +1,14 @@
 import { memo, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Download, BookOpen, Network } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { FontSizeControl } from '@/components/FontSizeControl'
 import { MarkdownCard, type RemarkPlugins } from '@/components/MarkdownCard'
 import { MindMapCard } from '@/components/MindMapCard'
 import { ChapterQualityNote } from './ChapterQualityNote'
+import { ResultActions, ResultTitle } from './ResultTopBar'
 import { StepRetryNote } from './StepRetryNote'
 import type { BookStepKind } from '@/hooks/useBookSteps'
-import { UploadToWebDAVButton } from '@/components/UploadToWebDAVButton'
-import { ExportPackButton } from '@/components/study/ExportPackButton'
 import { ChartsPanel } from '@/charts'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { isUsableText } from '@/utils/resultStatus'
@@ -98,47 +94,30 @@ export const ResultsSection = memo(function ResultsSection({
 
   return (
     <Card className="min-w-0 gap-2 sm:gap-4 py-2 sm:py-4">
-      <CardHeader className="overflow-hidden px-2 sm:px-4">
-        <CardTitle className="min-w-0">
-          <div className="t-title truncate">
-            {processingMode === 'summary' ? (
-              <><BookOpen className="h-5 w-5 inline-block mr-2" />{t('results.summaryTitle', { title: bookSummary?.title })}</>
-            ) : processingMode === 'mindmap' ? (
-              <><Network className="h-5 w-5 inline-block mr-2" />{t('results.chapterMindMapTitle', { title: bookMindMap?.title })}</>
-            ) : (
-              <><Network className="h-5 w-5 inline-block mr-2" />{t('results.wholeMindMapTitle', { title: bookMindMap?.title })}</>
-            )}
+      {/* 经典布局（导图模式）：书名与操作仍留在卡片头部。
+          工作台的 body 变体由顶栏（ResultTitle）与正文列顶部（ResultActions）承担，这里不重复 */}
+      {!isBody && (
+        <CardHeader className="overflow-hidden px-2 sm:px-4">
+          <CardTitle className="min-w-0">
+            <ResultTitle
+              processingMode={processingMode}
+              bookSummary={bookSummary}
+              bookMindMap={bookMindMap}
+              totalChapters={totalChapters}
+              className="truncate"
+            />
+          </CardTitle>
+          <div className="-mt-1 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <ResultActions
+              processingMode={processingMode}
+              bookSummary={bookSummary}
+              file={file}
+              onDownloadAllMarkdown={onDownloadAllMarkdown}
+              className="shrink-0"
+            />
           </div>
-        </CardTitle>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between -mt-1 min-w-0">
-          <CardDescription className="truncate min-w-0">
-            {t('results.author', { author: bookSummary?.author || bookMindMap?.author })} | {t('results.chapterCount', { count: bookSummary?.chapters.length || bookMindMap?.chapters.length || totalChapters })}
-          </CardDescription>
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            <FontSizeControl variant="compact" showLabel={false} />
-            {processingMode === 'summary' && bookSummary && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onDownloadAllMarkdown}
-                  className="flex items-center gap-1.5 min-h-8 text-xs"
-                  title={t('download.downloadAllMarkdown')}
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  MD
-                </Button>
-                <ExportPackButton bookSummary={bookSummary} />
-                <UploadToWebDAVButton
-                  bookSummary={bookSummary}
-                  file={file}
-                  chapterNamingMode="numbered"
-                />
-              </>
-            )}
-          </div>
-        </div>
-      </CardHeader>
+        </CardHeader>
+      )}
       {/* 内容区移动端几乎贴边；真正内边距留给章节卡本身 */}
       <CardContent className="min-w-0 px-1 sm:px-4">
         {processingMode === 'summary' && bookSummary ? (

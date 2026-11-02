@@ -294,6 +294,17 @@ export function lastReadAt(e: LibraryEntry): number {
 }
 
 /**
+ * 按文件名在索引里找 WebDAV 路径：处理历史只记了文件名，要补 epub 得先找回它在哪。
+ * 同名文件取第一个（同名不同目录的 epub 内容一致，取哪个都能看原文）。
+ */
+export function findPathByFileName(index: LibraryIndex, fileName: string): string | null {
+  for (const path of Object.keys(index.entries)) {
+    if (baseName(path) === fileName) return path
+  }
+  return null
+}
+
+/**
  * "最近阅读"：读过（或打开过）的书，按最后阅读时间降序——**读完的也在**，这是「我最近在读什么」的轨迹，不是待办清单。
  * 没处理过又没有任何进度的书（只是点开过）不算读过。
  */

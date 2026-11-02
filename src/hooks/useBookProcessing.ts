@@ -21,6 +21,7 @@ import {
   type LoadedCloudBook,
 } from '@/services/pipeline/cloudLoad'
 import { clearBookEntries, clearChapterEntries, clearKindEntries } from '@/services/pipeline/persistence'
+import { baseName } from '@/services/library/libraryIndex'
 import { useBookFile } from './useBookFile'
 import { useKeyCharts } from './useKeyCharts'
 import { useBookSteps } from './useBookSteps'
@@ -120,22 +121,43 @@ export function useBookProcessing() {
 
   const { setFile, checkCloudCache, extractChapters } = book
   // 设置文件后检查云缓存并提取章节（有缓存时仍取章，用户可选择直接用缓存）
+  // deferExtract：章节提取放后台 —— 已经精读过的书，云缓存检查完就能先把结果给用户，
+  // epub 的章节解析（大文件最慢的一步）随后再补，「原文」页签晚一点可用但读者不用干等。
   const handleFileSelect = useCallback(
-    async (selectedFile: File) => {
+    async (selectedFile: File, opts?: { deferExtract?: boolean }) => {
       resetState()
       setFile(selectedFile)
       await checkCloudCache(selectedFile.name)
+      if (opts?.deferExtract) {
+        void extractChapters(selectedFile)
+        return
+      }
       await extractChapters(selectedFile)
     },
     [resetState, setFile, checkCloudCache, extractChapters]
   )
 
   const handleWebDAVFileSelect = useCallback(
-    async (selectedFile: File) => {
+    async (selectedFile: File, opts?: { deferExtract?: boolean }) => {
       toast.success(t('webdav.fileSelected', { name: selectedFile.name }))
-      await handleFileSelect(selectedFile)
+      await handleFileSelect(selectedFile, opts)
     },
     [t, handleFileSelect]
+  )
+
+  /**
+   * 后台补 epub：结果已经在屏上时，把源文件接上去（只设置文件 + 提取章节，**不清空**已有结果）。
+   * 用于「最近处理」打开：云端缓存里只有总结，没有原文，读者想看原文时得先把 epub 拉下来。
+   * 失败只记日志：原文是附加能力，不该影响已经显示的结果。
+   */
+  const attachSourceInBackground = useCallback(
+    async (sourceFile: File) => {
+      const generation = generationRef.current.current
+      if (!generationRef.current.isCurrent(generation)) return
+      setFile(sourceFile)
+      await extractChapters(sourceFile)
+    },
+    [setFile, extractChapters, generationRef]
   )
 
   const { setIsWebDAVBrowserOpen } = reader
@@ -200,44 +222,48 @@ export function useBookProcessing() {
     }
   }, [cloud, file, cloudCacheKeyRef, setCloud, applyLoadedBook, t])
 
-  // 从历史记录加载云端缓存
-  const loadFromHistoryRecord = useCallback(
-    async (fileName: string): Promise<boolean> => {
+  /**
+   * 按文件名从云端缓存恢复结果（**不需要本地文件**）。
+   *
+   * 「最近处理」与书库里「已精读」的书都走这里：先进结果，epub 随后在后台补——
+   * 云缓存里只有总结与图表，epub 才是原文，但下载大文件不该挡在结果前面。
+   */
+  const loadCloudCacheByFileName = useCallback(
+    async (
+      fileName: string,
+      opts?: { idPrefix?: 'history' | 'cloud'; fallbackTitle?: string; onError?: (key: string) => void }
+    ): Promise<boolean> => {
       const generation = generationRef.current.current
       const isStale = () => !generationRef.current.isCurrent(generation)
+      const fail = (key: string) => {
+        opts?.onError?.(key)
+        return false
+      }
       try {
         const config = useConfigStore.getState().webdavConfig
-        if (!config.enabled) {
-          toast.error(t('history.webdavRequired'))
-          return false
-        }
+        if (!config.enabled) return fail('history.webdavRequired')
         if (!webdavService.isInitialized()) {
           const init = await webdavService.initialize(config)
           if (isStale()) return false
-          if (!init.success) {
-            toast.error(t('history.webdavInitFailed'))
-            return false
-          }
+          if (!init.success) return fail('history.webdavInitFailed')
         }
         const result = await cloudCacheService.readCache(fileName)
         if (isStale()) return false
-        if (!result.success || !result.content) {
-          toast.error(t('history.cacheNotFound'))
-          return false
-        }
+        if (!result.success || !result.content) return fail('history.cacheNotFound')
         const snapshot: CloudSnapshot = {
           content: result.content,
           metadata: result.metadata,
           chartsJson: result.chartsJson,
           chartsFileFound: result.chartsFileFound,
         }
-        const loaded = await buildCloudBook(snapshot, { fileName, fallbackTitle: stripExt(fileName), idPrefix: 'history' })
+        const loaded = await buildCloudBook(snapshot, {
+          fileName,
+          fallbackTitle: opts?.fallbackTitle ?? stripExt(fileName),
+          idPrefix: opts?.idPrefix ?? 'history',
+        })
         if (isStale()) return false
-        if (!loaded) {
-          toast.error(t('history.cacheParseError'))
-          return false
-        }
-        // 作废旧任务、释放旧书资源后写入结果；历史 fileName 即云端缓存键
+        if (!loaded) return fail('history.cacheParseError')
+        // 作废旧任务、释放旧书资源后写入结果；fileName 即云端缓存键
         resetState()
         cloudCacheKeyRef.current = fileName
         setCloud({
@@ -252,12 +278,58 @@ export function useBookProcessing() {
         return true
       } catch (error) {
         if (isStale()) return false
-        logger.error('从历史加载失败:', error)
-        toast.error(t('history.loadError'))
-        return false
+        logger.error('从云缓存加载失败:', error)
+        return fail('history.loadError')
       }
     },
-    [t, resetState, cloudCacheKeyRef, setCloud, applyLoadedBook]
+    [resetState, cloudCacheKeyRef, setCloud, applyLoadedBook]
+  )
+
+  // 从历史记录加载云端缓存
+  const loadFromHistoryRecord = useCallback(
+    async (fileName: string): Promise<boolean> => {
+      const ok = await loadCloudCacheByFileName(fileName, {
+        onError: (key) => toast.error(t(key)),
+      })
+      return ok
+    },
+    [t, loadCloudCacheByFileName]
+  )
+
+  /**
+   * 「最近处理」打开：先把云端缓存里的结果加载出来（立刻能看），随后**在后台**把 epub 拉下来，
+   * 让「原文」页签可用——用户不用等下载，大文件也不挡路。
+   *
+   * 为什么分两步：云缓存里只有总结与图表，epub 才是原文。先进结果再补原文，
+   * 是「先给能给的，再补缺的」。
+   */
+  const loadFromHistoryWithSource = useCallback(
+    async (
+      fileName: string,
+      opts?: { sourcePath?: string | null; fallbackTitle?: string; onError?: (key: string) => void }
+    ): Promise<boolean> => {
+      const ok = await loadCloudCacheByFileName(fileName, {
+        idPrefix: 'history',
+        fallbackTitle: opts?.fallbackTitle,
+        onError: opts?.onError ?? ((key) => toast.error(t(key))),
+      })
+      if (!ok) return false
+      // 后台补 epub：失败不影响已经显示的结果
+      const path = opts?.sourcePath
+      if (!path) return true
+      void (async () => {
+        try {
+          const name = baseName(path)
+          const r = await webdavService.downloadFileAsFile(path, name)
+          if (!r.success || !r.data) return
+          await attachSourceInBackground(r.data)
+        } catch (e) {
+          logger.warn('后台补原文失败:', e)
+        }
+      })()
+      return true
+    },
+    [t, loadCloudCacheByFileName, attachSourceInBackground]
   )
 
   const cacheFileNames = useCallback(
@@ -386,6 +458,9 @@ export function useBookProcessing() {
     handleChapterSummaryNavigation: reader.handleChapterSummaryNavigation,
     handleChapterNavigation: reader.handleChapterNavigation,
     loadFromHistoryRecord,
+    loadFromHistoryWithSource,
+    loadCloudCacheByFileName,
+    attachSourceInBackground,
 
     // 设置器
     setCustomPrompt,

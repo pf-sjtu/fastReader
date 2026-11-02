@@ -150,61 +150,81 @@ export const MarkdownCard = memo(function MarkdownCard({
       id={`chapter-summary-${id}`}
       className={cn('min-w-0 gap-0 overflow-hidden py-0 shadow-none', actualIsCollapsed && 'hover:bg-accent/30', className)}
     >
-      <button
-        type="button"
-        onClick={handleToggleCollapse}
-        aria-expanded={!actualIsCollapsed}
-        aria-label={`${toggleLabel}：${title}`}
-        title={toggleLabel}
-        className="flex w-full items-start gap-3 px-3 py-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:px-4"
-      >
-        {showIndex && <span className="mt-[0.3em] w-5 shrink-0 text-xs tabular-nums text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>}
-        <span className="t-title min-w-0 flex-1">{title}</span>
-        <ChevronDown className={cn('mt-[0.3em] size-4 shrink-0 text-muted-foreground transition-transform', !actualIsCollapsed && 'rotate-180')} aria-hidden="true" />
-      </button>
+      {/*
+        头部一行：序号 + 标题 + 右侧工具 + 折叠箭头。
+        工具原来单独占内容区顶部一行（复制 / 阅读原文 / …），把正文往下挤；现在收进标题行右侧，
+        收起状态下也能直接看到有哪些操作。
+        标题与折叠箭头各自是按钮（点击折叠），工具区 stopPropagation，避免点工具时误折叠。
+      */}
+      <div className="flex w-full items-start gap-3 px-3 py-3 sm:px-4">
+        <button
+          type="button"
+          onClick={handleToggleCollapse}
+          aria-expanded={!actualIsCollapsed}
+          aria-label={`${toggleLabel}：${title}`}
+          title={toggleLabel}
+          className="flex min-w-0 flex-1 items-start gap-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          {showIndex && <span className="mt-[0.3em] w-5 shrink-0 text-xs tabular-nums text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>}
+          <span className="t-title min-w-0 flex-1">{title}</span>
+        </button>
+        {hasToolbar && (
+          <div
+            className="flex shrink-0 items-center gap-0.5 text-muted-foreground"
+            role="toolbar"
+            aria-label={title}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {showCopyButton && (
+              <Button variant="ghost" size="icon-sm" onClick={copy} disabled={!markdownContent} title={t('common.copyChapterSummary')} aria-label={t('common.copy')}>
+                <Copy className="size-4" />
+              </Button>
+            )}
+            {canRead && (
+              <Button variant="ghost" size="icon-sm" onClick={() => onReadChapter!(id)} title={t('common.readChapter')} aria-label={t('common.readChapter')}>
+                <BookOpen className="size-4" />
+              </Button>
+            )}
+            {hasMenu && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" title={t('common.moreActions')} aria-label={t('common.moreActions')}>
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {showViewContent && (
+                    <DropdownMenuItem onSelect={() => setViewOpen(true)}>
+                      <Eye className="size-4" />
+                      {t('viewContent.originalText')}
+                    </DropdownMenuItem>
+                  )}
+                  {showViewContent && canClear && <DropdownMenuSeparator />}
+                  {canClear && (
+                    <DropdownMenuItem variant="destructive" onSelect={() => onClearCache!(id)}>
+                      <Trash2 className="size-4" />
+                      {t('common.clearCache')}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={handleToggleCollapse}
+          aria-expanded={!actualIsCollapsed}
+          aria-label={`${toggleLabel}：${title}`}
+          title={toggleLabel}
+          className="mt-[0.3em] shrink-0 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform', !actualIsCollapsed && 'rotate-180')} aria-hidden="true" />
+        </button>
+      </div>
 
       {!actualIsCollapsed && (
         <CardContent className="min-w-0 px-3 pb-4 pt-0 sm:px-4">
-          {hasToolbar && (
-            <div className="-ml-2 mb-2 flex flex-wrap items-center gap-0.5 text-muted-foreground" role="toolbar" aria-label={title}>
-              {showCopyButton && (
-                <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-xs" onClick={copy} disabled={!markdownContent} title={t('common.copyChapterSummary')}>
-                  <Copy className="size-3.5" />
-                  {t('common.copy')}
-                </Button>
-              )}
-              {canRead && (
-                <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-xs" onClick={() => onReadChapter!(id)} title={t('common.readChapter')}>
-                  <BookOpen className="size-3.5" />
-                  {t('common.readChapter')}
-                </Button>
-              )}
-              {hasMenu && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon-sm" title={t('common.moreActions')} aria-label={t('common.moreActions')}>
-                      <MoreHorizontal className="size-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    {showViewContent && (
-                      <DropdownMenuItem onSelect={() => setViewOpen(true)}>
-                        <Eye className="size-4" />
-                        {t('viewContent.originalText')}
-                      </DropdownMenuItem>
-                    )}
-                    {showViewContent && canClear && <DropdownMenuSeparator />}
-                    {canClear && (
-                      <DropdownMenuItem variant="destructive" onSelect={() => onClearCache!(id)}>
-                        <Trash2 className="size-4" />
-                        {t('common.clearCache')}
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-          )}
           {headerExtra}
           <div className="markdown-card-content prose prose-sm max-w-none overflow-x-auto">
             {/*

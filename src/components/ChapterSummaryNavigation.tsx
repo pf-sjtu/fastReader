@@ -106,13 +106,12 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
   return (
     <div
       className={cn(
-        'flex flex-col bg-card overflow-hidden',
-        isSheet
-          ? 'w-full h-full border-0 rounded-none'
-          : 'w-52 sticky top-4 border rounded-lg',
+        'flex flex-col overflow-hidden bg-card',
+        // 侧栏（工作台）：撑满三栏里的目录列高度，底边与正文列对齐。
+        // 此前写死 w-52 + maxHeight: calc(100vh - 8rem)，底边总比正文列短一截（截图里那条空白）。
+        isSheet ? 'h-full w-full border-0 rounded-none' : 'h-full min-h-0 border rounded-lg',
         className
       )}
-      style={isSheet ? undefined : { maxHeight: 'calc(100vh - 8rem)' }}
     >
       {/* 进度头部：处理中=处理进度，完成后=阅读进度 */}
       {/* 抽屉里右上角有 Sheet 自带的关闭按钮（绝对定位），头部右侧要让出位置，否则会压在 1/26 上 */}

@@ -42,6 +42,7 @@ import { ResizeHandle } from './ResizeHandle'
 import { NavRail } from './NavRail'
 import { AskPanel } from '@/components/study/AskPanel'
 import { DepthSwitch } from '@/components/study/DepthSwitch'
+import { ResultActions } from '@/components/sections/ResultTopBar'
 import { QuizPanel } from '@/components/study/QuizPanel'
 import { StudyKitPanel } from '@/components/study/StudyKitPanel'
 import { applyDepth } from '@/study/depth'
@@ -390,7 +391,18 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
 
   const body = (
     <>
-      {kit && <DepthSwitch chapters={chapters} className="mb-2" />}
+      {/* 顶部一行：左边「全文 / 要点 / 一句话」，右边是字号 / MD / 学习包 / 上传云端。
+          原来这些挤在结果卡头部，正文列一窄就被截断（书名、作者都显示不全） */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+        {kit && <DepthSwitch chapters={chapters} />}
+        <ResultActions
+          processingMode="summary"
+          bookSummary={bookSummary}
+          file={file}
+          onDownloadAllMarkdown={onDownloadAllMarkdown}
+          className="ml-auto"
+        />
+      </div>
     <Suspense
       fallback={<div className="py-12 text-center text-muted-foreground">{t('progress.loading')}</div>}
     >
@@ -440,7 +452,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       currentViewingChapter={currentViewingChapter}
       variant={variant}
       headerAction={headerAction}
-      className={variant === 'sidebar' ? 'static h-full' : undefined}
+      className={variant === 'sidebar' ? 'min-h-0 flex-1' : undefined}
     />
   )
 

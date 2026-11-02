@@ -109,6 +109,8 @@ const S1_KEYS = [
   'regenerateKeyCharts', 'retryBookStep', 'cancelKeyCharts', 'clearBookCache', 'increasePreviewFontSize', 'decreasePreviewFontSize',
   'togglePreviewFullscreen', 'loadFromCloudCache', 'handleWebDAVFileSelect', 'openWebDAVBrowser',
   'handleChapterSummaryNavigation', 'handleChapterNavigation', 'loadFromHistoryRecord',
+  // 本轮新增：按文件名从云缓存恢复结果 / 后台补 epub（先进结果、原文随后可用）
+  'loadCloudCacheByFileName', 'loadFromHistoryWithSource', 'attachSourceInBackground',
   'setCustomPrompt', 'setSelectedChapters', 'setIsWebDAVBrowserOpen', 'setBookSummary',
   'setBookMindMap', 'setCurrentViewingChapterSummary', 'fullBookData',
 ]

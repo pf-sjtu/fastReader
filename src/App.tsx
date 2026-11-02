@@ -11,6 +11,9 @@ import { scrollToTop } from '@/utils/index'
 import { useConfigStore } from '@/stores/configStore'
 import { useBookProcessing } from '@/hooks/useBookProcessing'
 import { useLibraryOpen } from '@/hooks/useLibraryOpen'
+import { findPathByFileName, baseName } from '@/services/library/libraryIndex'
+import { webdavService } from '@/services/webdavService'
+import { useLibraryStore } from '@/services/library/libraryStore'
 import { useAppExports } from '@/hooks/useAppExports'
 import { useBackToTop, useReadingFontAttr, useWebDAVAutoConnect } from '@/hooks/useAppShell'
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -23,6 +26,7 @@ import { UnifiedStatusBar } from '@/components/UnifiedStatusBar'
 import { ReaderWorkspace } from '@/components/workspace/ReaderWorkspace'
 import { PreviewPanel } from '@/components/sections/PreviewPanel'
 import { AppHeader } from '@/components/app/AppHeader'
+import { ResultTitle } from '@/components/sections/ResultTopBar'
 import { ConfigStep } from '@/components/app/ConfigStep'
 import { ClassicResults } from '@/components/app/ClassicResults'
 import { MobileNavSheet, MobilePreviewSheet } from '@/components/app/MobileSheets'
@@ -88,7 +92,7 @@ function App() {
   const { downloadAllMarkdown, downloadMindMap } = useAppExports(bookSummary, file?.name)
 
   // 开始处理并切换到结果页
-  const { processBook, cancelProcessing, restartProcessing, loadFromCloudCache, loadFromHistoryRecord } = book
+  const { processBook, cancelProcessing, restartProcessing, loadFromCloudCache, loadFromHistoryWithSource } = book
   const handleStartProcessing = useCallback(async () => {
     setCurrentStepIndex(2)
     await processBook()
@@ -128,6 +132,37 @@ function App() {
     })()
   }, [loadFromCloudCache])
 
+  /**
+   * 已精读的书：先从云端缓存直接进结果（不等 epub 下载），epub 在后台补上。
+   * 「最近阅读」点开就能看到总结与图表；「原文」页签稍后自己可用。
+   */
+  const openCachedResults = useCallback(
+    async (fileName: string, opts: { sourcePath: string; title?: string }): Promise<boolean> => {
+      const ok = await book.loadCloudCacheByFileName(fileName, {
+        idPrefix: 'cloud',
+        fallbackTitle: opts.title,
+        onError: () => {
+          /* 没有缓存不是错误：静默落回常规流程，不弹「缓存未找到」 */
+        },
+      })
+      if (!ok) return false
+      setCurrentStepIndex(2)
+      // 后台补 epub：失败不影响已经显示的结果
+      void (async () => {
+        try {
+          const name = baseName(opts.sourcePath)
+          const r = await webdavService.downloadFileAsFile(opts.sourcePath, name)
+          if (!r.success || !r.data) return
+          await book.attachSourceInBackground(r.data)
+        } catch (e) {
+          console.warn('[App] 后台补原文失败:', e)
+        }
+      })()
+      return true
+    },
+    [book]
+  )
+
   // 书库：打开一本书 = 下载 + 走选文件流程；已精读的自动进入工作台
   const { openBook, openingPath, autoOpening } = useLibraryOpen({
     file,
@@ -135,6 +170,7 @@ function App() {
     isCheckingCloudCache: book.isCheckingCloudCache,
     handleWebDAVFileSelect: book.handleWebDAVFileSelect,
     handleLoadFromCloudCache,
+    openCachedResults,
   })
 
   // 打开书就切到「处理」段，免得用户以为还在书库里
@@ -158,14 +194,16 @@ function App() {
     await restartProcessing()
   }, [restartProcessing])
 
-  // 从历史记录加载云端缓存
+  // 从历史记录加载：先进结果（云端缓存），epub 随后在后台补上，「原文」页签晚一点可用
   const handleLoadFromHistory = useCallback(
     async (record: ProcessingHistoryRecord): Promise<boolean> => {
-      const success = await loadFromHistoryRecord(record.fileName)
+      // 历史记录只有文件名，要补 epub 得先在书库索引里找回它在 WebDAV 上的路径
+      const path = findPathByFileName(useLibraryStore.getState().index, record.fileName)
+      const success = await loadFromHistoryWithSource(record.fileName, { sourcePath: path })
       if (success) setCurrentStepIndex(2)
       return success
     },
-    [loadFromHistoryRecord]
+    [loadFromHistoryWithSource]
   )
 
   // 移动端：打开原文预览时自动弹出预览 Sheet
@@ -222,6 +260,18 @@ function App() {
   const desktopPreview = !isMobile && !workspaceMode ? previewPanel('sidebar') : null
   const dockPreview = !isMobile && workspaceMode ? previewPanel('dock') : null
 
+  // 工作台顶栏的书名 + 作者：结果卡头部太窄会截断（「作者: Tom…」），这里给它整行的宽度
+  const workspaceTitle =
+    workspaceMode && bookSummary ? (
+      <ResultTitle
+        processingMode="summary"
+        bookSummary={bookSummary}
+        bookMindMap={null}
+        totalChapters={extractedChapters?.length || 0}
+        className="min-w-0 flex-1"
+      />
+    ) : null
+
   const statusBar = (
     <UnifiedStatusBar
       currentView={currentStepIndex === 1 ? 'config' : 'processing'}
@@ -267,7 +317,14 @@ function App() {
         )}
       >
         {/* 工作台里页头与状态栏合成一行（单层页头）；其余页面状态栏仍在页头下方 */}
-        <AppHeader compact={workspaceMode}>{workspaceMode ? statusBar : null}</AppHeader>
+        <AppHeader compact={workspaceMode}>
+          {workspaceMode ? (
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+              {workspaceTitle}
+              {statusBar}
+            </div>
+          ) : null}
+        </AppHeader>
         {!workspaceMode && statusBar}
 
         {/* 批量处理队列面板 */}
