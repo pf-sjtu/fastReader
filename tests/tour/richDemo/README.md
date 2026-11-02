@@ -14,6 +14,7 @@ node tests/tour/richDemo/serve.mjs tmp/rich-demo-dist 5198
 - html 块：iframe 高度自适应（不停在 120px、无内部滚动条）；按钮点击有反应；安全探针（外链脚本 / 网络 / 读 Cookie / 嵌套页面）全部被拦
 - mermaid：好图渲染为图片（6 种放行图型都验过：graph LR、sequenceDiagram、timeline、mindmap、stateDiagram-v2、quadrantChart）；坏图回退为源码，且 `document.body` 里没有残留 `#dmmd-*` / `#mmd-*` 炸弹图节点
 - **mindmap 必须是多分支**：只有一条链的 mindmap 会被渲染器拉成竖排长条（实测 viewBox 135×429，缩放到容器宽后高 2367px），多分支（3 支 × 2 层）才是径向树。指南因此写明「mindmap 至少 3 个分支，单链改用 genui hierarchy 或 graph TD」
+- **一个 genui 围栏最多 8 个节点**（`GENUI_LIMITS.nodes`，多出来的会被静默丢掉）：演示页曾把九种组件塞进同一个围栏，第 9 个 `quiz` 从未渲染，而验收记录照样写了「九种组件可见」。现在样本在 `sample.ts` 里按上限拆栏，`sample.test.ts` 守卫「每栏 ≤8 节点、九种不多不少、六种图型齐全」；验收时请**实际点一下测验**（判分与解析出现才算过）
 - genui：九种组件（含 hierarchy 缩进树、concept 的定义 / 例 / 反例）的浅色 / 深色主题对比度；测验点选判分
 - 坏 genui / 未闭合块：回退为源码 + 提示，正文不受影响
 - 章末提问区块的样式

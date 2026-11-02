@@ -82,6 +82,8 @@
     { "name": "首行单独写类型名 + 下面接带 type 的 JSON", "code": "compare\n{\"type\":\"compare\",\"columns\":[\"甲\",\"乙\"],\"rows\":[{\"label\":\"维度\",\"cells\":[\"1\",\"2\"]}]}", "ok": true, "types": ["compare"] },
     { "name": "首行单独写类型名 + JSON 里不再写 type（补回去）", "code": "compare\n{\"columns\":[\"甲\",\"乙\"],\"rows\":[{\"label\":\"维度\",\"cells\":[\"1\",\"2\"]}]}", "ok": true, "types": ["compare"] },
     { "name": "首行单独写类型名 + 数组（逐个补 type）", "code": "timeline\n[{\"items\":[{\"time\":\"1990\",\"label\":\"创立\"}]},{\"type\":\"nope\"}]", "ok": true, "types": ["timeline"] },
+    { "name": "首行单独写类型名 + {blocks:[…]} 包装（逐项补）", "code": "compare\n{\"blocks\":[{\"columns\":[\"甲\",\"乙\"],\"rows\":[{\"label\":\"维度\",\"cells\":[\"1\",\"2\"]}]}]}", "ok": true, "types": ["compare"] },
+    { "name": "首行类型名与 JSON 里的 type 不一致 → 以 JSON 的为准", "code": "compare\n{\"type\":\"callout\",\"body\":\"x\"}", "ok": true, "types": ["callout"] },
     { "name": "首行是没见过的词 → 不当类型名，JSON 照样解析不了", "code": "whatever\n{\"columns\":[\"甲\"],\"rows\":[{\"label\":\"维度\",\"cells\":[\"1\"]}]}", "ok": false, "error": "JSON 无法解析" },
     { "name": "type 大小写不敏感", "code": "{\"type\":\"CALLOUT\",\"body\":\"x\"}", "ok": true, "types": ["callout"] },
     { "name": "空串", "code": "", "ok": false, "error": "JSON 无法解析" }

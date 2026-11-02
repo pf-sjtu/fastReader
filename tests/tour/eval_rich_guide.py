@@ -152,6 +152,14 @@ CHAPTERS = [
 ]
 
 # 选型判定：块 → 它能表达的语义标签；章节期望标签命中即算「选型合适」
+# 选型判定：块 → 它能表达的语义标签；章节期望标签命中即算「选型合适」
+#
+# 口径（写在这里免得被当成「全部覆盖」）：
+#   - 只给 flow / compare / concept / hierarchy 四种期望做映射；cards / callout / tabs / quiz 一律算 other，
+#     即「单独只配这些」的章节会被判为不合适——这是有意的（这几个是辅助块，不是本评测要衡量的选型能力）
+#   - 一个章节只要有一个块命中期望就算合适（多配一个别的块不额外扣分）
+#   - 未闭合 / 解析不出类型的块不会贡献标签，因此「读不出来」会体现为选型不合适；
+#     改了解析器后请用 `--rescore` 重新打分，再判断到底是模型选错还是我们没读对
 MERMAID_TAGS = {
     "graph": {"flow", "hierarchy"},
     "flowchart": {"flow", "hierarchy"},
@@ -172,7 +180,7 @@ GENUI_TAGS = {
 
 
 def block_tags(block) -> set:
-    """这个块表达了什么（认不出来的图型算 other，不影响正确性判定）"""
+    """这个块表达了什么（认不出来的图型算 other，不影响正确性判定；口径见 MERMAID_TAGS 上方的注释）"""
     if block.lang == "genui":
         from src.cli.genui_schema import parse_genui  # noqa: PLC0415
 

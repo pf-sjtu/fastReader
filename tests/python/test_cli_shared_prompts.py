@@ -92,3 +92,12 @@ def test_rich_guide_brief_covers_decision_layer_only():
         assert k in brief
     # 自定义提示词里两个占位符都没有时原样返回
     assert t.expand_rich_guide("自定义 {{title}}") == "自定义 {{title}}"
+
+
+def test_rich_guide_brief_falls_back_to_full_without_heading():
+    """分界标题缺失（或就在开头）时退回全文，不给出半截说明"""
+    from src.cli.prompts import rich_guide_brief
+
+    assert rich_guide_brief("没有分界标题的一段说明") == "没有分界标题的一段说明"
+    assert rich_guide_brief("") == ""
+    assert rich_guide_brief("## 各块写法（参考） 开头的文件") == "## 各块写法（参考） 开头的文件"

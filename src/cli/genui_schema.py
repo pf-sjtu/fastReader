@@ -167,11 +167,15 @@ def parse_genui(code: str) -> dict:
         data = _lenient_json(rest)
     except ValueError:
         return {"ok": False, "error": "JSON 无法解析"}
-    # 首行写了类型名、JSON 里没写 type：补回去（与前端一致）
+    # 首行写了类型名、JSON 里没写 type：补回去（数组与 {blocks:[…]} 包装都逐项补；JSON 里已写 type 的以它为准）
     if leading_type:
         def _with_type(v: Any) -> Any:
             o = _obj(v)
-            return v if _text(o.get("type"), 20) else {**o, "type": leading_type}
+            if _text(o.get("type"), 20):
+                return v
+            if isinstance(o.get("blocks"), list):
+                return {**o, "blocks": [_with_type(x) for x in o["blocks"]]}
+            return {**o, "type": leading_type}
 
         data = [_with_type(v) for v in data] if isinstance(data, list) else _with_type(data)
     # 三种写法都认：单个节点 {type:…}、数组 [{…},{…}]、{blocks:[…]}

@@ -3,6 +3,9 @@ import { cn } from '@/lib/utils'
 import type { GenUiNode } from './schema'
 
 /** 所有文字都以 React 文本节点渲染（自动转义）；颜色只用语义 token */
+// 注：「例：」「反例：」这类提示文字是中文硬编码，与 RichBlock.tsx 的回退文案一致——
+// 富块层故意不依赖 i18n：演示页（tests/tour/richDemo）与单测直接挂 ReactMarkdown，没有 i18n provider。
+// 离线学习包那一路不同：文案由 exportPack 从 i18n 传入（study.pack.example|contrast）。
 
 const Title = ({ children }: { children?: string }) => (children ? <div className="t-label mb-2 text-muted-foreground">{children}</div> : null)
 

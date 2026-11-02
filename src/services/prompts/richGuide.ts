@@ -24,12 +24,13 @@ const clean = (text: string): string => text.replace(/^\uFEFF/, '').trim()
 /** 说明全文 */
 export const getRichBlocksGuide = (): string => clean(guide)
 
-/** 只保留决策层（参考层从 REFERENCE_HEADING 起到文末）；文件里没有该标题时退回全文，不会给出半截说明 */
-export function getRichBlocksGuideBrief(): string {
-  const full = getRichBlocksGuide()
+/** 只保留决策层（参考层从 REFERENCE_HEADING 起到文末）；没有分界标题时退回全文，不会给出半截说明 */
+export function briefOf(full: string): string {
   const at = full.indexOf(REFERENCE_HEADING)
   return at > 0 ? full.slice(0, at).trim() : full
 }
+
+export const getRichBlocksGuideBrief = (): string => briefOf(getRichBlocksGuide())
 
 /** 把模板里的两个占位符展开成对应正文；用函数做替换，避免正文里的 `$` 被当成替换模式 */
 export const expandRichGuide = (template: string): string =>

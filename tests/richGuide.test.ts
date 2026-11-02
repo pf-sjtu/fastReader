@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { getRichBlocksGuide, getRichBlocksGuideBrief, expandRichGuide, REFERENCE_HEADING } from '../src/services/prompts/richGuide'
+import { getRichBlocksGuide, getRichBlocksGuideBrief, expandRichGuide, briefOf, REFERENCE_HEADING } from '../src/services/prompts/richGuide'
 import { getFictionChapterSummaryPrompt, getNonFictionChapterSummaryPrompt } from '../src/services/prompts/chapterSummary'
 import { listRichBlocks } from '../src/lib/richBlocks'
 import { parseGenUi } from '../src/components/markdown/genui/schema'
@@ -58,6 +58,12 @@ describe('富内容块能力说明', () => {
     expect(listRichBlocks(brief)).toHaveLength(0)
     expect(brief).not.toContain('```')
     for (const k of ['选型', '什么时候用', '最多 2 个', '不计入字数']) expect(brief).toContain(k)
+  })
+
+  it('分界标题缺失 / 为空时退回全文，不给半截说明', () => {
+    expect(briefOf('没有分界标题的一段说明')).toBe('没有分界标题的一段说明')
+    expect(briefOf('')).toBe('')
+    expect(briefOf(`${REFERENCE_HEADING} 开头的文件`)).toBe(`${REFERENCE_HEADING} 开头的文件`)
   })
 
   it('小说 / 社科章节总结模板都引用占位符，且没有内联副本', () => {

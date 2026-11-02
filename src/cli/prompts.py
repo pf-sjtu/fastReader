@@ -176,6 +176,12 @@ def _json(data) -> str:
     return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
 
 
+def rich_guide_brief(guide: str) -> str:
+    """只保留决策层（参考层从分界标题起到文末）；找不到分界标题就退回全文，不给出半截说明"""
+    at = guide.find(RICH_GUIDE_REFERENCE_HEADING)
+    return guide[:at].strip() if at > 0 else guide
+
+
 class PromptTemplates:
     """Prompt 模板管理器"""
 
@@ -251,8 +257,7 @@ class PromptTemplates:
         if not _RICH_GUIDE_PLACEHOLDER.search(template or "") and not _RICH_GUIDE_BRIEF_PLACEHOLDER.search(template or ""):
             return template
         guide = load_shared_text("rich-blocks-guide.md", self.prompts_dir)
-        at = guide.find(RICH_GUIDE_REFERENCE_HEADING)
-        brief = guide[:at].strip() if at > 0 else guide
+        brief = rich_guide_brief(guide)
         out = _RICH_GUIDE_PLACEHOLDER.sub(lambda _m: guide, template)
         return _RICH_GUIDE_BRIEF_PLACEHOLDER.sub(lambda _m: brief, out)
 

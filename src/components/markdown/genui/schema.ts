@@ -164,11 +164,13 @@ export function parseGenUi(code: string): GenUiResult {
   } catch {
     return { ok: false, error: 'JSON 无法解析' }
   }
-  // 首行写了类型名、JSON 里没写 type：补回去（数组则逐个补）
+  // 首行写了类型名、JSON 里没写 type：补回去（数组与 {blocks:[…]} 包装都逐项补；JSON 里已写 type 的以它为准）
   if (type) {
     const withType = (v: unknown): unknown => {
       const o = obj(v)
-      return text(o.type, 20) ? v : { ...o, type }
+      if (text(o.type, 20)) return v
+      if (Array.isArray(o.blocks)) return { ...o, blocks: o.blocks.map(withType) }
+      return { ...o, type }
     }
     data = Array.isArray(data) ? data.map(withType) : withType(data)
   }
