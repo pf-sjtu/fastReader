@@ -1,6 +1,8 @@
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useIsDarkMode } from '@/components/useTheme'
+import { useFigureTextPx } from '@/components/useFigureType'
 import { Skeleton } from '@/components/ui/skeleton'
+import { figureFit, svgNaturalSize } from '@/lib/figureType'
 import { renderMermaid, svgToDataUri } from '@/lib/mermaidRender'
 import { buildSandboxDoc, DOC_MSG, HEIGHT_MSG, READY_MSG, READY_TIMEOUT_MS, SANDBOX_URL } from '@/lib/htmlSandbox'
 import type { RichLang } from '@/lib/richBlocks'
@@ -11,10 +13,10 @@ import { GenUiView } from './genui/GenUi'
 function Fallback({ code, lang, reason }: { code: string; lang: string; reason: string }) {
   return (
     <div className="not-prose my-3 rounded-lg border border-dashed p-3 text-foreground" data-slot="rich-fallback">
-      <div className="mb-1 text-xs text-muted-foreground">
+      <div className="t-note mb-1">
         {lang} 块无法渲染（{reason}），以下为源码
       </div>
-      <pre className="m-0 max-h-60 overflow-auto whitespace-pre-wrap break-words text-xs">{code}</pre>
+      <pre className="t-note m-0 max-h-60 overflow-auto whitespace-pre-wrap break-words font-mono">{code}</pre>
     </div>
   )
 }
@@ -34,7 +36,12 @@ class Boundary extends Component<{ code: string; lang: string; children: ReactNo
 
 function MermaidView({ code }: { code: string }) {
   const dark = useIsDarkMode()
+  // 字号写在 SVG 里（图片文档继承不到宿主 CSS），所以它变了要重渲
+  const textPx = useFigureTextPx()
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [boxW, setBoxW] = useState(0)
   const [res, setRes] = useState<{ svg: string } | { error: string } | null>(null)
+
   useEffect(() => {
     let live = true
     setRes(null)
@@ -42,12 +49,31 @@ function MermaidView({ code }: { code: string }) {
     return () => {
       live = false
     }
-  }, [code, dark])
+  }, [code, dark, textPx])
+
+  // 容器可用宽度（jsdom 没有 ResizeObserver，退回单次测量）
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    const measure = () => setBoxW(el.clientWidth)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [res])
+
   if (!res) return <Skeleton variant="block" className="not-prose my-3 h-24" />
   if ('error' in res) return <Fallback code={code} lang="mermaid" reason={res.error} />
+
+  // 不放大；缩到不低于 11px 的可读下限；再宽就交给外层的 overflow-x-auto 横滚（见 lib/figureType.ts）
+  const size = svgNaturalSize(res.svg)
+  const fit = size ? figureFit({ naturalW: size.w, containerW: boxW, textPx }) : 1
+  const dims = size ? { width: Math.round(size.w * fit), height: Math.round(size.h * fit) } : undefined
+
   return (
-    <div className="not-prose my-3 overflow-x-auto rounded-lg border bg-card p-3 text-center" data-slot="mermaid">
-      <img src={svgToDataUri(res.svg)} alt="图示" className="mx-auto max-w-full" />
+    <div ref={boxRef} className="not-prose my-3 overflow-x-auto rounded-lg border bg-card p-3" data-slot="mermaid">
+      <img src={svgToDataUri(res.svg)} alt="图示" className="mx-auto block" style={dims} />
     </div>
   )
 }

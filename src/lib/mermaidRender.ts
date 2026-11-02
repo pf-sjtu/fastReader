@@ -1,25 +1,50 @@
 /**
  * mermaid 渲染：按需懒加载（体积大，只有真出现图时才下载），严格安全级别，串行排队 + 超时。
  * 输出 SVG 字符串；调用方以 <img data:> 展示，SVG 里即使混入脚本也不会执行。
+ *
+ * **排版**（见 lib/figureType.ts）：图以图片文档呈现，继承不到宿主 CSS，所以字体栈与字号必须
+ * 写进 SVG 自身；同时关掉 mermaid 默认的 `useMaxWidth: true`（它会给 SVG 写 `width:100%`，
+ * 把小图拉满容器——实测 stateDiagram 被放大 3.39×、文字 54px，而正文只有 15px）。
+ * 缩放交给调用方的 figureFit()：不放大、缩到不低于 11px、再宽就横滚。
  */
+
+import { FIGURE_FONT_STACK, readFigureType } from './figureType'
 
 const RENDER_TIMEOUT_MS = 8000
 const MAX_CODE = 8000
 
 type Mermaid = typeof import('mermaid').default
 let loading: Promise<Mermaid> | null = null
-let lastTheme: 'dark' | 'default' | null = null
+let lastInit: string | null = null
 let seq = 0
 /** mermaid 的 render 不可重入：串行执行，前一个失败不影响后一个 */
 let queue: Promise<unknown> = Promise.resolve()
+
+/** 图型各自关掉「拉满容器宽」；与指南放行的六种图型对应，其余类型不受影响 */
+const NO_STRETCH = { useMaxWidth: false } as const
 
 async function load(dark: boolean): Promise<Mermaid> {
   loading ??= import('mermaid').then((m) => m.default)
   const mermaid = await loading
   const theme = dark ? 'dark' : 'default'
-  if (lastTheme !== theme) {
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme, fontFamily: 'inherit', flowchart: { htmlLabels: false } })
-    lastTheme = theme
+  // 主题或字号变了都要重新 initialize：字号写进 SVG，不重建就还是旧字号
+  const textPx = readFigureType().textPx
+  const initKey = `${theme}:${textPx}`
+  if (lastInit !== initKey) {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme,
+      fontFamily: FIGURE_FONT_STACK,
+      themeVariables: { fontFamily: FIGURE_FONT_STACK, fontSize: `${textPx}px` },
+      flowchart: { htmlLabels: false, ...NO_STRETCH },
+      sequence: { ...NO_STRETCH },
+      state: { ...NO_STRETCH },
+      timeline: { ...NO_STRETCH },
+      mindmap: { ...NO_STRETCH },
+      quadrantChart: { ...NO_STRETCH },
+    })
+    lastInit = initKey
   }
   return mermaid
 }

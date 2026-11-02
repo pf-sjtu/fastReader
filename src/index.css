@@ -283,6 +283,16 @@
     font-size: 0.75rem;
     line-height: 1.5;
   }
+  /*
+   * 内容区说明文字（图注、回退提示、genui 的 detail/definition…）：**相对正文**定尺寸、
+   * 随「字体大小」一起缩放。上面几个角色是 rem 固定值（属于 UI 链，不跟正文缩放），
+   * 所以正文里的小字用这个，不要在业务组件里写 text-[0.8em] 这种零散值。
+   */
+  .t-note {
+    color: var(--muted-foreground);
+    font-size: 0.875em;
+    line-height: 1.5;
+  }
 }
 
 @layer base {

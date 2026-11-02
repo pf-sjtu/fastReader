@@ -35,7 +35,7 @@ function Quiz({ node }: { node: Extract<GenUiNode, { type: 'quiz' }> }) {
               disabled={done}
               onClick={() => setPicked(i)}
               className={cn(
-                'rounded-md border px-3 py-1.5 text-left text-sm transition-colors',
+                'rounded-md border px-3 py-1.5 text-left transition-colors',
                 !done && 'hover:bg-muted',
                 right && 'border-success/50 bg-success/10',
                 wrong && 'border-destructive/50 bg-destructive/10'
@@ -46,7 +46,7 @@ function Quiz({ node }: { node: Extract<GenUiNode, { type: 'quiz' }> }) {
           )
         })}
       </div>
-      {picked !== null && node.explain && <div className="mt-2 text-sm text-muted-foreground">{node.explain}</div>}
+      {picked !== null && node.explain && <div className="t-note mt-2">{node.explain}</div>}
     </div>
   )
 }
@@ -64,13 +64,13 @@ function Tabs({ node }: { node: Extract<GenUiNode, { type: 'tabs' }> }) {
             role="tab"
             aria-selected={k === i}
             onClick={() => setI(k)}
-            className={cn('rounded-md px-2.5 py-1 text-sm', k === i ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground')}
+            className={cn('rounded-md px-2.5 py-1', k === i ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground')}
           >
             {t.label}
           </button>
         ))}
       </div>
-      <div className="text-sm leading-relaxed">{cur.body}</div>
+      <div className="t-note">{cur.body}</div>
     </div>
   )
 }
@@ -85,7 +85,7 @@ function Node({ node }: { node: GenUiNode }) {
               <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">{i + 1}</span>
               <div>
                 <div className="font-medium">{s.label}</div>
-                {s.detail && <div className="text-sm text-muted-foreground">{s.detail}</div>}
+                {s.detail && <div className="t-note">{s.detail}</div>}
               </div>
             </li>
           ))}
@@ -94,7 +94,7 @@ function Node({ node }: { node: GenUiNode }) {
     case 'compare':
       return (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
+          <table className="w-full border-collapse">
             <thead>
               <tr>
                 <th className="border-b p-2 text-left" />
@@ -122,9 +122,9 @@ function Node({ node }: { node: GenUiNode }) {
           {node.items.map((t, i) => (
             <li key={i} className="relative pb-3 last:pb-0">
               <span className="absolute -left-[1.45rem] top-1.5 size-2 rounded-full bg-primary" />
-              {t.time && <div className="text-xs text-muted-foreground">{t.time}</div>}
+              {t.time && <div className="t-note">{t.time}</div>}
               <div className="font-medium">{t.label}</div>
-              {t.detail && <div className="text-sm text-muted-foreground">{t.detail}</div>}
+              {t.detail && <div className="t-note">{t.detail}</div>}
             </li>
           ))}
         </ol>
@@ -134,9 +134,9 @@ function Node({ node }: { node: GenUiNode }) {
         <div className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2">
           {node.items.map((c, i) => (
             <div key={i} className="rounded-md border bg-card p-3">
-              {c.tag && <div className="mb-1 text-xs text-primary">{c.tag}</div>}
+              {c.tag && <div className="mb-1 t-note text-primary">{c.tag}</div>}
               <div className="font-medium">{c.title}</div>
-              {c.body && <div className="mt-1 text-sm text-muted-foreground">{c.body}</div>}
+              {c.body && <div className="t-note mt-1">{c.body}</div>}
             </div>
           ))}
         </div>
@@ -145,7 +145,7 @@ function Node({ node }: { node: GenUiNode }) {
       return (
         <div className={cn('rounded-md border-l-4 p-3', TONE[node.tone])}>
           {node.title && <div className="mb-1 font-medium">{node.title}</div>}
-          <div className="text-sm leading-relaxed">{node.body}</div>
+          <div className="t-note">{node.body}</div>
         </div>
       )
     case 'concept':
@@ -154,9 +154,9 @@ function Node({ node }: { node: GenUiNode }) {
           {node.items.map((c, i) => (
             <div key={i} className="rounded-md border bg-card p-3">
               <div className="font-medium">{c.term}</div>
-              <div className="text-sm text-muted-foreground">{c.definition}</div>
-              {c.example && <div className="mt-1 text-sm text-muted-foreground">例：{c.example}</div>}
-              {c.contrast && <div className="mt-1 text-sm text-muted-foreground">反例：{c.contrast}</div>}
+              <div className="t-note">{c.definition}</div>
+              {c.example && <div className="t-note mt-1">例：{c.example}</div>}
+              {c.contrast && <div className="t-note mt-1">反例：{c.contrast}</div>}
             </div>
           ))}
         </div>
@@ -169,7 +169,7 @@ function Node({ node }: { node: GenUiNode }) {
               <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-muted-foreground" />
               <div>
                 <span>{h.label}</span>
-                {h.detail && <div className="text-sm text-muted-foreground">{h.detail}</div>}
+                {h.detail && <div className="t-note">{h.detail}</div>}
               </div>
             </li>
           ))}

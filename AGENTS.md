@@ -84,7 +84,12 @@ git push -u origin HEAD
 标题衬线 `.font-brand`。仓库名、Pages 项目 `fast-read`、存储键与 `FASTREADER_*` 环境变量为兼容保留原名，不要改。
 样式一律用语义 token（`bg-muted`/`text-muted-foreground`/`text-success|warning|info|destructive`…），不要写 `gray-*`/`slate-*`/`green-500` 这类调色板硬编码；
 标题只用文字角色类 `t-display/t-title/t-section/t-label/t-caption`（`index.css`），圆角只用 `rounded-md|lg|full`；
+正文里的说明小字用 `t-note`（**相对正文**的 0.875em，跟随「字体大小」缩放），不要写 `text-[0.8em]` 这类零散值；
 `tests/designSystem.test.ts` 会拦截违规（例外要登记理由）。字体全是系统字体栈（`--font-sans/serif/mono`），不下载字体，设置→「字体」可检测是否已安装。
+**图（mermaid / html 沙箱 / 离线包 / 自绘 SVG）另有一套守卫**：它们脱离宿主 CSS、读不到变量，所以字体栈与字号只能写具体值——
+具体值唯一来源是 `src/lib/figureType.ts` 的 `FIGURE_FONT_STACK`（与 `--font-sans` 逐字一致）与 `readFigureType()`（`--base-font-size` × `--font-scale`）；
+缩放策略用 `figureFit()`：**不放大**、缩到不低于 11px、再宽就横滚（mermaid 必须 `useMaxWidth: false`，它默认会把小图拉满容器，实测文字会从 15px 变 54px）；
+改「字体大小」后由 `FontSizeControl` 派发 `juhua:font-scale` 事件，`useFigureTextPx()` 据此重渲（写在产物里的字号不会自动跟随）。守卫 `tests/figureType.test.ts`。
 
 ## Architecture
 - **SPA**: React 19 + TypeScript + Vite

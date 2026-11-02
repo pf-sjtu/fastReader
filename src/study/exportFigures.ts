@@ -20,10 +20,12 @@ import { layoutEntityTimeline, type TimelineLayoutConfig } from '@/charts/plugin
 import { cssColorToHex, readableTextOn } from '@/charts/theme'
 import { getEntityGraph, type BookCharts } from '@/charts/types'
 import { wrapText } from '@/charts/textWrap'
+import { FIGURE_FONT_STACK } from '@/lib/figureType'
 import { svgToDataUri } from '@/lib/mermaidRender'
 import { escapeHtml, type PackImage } from '@/study/pack'
 
-const FONT = 'system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif'
+/** 图内字体栈：与正文同栈（唯一来源见 src/lib/figureType.ts，守卫 tests/figureType.test.ts） */
+const FONT = FIGURE_FONT_STACK
 /** 学习包亮色主题（`buildPack.ts` 的 `--pack-*`）的 sRGB 对应值 */
 const PAPER = '#f7f4ee'
 const INK = '#2b2620'

@@ -18,6 +18,7 @@
  */
 
 import { PACK_RICH_STYLE, restoreFragments, richBlocksToStatic } from './richStatic'
+import { FIGURE_FONT_STACK } from '@/lib/figureType'
 
 export interface PackChapter {
   index: number
@@ -448,7 +449,7 @@ body {
   padding: 32px 20px 64px;
   background: var(--pack-bg);
   color: var(--pack-fg);
-  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-family: ${FIGURE_FONT_STACK};
   font-size: 15px;
   line-height: 1.75;
 }

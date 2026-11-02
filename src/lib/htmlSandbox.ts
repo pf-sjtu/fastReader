@@ -7,7 +7,10 @@
  * 只放行内联脚本 / 样式与 data: 图片，且仅同源可嵌），iframe 为 sandbox="allow-scripts"（不含 same-origin → opaque origin，
  * 碰不到站点的存储与 Cookie），握手后由父页面 postMessage 下发整份文档。
  * 允许模型写交互（按钮、折叠、简单动画），不允许它联网、跳转、嵌套页面；高度由文档内脚本回报。
+ * 文档里的**字体栈与字号**从宿主 token 拷进去（`readFigureType()`），与正文/图保持一致。
  */
+
+import { readFigureType } from './figureType'
 
 export const HTML_MAX = 20000
 export const SANDBOX_URL = '/rich-sandbox/'
@@ -31,11 +34,13 @@ export function buildSandboxDoc(code: string, dark = false): SandboxDoc {
   const body = src.replace(BANNED, '')
   const reporter = `<script>(function(){function h(){var b=document.body,c=getComputedStyle(b),x=b.offsetHeight+(parseFloat(c.marginTop)||0)+(parseFloat(c.marginBottom)||0),d=document.documentElement;parent.postMessage({type:'${HEIGHT_MSG}',h:Math.max(x,d.scrollHeight>d.clientHeight?d.scrollHeight:0)},'*')}` +
     `addEventListener('load',h);try{new ResizeObserver(h).observe(document.body)}catch(e){}})()</script>`
-  // 默认文字色跟随主题（模型自己写了颜色则以它为准）；背景透明，透出卡片底色
+  // 默认文字色与**字体栈 / 字号**都跟随宿主 token（沙箱文档是独立文档，只能事先拷值进去）：
+  // 字体栈与图用同一个常量，字号取 --base-font-size × --font-scale，改了「字体大小」里的 html 块也跟着变
   const color = dark ? '#e8e4dc' : '#222'
+  const { fontStack, textPx } = readFigureType()
   const doc =
     `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}">` +
-    `<style>body{margin:0;padding:8px;font:14px/1.6 system-ui,sans-serif;color:${color};background:transparent}*{box-sizing:border-box;max-width:100%}</style></head>` +
+    `<style>body{margin:0;padding:8px;font:${textPx}px/1.6 ${fontStack};color:${color};background:transparent}*{box-sizing:border-box;max-width:100%}</style></head>` +
     `<body>${body}${reporter}</body></html>`
   return { ok: true, doc }
 }

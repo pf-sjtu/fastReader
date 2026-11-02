@@ -11,6 +11,10 @@ node tests/tour/richDemo/serve.mjs tmp/rich-demo-dist 5198
 
 然后用浏览器（Playwright MCP 的 Chromium 为准；内置浏览器的 `src` 沙箱 iframe 有无法 postMessage 的已知差异）打开 `http://localhost:5198/`，核对：
 
+- **图的排版**：图内文字与正文同栈同字号（`src/lib/figureType.ts`）。验收时用控制台量一遍：每个 `[data-slot="mermaid"] img`
+  的 `rendered / natural` 应为 1.00（只有超宽图略小于 1），SVG 内 `font-size` 应为 15px（= `--base-font-size` × `--font-scale`）。
+  实测（1440 宽）：修复前同一页的图内文字是 15.1–**54.3px**（stateDiagram 被放大 3.39×），修复后 15.0–14.6px；
+  改「设置 → 字体大小」后图会重渲（`juhua:font-scale` 事件）
 - html 块：iframe 高度自适应（不停在 120px、无内部滚动条）；按钮点击有反应；安全探针（外链脚本 / 网络 / 读 Cookie / 嵌套页面）全部被拦
 - mermaid：好图渲染为图片（6 种放行图型都验过：graph LR、sequenceDiagram、timeline、mindmap、stateDiagram-v2、quadrantChart）；坏图回退为源码，且 `document.body` 里没有残留 `#dmmd-*` / `#mmd-*` 炸弹图节点
 - **mindmap 必须是多分支**：只有一条链的 mindmap 会被渲染器拉成竖排长条（实测 viewBox 135×429，缩放到容器宽后高 2367px），多分支（3 支 × 2 层）才是径向树。指南因此写明「mindmap 至少 3 个分支，单链改用 genui hierarchy 或 graph TD」

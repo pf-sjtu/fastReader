@@ -4,6 +4,16 @@ import { Card, CardContent } from '@/components/ui/card'
 import { PanelHeader } from '@/components/ui/section-heading'
 import { Minus, Plus, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { FONT_SCALE_EVENT } from '@/lib/figureType'
+
+/**
+ * 写入字号并广播：图（mermaid / 沙箱 html / 离线包）的字号是写进产物自身的，
+ * 改 CSS 变量不会触发它们重渲染，所以由这里派发事件（见 lib/figureType.ts 与 components/useFigureType.ts）。
+ */
+function applyFontScale(scale: number) {
+  document.documentElement.style.setProperty('--font-scale', scale.toString())
+  window.dispatchEvent(new Event(FONT_SCALE_EVENT))
+}
 
 interface FontSizeControlProps {
   className?: string
@@ -26,14 +36,14 @@ export const FontSizeControl: React.FC<FontSizeControlProps> = ({
       const scale = parseFloat(savedScale)
       if (!isNaN(scale) && scale >= 0.5 && scale <= 2) {
         setFontScale(scale)
-        document.documentElement.style.setProperty('--font-scale', scale.toString())
+        applyFontScale(scale)
       }
     }
   }, [])
 
   const updateFontScale = (scale: number) => {
     setFontScale(scale)
-    document.documentElement.style.setProperty('--font-scale', scale.toString())
+    applyFontScale(scale)
     localStorage.setItem('font-scale', scale.toString())
   }
 
