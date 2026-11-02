@@ -40,6 +40,8 @@ const EXEMPT: Record<string, Record<string, string>> = {
   'src/study/pack/richStatic.ts': { 'raw-color': '离线学习包里 genui 静态版的内嵌样式，同 buildPack：独立 HTML 文档读不到宿主 CSS 变量' },
   'src/lib/htmlSandbox.ts': { 'raw-color': '注入 iframe 沙箱文档内的基础样式，读不到宿主 CSS 变量' },
   'src/study/exportFigures.ts': { 'raw-color': '导出的 SVG 进 data URI 后读不到宿主 CSS 变量，必须写具体色值（与 index.css 亮色 token 对齐，有测试守着 NOTE_PALETTE）' },
+  'src/lib/mermaidTheme.ts': { 'raw-color': '图是图片文档读不到宿主 CSS 变量，主题 token 的具体取值必须写死（与 index.css 同源，由 tests/mermaidTheme.test.ts 核对）' },
+  'src/lib/cssColor.ts': { 'raw-color': '颜色解析的兜底值与探针哨兵色（#666666 / #010203），不是界面配色' },
   'src/utils/mindmapExport.ts': { 'raw-color': 'canvas 导出用的纯色底，同样读不到 CSS 变量' },
   'src/components/EpubReader.tsx': { 'raw-color': 'EPUB 正文样式注入 iframe 内部文档，读不到宿主 CSS 变量，只能写具体色值' },
   'src/components/PdfReader.tsx': { 'raw-color': 'PDF canvas 的背景/边框色，同样在宿主 CSS 之外' },

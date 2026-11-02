@@ -9,6 +9,7 @@
  */
 
 import { FIGURE_FONT_STACK, readFigureType } from './figureType'
+import { mermaidThemeVariables, readThemeTokens } from './mermaidTheme'
 
 const RENDER_TIMEOUT_MS = 8000
 const MAX_CODE = 8000
@@ -27,7 +28,7 @@ async function load(dark: boolean): Promise<Mermaid> {
   loading ??= import('mermaid').then((m) => m.default)
   const mermaid = await loading
   const theme = dark ? 'dark' : 'default'
-  // 主题或字号变了都要重新 initialize：字号写进 SVG，不重建就还是旧字号
+  // 主题或字号变了都要重新 initialize：字号与配色都写进 SVG，不重建就还是旧样式
   const textPx = readFigureType().textPx
   const initKey = `${theme}:${textPx}`
   if (lastInit !== initKey) {
@@ -36,7 +37,13 @@ async function load(dark: boolean): Promise<Mermaid> {
       securityLevel: 'strict',
       theme,
       fontFamily: FIGURE_FONT_STACK,
-      themeVariables: { fontFamily: FIGURE_FONT_STACK, fontSize: `${textPx}px` },
+      // 图内配色跟随品牌（宣纸 / 松烟墨 / 朱砂）而不是 mermaid 默认的蓝紫体系
+      themeVariables: mermaidThemeVariables({
+        tokens: readThemeTokens(dark),
+        fontStack: FIGURE_FONT_STACK,
+        fontSizePx: textPx,
+        dark,
+      }),
       flowchart: { htmlLabels: false, ...NO_STRETCH },
       sequence: { ...NO_STRETCH },
       state: { ...NO_STRETCH },

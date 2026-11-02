@@ -11,6 +11,7 @@
  */
 
 import { readFigureType, type FigureType } from './figureType'
+import { resolveCssVarColor } from './cssColor'
 
 export const HTML_MAX = 20000
 export const SANDBOX_URL = '/rich-sandbox/'
@@ -37,7 +38,8 @@ export function buildSandboxDoc(code: string, dark = false, figure: FigureType =
     `addEventListener('load',h);try{new ResizeObserver(h).observe(document.body)}catch(e){}})()</script>`
   // 默认文字色与**字体栈 / 字号**都跟随宿主 token（沙箱文档是独立文档，只能事先拷值进去）：
   // 字体栈与图用同一个常量，字号取 --base-font-size × --font-scale，改了「字体大小」里的 html 块也跟着变
-  const color = dark ? '#e8e4dc' : '#222'
+  // 文字色取主题的 --foreground（松烟墨）：写死色值会和正文的墨色差一点，看着像两套配色
+  const color = resolveCssVarColor('var(--foreground)', dark ? '#e8e4dc' : '#251f1c')
   const { fontStack, textPx } = figure
   const doc =
     `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}">` +
