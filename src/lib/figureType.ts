@@ -87,6 +87,16 @@ export function figureFit({ naturalW, containerW, textPx, minTextPx = MIN_FIGURE
   return Math.min(1, Math.max(fit, floor))
 }
 
+/**
+ * 可用的内容盒宽度：`clientWidth` **包含 padding**，直接拿它算缩放会让图比内容盒宽出一个 padding
+ * （卡片里会多出横向滚动——实测最宽那张图卡就多出 24px）。减法抽成纯函数便于单测。
+ */
+export function contentBoxWidth(clientWidth: number, paddingLeft: number, paddingRight: number): number {
+  if (!Number.isFinite(clientWidth) || clientWidth <= 0) return 0
+  const w = clientWidth - (Number.isFinite(paddingLeft) ? paddingLeft : 0) - (Number.isFinite(paddingRight) ? paddingRight : 0)
+  return w > 0 ? w : clientWidth
+}
+
 /** 从 mermaid 产出的 SVG 取原始尺寸（优先 width/height 属性，退回 viewBox；都取不到给 null） */
 export function svgNaturalSize(svg: string): { w: number; h: number } | null {
   const w = /\swidth="([\d.]+)"/.exec(svg)?.[1]

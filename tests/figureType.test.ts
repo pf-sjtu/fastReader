@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { FIGURE_FONT_STACK, MIN_FIGURE_TEXT_PX, figureFit, svgNaturalSize, readFigureType } from '../src/lib/figureType'
+import { FIGURE_FONT_STACK, MIN_FIGURE_TEXT_PX, contentBoxWidth, figureFit, svgNaturalSize, readFigureType } from '../src/lib/figureType'
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), 'utf8')
 
@@ -46,7 +46,7 @@ describe('图的排版：唯一来源与跟随正文', () => {
     }
     expect(withTokens({ '--base-font-size': '15px', '--font-scale': '1.5' }).textPx).toBeCloseTo(22.5)
     expect(withTokens({ '--base-font-size': '18px', '--font-scale': '0.5' }).textPx).toBeCloseTo(9)
-    // 变量缺失 / 非法 → 回到兜底值（9px 那种会被当成非法吗？9 是合法正数，会被采用）
+    // 变量缺失 / 非法（空串、0、非数字）→ 回到兜底值
     expect(withTokens({}).textPx).toBe(15)
     expect(withTokens({ '--base-font-size': 'abc', '--font-scale': '0' }).textPx).toBe(15)
     // 字体栈也是从 token 读的（拿不到才用常量兜底）
@@ -83,6 +83,15 @@ describe('图的排版：唯一来源与跟随正文', () => {
     expect(src).toContain('readFigureType()')
     expect(src).not.toMatch(/font:14px\/1\.6 system-ui/)
   })
+
+  it('沙箱文档的 font 声明用的是传入的栈与字号（真算一遍，不只看源码）', async () => {
+    // 沙箱是 opaque origin，浏览器里读不到它内部的 CSS，只能在单测里传入排版参数实算
+    const { buildSandboxDoc } = await import('../src/lib/htmlSandbox')
+    const r = buildSandboxDoc('<p>x</p>', false, { fontStack: '"PingFang SC", sans-serif', basePx: 15, scale: 1.3, textPx: 19.5 })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.doc).toContain('font:19.5px/1.6 "PingFang SC", sans-serif')
+  })
 })
 
 describe('figureFit：不放大、缩到可读下限为止', () => {
@@ -113,6 +122,18 @@ describe('figureFit：不放大、缩到可读下限为止', () => {
     expect(figureFit({ naturalW: 900, containerW: 0, textPx: 15 })).toBe(1)
     expect(figureFit({ naturalW: 0, containerW: 700, textPx: 15 })).toBe(1)
     expect(figureFit({ naturalW: 900, containerW: 700, textPx: 0 })).toBe(1)
+  })
+})
+
+describe('contentBoxWidth：可用宽度要扣掉卡片 padding', () => {
+  it('clientWidth 含 padding，直接用会让图比内容盒宽出一个 padding（多出横向滚动）', () => {
+    expect(contentBoxWidth(795, 24, 24)).toBe(747)
+    expect(contentBoxWidth(795, 0, 0)).toBe(795)
+  })
+  it('测量异常时退回 clientWidth，不给 0（否则等于不缩放）', () => {
+    expect(contentBoxWidth(795, 400, 400)).toBe(795)
+    expect(contentBoxWidth(0, 12, 12)).toBe(0)
+    expect(contentBoxWidth(795, Number.NaN, Number.NaN)).toBe(795)
   })
 })
 

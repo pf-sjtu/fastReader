@@ -13,10 +13,16 @@ const md = demoMarkdown
 createRoot(document.getElementById('root')!).render(
   <ThemeProvider defaultTheme={(new URLSearchParams(location.search).get('theme') as 'light' | 'dark') || 'light'} storageKey="rich-demo-theme">
   <div style={{ maxWidth: 820, margin: '0 auto', padding: 24 }}>
-    <div className="markdown-card-content prose prose-sm max-w-none overflow-x-auto" id="demo">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkTailQuestions]} components={richMarkdownComponents}>
-        {md}
-      </ReactMarkdown>
+    {/*
+      与 MarkdownCard 同一层 DOM：`[data-slot="card-content"]` 上的 `font-size: … !important`
+      才是线上正文的 15px（留在外面的 .prose 会退成 prose-sm 的 14px，量的数字就不代表线上了）。
+    */}
+    <div data-slot="card-content">
+      <div className="markdown-card-content prose prose-sm max-w-none overflow-x-auto" id="demo">
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkTailQuestions]} components={richMarkdownComponents}>
+          {md}
+        </ReactMarkdown>
+      </div>
     </div>
   </div>
   </ThemeProvider>,

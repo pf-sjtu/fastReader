@@ -90,6 +90,10 @@ git push -u origin HEAD
 具体值唯一来源是 `src/lib/figureType.ts` 的 `FIGURE_FONT_STACK`（与 `--font-sans` 逐字一致）与 `readFigureType()`（`--base-font-size` × `--font-scale`）；
 缩放策略用 `figureFit()`：**不放大**、缩到不低于 11px、再宽就横滚（mermaid 必须 `useMaxWidth: false`，它默认会把小图拉满容器，实测文字会从 15px 变 54px）；
 改「字体大小」后由 `FontSizeControl` 派发 `juhua:font-scale` 事件，`useFigureTextPx()` 据此重渲（写在产物里的字号不会自动跟随）。守卫 `tests/figureType.test.ts`。
+**图（mermaid / html 沙箱 / 离线包 / 自绘 SVG）另有一套守卫**：它们脱离宿主 CSS、读不到变量，所以字体栈与字号只能写具体值——
+具体值唯一来源是 `src/lib/figureType.ts` 的 `FIGURE_FONT_STACK`（与 `--font-sans` 逐字一致）与 `readFigureType()`（`--base-font-size` × `--font-scale`）；
+缩放策略用 `figureFit()`：**不放大**、缩到不低于 11px、再宽就横滚（mermaid 必须 `useMaxWidth: false`，它默认会把小图拉满容器，实测文字会从 15px 变 54px）；
+改「字体大小」后由 `FontSizeControl` 派发 `juhua:font-scale` 事件，`useFigureTextPx()` 据此重渲（写在产物里的字号不会自动跟随）。守卫 `tests/figureType.test.ts`。
 
 ## Architecture
 - **SPA**: React 19 + TypeScript + Vite

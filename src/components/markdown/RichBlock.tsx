@@ -1,8 +1,8 @@
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useIsDarkMode } from '@/components/useTheme'
-import { useFigureTextPx } from '@/components/useFigureType'
+import { useFigureType } from '@/components/useFigureType'
 import { Skeleton } from '@/components/ui/skeleton'
-import { figureFit, svgNaturalSize } from '@/lib/figureType'
+import { contentBoxWidth, figureFit, svgNaturalSize } from '@/lib/figureType'
 import { renderMermaid, svgToDataUri } from '@/lib/mermaidRender'
 import { buildSandboxDoc, DOC_MSG, HEIGHT_MSG, READY_MSG, READY_TIMEOUT_MS, SANDBOX_URL } from '@/lib/htmlSandbox'
 import type { RichLang } from '@/lib/richBlocks'
@@ -37,7 +37,7 @@ class Boundary extends Component<{ code: string; lang: string; children: ReactNo
 function MermaidView({ code }: { code: string }) {
   const dark = useIsDarkMode()
   // 字号写在 SVG 里（图片文档继承不到宿主 CSS），所以它变了要重渲
-  const textPx = useFigureTextPx()
+  const { textPx } = useFigureType()
   const boxRef = useRef<HTMLDivElement>(null)
   const [boxW, setBoxW] = useState(0)
   const [res, setRes] = useState<{ svg: string } | { error: string } | null>(null)
@@ -51,14 +51,24 @@ function MermaidView({ code }: { code: string }) {
     }
   }, [code, dark, textPx])
 
-  // 容器可用宽度（jsdom 没有 ResizeObserver，退回单次测量）
+  // 容器可用宽度（jsdom 没有 ResizeObserver，退回单次测量）。注意 clientWidth 含 padding，
+  // 直接用会让图比内容盒宽出 24px（卡片多出横向滚动）—— 统一走 contentBoxWidth。
   useEffect(() => {
     const el = boxRef.current
     if (!el) return
-    const measure = () => setBoxW(el.clientWidth)
+    const measure = () => {
+      const cs = getComputedStyle(el)
+      const px = (v: string) => Number.parseFloat(v) || 0
+      setBoxW(contentBoxWidth(el.clientWidth, px(cs.paddingLeft), px(cs.paddingRight)))
+    }
     measure()
     if (typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(measure)
+    const ro = new ResizeObserver((entries) => {
+      // contentRect 已经是内容盒尺寸；拿不到再退回测量
+      const w = entries[0]?.contentRect?.width
+      if (typeof w === 'number' && w > 0) setBoxW(w)
+      else measure()
+    })
     ro.observe(el)
     return () => ro.disconnect()
   }, [res])
@@ -85,10 +95,14 @@ function MermaidView({ code }: { code: string }) {
  */
 function HtmlView({ code }: { code: string }) {
   const dark = useIsDarkMode()
+  // 沙箱文档里的字体栈 / 字号是从宿主 token 拷进去的，所以字号变了要重建文档与 iframe
+  const figure = useFigureType()
+  const textPx = figure.textPx
   const ref = useRef<HTMLIFrameElement>(null)
   const [h, setH] = useState(120)
   const [dead, setDead] = useState(false)
-  const built = useMemo(() => buildSandboxDoc(code, dark), [code, dark])
+  // 显式传入排版参数：依赖是真的（buildSandboxDoc 自己去读 token 会让 figure 成为「假依赖」）
+  const built = useMemo(() => buildSandboxDoc(code, dark, figure), [code, dark, figure])
   const doc = built.ok ? built.doc : null
 
   useEffect(() => {
@@ -120,8 +134,8 @@ function HtmlView({ code }: { code: string }) {
   if (dead) return <Fallback code={code} lang="html" reason="沙箱页不可用" />
   return (
     <iframe
-      // 主题 / 内容变了就整个重建：沙箱页只接受一次下发
-      key={`${dark ? 'd' : 'l'}:${hashOf(code)}`}
+      // 主题 / 字号 / 内容变了就整个重建：沙箱页只接受一次下发
+      key={`${dark ? 'd' : 'l'}:${Math.round(textPx * 10)}:${hashOf(code)}`}
       ref={ref}
       title="交互示意"
       sandbox="allow-scripts"

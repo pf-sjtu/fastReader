@@ -10,7 +10,7 @@
  * 文档里的**字体栈与字号**从宿主 token 拷进去（`readFigureType()`），与正文/图保持一致。
  */
 
-import { readFigureType } from './figureType'
+import { readFigureType, type FigureType } from './figureType'
 
 export const HTML_MAX = 20000
 export const SANDBOX_URL = '/rich-sandbox/'
@@ -27,7 +27,8 @@ const BANNED = /<(iframe|object|embed|link|meta|base|frame|frameset|form)\b[\s\S
 
 export type SandboxDoc = { ok: true; doc: string } | { ok: false; error: string }
 
-export function buildSandboxDoc(code: string, dark = false): SandboxDoc {
+/** @param figure 图的排版参数（默认读当前 token；显式传入便于测试与「一次读取多处使用」） */
+export function buildSandboxDoc(code: string, dark = false, figure: FigureType = readFigureType()): SandboxDoc {
   const src = code.trim()
   if (!src) return { ok: false, error: '内容为空' }
   if (src.length > HTML_MAX) return { ok: false, error: '内容过大' }
@@ -37,7 +38,7 @@ export function buildSandboxDoc(code: string, dark = false): SandboxDoc {
   // 默认文字色与**字体栈 / 字号**都跟随宿主 token（沙箱文档是独立文档，只能事先拷值进去）：
   // 字体栈与图用同一个常量，字号取 --base-font-size × --font-scale，改了「字体大小」里的 html 块也跟着变
   const color = dark ? '#e8e4dc' : '#222'
-  const { fontStack, textPx } = readFigureType()
+  const { fontStack, textPx } = figure
   const doc =
     `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}">` +
     `<style>body{margin:0;padding:8px;font:${textPx}px/1.6 ${fontStack};color:${color};background:transparent}*{box-sizing:border-box;max-width:100%}</style></head>` +

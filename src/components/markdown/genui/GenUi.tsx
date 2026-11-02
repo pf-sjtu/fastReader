@@ -117,14 +117,24 @@ function Node({ node }: { node: GenUiNode }) {
         </div>
       )
     case 'timeline':
+      // 竖线与圆点必须共用同一条中心线。原先用 `absolute -left-[1.45rem]` 手算偏移，而 li 的起点由
+      // ol 的 border(2px) + padding(16px) 决定，算出来圆点中心比竖线偏左 2px（实测竖线中心 x=249、
+      // 圆点中心 x=247），看上去就是圆点挂在线上、没套正。现在圆点是 flex 的第一个子元素
+      // （左边缘 0、宽 8px → 中心 4px），竖线照这个中心摆放（left 3px + 宽 2px），两者都由圆点尺寸推导，
+      // 不再依赖 padding/border 的组合。
       return (
-        <ol className="m-0 list-none border-l-2 border-border p-0 pl-4">
+        <ol className="relative m-0 list-none p-0" data-slot="genui-timeline">
+          {/* 竖线是绝对定位元素，会绘制在静态内容之上——不给圆点定位的话竖线会把圆点盖成两半，
+              所以圆点也带 `relative`（DOM 在竖线之后，同层按顺序后绘制）。 */}
+          <span aria-hidden className="absolute top-2 bottom-2 left-[3px] w-0.5 rounded-full bg-border" />
           {node.items.map((t, i) => (
-            <li key={i} className="relative pb-3 last:pb-0">
-              <span className="absolute -left-[1.45rem] top-1.5 size-2 rounded-full bg-primary" />
-              {t.time && <div className="t-note">{t.time}</div>}
-              <div className="font-medium">{t.label}</div>
-              {t.detail && <div className="t-note">{t.detail}</div>}
+            <li key={i} className="flex gap-3 pb-3 last:pb-0">
+              <span aria-hidden className="relative mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
+              <div>
+                {t.time && <div className="t-note">{t.time}</div>}
+                <div className="font-medium">{t.label}</div>
+                {t.detail && <div className="t-note">{t.detail}</div>}
+              </div>
             </li>
           ))}
         </ol>
