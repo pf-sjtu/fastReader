@@ -13,4 +13,4 @@ node tests/tour/richDemo/serve.mjs tmp/ui-demo-dist 5199
 ```
 
 打开 `http://localhost:5199/`，查询参数：`theme=dark`、`cost=1`（有费用）、`partial=1`（缓存不完整）、`file=1`（已选书）、`only=tooltip`（只渲染悬浮卡，直接出现在视口里）。
-悬浮卡的滚动要把视口压矮（如 900×300）后再触发一次 `resize`，Radix 才会按可用高度重新算 `max-height`。按端口停服务，不要按进程名杀。
+悬浮卡的滚动要把视口压矮（如 800×330）后再触发一次 `resize`，Radix 才会按可用高度重新算 `max-height`。`hover=1` 是真实悬停模式（非强制展开，书卡按钮放进视口内）：用 Playwright 真实鼠标悬停 → 分步移进卡内 → `mouse.wheel` 滚动 → 移开，可验证「卡片可悬停所以能滚动」这个前提。拖入验证：`browser_drop` 把磁盘上的真实文件投到 `[data-slot="file-drop-zone"]`（该演示页的 `onFileSelect` 会真的把文件显示出来）。按端口停服务，不要按进程名杀。

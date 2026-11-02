@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './demo.css'
 import '@/i18n'
@@ -34,6 +35,30 @@ const q = new URLSearchParams(location.search)
 const costly = q.get('cost') === '1'
 const onlyTooltip = q.get('only') === 'tooltip' // 只渲染悬浮卡：让它直接出现在视口里
 
+/** 上传卡包一层 state：拖入 / 选择的文件真的会显示出来，才能验证落笔区的拖入路径 */
+function UploadDemo() {
+  const [file, setFile] = useState<File | null>(q.get('file') === '1' ? new File([new Uint8Array(1.2 * 1024 * 1024)], '约翰·聂夫的成功投资.epub') : null)
+  return (
+    <FileUploadCard
+      file={file}
+      processing={false}
+      extractingChapters={false}
+      isCheckingCloudCache={false}
+      cloudCacheMetadata={costly ? ({ ...(meta as object), costUSD: 0.1234, costRMB: 0.89 } as never) : ({ ...(meta as object), costUSD: 0, costRMB: 0 } as never)}
+      cloudCacheContent="# x"
+      cloudChartsFileFound
+      cloudCacheIsPartial={q.get('partial') === '1'}
+      webdavEnabled
+      webdavInitialized
+      onFileSelect={setFile}
+      onExtractChapters={noop}
+      onClearCache={noop}
+      onOpenWebDAVBrowser={noop}
+      onLoadFromCloudCache={noop}
+    />
+  )
+}
+
 createRoot(document.getElementById('root')!).render(
   <ThemeProvider defaultTheme={(q.get('theme') as 'light' | 'dark') || 'light'} storageKey="ui-demo-theme">
     <div style={{ maxWidth: 980, margin: '0 auto', padding: 24 }} className="space-y-8">
@@ -50,29 +75,13 @@ createRoot(document.getElementById('root')!).render(
 
       {!onlyTooltip && (
       <section data-demo="upload">
-        <FileUploadCard
-          file={q.get('file') === '1' ? new File([new Uint8Array(1.2 * 1024 * 1024)], '约翰·聂夫的成功投资.epub') : null}
-          processing={false}
-          extractingChapters={false}
-          isCheckingCloudCache={false}
-          cloudCacheMetadata={costly ? ({ ...(meta as object), costUSD: 0.1234, costRMB: 0.89 } as never) : ({ ...(meta as object), costUSD: 0, costRMB: 0 } as never)}
-          cloudCacheContent="# x"
-          cloudChartsFileFound
-          cloudCacheIsPartial={q.get('partial') === '1'}
-          webdavEnabled
-          webdavInitialized
-          onFileSelect={noop}
-          onExtractChapters={noop}
-          onClearCache={noop}
-          onOpenWebDAVBrowser={noop}
-          onLoadFromCloudCache={noop}
-        />
+        <UploadDemo />
       </section>
       )}
 
-      <section data-demo="tooltip" style={{ paddingTop: onlyTooltip ? 440 : 460 }}>
+      <section data-demo="tooltip" style={{ paddingTop: q.get('hover') === '1' ? 230 : onlyTooltip ? 440 : 460 }}>
         <h2 className="t-label mb-2 text-muted-foreground">悬浮卡（强制展开）</h2>
-        <Tooltip open>
+        <Tooltip open={q.get('hover') === '1' ? undefined : true}>
           <TooltipTrigger asChild>
             <button type="button" className="rounded-md border px-3 py-2 text-sm">书卡（悬浮卡在其上方）</button>
           </TooltipTrigger>
