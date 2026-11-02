@@ -46,7 +46,7 @@ export function ChapterPreview({ open, file }: ChapterPreviewProps) {
   if (!file) return null
 
   return (
-    <div className="space-y-4 p-4 bg-muted/50 rounded-lg border">
+    <div className="space-y-4 p-4 bg-muted rounded-lg border">
       <div className="flex items-center gap-2 mb-3">
         <Settings className="h-4 w-4" />
         <Label className="text-sm font-medium">

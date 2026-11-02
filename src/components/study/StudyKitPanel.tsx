@@ -11,6 +11,7 @@ import { AutoStudyToggle } from './AutoStudyToggle'
 import { DepthSwitch } from './DepthSwitch'
 import { RunEstimateLine } from './RunEstimateLine'
 import { SyncNote } from './SyncNote'
+import { Hint } from '@/components/ui/hint'
 
 interface Props {
   bookSummary: BookSummary
@@ -52,9 +53,9 @@ export function StudyKitPanel({ bookSummary, onJumpChapter }: Props) {
 
       {!running.kit && <RunEstimateLine tokens={estimate.inputTokens + estimate.outputTokens} costRMB={estimate.costRMB} />}
       {errors.kit && (
-        <p role="alert" className="text-xs text-destructive">
+        <Hint tone="danger" className="text-xs">
           {errors.kit === 'noChapters' ? t('study.noChapters') : t('study.failed', { error: errors.kit })}
-        </p>
+        </Hint>
       )}
 
       {!kit && !running.kit && <p className="py-6 text-center text-sm text-muted-foreground">{t('study.kit.empty')}</p>}

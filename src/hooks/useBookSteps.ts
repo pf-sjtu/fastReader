@@ -40,7 +40,7 @@ export function useBookSteps({ generationRef, bookSummary, setBookSummary, resol
       }
       if (kind === 'overall' && !isUsableText(bookSummary.connections)) {
         // 全书总结要读关联分析：关联本身没有时先提示，别拿占位文案喂模型
-        toast.message(t('results.step.needConnections'))
+        toast.info(t('results.step.needConnections'))
         return
       }
       const generation = generationRef.current.current

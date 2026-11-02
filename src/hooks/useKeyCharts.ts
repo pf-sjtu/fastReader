@@ -77,7 +77,7 @@ export function useKeyCharts(deps: KeyChartsDeps) {
         return
       }
       if (busyRef.current) {
-        if (!silent) toast.message(t('results.charts.busy'))
+        if (!silent) toast.info(t('results.charts.busy'))
         return
       }
       // 换书会递增代数并 abort：旧结果不写回、不上传
@@ -152,7 +152,7 @@ export function useKeyCharts(deps: KeyChartsDeps) {
           return
         }
         if (userCancelRef.current) {
-          toast.message(t('results.charts.cancelled'), { id: toastId })
+          toast.info(t('results.charts.cancelled'), { id: toastId })
           return
         }
         const msg = err instanceof Error ? err.message : t('progress.unknownError', { defaultValue: '未知错误' })

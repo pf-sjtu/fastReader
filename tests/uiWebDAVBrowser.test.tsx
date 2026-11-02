@@ -42,7 +42,7 @@ describe('WebDAVFileBrowser 可访问性', () => {
   const rows = () => Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"] [role="button"][tabindex="0"]'))
 
   it('文件行可聚焦，Enter 选中文件、Space 进入目录', async () => {
-    m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
+    m = mount(<WebDAVFileBrowser open onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(rows()).toHaveLength(2))
     const [dirRow, fileRow] = rows()
     expect(dirRow.textContent).toContain('sub')
@@ -58,7 +58,7 @@ describe('WebDAVFileBrowser 可访问性', () => {
 
   it('行内下载按钮下载的是被点击的那一行（不读旧 selectedFile）', async () => {
     downloadFileAsFile.mockResolvedValue({ success: false, error: 'stop' })
-    m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
+    m = mount(<WebDAVFileBrowser open onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(rows()).toHaveLength(2))
     const btn = document.querySelector(`[aria-label="${i18n.t('webdav.browser.downloadFileNamed', { name: 'a.epub' })}"]`)
     click(btn)

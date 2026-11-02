@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import i18n from '../i18n'
+import { Hint } from '@/components/ui/hint'
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -71,7 +72,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
     if (this.props.section) {
       return (
-        <div role="alert" className="rounded-lg border border-destructive/40 bg-card p-4 space-y-2 text-sm">
+        <Hint tone="danger" boxed className="space-y-2 p-4">
           <p className="font-medium text-foreground">{i18n.t('errorBoundary.sectionFailed', { section: this.props.section })}</p>
           <p className="text-muted-foreground">{isChunkError ? hint : i18n.t('errorBoundary.sectionHint')}</p>
           {!isChunkError && (
@@ -87,7 +88,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               {reloadLabel}
             </Button>
           </div>
-        </div>
+        </Hint>
       )
     }
 

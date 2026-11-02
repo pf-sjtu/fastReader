@@ -3,6 +3,7 @@ import { Loader2, Check, ArrowRight, AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { ProcessingMetadata } from '@/services/cloudCacheService'
+import { Hint } from '@/components/ui/hint'
 
 interface CloudCacheSectionProps {
   isCheckingCloudCache: boolean
@@ -54,7 +55,7 @@ export function CloudCacheSection({
     // 元数据药丸：「标签 值」一枚一枚排开，窄屏自动折行（比两列表格更像一张「收藏卡」，也不会让长模型名撑坏布局）
     const chip = 'inline-flex max-w-full items-baseline gap-1.5 rounded-full border bg-background/70 px-2.5 py-0.5 text-xs'
     return (
-      <div data-slot="cloud-cache" className="relative overflow-hidden rounded-lg border border-success/30 bg-success/5">
+      <div data-slot="cloud-cache" className="relative overflow-hidden rounded-lg border border-success-border bg-success-muted">
         {/* 书脊：左缘一道成功色竖条，一眼分出「这是已有成果」而不是普通提示 */}
         <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-success" />
         <div className="flex flex-wrap items-center gap-3 p-3 pl-5">
@@ -87,7 +88,7 @@ export function CloudCacheSection({
               </div>
             )}
           </dl>
-          <span className={includesKeyCharts ? `${chip} border-success/40 text-success` : `${chip} border-dashed text-muted-foreground`}>
+          <span className={includesKeyCharts ? `${chip} border-success-border text-success` : `${chip} border-dashed text-muted-foreground`}>
             {includesKeyCharts
               ? cloudChartsFileFound
                 ? t('cloudCache.includesKeyChartsJson')
@@ -96,7 +97,7 @@ export function CloudCacheSection({
           </span>
         </div>
         {cloudCacheIsPartial && (
-          <p className="flex items-start gap-1.5 border-t border-warning/30 bg-warning/10 py-2 pl-5 pr-3 text-xs text-warning">
+          <p className="flex items-start gap-1.5 border-t border-warning-border bg-warning-muted py-2 pl-5 pr-3 text-xs text-warning">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
             {t('cloudCache.partialLoaded')}
           </p>
@@ -107,10 +108,10 @@ export function CloudCacheSection({
 
   if (cloudCacheStatusUnknown && file && webdavEnabled) {
     return (
-      <div role="status" className="flex items-start gap-1 text-xs text-warning">
+      <Hint tone="warning" className="flex items-start gap-1 text-xs">
         <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
         {t('cloudCache.statusUnknown')}
-      </div>
+      </Hint>
     )
   }
 

@@ -64,6 +64,12 @@
   --color-danger: var(--danger);
   --color-danger-foreground: var(--danger-foreground);
   --color-danger-muted: var(--danger-muted);
+  /* 语义描边：状态卡、提示框的边框统一走这里，不再散落 border-primary/40 这类透明度叠色 */
+  --color-primary-border: var(--primary-border);
+  --color-success-border: var(--success-border);
+  --color-warning-border: var(--warning-border);
+  --color-info-border: var(--info-border);
+  --color-destructive-border: var(--destructive-border);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -120,6 +126,12 @@
   --info-muted: color-mix(in oklab, var(--info) 14%, var(--card));
   --destructive-muted: color-mix(in oklab, var(--destructive) 14%, var(--card));
   --danger-muted: var(--destructive-muted);
+  /* 语义描边：浅色下 40% 饱和度 */
+  --primary-border: color-mix(in oklab, var(--primary) 40%, transparent);
+  --success-border: color-mix(in oklab, var(--success) 40%, transparent);
+  --warning-border: color-mix(in oklab, var(--warning) 40%, transparent);
+  --info-border: color-mix(in oklab, var(--info) 40%, transparent);
+  --destructive-border: color-mix(in oklab, var(--destructive) 40%, transparent);
   /* 正文里的链接：跟品牌色走（原先 .prose a 写死 Tailwind 蓝 #2563eb，与朱砂主色不一致） */
   --link: var(--primary);
   --link-hover: oklch(0.4450 0.1500 32.0);
@@ -211,6 +223,12 @@
   /* 危险色的淡底在深色下要压得更暗：与 card 混合时 danger 文字只有 3.85，改用 background 混 12% 得 4.59 */
   --destructive-muted: color-mix(in oklab, var(--destructive) 12%, var(--background));
   --danger-muted: var(--destructive-muted);
+  /* 深色下描边提到 55%：40% 在近黑底上几乎看不见 */
+  --primary-border: color-mix(in oklab, var(--primary) 55%, transparent);
+  --success-border: color-mix(in oklab, var(--success) 55%, transparent);
+  --warning-border: color-mix(in oklab, var(--warning) 55%, transparent);
+  --info-border: color-mix(in oklab, var(--info) 55%, transparent);
+  --destructive-border: color-mix(in oklab, var(--destructive) 55%, transparent);
   --link: var(--primary);
   --link-hover: oklch(0.7600 0.1400 35.0);
   --link-visited: oklch(0.7200 0.1100 305.0);

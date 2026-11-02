@@ -60,13 +60,13 @@ export function ModelSwitcher({ disabled, tokenUsage = 0, className }: ModelSwit
         <Button
           variant="outline"
           size="sm"
-          className={cn('max-w-[18rem] gap-1.5 px-2.5 font-normal', missingKey && 'border-destructive/50 text-destructive', className)}
+          className={cn('max-w-[18rem] gap-1.5 px-2.5 font-normal', missingKey && 'border-destructive-border text-destructive', className)}
           aria-label={t('modelSwitcher.trigger', { model: label })}
         >
           {missingKey ? <KeyRound className="h-3.5 w-3.5 shrink-0" /> : <Brain className="h-3.5 w-3.5 shrink-0" />}
           <span className="truncate text-xs">{missingKey ? t('statusBar.noApiKey') : label}</span>
           {effort !== 'auto' && !missingKey && (
-            <span className="shrink-0 rounded-md bg-primary/10 px-1 text-xs text-primary">{t(`modelSwitcher.effort.${effort}`)}</span>
+            <span className="shrink-0 rounded-md bg-primary-muted px-1 text-xs text-primary">{t(`modelSwitcher.effort.${effort}`)}</span>
           )}
           {tokenUsage > 0 && <span className="shrink-0 text-xs text-muted-foreground">{formatTokens(tokenUsage)}</span>}
           <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />

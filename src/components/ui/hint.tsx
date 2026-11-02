@@ -6,7 +6,7 @@ import { hintToneClass, needsAlertRole, type StatusTone } from '@/utils/statusTo
  * 提示：统一「一行旁注」与「带框警告 / 错误」的形状。
  *
  * 为什么需要它：全站有 11 处自拼的提示——无框纯文字（`text-muted-foreground`）、
- * 框式警告（`border-warning/40 bg-warning/10`）、框式错误（`border-destructive/40 bg-destructive/5`
+ * 框式警告（`border-warning-border bg-warning-muted`）、框式错误（`border-destructive-border bg-destructive-muted`
  * 或 `bg-card`），`role` 也随意在 `status` / `note` / 无 role 之间挑。同一句提示在不同页面
  * 浓淡与可达性都不同。
  *

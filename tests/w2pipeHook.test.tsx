@@ -11,7 +11,7 @@ import { mount } from './uiTestUtils'
 const h = vi.hoisted(() => ({
   toast: Object.assign(vi.fn(), {
     success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(),
-    loading: vi.fn(() => 'tid'), dismiss: vi.fn(), message: vi.fn(),
+    loading: vi.fn(() => 'tid'), dismiss: vi.fn(), info: vi.fn(),
   }),
   ai: {
     summarize: vi.fn(async (title: string) => `摘要:${title}`),

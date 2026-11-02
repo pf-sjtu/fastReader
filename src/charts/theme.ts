@@ -17,35 +17,39 @@ export interface ChartThemeColors {
   isDark: boolean
 }
 
-/** 暖灰褐主题回退（与 index.css Demo A 对齐的 hex） */
-const FALLBACK_LIGHT: ChartThemeColors = {
-  primary: '#4a433c',
-  primaryForeground: '#f4f0ea',
-  foreground: '#3d3832',
-  mutedForeground: '#8a8178',
-  card: '#ffffff',
-  border: '#d4ccc2',
-  accent: '#c9bfb3',
-  accentForeground: '#3d3832',
+/**
+ * 主题回退值：与 index.css 的 :root / .dark token 逐一对应（由浏览器实测解析出的 sRGB hex）。
+ * 读取 CSS 变量失败时（无 DOM、SSR）用它们兜底，所以**改了 index.css 的 token 也要同步这里**——
+ * tests/chartTheme.test.ts 会核对两组值是否与 index.css 的 token 一致。
+ */
+export const FALLBACK_LIGHT: ChartThemeColors = {
+  primary: '#b4341f',
+  primaryForeground: '#fbf4ea',
+  foreground: '#251f1c',
+  mutedForeground: '#6c6158',
+  card: '#fdfbf7',
+  border: '#dad1c7',
+  accent: '#efdbcf',
+  accentForeground: '#251f1c',
   palette: [
-    '#b5321f', '#2a4f8c', '#a67c1a', '#3f7d4e', '#6a3f8c',
-    '#2f7d8c', '#b02e52', '#6b4a32', '#7d8a2f', '#a8508f',
+    '#b6341f', '#285994', '#9f7101', '#337344', '#664689',
+    '#00717c', '#a92e52', '#6d4a2c', '#6d7533', '#9b5c87',
   ],
   isDark: false,
 }
 
-const FALLBACK_DARK: ChartThemeColors = {
-  primary: '#e8e8e8',
-  primaryForeground: '#1a1a1a',
-  foreground: '#ececec',
-  mutedForeground: '#9a9a9a',
-  card: '#2a2a2a',
-  border: '#4a4a4a',
-  accent: '#3a3a3a',
-  accentForeground: '#ececec',
+export const FALLBACK_DARK: ChartThemeColors = {
+  primary: '#e4694b',
+  primaryForeground: '#14100d',
+  foreground: '#e9e4dc',
+  mutedForeground: '#9b948c',
+  card: '#1d1816',
+  border: '#38312e',
+  accent: '#3b2824',
+  accentForeground: '#e9e4dc',
   palette: [
-    '#e8785c', '#7ea2e6', '#e0b84a', '#6fc08a', '#b48ae0',
-    '#5fc0d0', '#e8708f', '#b08a68', '#b8c85a', '#d98ac0',
+    '#f07456', '#6ea1e2', '#e4b750', '#76be86', '#b593dc',
+    '#61bfc9', '#f17993', '#b98e6c', '#b5bf73', '#d995c2',
   ],
   isDark: true,
 }

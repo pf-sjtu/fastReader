@@ -335,7 +335,7 @@ function App() {
       <ErrorBoundary section={t('errorBoundary.webdavBrowser')}>
         <Suspense fallback={<PanelSkeleton />}>
           <WebDAVFileBrowser
-            isOpen={isWebDAVBrowserOpen}
+            open={isWebDAVBrowserOpen}
             onClose={handleCloseWebDAVBrowser}
             onFileSelect={book.handleWebDAVFileSelect}
           />

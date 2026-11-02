@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import type { AIProtocol } from '../../../types/ai'
 import { defaultBaseUrlForProtocol, type BaseUrlIssue } from './provider-utils'
 import { ModelChecklist } from './ModelChecklist'
+import { Hint } from '@/components/ui/hint'
 
 export interface WizardDraft {
   type: AIProtocol
@@ -168,12 +169,12 @@ export function WizardCredentialsStep({
 
         <div aria-live="polite">
           {fetchState.status === 'error' && (
-            <p role="alert" className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+            <Hint tone="danger" boxed className="flex items-start gap-2 px-3 py-2 text-xs">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
               <span className="min-w-0 break-words">
                 {t('aiProvider.wizard.fetchFailed', { error: fetchState.message })}
               </span>
-            </p>
+            </Hint>
           )}
           {fetchState.status === 'done' && (
             <p className="text-xs text-muted-foreground">{t('aiProvider.wizard.fetched', { count: fetchState.count })}</p>

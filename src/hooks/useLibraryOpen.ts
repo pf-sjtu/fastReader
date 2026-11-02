@@ -123,7 +123,7 @@ export function useLibraryOpen({
         progress.setCancel(null)
         // 用户取消：不是失败，更不能去怀疑「文件是不是没了」（那会弹出删除云端资料的确认）
         if (ac.signal.aborted) {
-          toast.message(t('library.download.cancelled'))
+          toast.info(t('library.download.cancelled'))
           return
         }
         if (!r.success || !r.data) {

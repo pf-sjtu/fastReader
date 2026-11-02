@@ -112,29 +112,29 @@ describe('WebDAVFileBrowser', () => {
 
   it('未初始化时按配置给出统一错误文案', async () => {
     dav.isInitialized.mockReturnValue(false)
-    m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
+    m = mount(<WebDAVFileBrowser open onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(document.body.textContent).toContain(t('webdav.errors.disabled')))
     m.unmount()
 
     cfg().setWebDAVEnabled(true)
-    m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
+    m = mount(<WebDAVFileBrowser open onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(document.body.textContent).toContain(t('webdav.errors.incomplete')))
     m.unmount()
 
     enableWebDAV()
     dav.initialize.mockResolvedValueOnce({ success: false, error: '401' })
-    m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
+    m = mount(<WebDAVFileBrowser open onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(document.body.textContent).toContain(t('webdav.errors.initFailed', { error: '401' })))
     m.unmount()
 
     dav.initialize.mockRejectedValueOnce(new Error('net'))
-    m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
+    m = mount(<WebDAVFileBrowser open onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(document.body.textContent).toContain(t('webdav.errors.initException', { error: 'net' })))
   })
 
   it('列目录失败 / 抛异常时显示错误', async () => {
     dav.getDirectoryContents.mockResolvedValueOnce({ success: false })
-    m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
+    m = mount(<WebDAVFileBrowser open onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(document.body.textContent).toContain(t('webdav.errors.loadFailed')))
     dav.getDirectoryContents.mockRejectedValueOnce(new Error('boom'))
     click(document.querySelector(`[aria-label="${t('webdav.browser.refresh')}"]`))
@@ -143,7 +143,7 @@ describe('WebDAVFileBrowser', () => {
 
   it('目录导航：进入、上级、后退、前进', async () => {
     enableWebDAV()
-    m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
+    m = mount(<WebDAVFileBrowser open onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(rows().length).toBe(3))
     expect(dav.getDirectoryContents).toHaveBeenLastCalledWith('/books/')
     click(rows()[0])
@@ -159,14 +159,14 @@ describe('WebDAVFileBrowser', () => {
 
   it('设置中的浏览路径变化后回到新起点', async () => {
     enableWebDAV()
-    m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
+    m = mount(<WebDAVFileBrowser open onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(rows().length).toBe(3))
     act(() => cfg().setWebDAVBrowsePath('/other/'))
     await waitFor(() => expect(dav.getDirectoryContents).toHaveBeenLastCalledWith('/other/'))
   })
 
   it('搜索、排序切换与乱序', async () => {
-    m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
+    m = mount(<WebDAVFileBrowser open onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(rows().length).toBe(3))
     typeInto(document.querySelector<HTMLInputElement>(`input[placeholder="${t('webdav.browser.searchPlaceholder')}"]`)!, 'zzz')
     expect(document.body.textContent).toContain(t('webdav.noSearchResults'))
@@ -181,7 +181,7 @@ describe('WebDAVFileBrowser', () => {
   it('选中文件后下载并交给父组件；失败时提示', async () => {
     const onFileSelect = vi.fn()
     const onClose = vi.fn()
-    m = mount(<WebDAVFileBrowser isOpen onClose={onClose} onFileSelect={onFileSelect} />)
+    m = mount(<WebDAVFileBrowser open onClose={onClose} onFileSelect={onFileSelect} />)
     await waitFor(() => expect(rows().length).toBe(3))
     pressKey(rows().find((r) => r.textContent?.includes('a.epub'))!, 'Enter')
     expect(document.body.textContent).toContain(t('webdav.browser.size', { size: '2 KB' }))
@@ -207,7 +207,7 @@ describe('WebDAVFileBrowser', () => {
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: createURL, revokeObjectURL: revokeURL }))
     const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     dav.downloadFileAsFile.mockResolvedValueOnce({ success: true, data: new File(['e'], 'a.epub') })
-    m = mount(<WebDAVFileBrowser isOpen onClose={vi.fn()} onFileSelect={vi.fn()} />)
+    m = mount(<WebDAVFileBrowser open onClose={vi.fn()} onFileSelect={vi.fn()} />)
     await waitFor(() => expect(rows().length).toBe(3))
     click(document.querySelector(`[aria-label="${t('webdav.browser.downloadFileNamed', { name: 'a.epub' })}"]`))
     await waitFor(() => expect(anchorClick).toHaveBeenCalled())

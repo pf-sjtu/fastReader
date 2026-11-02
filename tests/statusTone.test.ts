@@ -48,13 +48,15 @@ describe('状态色调映射：语义 → 外观只有一张表', () => {
     }
   })
 
-  it('描边只有一档（/40），不再 30/40/50/60 混用', () => {
+  it('描边只有一档：语义描边 token，不再混用 30/40/50/60 透明度', () => {
     for (const tone of STATUS_TONES) {
       const cls = hintToneClass(tone)
-      const borders = cls.match(/border-[a-z]+(?:\/\d+)?/g) ?? []
+      // 描边要么是中性 border-border，要么是语义描边 token（border-primary-border 等）
+      const borders = cls.match(/border-[a-z-]+(?:\/\d+)?/g) ?? []
       for (const b of borders) {
         if (b === 'border-border') continue
-        expect(b, `${tone} 的描边应当只有 /40 一档`).toMatch(/\/40$/)
+        expect(b, `${tone} 的描边应当是语义描边 token`).toMatch(/^border-(primary|success|warning|info|destructive)-border$/)
+        expect(b, `${tone} 的描边不再用透明度叠色`).not.toMatch(/\/\d+$/)
       }
     }
   })

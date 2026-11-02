@@ -10,6 +10,7 @@ import { useCoverUrl } from './useCoverUrl'
 import { useLongPress } from './useLongPress'
 import { useOpenProgress } from '@/stores/openProgress'
 import { fractionOf } from '@/services/webdav/progress'
+import { StatusBadge } from '@/components/ui/status-badge'
 
 const RING_R = 18
 const RING_C = 2 * Math.PI * RING_R
@@ -187,9 +188,10 @@ export function BookCard({ entry, opening, disabled, onOpen, onInfo, caption, sh
           <div className="flex max-w-[60%] shrink-0 flex-col items-end gap-1">
             {primaryCategory && <span className={CATEGORY_PILL_BASE(categoryTone(entry.subjects![0]))}>{primaryCategory}</span>}
             {entry.status !== 'unprocessed' && (
-              <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium leading-4 text-primary-foreground shadow-sm">
+              /* 已读/部分处理：实心主色，要一眼看见（solid 只有主色有实心版） */
+              <StatusBadge tone="primary" look="solid" className="shadow-sm">
                 {entry.status === 'done' ? t('library.status.done') : t('library.status.partial')}
-              </span>
+              </StatusBadge>
             )}
           </div>
         </div>

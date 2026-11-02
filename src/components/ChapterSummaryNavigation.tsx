@@ -163,7 +163,7 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
               {/* 节点 + 文字同行，垂直居中对齐 */}
               <div className="flex items-center">
                 {isProcessing ? (
-                  <div className="w-3.5 h-3.5 rounded-full border-2 border-primary/30 flex items-center justify-center shrink-0">
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-primary-border flex items-center justify-center shrink-0">
                     <Loader2 className="h-2 w-2 text-primary animate-spin" />
                   </div>
                 ) : chapter.processed ? (
@@ -176,8 +176,8 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
                       'block w-3.5 h-3.5 rounded-full border-2 shrink-0 transition-colors',
                       isViewing && 'bg-primary border-primary shadow-[0_0_0_2px] shadow-primary/25',
                       isRead && 'bg-muted-foreground/15 border-muted-foreground/25 hover:border-muted-foreground/40',
-                      isUnread && 'bg-background border-muted-foreground/55 hover:border-primary/60',
-                      !isViewing && !isRead && !isUnread && 'bg-background border-primary/40 hover:border-primary'
+                      isUnread && 'bg-background border-muted-foreground/55 hover:border-primary-border',
+                      !isViewing && !isRead && !isUnread && 'bg-background border-primary-border hover:border-primary'
                     )}
                   />
                 ) : (
@@ -208,7 +208,7 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
                 <div
                   className={cn(
                     'ml-[7px] w-px h-3',
-                    isRead || isViewing ? 'bg-primary/20' : 'bg-border'
+                    isRead || isViewing ? 'bg-primary-muted' : 'bg-border'
                   )}
                 />
               )}

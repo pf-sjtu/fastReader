@@ -46,7 +46,7 @@ export function ExportPackButton({ bookSummary }: { bookSummary: BookSummary }) 
       downloadPackHtml(result.html, result.filename)
       toast.success(t('study.pack.done', { filename: result.filename }))
       if (result.failed.length) {
-        toast.message(t('study.pack.imagesFailed', { count: result.failed.length }))
+        toast.info(t('study.pack.imagesFailed', { count: result.failed.length }))
       }
     } catch (error) {
       logger.error('学习包导出失败:', error)

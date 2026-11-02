@@ -17,8 +17,8 @@ export interface StatusBadgeProps extends React.ComponentProps<'span'> {
   status?: string
   /** 直接给语义色调（与 status 二选一；status 优先） */
   tone?: StatusTone
-  /** 外观：chip（淡底+描边，默认）/ surface（只有淡底）/ text（只有文字色） */
-  look?: 'chip' | 'surface' | 'text'
+  /** 外观：chip（淡底+描边，默认）/ surface（只有淡底）/ text（只有文字色）/ solid（实心主色） */
+  look?: 'chip' | 'surface' | 'text' | 'solid'
 }
 
 export function StatusBadge({ status, tone, look = 'chip', className, children, ...props }: StatusBadgeProps) {

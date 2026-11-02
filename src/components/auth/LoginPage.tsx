@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { sharedApi, SharedApiError } from '@/services/shared/api'
+import { Hint } from '@/components/ui/hint'
 
 interface LoginPageProps {
   onSuccess: () => void
@@ -94,9 +95,9 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                   </Button>
                 </div>
                 {error && (
-                  <p id="fr-password-error" role="alert" className="text-sm text-destructive">
+                  <Hint id="fr-password-error" tone="danger" className="text-sm">
                     {error}
-                  </p>
+                  </Hint>
                 )}
               </div>
 

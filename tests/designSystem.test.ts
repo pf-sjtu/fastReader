@@ -99,6 +99,14 @@ const RULES: { id: string; re: RegExp; inner?: RegExp; unless?: RegExp; hint: st
     skipDirs: ['src/charts', 'src/components/markdown/genui'],
   },
   {
+    // 状态色的淡底与描边只走 token：淡底 bg-*-muted、描边 border-*-border。
+    // 剩下的两处透明度是有意为之（ResizeHandle 的高亮把手、深色下危险按钮的实底）。
+    id: 'tinted-surface',
+    re: /\b(?:bg|border)-(?:primary|destructive|success|warning|info)\/(?:5|10|15|20|30|40|50|60|70)\b/,
+    unless: /bg-primary\/50|dark:bg-destructive\/60/,
+    hint: '状态色淡底用 bg-*-muted、描边用 border-*-border，不再用透明度叠色',
+  },
+  {
     // 写死的 white/black 不跟主题走：要么换成语义 token，要么在同一处给 dark: 变体。
     // 受控场景（遮罩 scrim、封面图上的白字、危险按钮的 dark:bg-destructive/60）登记在 EXEMPT。
     id: 'theme-locked-color',

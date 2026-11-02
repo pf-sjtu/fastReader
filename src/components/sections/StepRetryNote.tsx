@@ -1,6 +1,7 @@
 import { RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { isUsableText } from '@/utils/resultStatus'
 import type { BookStepKind } from '@/hooks/useBookSteps'
 
@@ -18,12 +19,18 @@ export function StepRetryNote({ kind, text, running, onRetry }: Props) {
   if (!onRetry || isUsableText(text)) return null
   const busy = running === kind
   return (
-    <div role="status" className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted px-3 py-2" data-testid={`step-retry-${kind}`}>
+    <Hint
+      tone="neutral"
+      role="status"
+      boxed
+      className="mb-2 flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+      data-testid={`step-retry-${kind}`}
+    >
       <span className="text-xs text-muted-foreground">{t(kind === 'connections' ? 'results.step.connectionsMissing' : 'results.step.overallMissing')}</span>
       <Button size="sm" variant="outline" disabled={!!running} onClick={() => onRetry(kind)}>
         <RefreshCw className={busy ? 'size-3.5 animate-spin' : 'size-3.5'} />
         {t('results.step.retry')}
       </Button>
-    </div>
+    </Hint>
   )
 }

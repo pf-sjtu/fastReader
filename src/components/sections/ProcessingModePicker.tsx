@@ -53,7 +53,7 @@ export function ProcessingModePicker({ value, onChange, disabled }: Props) {
             }}
             className={cn(
               'relative flex items-start gap-3 rounded-lg border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-60 sm:flex-col sm:gap-2',
-              checked ? 'border-primary bg-primary/5 shadow-sm' : 'bg-card hover:bg-accent/60'
+              checked ? 'border-primary bg-primary-muted shadow-sm' : 'bg-card hover:bg-accent/60'
             )}
           >
             <span

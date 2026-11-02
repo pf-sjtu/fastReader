@@ -244,7 +244,7 @@ export function WebDAVConfig() {
               <LibraryMaintenance />
 
               {testResult && (
-                <Alert className={testResult.success ? 'border-success/40' : 'border-destructive/40'}>
+                <Alert className={testResult.success ? 'border-success-border' : 'border-destructive-border'}>
                   <AlertDescription>{testResult.message}</AlertDescription>
                 </Alert>
               )}

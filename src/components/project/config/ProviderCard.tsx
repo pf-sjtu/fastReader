@@ -53,7 +53,7 @@ export function ProviderCard({
 
   return (
     <div
-      className={`rounded-lg border transition-colors ${isActive ? 'border-primary bg-primary/5' : 'border-border'}`}
+      className={`rounded-lg border transition-colors ${isActive ? 'border-primary bg-primary-muted' : 'border-border'}`}
     >
       <div className="space-y-2 p-3">
         <div className="flex min-w-0 items-start gap-2.5">

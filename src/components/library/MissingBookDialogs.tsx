@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useLibraryStore } from '@/services/library/libraryStore'
 import type { LibraryEntry } from '@/services/library/types'
+import { Hint } from '@/components/ui/hint'
 
 /**
  * 点开一本书时，WebDAV 连接正常、扫描成功，却确实没有这本书：问用户要不要删云端 metadata。
@@ -69,13 +70,13 @@ export function OrphanNotice({ orphans }: { orphans: readonly LibraryEntry[] }) 
   if (orphans.length === 0) return null
   return (
     <>
-      <div role="status" className="flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+      <Hint tone="warning" boxed className="flex flex-wrap items-center gap-2 px-3 py-2 text-xs">
         <span className="mr-auto">{t('library.orphans.notice', { count: orphans.length })}</span>
         <Button variant="outline" size="sm" className="gap-1" onClick={() => setOpen(true)}>
           <Trash2 className="size-3.5" />
           {t('library.orphans.review')}
         </Button>
-      </div>
+      </Hint>
       <AlertDialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
         <AlertDialogContent>
           <AlertDialogHeader>

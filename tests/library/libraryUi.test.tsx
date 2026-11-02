@@ -19,7 +19,7 @@ vi.mock('@/services/webdavService', () => ({
 }))
 const toastError = vi.fn()
 const toastDismiss = vi.fn()
-vi.mock('sonner', () => ({ toast: { error: (...a: unknown[]) => toastError(...a), success: vi.fn(), loading: vi.fn(), dismiss: (...a: unknown[]) => toastDismiss(...a), message: vi.fn() } }))
+vi.mock('sonner', () => ({ toast: { error: (...a: unknown[]) => toastError(...a), success: vi.fn(), loading: vi.fn(), dismiss: (...a: unknown[]) => toastDismiss(...a), info: vi.fn() } }))
 
 import { LibraryView } from '@/components/library/LibraryView'
 import { useOpenProgress } from '@/stores/openProgress'

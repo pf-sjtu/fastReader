@@ -172,7 +172,7 @@ function PromptEntryEditor({ entry, value, overridden, inUse, preview }: PromptE
         aria-describedby={hintId}
         spellCheck={false}
         className={`max-h-[45vh] min-h-[180px] overflow-y-auto font-mono text-xs leading-relaxed ${
-          preview !== null ? 'bg-muted/60 disabled:cursor-text disabled:opacity-100' : ''
+          preview !== null ? 'bg-muted disabled:cursor-text disabled:opacity-100' : ''
         }`}
       />
     </section>

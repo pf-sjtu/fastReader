@@ -73,7 +73,7 @@ export function BatchQueuePanel() {
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="w-full text-left flex items-center justify-between p-3 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="w-full text-left flex items-center justify-between p-3 bg-muted rounded-lg cursor-pointer hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <div className="flex items-center gap-3">
             <FolderOpen className="h-4 w-4" />
@@ -123,7 +123,7 @@ export function BatchQueuePanel() {
                   className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs ${
                     item.status === 'processing'
                       ? 'bg-accent'
-                      : 'hover:bg-muted/50'
+                      : 'hover:bg-muted'
                   }`}
                 >
                   <span className="w-5 text-muted-foreground">{index + 1}.</span>

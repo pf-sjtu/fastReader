@@ -28,7 +28,7 @@ export function BatchQueueTab({ onClearQueue }: { onClearQueue: () => void }) {
 
   return (
     <div className="h-full flex flex-col space-y-4 overflow-hidden">
-      <div className="grid grid-cols-5 gap-2 p-3 bg-muted/50 rounded-lg flex-shrink-0">
+      <div className="grid grid-cols-5 gap-2 p-3 bg-muted rounded-lg flex-shrink-0">
         {tiles.map((tile) => (
           <div key={tile.label} className="text-center">
             <div className={`text-2xl font-bold ${tile.cls}`}>{tile.value}</div>
@@ -53,7 +53,7 @@ export function BatchQueueTab({ onClearQueue }: { onClearQueue: () => void }) {
       )}
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden border rounded-lg">
-        <div className="flex items-center justify-between p-2 border-b bg-muted/50">
+        <div className="flex items-center justify-between p-2 border-b bg-muted">
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"

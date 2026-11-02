@@ -7,6 +7,7 @@ import { SectionHeading } from '@/components/ui/section-heading'
 import { cn } from '@/lib/utils'
 import { useReadingFocusStore, type ReadingFont } from '@/stores/readingFocus'
 import { canvasMeasure, checkStack, parseFontStack, type FontStatus, type MeasureFn, type StackReport } from '@/utils/fontCheck'
+import { StatusBadge } from '@/components/ui/status-badge'
 
 const ROLES = [
   { id: 'sans', cssVar: '--font-sans', labelKey: 'config.fonts.roles.sans' },
@@ -18,12 +19,6 @@ const ROLES = [
 const readStack = (cssVar: string) => parseFontStack(getComputedStyle(document.documentElement).getPropertyValue(cssVar))
 
 const STATUS_ICON: Record<FontStatus, typeof Check> = { installed: Check, missing: X, generic: Minus, unknown: Minus }
-const STATUS_TONE: Record<FontStatus, string> = {
-  installed: 'text-success',
-  missing: 'text-muted-foreground',
-  generic: 'text-muted-foreground',
-  unknown: 'text-muted-foreground',
-}
 
 function StackList({ report }: { report: StackReport }) {
   const { t } = useTranslation()
@@ -38,11 +33,19 @@ function StackList({ report }: { report: StackReport }) {
             <span className="min-w-0 flex-1 truncate" style={item.status === 'installed' ? { fontFamily: `"${item.name}"` } : undefined}>
               {item.name}
             </span>
-            {isActive && <span className="shrink-0 rounded-md bg-primary px-1.5 text-xs text-primary-foreground">{t('config.fonts.active')}</span>}
-            <span className={cn('flex shrink-0 items-center gap-1 text-xs', STATUS_TONE[item.status])}>
+            {isActive && (
+              <StatusBadge tone="primary" look="solid" className="shrink-0">
+                {t('config.fonts.active')}
+              </StatusBadge>
+            )}
+            <StatusBadge
+              tone={item.status === 'installed' ? 'success' : 'neutral'}
+              look="text"
+              className="shrink-0 gap-1"
+            >
               <Icon className="size-3.5" aria-hidden="true" />
               {t(`config.fonts.status.${item.status}`)}
-            </span>
+            </StatusBadge>
           </li>
         )
       })}

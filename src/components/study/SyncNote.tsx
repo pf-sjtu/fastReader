@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { AlertTriangle, CloudOff } from 'lucide-react'
 import { useStudyStore } from '@/study/studyStore'
 import type { StudyPart } from '@/study/persistence'
+import { Hint } from '@/components/ui/hint'
 
 /**
  * 速读 / 自测的云端提示：只在需要用户知情时出现一行——
@@ -16,26 +17,26 @@ export function SyncNote({ part }: { part: StudyPart }) {
 
   if (sync === 'newer') {
     return (
-      <p className="flex items-start gap-1.5 text-xs text-warning" role="status">
+      <Hint tone="warning" className="flex items-start gap-1.5 text-xs">
         <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
         {t('study.sync.newer')}
-      </p>
+      </Hint>
     )
   }
   if (stale) {
     return (
-      <p className="flex items-start gap-1.5 text-xs text-warning" role="status">
+      <Hint tone="warning" className="flex items-start gap-1.5 text-xs">
         <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
         {t('study.sync.stale')}
-      </p>
+      </Hint>
     )
   }
   if (sync === 'offline') {
     return (
-      <p className="flex items-start gap-1.5 text-xs text-muted-foreground" role="status">
+      <Hint tone="neutral" className="flex items-start gap-1.5 text-xs">
         <CloudOff className="mt-0.5 size-3.5 shrink-0" />
         {t('study.sync.offline')}
-      </p>
+      </Hint>
     )
   }
   return null

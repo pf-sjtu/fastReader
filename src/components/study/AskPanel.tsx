@@ -62,7 +62,7 @@ export function AskPanel({ bookSummary, onJumpChapter }: Props) {
         {chat.map((turn) => (
           <li key={turn.id} className="space-y-1.5">
             <p className="ml-auto w-fit max-w-[90%] rounded-2xl rounded-br-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground">{turn.question}</p>
-            <div className={cn('max-w-[95%] rounded-2xl rounded-bl-sm border bg-card px-3 py-2 text-sm leading-relaxed', turn.error && 'border-destructive/50')}>
+            <div className={cn('max-w-[95%] rounded-2xl rounded-bl-sm border bg-card px-3 py-2 text-sm leading-relaxed', turn.error && 'border-destructive-border')}>
               {turn.pending ? (
                 <span className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="size-3.5 animate-spin" />

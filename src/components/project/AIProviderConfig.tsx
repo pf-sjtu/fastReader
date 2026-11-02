@@ -29,6 +29,7 @@ import { useAIConnectionTest } from './config/useAIConnectionTest'
 import { useCatalog } from './config/useCatalog'
 import { useAutoRefreshStaleProviders, useModelSync } from './config/useModelSync'
 import { reconcileActiveModel } from './config/provider-utils'
+import { Hint } from '@/components/ui/hint'
 
 /** 向导状态：每次打开换 key，让草稿从头初始化 */
 interface WizardState {
@@ -81,9 +82,9 @@ function ActiveModelBar() {
         <span className="text-xs text-muted-foreground">{t('aiProvider.temperatureHint')}</span>
       </div>
       {result && (
-        <p
-          role="status"
-          className={`flex items-start gap-1.5 text-xs ${result.success ? 'text-success' : 'text-destructive'}`}
+        <Hint
+          tone={result.success ? 'success' : 'danger'}
+          className="flex items-start gap-1.5 text-xs"
         >
           {result.success ? (
             <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -91,7 +92,7 @@ function ActiveModelBar() {
             <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           )}
           <span className="min-w-0 break-words">{result.message}</span>
-        </p>
+        </Hint>
       )}
     </div>
   )
@@ -100,7 +101,7 @@ function ActiveModelBar() {
 function IntroCard() {
   const { t } = useTranslation()
   return (
-    <Card className="border bg-muted/50">
+    <Card className="border bg-muted">
       <CardContent className="p-3">
         <div className="flex items-start gap-2.5">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />

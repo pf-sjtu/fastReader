@@ -12,6 +12,7 @@ import { useLibraryStore } from '@/services/library/libraryStore'
 import { summarizeStale, type StaleArtifact, type StaleReason } from '@/services/library/artifactCleanup'
 import { deleteStaleArtifacts, scanStaleArtifacts } from '@/services/library/artifactCleanupService'
 import { formatFileSize } from '@/utils/file'
+import { Hint } from '@/components/ui/hint'
 
 /** 展示顺序沿用既有三类，新增的「已过时」放最后 */
 const REASONS: StaleReason[] = ['legacy', 'dangling', 'orphan', 'stale']
@@ -95,10 +96,10 @@ export function ArtifactCleanup() {
             </p>
           )}
           {state.kind === 'error' && (
-            <p role="alert" className="py-4 text-sm text-destructive">
+            <Hint tone="danger" className="py-4">
               {t(`library.artifacts.error.${state.reason}`)}
               {state.error ? `：${state.error}` : ''}
-            </p>
+            </Hint>
           )}
           {state.kind === 'ready' && items.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">{t('library.artifacts.none')}</p>}
 

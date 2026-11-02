@@ -82,7 +82,7 @@ export const TimelineNavigation = memo(function TimelineNavigation({
               {/* 节点 + 文字同行，垂直居中对齐 */}
               <div className="flex items-center">
                 {isProcessing ? (
-                  <div className="w-3.5 h-3.5 rounded-full border-2 border-primary/30 flex items-center justify-center shrink-0">
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-primary-border flex items-center justify-center shrink-0">
                     <Loader2 className="h-2 w-2 text-primary animate-spin" />
                   </div>
                 ) : chapter.processed ? (

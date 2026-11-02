@@ -47,7 +47,7 @@ export function ProcessingSection({ processing }: { processing: boolean }) {
         </div>
       </div>
 
-      <div className="p-3 bg-info/10 rounded-lg border border-info/30">
+      <div className="p-3 bg-info-muted rounded-lg border border-info-border">
         <div className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="processing-mode" className="text-sm font-medium">

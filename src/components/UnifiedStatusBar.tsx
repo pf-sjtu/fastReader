@@ -110,7 +110,7 @@ export const StatusProgress = memo(function StatusProgress({
                 <Button
                   variant="outline"
                   size="xs"
-                  className="px-2 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
+                  className="px-2 text-xs border-destructive-border text-destructive hover:bg-destructive-muted"
                   onClick={() => setAbortConfirmOpen(true)}
                 >
                   {t('progress.abort')}
@@ -140,7 +140,7 @@ export const StatusProgress = memo(function StatusProgress({
                     <Button
                       variant="outline"
                       size="xs"
-                      className="px-2 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
+                      className="px-2 text-xs border-destructive-border text-destructive hover:bg-destructive-muted"
                       onClick={() => setAbortConfirmOpen(true)}
                     >
                       {t('progress.abort')}

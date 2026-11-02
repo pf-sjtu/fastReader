@@ -32,7 +32,7 @@ import { useWebDAVClient } from './webdav/useWebDAVClient'
 import { directoryPath, extOf, filterEntries, parentPath, sortEntries, type SortBy, type SortOrder } from './webdav/fileListUtils'
 
 interface WebDAVFileBrowserProps {
-  isOpen: boolean
+  open: boolean
   onClose: () => void
   onFileSelect: (file: File) => void
   allowedExtensions?: string[]
@@ -57,7 +57,7 @@ function FileIcon({ file }: { file: WebDAVFileInfo }) {
 
 const formatDate = (s: string) => new Date(s).toLocaleString()
 
-export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtensions = DEFAULT_EXTENSIONS }: WebDAVFileBrowserProps) {
+export function WebDAVFileBrowser({ open, onClose, onFileSelect, allowedExtensions = DEFAULT_EXTENSIONS }: WebDAVFileBrowserProps) {
   const { t } = useTranslation()
   const { config, listDirectory } = useWebDAVClient()
   const startPath = config.browsePath || '/'
@@ -105,8 +105,8 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
 
   // 打开或路径变化时加载（listDirectory 内部按需初始化 WebDAV）
   useEffect(() => {
-    if (isOpen) void loadDirectory(currentPath)
-  }, [isOpen, currentPath, loadDirectory])
+    if (open) void loadDirectory(currentPath)
+  }, [open, currentPath, loadDirectory])
 
   const goTo = (path: string) => {
     const next = [...pathHistory.slice(0, historyIndex + 1), path]
@@ -181,7 +181,7 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
   const isSelectable = (f: WebDAVFileInfo) => f.type === 'file' && allowedExtensions.includes(extOf(f.basename))
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-5xl h-[85vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
@@ -278,7 +278,7 @@ export function WebDAVFileBrowser({ isOpen, onClose, onFileSelect, allowedExtens
           </div>
 
           {error && (
-            <Alert className="border-destructive/40 flex-shrink-0">
+            <Alert className="border-destructive-border flex-shrink-0">
               <XCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>

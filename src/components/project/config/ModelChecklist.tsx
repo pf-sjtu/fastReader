@@ -66,7 +66,7 @@ export function ModelChecklist({ ids, selected, onChange }: ModelChecklistProps)
           {visible.slice(0, MAX_ROWS).map((id) => {
             const checkboxId = `wizard-model-${id}`
             return (
-              <li key={id} className="flex items-center gap-2 px-3 py-1 hover:bg-muted/60">
+              <li key={id} className="flex items-center gap-2 px-3 py-1 hover:bg-muted">
                 <Checkbox
                   id={checkboxId}
                   checked={selected.has(id)}

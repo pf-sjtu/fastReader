@@ -234,7 +234,7 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
           variant="outline"
           size="sm"
           onClick={() => uploadToWebDAV()}
-          className={`${className} border-success/40 hover:border-success/60 hover:bg-success/10`}
+          className={`${className} border-success-border hover:border-success-border hover:bg-success-muted`}
           title={t('upload.reupload')}
         >
           <Check className="h-4 w-4 mr-1 text-success" />

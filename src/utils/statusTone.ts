@@ -65,23 +65,31 @@ const TONE_TEXT: Record<StatusTone, string> = {
 /** 带框提示：淡底 + 一条固定描边档（不再是 30/40/50/60 混用） */
 const TONE_BOX: Record<StatusTone, string> = {
   neutral: 'border-border bg-muted text-foreground',
-  primary: 'border-primary/40 bg-primary-muted text-foreground',
-  info: 'border-info/40 bg-info-muted text-foreground',
-  success: 'border-success/40 bg-success-muted text-foreground',
-  warning: 'border-warning/40 bg-warning-muted text-foreground',
-  danger: 'border-destructive/40 bg-destructive-muted text-foreground',
-  processing: 'border-info/40 bg-info-muted text-foreground',
+  primary: 'border-primary-border bg-primary-muted text-foreground',
+  info: 'border-info-border bg-info-muted text-foreground',
+  success: 'border-success-border bg-success-muted text-foreground',
+  warning: 'border-warning-border bg-warning-muted text-foreground',
+  danger: 'border-destructive-border bg-destructive-muted text-foreground',
+  processing: 'border-info-border bg-info-muted text-foreground',
 }
 
 /** 只有描边（徽标用：淡底 + 同色描边） */
 const TONE_CHIP: Record<StatusTone, string> = {
   neutral: 'border-border bg-muted text-muted-foreground',
-  primary: 'border-primary/40 bg-primary-muted text-primary',
-  info: 'border-info/40 bg-info-muted text-info',
-  success: 'border-success/40 bg-success-muted text-success',
-  warning: 'border-warning/40 bg-warning-muted text-warning',
-  danger: 'border-destructive/40 bg-destructive-muted text-destructive',
-  processing: 'border-info/40 bg-info-muted text-info',
+  primary: 'border-primary-border bg-primary-muted text-primary',
+  info: 'border-info-border bg-info-muted text-info',
+  success: 'border-success-border bg-success-muted text-success',
+  warning: 'border-warning-border bg-warning-muted text-warning',
+  danger: 'border-destructive-border bg-destructive-muted text-destructive',
+  processing: 'border-info-border bg-info-muted text-info',
+}
+
+/**
+ * 实心外观：只有主色有实心版（用于「已读 / 当前生效」这类要醒目的标记）。
+ * 其余色调没有实心版——实心的 success/warning 底上文字对比度不够，宁可退回 chip。
+ */
+const TONE_SOLID: Partial<Record<StatusTone, string>> = {
+  primary: 'bg-primary text-primary-foreground',
 }
 
 /** 业务状态名 → 语义色调（认不出来的按中性处理，不猜颜色） */
@@ -93,10 +101,14 @@ export function toneOf(status: string | null | undefined): StatusTone {
 
 export const isStatusTone = (v: string): v is StatusTone => (STATUS_TONES as readonly string[]).includes(v)
 
-/** 徽标外观：`chip` 带框（默认）/ `surface` 只有淡底 / `text` 只有文字色 */
-export function statusToneClass(tone: StatusTone, look: 'chip' | 'surface' | 'text' = 'chip'): string {
+/** 徽标外观：`chip` 带框（默认）/ `surface` 只有淡底 / `text` 只有文字色 / `solid` 实心主色 */
+export function statusToneClass(
+  tone: StatusTone,
+  look: 'chip' | 'surface' | 'text' | 'solid' = 'chip'
+): string {
   if (look === 'text') return TONE_TEXT[tone]
   if (look === 'surface') return TONE_SURFACE[tone]
+  if (look === 'solid') return TONE_SOLID[tone] ?? TONE_CHIP[tone]
   return TONE_CHIP[tone]
 }
 

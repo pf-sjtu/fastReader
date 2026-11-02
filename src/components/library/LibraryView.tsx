@@ -19,6 +19,7 @@ import { BookDetailDialog } from './BookInfo'
 import { LibraryToolbar } from './LibraryToolbar'
 import { MissingBookDialog, OrphanNotice } from './MissingBookDialogs'
 import { groupLabel, reasonLabel } from './labels'
+import { Hint } from '@/components/ui/hint'
 
 interface LibraryViewProps {
   onOpenBook: (entry: LibraryEntry) => void
@@ -185,10 +186,10 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
 
       {/* 安静的一行：说清楚数据从哪来、WebDAV 什么时候才会被访问 */}
       {total > 0 && davEnabled && (error || !fresh) && (
-        <p role="status" className="text-xs text-muted-foreground">
+        <Hint tone="neutral" className="text-xs">
           {t('library.sync.cached')}
           {error ? `（${error}）` : ''}
-        </p>
+        </Hint>
       )}
 
       <OrphanNotice orphans={orphans} />
@@ -271,9 +272,9 @@ export function LibraryView({ onOpenBook, openingPath = null }: LibraryViewProps
         <div className="space-y-2 py-6 text-center text-sm text-muted-foreground">
           {total === 0 && error && !refreshing ? (
             <>
-              <p role="alert" className="text-destructive">
+              <Hint tone="danger">
                 {t('library.scanFailed', { error })}
-              </p>
+              </Hint>
               <Button variant="outline" size="sm" onClick={() => void refresh()}>
                 {t('library.retry')}
               </Button>

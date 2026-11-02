@@ -114,7 +114,7 @@ export function InitWizard({ onDone }: InitWizardProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (
-            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+            <div className="flex items-start gap-2 rounded-md border border-destructive-border bg-destructive-muted p-3 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
@@ -125,7 +125,7 @@ export function InitWizard({ onDone }: InitWizardProps) {
               <button
                 type="button"
                 onClick={() => setStep('file')}
-                className="w-full text-left rounded-lg border p-3 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-full text-left rounded-lg border p-3 hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="flex items-center gap-2 font-medium">
                   <FileUp className="h-4 w-4 text-primary" />
@@ -138,7 +138,7 @@ export function InitWizard({ onDone }: InitWizardProps) {
                 type="button"
                 disabled={!localAvailable}
                 onClick={handleImportLocal}
-                className="w-full text-left rounded-lg border p-3 hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-full text-left rounded-lg border p-3 hover:bg-muted transition-colors disabled:opacity-50 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="flex items-center gap-2 font-medium">
                   <HardDriveDownload className="h-4 w-4 text-primary" />

@@ -13,9 +13,9 @@ const Title = ({ children }: { children?: string }) => (children ? <div classNam
 const LEVEL_INDENT = ['', 'ml-0', 'ml-4', 'ml-8', 'ml-12']
 
 const TONE: Record<'info' | 'warn' | 'key', string> = {
-  info: 'border-info/40 bg-info/10',
-  warn: 'border-warning/40 bg-warning/10',
-  key: 'border-primary/40 bg-primary/10',
+  info: 'border-info-border bg-info-muted',
+  warn: 'border-warning-border bg-warning-muted',
+  key: 'border-primary-border bg-primary-muted',
 }
 
 function Quiz({ node }: { node: Extract<GenUiNode, { type: 'quiz' }> }) {
@@ -38,8 +38,8 @@ function Quiz({ node }: { node: Extract<GenUiNode, { type: 'quiz' }> }) {
                 'rounded-md border px-3 py-1.5 text-left transition-colors',
                 !done && 'hover:bg-muted',
                 // 与 QuizPanel 同一档（判分后的红/绿不要压过正文）
-                right && 'border-success/30 bg-success/5',
-                wrong && 'border-destructive/50 bg-destructive/5'
+                right && 'border-success-border bg-success-muted',
+                wrong && 'border-destructive-border bg-destructive-muted'
               )}
             >
               {o}
@@ -195,7 +195,7 @@ function Node({ node }: { node: GenUiNode }) {
 
 export function GenUiView({ nodes }: { nodes: GenUiNode[] }) {
   return (
-    <div className="not-prose my-3 flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 text-foreground" data-slot="genui">
+    <div className="not-prose my-3 flex flex-col gap-3 rounded-lg border bg-muted p-3 text-foreground" data-slot="genui">
       {nodes.map((n, i) => (
         <div key={i}>
           {'title' in n && <Title>{n.title}</Title>}

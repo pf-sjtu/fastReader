@@ -65,14 +65,14 @@ export function FileDropZone({ file, disabled, onPickLocal, onOpenWebDAV, onDrop
       onDrop={drop}
       className={cn(
         'relative overflow-hidden rounded-lg border-2 border-dashed p-4 transition-colors sm:p-5',
-        dragging ? 'border-primary bg-primary/10' : file ? 'border-primary/40 bg-primary/5' : 'bg-background/60 hover:border-primary/50'
+        dragging ? 'border-primary bg-primary-muted' : file ? 'border-primary-border bg-primary-muted' : 'bg-background/60 hover:border-primary-border'
       )}
     >
       <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
         <span
           className={cn(
             'grid size-14 shrink-0 place-items-center rounded-lg transition-colors',
-            file || dragging ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'
+            file || dragging ? 'bg-primary text-primary-foreground' : 'bg-primary-muted text-primary'
           )}
         >
           {file ? <FileText className="size-6" aria-hidden /> : <Upload className="size-6" aria-hidden />}
@@ -108,7 +108,7 @@ export function FileDropZone({ file, disabled, onPickLocal, onOpenWebDAV, onDrop
         </div>
       </div>
       {dragging && (
-        <div aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center bg-primary/10 backdrop-blur-[1px]">
+        <div aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center bg-primary-muted backdrop-blur-[1px]">
           <span className="t-title rounded-full bg-primary px-4 py-1.5 text-primary-foreground shadow-md">{t('upload.dropRelease')}</span>
         </div>
       )}

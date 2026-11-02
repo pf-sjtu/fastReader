@@ -60,7 +60,7 @@ export function BatchFileTab({ selection: sel, options, onOptionsChange }: Batch
         )}
 
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden border rounded-lg">
-          <div className="flex flex-wrap items-center justify-between gap-2 p-2 border-b bg-muted/50">
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2 border-b bg-muted">
             <div className="flex items-center gap-2">
               <Checkbox
                 id="select-all"
@@ -146,7 +146,7 @@ export function BatchFileTab({ selection: sel, options, onOptionsChange }: Batch
           </ScrollArea>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 sm:p-4 bg-muted/50 rounded-lg border flex-shrink-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 sm:p-4 bg-muted rounded-lg border flex-shrink-0">
           <div className="space-y-2">
             <Label htmlFor="batch-max-files">{t('batch.range')}</Label>
             <Select
