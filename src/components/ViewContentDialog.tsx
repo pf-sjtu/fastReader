@@ -9,9 +9,10 @@ import remarkCjkFriendly from "remark-cjk-friendly";
 import { prepareMarkdownForRender } from '@/lib/markdown'
 import { sanitizeBookHtml } from '@/utils/sanitizeHtml'
 import { richMarkdownComponents } from '@/components/markdown/richComponents'
+import { remarkRichTruncation } from '@/components/markdown/remarkRichTruncation'
 
 // 模块级常量：避免每次渲染新建插件数组
-const REMARK_PLUGINS = [remarkGfm, remarkCjkFriendly]
+const REMARK_PLUGINS = [remarkGfm, remarkCjkFriendly, remarkRichTruncation]
 
 interface ViewContentDialogProps {
   title: string

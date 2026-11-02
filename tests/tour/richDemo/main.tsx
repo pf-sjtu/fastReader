@@ -6,6 +6,7 @@ import './demo.css'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { richMarkdownComponents } from '@/components/markdown/richComponents'
 import { remarkTailQuestions } from '@/components/markdown/remarkTailQuestions'
+import { remarkRichTruncation } from '@/components/markdown/remarkRichTruncation'
 import { demoMarkdown } from './sample'
 
 const md = demoMarkdown
@@ -19,9 +20,14 @@ createRoot(document.getElementById('root')!).render(
     */}
     <div data-slot="card-content">
       <div className="markdown-card-content prose prose-sm max-w-none overflow-x-auto" id="demo">
-        <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkTailQuestions]} components={richMarkdownComponents}>
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkTailQuestions, remarkRichTruncation]} components={richMarkdownComponents}>
           {md}
         </ReactMarkdown>
+        <div id="truncated-demo">
+          <ReactMarkdown remarkPlugins={[remarkRichTruncation]} components={richMarkdownComponents}>
+            {'```html\n<button>未闭合的示例</button>'}
+          </ReactMarkdown>
+        </div>
       </div>
     </div>
   </div>

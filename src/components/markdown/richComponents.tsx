@@ -9,9 +9,9 @@ const textOf = (n: unknown): string => (typeof n === 'string' ? n : Array.isArra
 export const richMarkdownComponents: Components = {
   pre(props: ComponentProps<'pre'>) {
     const child = Array.isArray(props.children) ? props.children[0] : props.children
-    if (isValidElement<{ className?: string; children?: unknown }>(child)) {
+    if (isValidElement<{ className?: string; children?: unknown; 'data-rich-truncated'?: string }>(child)) {
       const lang = /language-(\w+)/.exec(child.props.className ?? '')?.[1]
-      if (isRichLang(lang)) return <RichBlock lang={lang} code={textOf(child.props.children).replace(/\n$/, '')} />
+      if (isRichLang(lang)) return <RichBlock lang={lang} code={textOf(child.props.children).replace(/\n$/, '')} truncated={child.props['data-rich-truncated'] === 'true'} />
     }
     return <pre {...props} />
   },

@@ -3,6 +3,7 @@ import { afterEach } from 'vitest'
 import { mount, click, waitFor } from './uiTestUtils'
 import ReactMarkdown from 'react-markdown'
 import { richMarkdownComponents } from '@/components/markdown/richComponents'
+import { remarkRichTruncation } from '@/components/markdown/remarkRichTruncation'
 import { act } from 'react'
 import { buildSandboxDoc, DOC_MSG, HEIGHT_MSG, HTML_MAX, READY_MSG, READY_TIMEOUT_MS, SANDBOX_URL } from '@/lib/htmlSandbox'
 
@@ -21,13 +22,46 @@ afterEach(() => {
 })
 const md = (s: string) => {
   m?.unmount()
-  m = mount(<ReactMarkdown components={richMarkdownComponents}>{s}</ReactMarkdown>)
+  m = mount(<ReactMarkdown remarkPlugins={[remarkRichTruncation]} components={richMarkdownComponents}>{s}</ReactMarkdown>)
   return m
 }
 const has = (t: string) => document.body.textContent?.includes(t) ?? false
 const btn = (t: string) => [...document.querySelectorAll('button')].find((b) => b.textContent === t)
 
 describe('富内容块渲染', () => {
+  it.each(['html', 'genui', 'mermaid'])('未闭合 %s 回退源码而不执行或渲染', (lang) => {
+    md(`前文\n\n${F}${lang}\n<button>未完成</button>`)
+    expect(document.querySelector('[data-slot="rich-fallback"]')?.textContent).toContain('内容不完整')
+    expect(document.querySelector('iframe, [data-slot="genui"], [data-slot="mermaid"]')).toBeNull()
+    expect(has('未完成')).toBe(true)
+  })
+
+  it('更长的合法闭栏仍正常渲染', () => {
+    md(`${F}html\n<button>完成</button>\n${F}${'`'}`)
+    expect(document.querySelector('iframe')).toBeTruthy()
+  })
+
+  it('内容行末尾的反引号不是闭栏', () => {
+    md(`${F}html\n<span>尾巴 ${F}`)
+    expect(document.querySelector('[data-slot="rich-fallback"]')?.textContent).toContain('内容不完整')
+    expect(document.querySelector('iframe')).toBeNull()
+  })
+
+  it.each(['    ```', '> ```'])('非当前容器的围栏行 %s 不能关闭代码块', (line) => {
+    md(`${F}html\n<button>未完成</button>\n${line}`)
+    expect(document.querySelector('[data-slot="rich-fallback"]')?.textContent).toContain('内容不完整')
+    expect(document.querySelector('iframe')).toBeNull()
+  })
+
+  it('引用块内的合法波浪号围栏正常渲染', () => {
+    md('> ~~~html\n> <button>完成</button>\n> ~~~~')
+    expect(document.querySelector('iframe')).toBeTruthy()
+  })
+
+  it('单独 CR 换行的合法围栏正常渲染', () => {
+    md(`${F}html\r<button>完成</button>\r${F}`)
+    expect(document.querySelector('iframe')).toBeTruthy()
+  })
   it('genui：渲染成组件；测验可交互并判分', () => {
     const q = JSON.stringify({ type: 'quiz', question: '谁先到？', options: ['甲', '乙'], answer: 1, explain: '乙更快' })
     md(`正文\n\n${F}genui\n${q}\n${F}\n`)
