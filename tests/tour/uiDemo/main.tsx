@@ -36,7 +36,7 @@ const costly = q.get('cost') === '1'
 const onlyTooltip = q.get('only') === 'tooltip' // 只渲染悬浮卡：让它直接出现在视口里
 
 /** 上传卡包一层 state：拖入 / 选择的文件真的会显示出来，才能验证落笔区的拖入路径 */
-function UploadDemo() {
+export function UploadDemo() {
   const [file, setFile] = useState<File | null>(q.get('file') === '1' ? new File([new Uint8Array(1.2 * 1024 * 1024)], '约翰·聂夫的成功投资.epub') : null)
   return (
     <FileUploadCard
