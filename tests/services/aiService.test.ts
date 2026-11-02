@@ -222,7 +222,7 @@ describe('超长章节按模型输入预算自动分段总结', () => {
       overallSummary: '',
     }))
     const out = await svc.summarizeChapter('长章', longChapter, 'non-fiction', 'zh')
-    const prompts = providerMock.generateContent.mock.calls.map((c) => c[0].prompt as string)
+    const prompts = providerMock.generateContent.mock.calls.map((c) => (c[0] as { prompt?: string } | undefined)?.prompt ?? '')
 
     expect(prompts.length).toBeGreaterThanOrEqual(4) // ≥3 段 + 1 次合并
     for (const p of prompts) expect(p.length).toBeLessThanOrEqual(4096 + prompt.length)
@@ -235,6 +235,7 @@ describe('超长章节按模型输入预算自动分段总结', () => {
     expect(last).toContain('【第 1/')
     expect(out).toBe(`分段总结${n}`)
   })
+
 
   it('无上下文元数据：不切分（保持旧行为）', async () => {
     providerMock.generateContent.mockResolvedValue({ content: 'x' })
@@ -251,5 +252,42 @@ describe('超长章节按模型输入预算自动分段总结', () => {
     const p = providerMock.generateContent.mock.calls[0][0].prompt as string
     // 6×3000=18000 字被压到「4096×3/4 = 3072」量级（每章至少 400）
     expect(p.length).toBeLessThan(6000)
+  })
+})
+
+describe('导图压缩路径不把富内容块喂给导图', () => {
+  beforeEach(() => providerMock.generateContent.mockReset())
+
+  // 小上下文模型（输入预算 4096 字）+ 超长章节 → 走「先用章节总结流程压缩、再用摘要生成导图」的分支
+  const small = { ...mockConfig, contextWindow: 8192, maxOutputTokens: 2048 }
+  const condense = '小结：{{title}}\n{{content}}'
+  const mindmapPrompt = '导图：{{title}}\n{{content}}'
+  const longChapter = Array.from({ length: 10 }, (_, i) => `第${i}段。` + '字'.repeat(900)).join('\n\n')
+  const withBlock = '正文摘要。\n\n```mermaid\ngraph LR\nA-->B\n```\n'
+
+  it('压缩结果里的 mermaid / genui / html 块被剔除后，才进导图提示词', async () => {
+    providerMock.generateContent.mockImplementation(async (...a: unknown[]) => {
+      const prompt = (a[0] as { prompt?: string } | undefined)?.prompt ?? ''
+      return prompt.includes('导图：') ? { content: JSON.stringify({ nodeData: { id: 'r', topic: 'T' } }) } : { content: withBlock }
+    })
+    const svc = new AIService(small, () => ({
+      chapterSummary: { fiction: condense, nonFiction: condense },
+      mindmap: { chapter: mindmapPrompt, arrow: '', combined: '' },
+      connectionAnalysis: '',
+      overallSummary: '',
+    }))
+
+    await expect(svc.generateChapterMindMap('长章', longChapter, 'zh', undefined, 'non-fiction')).resolves.toEqual({
+      nodeData: { id: 'r', topic: 'T' },
+    })
+
+    const prompts = providerMock.generateContent.mock.calls.map((c) => (c[0] as { prompt?: string } | undefined)?.prompt ?? '')
+    // 压缩这一步确实拿到了（并会产出）块——否则下面的断言可能只是因为压根没走压缩分支
+    expect(prompts.some((p) => p.includes('```mermaid'))).toBe(true)
+    const last = prompts[prompts.length - 1]
+    expect(last).toContain('导图：')
+    expect(last).not.toContain('```mermaid')
+    expect(last).not.toContain('graph LR')
+    expect(last).toContain('正文摘要。')
   })
 })

@@ -17,6 +17,10 @@ export interface RichStaticLabels {
   diagramBelow: string
   correctAnswer: string
   explanation: string
+  /** concept 里「例」前缀 */
+  example: string
+  /** concept 里「反例 / 易混」前缀 */
+  contrast: string
 }
 
 type Esc = (text: string) => string
@@ -46,6 +50,18 @@ function nodeHtml(n: GenUiNode, esc: Esc, L: RichStaticLabels): string {
         n.explain ? `<p class="gu-explain">${esc(L.explanation)}：${esc(n.explain)}</p>` : '',
         `</div>`,
       ].join('')
+    case 'concept':
+      return `${title}<div class="gu-cards">${n.items
+        .map(
+          (i) =>
+            `<div class="gu-card"><strong>${esc(i.term)}</strong><p>${esc(i.definition)}</p>${i.example ? `<p class="gu-sub">${esc(L.example)}：${esc(i.example)}</p>` : ''}${i.contrast ? `<p class="gu-sub">${esc(L.contrast)}：${esc(i.contrast)}</p>` : ''}</div>`
+        )
+        .join('')}</div>`
+    case 'hierarchy':
+      // level 已被解析夹到 1..4，静态版只用对应的 gu-lv1..4 类名控制缩进
+      return `${title}<ul class="gu-tree">${n.items
+        .map((i) => `<li class="gu-lv${i.level}">${esc(i.label)}${i.detail ? ` <span class="gu-sub">${esc(i.detail)}</span>` : ''}</li>`)
+        .join('')}</ul>`
   }
 }
 
@@ -94,4 +110,12 @@ export const PACK_RICH_STYLE = `
 .gu-quiz ul { margin: 4px 0; padding-left: 20px; list-style: none; }
 .gu-quiz li.is-answer { font-weight: 600; }
 .gu-explain { color: var(--pack-muted-fg); font-size: 13px; }
+.gu-sub { color: var(--pack-muted-fg); font-size: 13px; }
+.gu-card .gu-sub { margin-top: 2px; }
+.gu-tree { margin: 0; padding-left: 0; list-style: none; }
+.gu-tree li { margin: 3px 0; }
+.gu-tree li::before { content: "·"; color: var(--pack-muted-fg); margin-right: 6px; }
+.gu-lv2 { padding-left: 16px; }
+.gu-lv3 { padding-left: 32px; }
+.gu-lv4 { padding-left: 48px; }
 `

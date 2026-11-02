@@ -40,10 +40,15 @@ interface PromptEntry {
 }
 
 const CHAPTER_VARS = ['title', 'content']
+/**
+ * 章节总结模板里还会预展开两个「使用说明」占位符（不是 renderPrompt 的变量，所以另列）。
+ * 暴露在界面上，用户才知道自己的自定义提示词能拿到、删掉就会失去富内容块。
+ */
+const CHAPTER_GUIDE_VARS = ['richBlocksGuide', 'richBlocksGuideBrief']
 
 const ENTRIES: PromptEntry[] = [
-  { id: 'summary-fiction', tab: 'chapterSummary', path: { group: 'chapterSummary', key: 'fiction' }, labelKey: 'promptEditor.entries.fiction', hintKey: 'promptEditor.hints.fiction', vars: CHAPTER_VARS },
-  { id: 'summary-nonfiction', tab: 'chapterSummary', path: { group: 'chapterSummary', key: 'nonFiction' }, labelKey: 'promptEditor.entries.nonFiction', hintKey: 'promptEditor.hints.nonFiction', vars: CHAPTER_VARS },
+  { id: 'summary-fiction', tab: 'chapterSummary', path: { group: 'chapterSummary', key: 'fiction' }, labelKey: 'promptEditor.entries.fiction', hintKey: 'promptEditor.hints.fiction', vars: [...CHAPTER_VARS, ...CHAPTER_GUIDE_VARS] },
+  { id: 'summary-nonfiction', tab: 'chapterSummary', path: { group: 'chapterSummary', key: 'nonFiction' }, labelKey: 'promptEditor.entries.nonFiction', hintKey: 'promptEditor.hints.nonFiction', vars: [...CHAPTER_VARS, ...CHAPTER_GUIDE_VARS] },
   { id: 'mindmap-chapter', tab: 'mindmap', mindmap: 'chapter', path: { group: 'mindmap', key: 'chapter' }, labelKey: 'promptEditor.entries.mindmapChapter', hintKey: 'promptEditor.hints.mindmapChapter', vars: CHAPTER_VARS },
   { id: 'mindmap-arrow', tab: 'mindmap', mindmap: 'arrow', path: { group: 'mindmap', key: 'arrow' }, labelKey: 'promptEditor.entries.mindmapArrow', hintKey: 'promptEditor.hints.mindmapArrow', vars: ['chapterSummaries'] },
   { id: 'mindmap-combined', tab: 'mindmap', mindmap: 'combined', path: { group: 'mindmap', key: 'combined' }, labelKey: 'promptEditor.entries.mindmapCombined', hintKey: 'promptEditor.hints.mindmapCombined', vars: ['bookTitle', 'chapterSummaries'] },

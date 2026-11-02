@@ -12,6 +12,8 @@ const genui = JSON.stringify([
   { type: 'steps', title: '企业生命周期', items: [{ label: '孕育期', detail: '想法与资源' }, { label: '婴儿期', detail: '活下来' }, { label: '学步期', detail: '过度扩张' }] },
   { type: 'compare', title: '两种路径', columns: ['内生增长', '并购'], rows: [{ label: '风险', cells: ['低', '高'] }, { label: '速度', cells: ['慢', '快'] }] },
   { type: 'timeline', items: [{ time: '1990', label: '创立', detail: '三人合伙' }, { time: '1998', label: '上市' }] },
+  { type: 'hierarchy', title: '知识分层', items: [{ label: '显性知识', level: 1 }, { label: '事实性', level: 2 }, { label: '程序性', level: 2 }, { label: '隐性知识', level: 1 }, { label: '经验直觉', level: 2 }] },
+  { type: 'concept', title: '两个常被混用的成本', items: [{ term: '沉没成本', definition: '已经付出、无法收回的支出', example: '已投入的研发费用', contrast: '决策时应忽略，却常被用来为继续投入辩护' }, { term: '机会成本', definition: '为当前选择而放弃的次优选项的价值', example: '把同一笔钱买债的利息', contrast: '看不见，但必须计入决策' }] },
   { type: 'cards', items: [{ title: '概念甲', body: '一句话解释', tag: '核心' }, { title: '概念乙', body: '另一句话' }] },
   { type: 'callout', tone: 'key', title: '要点', body: '增长不是目的，可持续才是。' },
   { type: 'tabs', tabs: [{ label: '财务', body: '现金流是生命线。' }, { label: '组织', body: '权责要清晰。' }] },
@@ -44,6 +46,48 @@ ${F}
 
 ${F}genui
 {坏的 json
+${F}
+
+新词汇的三种 mermaid 图型（mindmap / stateDiagram-v2 / quadrantChart）与另外两种放行图型（sequenceDiagram / timeline）：
+
+${F}mermaid
+mindmap
+  root((知识分类))
+    显性知识
+      事实性
+      程序性
+    隐性知识
+      认知类
+      技术类
+    集体默契
+      团队配合
+${F}
+
+${F}mermaid
+stateDiagram-v2
+  [*] --> 待审
+  待审 --> 通过: 同意
+  待审 --> [*]: 退回
+${F}
+
+${F}mermaid
+quadrantChart
+  x-axis 低风险 --> 高风险
+  y-axis 低收益 --> 高收益
+  债券: [0.2, 0.3]
+  股票: [0.8, 0.7]
+${F}
+
+${F}mermaid
+sequenceDiagram
+  起草人->>法务: 送审
+  法务-->>起草人: 退回
+${F}
+
+${F}mermaid
+timeline
+  1990 : 创立
+  1998 : 上市
 ${F}
 
 一个坏的 mermaid 块：

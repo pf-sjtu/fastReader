@@ -6,6 +6,9 @@ import type { GenUiNode } from './schema'
 
 const Title = ({ children }: { children?: string }) => (children ? <div className="t-label mb-2 text-muted-foreground">{children}</div> : null)
 
+/** 层级缩进：level 已被解析夹到 1..4，这里只用静态类名（不写内联像素值） */
+const LEVEL_INDENT = ['', 'ml-0', 'ml-4', 'ml-8', 'ml-12']
+
 const TONE: Record<'info' | 'warn' | 'key', string> = {
   info: 'border-info/40 bg-info/10',
   warn: 'border-warning/40 bg-warning/10',
@@ -141,6 +144,33 @@ function Node({ node }: { node: GenUiNode }) {
           {node.title && <div className="mb-1 font-medium">{node.title}</div>}
           <div className="text-sm leading-relaxed">{node.body}</div>
         </div>
+      )
+    case 'concept':
+      return (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2">
+          {node.items.map((c, i) => (
+            <div key={i} className="rounded-md border bg-card p-3">
+              <div className="font-medium">{c.term}</div>
+              <div className="text-sm text-muted-foreground">{c.definition}</div>
+              {c.example && <div className="mt-1 text-sm text-muted-foreground">例：{c.example}</div>}
+              {c.contrast && <div className="mt-1 text-sm text-muted-foreground">反例：{c.contrast}</div>}
+            </div>
+          ))}
+        </div>
+      )
+    case 'hierarchy':
+      return (
+        <ul className="m-0 list-none p-0">
+          {node.items.map((h, i) => (
+            <li key={i} className={cn('flex gap-2', LEVEL_INDENT[h.level])}>
+              <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-muted-foreground" />
+              <div>
+                <span>{h.label}</span>
+                {h.detail && <div className="text-sm text-muted-foreground">{h.detail}</div>}
+              </div>
+            </li>
+          ))}
+        </ul>
       )
     case 'tabs':
       return <Tabs node={node} />

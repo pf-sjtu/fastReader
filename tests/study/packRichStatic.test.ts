@@ -11,6 +11,18 @@ const sample = [
     { type: 'compare', columns: ['A', 'B'], rows: [{ label: '速度', cells: ['快', '慢'] }] },
     { type: 'callout', tone: 'warn', body: '<script>alert(1)</script>' },
     { type: 'quiz', question: '谁先到？', options: ['甲', '乙'], answer: 1, explain: '乙更快' },
+    {
+      type: 'concept',
+      items: [{ term: '边际成本', definition: '多生产一单位所增加的成本', example: '第 100 件产品的成本', contrast: '固定成本不随产量变化' }],
+    },
+    {
+      type: 'hierarchy',
+      items: [
+        { label: '成本', level: 1 },
+        { label: '固定成本', level: 2 },
+        { label: '房租', level: 3 },
+      ],
+    },
   ]),
   F,
   '',
@@ -43,6 +55,19 @@ describe('学习包：总结里的富内容块', () => {
     expect(html).toContain('<td>快</td>')
     expect(html).toContain(DEFAULT_PACK_LABELS.correctAnswer)
     expect(html).toContain('乙更快')
+  })
+
+  it('概念卡片与层级树：内容、序号缩进类名与本地化前缀都正确', () => {
+    expect(html).toContain('<div class="gu-card"><strong>边际成本</strong>')
+    expect(html).toContain('多生产一单位所增加的成本')
+    expect(html).toContain(`${DEFAULT_PACK_LABELS.example}：第 100 件产品的成本`)
+    expect(html).toContain(`${DEFAULT_PACK_LABELS.contrast}：固定成本不随产量变化`)
+    expect(html).toContain('<ul class="gu-tree">')
+    expect(html).toContain('<li class="gu-lv1">成本</li>')
+    expect(html).toContain('<li class="gu-lv2">固定成本</li>')
+    expect(html).toContain('<li class="gu-lv3">房租</li>')
+    expect(html).toContain('.gu-lv2 { padding-left: 16px; }')
+    expect(html).toContain('.gu-lv3 { padding-left: 32px; }')
   })
 
   it('块内文本照样转义，不产生可执行标签；源码围栏与 JSON 不外泄', () => {

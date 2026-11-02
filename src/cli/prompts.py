@@ -125,6 +125,9 @@ def prepare_post_process_chapters(
 _log = logging.getLogger(__name__)
 
 _RICH_GUIDE_PLACEHOLDER = re.compile(r"\{\{\s*richBlocksGuide\s*\}\}")
+_RICH_GUIDE_BRIEF_PLACEHOLDER = re.compile(r"\{\{\s*richBlocksGuideBrief\s*\}\}")
+# 决策层与参考层的分界（与前端 richGuide.ts 的 REFERENCE_HEADING 逐字一致）
+RICH_GUIDE_REFERENCE_HEADING = "## 各块写法（参考）"
 
 # {{name}}，允许花括号内两侧空白；name 须以字母或下划线开头（与前端 PLACEHOLDER 一致）
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
@@ -242,12 +245,16 @@ class PromptTemplates:
     # ---- 输入组装（对齐前端 aiService）----
 
     def expand_rich_guide(self, template: str) -> str:
-        """把模板里的 {{richBlocksGuide}} 预展开成「富内容块能力说明」（与前端 expandRichGuide 同语义）；
+        """把模板里的 {{richBlocksGuide}} / {{richBlocksGuideBrief}} 预展开成「富内容块能力说明」
+        （与前端 expandRichGuide 同语义）；精简版只保留决策层、不含语法参考。
         没有占位符（用户自定义的旧提示词）就原样返回，不追加"""
-        if not _RICH_GUIDE_PLACEHOLDER.search(template or ""):
+        if not _RICH_GUIDE_PLACEHOLDER.search(template or "") and not _RICH_GUIDE_BRIEF_PLACEHOLDER.search(template or ""):
             return template
         guide = load_shared_text("rich-blocks-guide.md", self.prompts_dir)
-        return _RICH_GUIDE_PLACEHOLDER.sub(lambda _m: guide, template)
+        at = guide.find(RICH_GUIDE_REFERENCE_HEADING)
+        brief = guide[:at].strip() if at > 0 else guide
+        out = _RICH_GUIDE_PLACEHOLDER.sub(lambda _m: guide, template)
+        return _RICH_GUIDE_BRIEF_PLACEHOLDER.sub(lambda _m: brief, out)
 
     def build_chapter_prompt(self, title: str, content: str, book_type: str, hint: Optional[str] = None) -> str:
         template = self.get_prompt("chapterSummary", book_type)

@@ -114,6 +114,10 @@ export interface PackLabels {
   correctAnswer: string
   yourChoice: string
   explanation: string
+  /** concept 静态卡片的「例」前缀 */
+  example: string
+  /** concept 静态卡片的「反例 / 易混」前缀 */
+  contrast: string
   /** 「第 3 题」 */
   questionNo: (n: number) => string
   /** 「章节 2」「笔记 5」这类计数 */
@@ -141,6 +145,8 @@ export const DEFAULT_PACK_LABELS: PackLabels = {
   correctAnswer: '正确答案',
   yourChoice: '你的选择',
   explanation: '解析',
+  example: '例',
+  contrast: '反例 / 易混',
   questionNo: (n) => `第 ${n} 题`,
   countOf: (unit, n) => `${unit} ${n}`,
 }

@@ -266,6 +266,8 @@ export function packLabels(t: TranslateFn): PackLabels {
     correctAnswer: text('correctAnswer'),
     yourChoice: text('yourChoice'),
     explanation: text('explanation'),
+    example: text('example'),
+    contrast: text('contrast'),
     questionNo: (n) => t('study.pack.questionNo', { n, defaultValue: DEFAULT_PACK_LABELS.questionNo(n) }),
     countOf: (unit, n) =>
       t('study.pack.countOf', { unit, n, defaultValue: DEFAULT_PACK_LABELS.countOf(unit, n) }),

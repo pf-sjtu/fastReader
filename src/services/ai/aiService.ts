@@ -12,6 +12,7 @@ import type {
 } from './types'
 import type { MindElixirData } from 'mind-elixir'
 import { expandRichGuide } from '../prompts/richGuide'
+import { stripRichBlocks } from '../../lib/richBlocks'
 import type { SupportedLanguage } from '../prompts/utils'
 import {
   getFictionChapterSummaryPrompt,
@@ -591,7 +592,8 @@ export class AIService {
         bookType === 'fiction'
           ? promptConfig.chapterSummary.fiction || getFictionChapterSummaryPrompt()
           : promptConfig.chapterSummary.nonFiction || getNonFictionChapterSummaryPrompt()
-      content = await this.generateForLongContent(expandRichGuide(condensePrompt), chapterTitle, chapterContent, outputLanguage, opts)
+      // 压缩只是给导图当输入：富内容块是给读者看的，模型写的小部件 / 图源码对「生成 JSON 树」没有信息价值，剔除后再送
+      content = stripRichBlocks(await this.generateForLongContent(expandRichGuide(condensePrompt), chapterTitle, chapterContent, outputLanguage, opts))
     }
 
     const prompt = renderPrompt(basePrompt, chapterVars(chapterTitle, content))

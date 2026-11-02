@@ -36,6 +36,41 @@ describe('富内容块渲染', () => {
     expect(has('乙更快')).toBe(true)
   })
 
+  it('genui：概念与层级——术语/定义/例子/反例与缩进层级都渲染出来', () => {
+    const blk = [
+      {
+        type: 'concept',
+        items: [
+          { term: '边际成本', definition: '多生产一单位所增加的成本', example: '第 100 件产品的成本', contrast: '固定成本不随产量变化' },
+          { term: '沉没成本', definition: '已经付出、无法收回的支出' },
+        ],
+      },
+      {
+        type: 'hierarchy',
+        items: [
+          { label: '成本', level: 1 },
+          { label: '固定成本', level: 2, detail: '不随产量变化' },
+          { label: '房租', level: 3 },
+        ],
+      },
+    ]
+    md(`正文\n\n${F}genui\n${JSON.stringify(blk)}\n${F}\n`)
+    const root = document.querySelector('[data-slot="genui"]')!
+    expect(root.textContent).toContain('边际成本')
+    expect(root.textContent).toContain('多生产一单位所增加的成本')
+    expect(root.textContent).toContain('例：第 100 件产品的成本')
+    expect(root.textContent).toContain('反例：固定成本不随产量变化')
+    // 没有 example / contrast 的那条不出现前缀
+    expect(root.textContent).not.toContain('例：undefined')
+    // 层级：level 1/2/3 对应 ml-0 / ml-4 / ml-8 的静态类名
+    const lis = [...root.querySelectorAll('ul > li')]
+    expect(lis.map((li) => li.className.includes('ml-4') || li.className.includes('ml-8') || li.className.includes('ml-0'))).toEqual([true, true, true])
+    expect(lis[0].className).toContain('ml-0')
+    expect(lis[1].className).toContain('ml-4')
+    expect(lis[2].className).toContain('ml-8')
+    expect(root.textContent).toContain('不随产量变化')
+  })
+
   it('genui：JSON 坏了回退为源码并给出提示，正文不受影响', () => {
     md(`前文\n\n${F}genui\n{坏的\n${F}\n\n后文`)
     expect(has('前文') && has('后文')).toBe(true)

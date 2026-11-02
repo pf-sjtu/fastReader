@@ -59,6 +59,36 @@ def test_rich_blocks_guide_examples_are_valid():
     from src.cli.rich_blocks import list_rich_blocks
 
     blocks = list_rich_blocks(load_shared_text("rich-blocks-guide.md"))
-    assert len(blocks) >= 4
+    assert len(blocks) >= 10
     for b in blocks:
+        if b.lang == "genui":
+            assert parse_genui(b.code)["ok"], b.code
         assert diagnose_block(b) is None, b.code
+    # 每种 genui 组件都有正例
+    import json as _json
+    types = {_json.loads(b.code)["type"] for b in blocks if b.lang == "genui"}
+    assert types == {"steps", "compare", "timeline", "hierarchy", "concept", "cards", "callout", "tabs", "quiz"}
+    assert {b.lang for b in blocks} == {"mermaid", "genui", "html"}
+
+
+def test_rich_guide_brief_covers_decision_layer_only():
+    """渐进披露：{{richBlocksGuideBrief}} 只展开决策层（分界标题之前），两个占位符互不误匹配"""
+    from src.cli.prompts import RICH_GUIDE_REFERENCE_HEADING
+    from src.cli.rich_blocks import list_rich_blocks
+
+    t = PromptTemplates()
+    guide = load_shared_text("rich-blocks-guide.md")
+    at = guide.find(RICH_GUIDE_REFERENCE_HEADING)
+    assert at > 0
+    brief = guide[:at].strip()
+
+    assert t.expand_rich_guide("{{richBlocksGuideBrief}}") == brief
+    assert t.expand_rich_guide("{{ richBlocksGuideBrief }}") == brief
+    assert t.expand_rich_guide("{{richBlocksGuide}}") == guide
+    assert t.expand_rich_guide("{{richBlocksGuideBrief}}\n{{richBlocksGuide}}") == f"{brief}\n{guide}"
+    # 精简版没有围栏示例，但选型与硬规则都在
+    assert list_rich_blocks(brief) == []
+    for k in ("选型", "什么时候用", "最多 2 个", "不计入字数"):
+        assert k in brief
+    # 自定义提示词里两个占位符都没有时原样返回
+    assert t.expand_rich_guide("自定义 {{title}}") == "自定义 {{title}}"

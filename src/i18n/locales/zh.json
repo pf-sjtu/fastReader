@@ -322,8 +322,8 @@
       "mindmapCombined": "整书思维导图"
     },
     "hints": {
-      "fiction": "书籍类型为「小说类」时用于总结每一章。",
-      "nonFiction": "书籍类型为「社科类」时用于总结每一章。",
+      "fiction": "书籍类型为「小说类」时用于总结每一章。模板里的 {{richBlocksGuide}} 会展开为「富内容块」使用说明（mermaid / genui / html）；删掉它，模型就不会输出图示与互动块；{{richBlocksGuideBrief}} 是同一说明的精简版（只保留选型规则）。",
+      "nonFiction": "书籍类型为「社科类」时用于总结每一章。模板里的 {{richBlocksGuide}} 会展开为「富内容块」使用说明（mermaid / genui / html）；删掉它，模型就不会输出图示与互动块；{{richBlocksGuideBrief}} 是同一说明的精简版（只保留选型规则）。",
       "mindmapChapter": "思维导图模式下为每一章生成导图。",
       "mindmapArrow": "为章节导图生成跨章节的关联箭头。",
       "mindmapCombined": "整书思维导图模式下合成全书导图。",
@@ -1502,6 +1502,8 @@
       "emptyChapter": "（本章暂无总结）",
       "interactiveOnline": "（此处为交互内容，仅在线版可用）",
       "diagramBelow": "图示（mermaid 源码）",
+      "example": "例",
+      "contrast": "反例 / 易混",
       "author": "作者",
       "generatedAt": "生成时间",
       "correctAnswer": "正确答案",

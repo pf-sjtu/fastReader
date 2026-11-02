@@ -337,8 +337,8 @@
       "mindmapCombined": "Whole-book mind map"
     },
     "hints": {
-      "fiction": "Summarizes each chapter when the book type is Fiction.",
-      "nonFiction": "Summarizes each chapter when the book type is Non-fiction.",
+      "fiction": "Summarizes each chapter when the book type is Fiction. {{richBlocksGuide}} expands to the rich-block guide (mermaid / genui / html); remove it and the model stops emitting diagrams and interactive blocks. {{richBlocksGuideBrief}} is the same guide without the syntax reference.",
+      "nonFiction": "Summarizes each chapter when the book type is Non-fiction. {{richBlocksGuide}} expands to the rich-block guide (mermaid / genui / html); remove it and the model stops emitting diagrams and interactive blocks. {{richBlocksGuideBrief}} is the same guide without the syntax reference.",
       "mindmapChapter": "Builds a mind map per chapter in mind map mode.",
       "mindmapArrow": "Builds cross-chapter link arrows for chapter mind maps.",
       "mindmapCombined": "Builds the whole-book mind map in combined mode.",
@@ -1502,6 +1502,8 @@
       "emptyChapter": "(no summary for this chapter yet)",
       "interactiveOnline": "(Interactive content — available online only)",
       "diagramBelow": "Diagram (mermaid source)",
+      "example": "Example",
+      "contrast": "Contrast",
       "author": "Author",
       "generatedAt": "Generated",
       "correctAnswer": "Correct answer",

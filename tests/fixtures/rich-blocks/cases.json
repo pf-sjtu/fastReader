@@ -54,10 +54,16 @@
   ],
   "genui": [
     {
-      "name": "七种组件各自可解析",
-      "code": "[{\"type\":\"steps\",\"items\":[{\"label\":\"孕育\"},\"婴儿\"]},{\"type\":\"compare\",\"columns\":[\"A\",\"B\"],\"rows\":[{\"label\":\"风险\",\"cells\":[\"高\",\"低\"]}]},{\"type\":\"timeline\",\"items\":[{\"time\":\"1990\",\"label\":\"创立\"}]},{\"type\":\"cards\",\"items\":[{\"title\":\"甲\",\"body\":\"乙\"}]},{\"type\":\"callout\",\"tone\":\"warn\",\"body\":\"注意\"},{\"type\":\"tabs\",\"tabs\":[{\"label\":\"一\",\"body\":\"内容\"}]},{\"type\":\"quiz\",\"question\":\"谁？\",\"options\":[\"甲\",\"乙\"],\"answer\":1}]",
+      "name": "九种组件各自可解析（一）前八种",
+      "code": "[{\"type\":\"steps\",\"items\":[{\"label\":\"孕育\"},\"婴儿\"]},{\"type\":\"compare\",\"columns\":[\"A\",\"B\"],\"rows\":[{\"label\":\"风险\",\"cells\":[\"高\",\"低\"]}]},{\"type\":\"timeline\",\"items\":[{\"time\":\"1990\",\"label\":\"创立\"}]},{\"type\":\"cards\",\"items\":[{\"title\":\"甲\",\"body\":\"乙\"}]},{\"type\":\"callout\",\"tone\":\"warn\",\"body\":\"注意\"},{\"type\":\"tabs\",\"tabs\":[{\"label\":\"一\",\"body\":\"内容\"}]},{\"type\":\"quiz\",\"question\":\"谁？\",\"options\":[\"甲\",\"乙\"],\"answer\":1},{\"type\":\"concept\",\"items\":[{\"term\":\"边际成本\",\"definition\":\"多生产一单位所增加的成本\",\"example\":\"第 100 件产品的成本\",\"contrast\":\"固定成本不随产量变化\"}]}]",
       "ok": true,
-      "types": ["steps", "compare", "timeline", "cards", "callout", "tabs", "quiz"]
+      "types": ["steps", "compare", "timeline", "cards", "callout", "tabs", "quiz", "concept"]
+    },
+    {
+      "name": "九种组件各自可解析（二）hierarchy（nodes 上限 8，第九种单独一条）",
+      "code": "{\"type\":\"hierarchy\",\"items\":[{\"label\":\"成本\",\"level\":1},{\"label\":\"固定成本\",\"level\":2},{\"label\":\"房租\",\"level\":3},{\"label\":\"可变成本\",\"level\":2}]}",
+      "ok": true,
+      "types": ["hierarchy"]
     },
     { "name": "单个节点", "code": "{\"type\":\"callout\",\"body\":\"x\"}", "ok": true, "types": ["callout"] },
     { "name": "{blocks:[…]} 写法", "code": "{\"blocks\":[{\"type\":\"callout\",\"body\":\"x\"}]}", "ok": true, "types": ["callout"] },
@@ -71,6 +77,8 @@
     { "name": "测验：答案为 null 不是第 0 项", "code": "{\"type\":\"quiz\",\"question\":\"q\",\"options\":[\"a\",\"b\"],\"answer\":null}", "ok": false, "error": "没有可渲染的组件" },
     { "name": "测验：答案为小数", "code": "{\"type\":\"quiz\",\"question\":\"q\",\"options\":[\"a\",\"b\"],\"answer\":1.5}", "ok": false, "error": "没有可渲染的组件" },
     { "name": "对比表：没有列", "code": "{\"type\":\"compare\",\"columns\":[],\"rows\":[{\"label\":\"r\",\"cells\":[]}]}", "ok": false, "error": "没有可渲染的组件" },
+    { "name": "概念：缺 definition → 整条丢弃", "code": "{\"type\":\"concept\",\"items\":[{\"term\":\"只说术语\"}]}", "ok": false, "error": "没有可渲染的组件" },
+    { "name": "层级：level 不是整数 → 当作第 1 层保留", "code": "{\"type\":\"hierarchy\",\"items\":[{\"label\":\"甲\",\"level\":\"x\"},{\"label\":\"乙\",\"level\":2.5}]}", "ok": true, "types": ["hierarchy"] },
     { "name": "type 大小写不敏感", "code": "{\"type\":\"CALLOUT\",\"body\":\"x\"}", "ok": true, "types": ["callout"] },
     { "name": "空串", "code": "", "ok": false, "error": "JSON 无法解析" }
   ],

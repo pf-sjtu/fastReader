@@ -108,6 +108,34 @@ def _parse_node(raw: Any) -> Optional[dict]:
         if not _text(r.get("question")) or len(options) < 2 or answer != answer or not answer.is_integer() or answer < 0 or answer >= len(options):
             return None
         return {"type": "quiz", "question": _text(r.get("question")), "options": options, "answer": int(answer)}
+    if kind == "concept":
+        # 术语 + 定义是必需项：缺定义的那一条整条丢掉
+        items = []
+        for i in _arr(_first(r, "items", "concepts")):
+            o = _obj(i)
+            items.append({
+                "term": _text(_first(o, "term", "label", "title"), label_max),
+                "definition": _text(_first(o, "definition", "desc", "body", "detail")),
+                "example": _opt(_first(o, "example", "ex")),
+                "contrast": _opt(_first(o, "contrast", "counter", "negExample")),
+            })
+        items = [i for i in items if i["term"] and i["definition"]][: LIMITS["items"]]
+        return {"type": "concept", "items": items} if items else None
+    if kind == "hierarchy":
+        items = []
+        for i in _arr(_first(r, "items", "nodes", "tree")):
+            o = _obj(i)
+            lv = _first(o, "level", "depth")
+            # 层级只认整数：缺失 / 小数 / 字符串一律当第 1 层，再夹进 1..4（与前端一致）
+            if isinstance(lv, bool) or not isinstance(lv, (int, float)) or not float(lv).is_integer():
+                lv = 1
+            items.append({
+                "label": _text(_first(o, "label", "title"), label_max),
+                "detail": _opt(_first(o, "detail", "body")),
+                "level": min(4, max(1, int(lv))),
+            })
+        items = [i for i in items if i["label"]][: LIMITS["items"]]
+        return {"type": "hierarchy", "items": items} if items else None
     return None
 
 

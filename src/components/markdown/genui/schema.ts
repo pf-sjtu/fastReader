@@ -4,6 +4,8 @@
  *   steps     流程 / 步骤        compare   对比表        timeline  时间线
  *   cards     并列概念卡片       callout   要点 / 提醒    tabs      分面切换（交互）
  *   quiz      一道随堂小测（交互）
+ *   concept   术语 + 定义 + 例子 + 反例（讲抽象概念）
+ *   hierarchy 概念层级 / 包含关系（level 表示缩进层级）
  * 解析原则同关键图表：模型输出不可信——宽容地读，坏的单项丢弃，一个都读不出来才报错（由调用方回退为源码）。
  */
 
@@ -15,6 +17,8 @@ export type GenUiNode =
   | { type: 'callout'; tone: 'info' | 'warn' | 'key'; title?: string; body: string }
   | { type: 'tabs'; title?: string; tabs: { label: string; body: string }[] }
   | { type: 'quiz'; question: string; options: string[]; answer: number; explain?: string }
+  | { type: 'concept'; title?: string; items: { term: string; definition: string; example?: string; contrast?: string }[] }
+  | { type: 'hierarchy'; title?: string; items: { label: string; detail?: string; level: number }[] }
 
 export const GENUI_LIMITS = { nodes: 8, items: 12, columns: 6, options: 6, text: 300, label: 60 } as const
 
@@ -77,6 +81,38 @@ function parseNode(raw: unknown): GenUiNode | null {
         .filter((t) => t.label && t.body)
         .slice(0, L.options)
       return tabs.length >= 1 ? { type: 'tabs', title: opt(r.title, L.label), tabs } : null
+    }
+    case 'concept': {
+      // 术语 + 定义是必需项：缺定义的那一条整条丢掉（只剩术语没有解释价值）
+      const items = arr(r.items ?? r.concepts)
+        .map((i) => {
+          const o = obj(i)
+          return {
+            term: text(o.term ?? o.label ?? o.title, L.label),
+            definition: text(o.definition ?? o.desc ?? o.body ?? o.detail),
+            example: opt(o.example ?? o.ex),
+            contrast: opt(o.contrast ?? o.counter ?? o.negExample),
+          }
+        })
+        .filter((i) => i.term && i.definition)
+        .slice(0, L.items)
+      return items.length ? { type: 'concept', title: opt(r.title, L.label), items } : null
+    }
+    case 'hierarchy': {
+      const items = arr(r.items ?? r.nodes ?? r.tree)
+        .map((i) => {
+          const o = obj(i)
+          const lv = o.level ?? o.depth
+          return {
+            label: text(o.label ?? o.title, L.label),
+            detail: opt(o.detail ?? o.body),
+            // 层级只认整数：缺失 / 小数 / 字符串一律当第 1 层，再夹进 1..4（缩进只有四档）
+            level: Math.min(4, Math.max(1, typeof lv === 'number' && Number.isInteger(lv) ? lv : 1)),
+          }
+        })
+        .filter((i) => i.label)
+        .slice(0, L.items)
+      return items.length ? { type: 'hierarchy', title: opt(r.title, L.label), items } : null
     }
     case 'quiz': {
       const options = arr(r.options).map((o) => text(o, 120)).filter(Boolean).slice(0, L.options)

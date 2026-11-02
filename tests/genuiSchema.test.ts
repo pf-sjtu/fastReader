@@ -8,7 +8,7 @@ const ok = (code: string) => {
 }
 
 describe('parseGenUi：宽容解析，坏的单项丢弃', () => {
-  it('七种组件各自能解析（字段别名也认）', () => {
+  it('九种组件各自能解析（字段别名也认）——单块受 nodes 上限 8 约束，第九种单独校验', () => {
     const nodes = ok(
       JSON.stringify([
         { type: 'steps', title: '流程', items: [{ label: '孕育', detail: '想法' }, '婴儿'] },
@@ -18,10 +18,66 @@ describe('parseGenUi：宽容解析，坏的单项丢弃', () => {
         { type: 'callout', tone: 'warn', body: '注意' },
         { type: 'tabs', tabs: [{ label: '一', body: '内容一' }] },
         { type: 'quiz', question: '谁？', options: ['甲', '乙'], answer: 1 },
+        { type: 'concept', items: [{ term: '边际成本', definition: '多生产一单位所增加的成本', example: '第 100 件产品的成本', contrast: '固定成本不随产量变化' }] },
       ])
     )
-    expect(nodes.map((n) => n.type)).toEqual(['steps', 'compare', 'timeline', 'cards', 'callout', 'tabs', 'quiz'])
+    const tree = ok(
+      JSON.stringify({ type: 'hierarchy', items: [{ label: '成本', level: 1 }, { label: '固定成本', level: 2 }, { label: '房租', level: 3 }, { label: '可变成本', level: 2 }] })
+    )
+    expect([...nodes.map((n) => n.type), ...tree.map((n) => n.type)]).toEqual(['steps', 'compare', 'timeline', 'cards', 'callout', 'tabs', 'quiz', 'concept', 'hierarchy'])
     expect(nodes[0]).toMatchObject({ items: [{ label: '孕育', detail: '想法' }, { label: '婴儿' }] })
+    expect(nodes[7]).toMatchObject({ items: [{ term: '边际成本', example: '第 100 件产品的成本' }] })
+    expect(tree[0]).toMatchObject({ items: [{ label: '成本', level: 1 }, { label: '固定成本', level: 2 }, { label: '房租', level: 3 }, { label: '可变成本', level: 2 }] })
+  })
+
+  it('概念：字段别名与丢弃规则（term 与 definition 都非空才保留）', () => {
+    const n = ok(
+      JSON.stringify({
+        type: 'concept',
+        title: '两个常被混用的概念',
+        concepts: [
+          { label: '沉没成本', desc: '已经付出、无法收回的支出', ex: '已投入的研发费用', counter: '决策时应忽略' },
+          { title: '机会成本', body: '为选择而放弃的次优项', negExample: '看不见但必须计入' },
+          { term: '只说术语' },
+          { term: '没有定义', definition: '   ' },
+          { definition: '没有术语' },
+        ],
+      })
+    )[0]
+    expect(n).toMatchObject({ type: 'concept', title: '两个常被混用的概念' })
+    expect(n.type === 'concept' && n.items).toEqual([
+      { term: '沉没成本', definition: '已经付出、无法收回的支出', example: '已投入的研发费用', contrast: '决策时应忽略' },
+      { term: '机会成本', definition: '为选择而放弃的次优项', example: undefined, contrast: '看不见但必须计入' },
+    ])
+    // 一条都留不下 → 整块丢弃
+    expect(parseGenUi('{"type":"concept","items":[{"term":"甲"}]}')).toEqual({ ok: false, error: '没有可渲染的组件' })
+  })
+
+  it('层级：level 只认整数，非整数 / 缺失当 1，超出范围夹到 1..4；label 为空丢弃', () => {
+    const n = ok(
+      JSON.stringify({
+        type: 'hierarchy',
+        nodes: [
+          { title: '成本', level: 0 },
+          { label: '固定成本', depth: 9 },
+          { label: '房租' },
+          { label: '可变成本', level: 2.5 },
+          { label: '人工', level: '3' },
+          { label: '无标签 1' },
+          { label: '  ' },
+        ],
+      })
+    )[0]
+    expect(n.type === 'hierarchy' && n.items.map((i) => [i.label, i.level])).toEqual([
+      ['成本', 1],
+      ['固定成本', 4],
+      ['房租', 1],
+      ['可变成本', 1],
+      ['人工', 1],
+      ['无标签 1', 1],
+    ])
+    expect(ok('{"type":"hierarchy","tree":[{"label":"甲","detail":"乙","level":3}]}')[0]).toMatchObject({ items: [{ label: '甲', detail: '乙', level: 3 }] })
+    expect(parseGenUi('{"type":"hierarchy","items":[]}')).toEqual({ ok: false, error: '没有可渲染的组件' })
   })
 
   it('三种顶层写法：单个节点 / 数组 / {blocks:[…]}', () => {
