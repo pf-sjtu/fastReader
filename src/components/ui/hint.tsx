@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
-import { hintToneClass, needsAlertRole, type StatusTone } from '@/utils/statusTone'
+import { hintToneClass, needsAlertRole, statusToneClass, type StatusTone } from '@/utils/statusTone'
 
 /**
  * 提示：统一「一行旁注」与「带框警告 / 错误」的形状。
@@ -32,8 +32,10 @@ export function Hint({ tone = 'neutral', boxed = false, role, className, childre
       role={role ?? autoRole}
       className={cn(
         'text-sm leading-relaxed',
-        boxed ? 'rounded-md border p-2.5' : 'text-muted-foreground',
-        boxed ? hintToneClass(tone) : tone === 'neutral' ? 'text-muted-foreground' : undefined,
+        boxed ? 'rounded-md border p-2.5' : undefined,
+        // 颜色一律按语义给：带框用 hintToneClass（淡底 + 描边），无框用文字色。
+        // （原先无框分支写死 text-muted-foreground，非中性 tone 被压成灰字——错误态看不出是错误。）
+        boxed ? hintToneClass(tone) : statusToneClass(tone, 'text'),
         className
       )}
       {...props}

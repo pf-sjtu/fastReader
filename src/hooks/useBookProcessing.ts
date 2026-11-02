@@ -121,26 +121,20 @@ export function useBookProcessing() {
 
   const { setFile, checkCloudCache, extractChapters } = book
   // 设置文件后检查云缓存并提取章节（有缓存时仍取章，用户可选择直接用缓存）
-  // deferExtract：章节提取放后台 —— 已经精读过的书，云缓存检查完就能先把结果给用户，
-  // epub 的章节解析（大文件最慢的一步）随后再补，「原文」页签晚一点可用但读者不用干等。
   const handleFileSelect = useCallback(
-    async (selectedFile: File, opts?: { deferExtract?: boolean }) => {
+    async (selectedFile: File) => {
       resetState()
       setFile(selectedFile)
       await checkCloudCache(selectedFile.name)
-      if (opts?.deferExtract) {
-        void extractChapters(selectedFile)
-        return
-      }
       await extractChapters(selectedFile)
     },
     [resetState, setFile, checkCloudCache, extractChapters]
   )
 
   const handleWebDAVFileSelect = useCallback(
-    async (selectedFile: File, opts?: { deferExtract?: boolean }) => {
+    async (selectedFile: File) => {
       toast.success(t('webdav.fileSelected', { name: selectedFile.name }))
-      await handleFileSelect(selectedFile, opts)
+      await handleFileSelect(selectedFile)
     },
     [t, handleFileSelect]
   )
@@ -151,13 +145,23 @@ export function useBookProcessing() {
    * 失败只记日志：原文是附加能力，不该影响已经显示的结果。
    */
   const attachSourceInBackground = useCallback(
-    async (sourceFile: File) => {
-      const generation = generationRef.current.current
+    async (sourceFile: File, expectedGeneration?: number) => {
+      // 代数必须在**下载开始时**捕获：取「此刻的代数再与自己比」是恒真的空转守卫，
+      // 换书后迟到的 A 书会把 B 书的 file 覆盖掉（章节提取另有守卫，file 没有）。
+      const generation = expectedGeneration ?? generationRef.current.current
       if (!generationRef.current.isCurrent(generation)) return
       setFile(sourceFile)
       await extractChapters(sourceFile)
     },
     [setFile, extractChapters, generationRef]
+  )
+
+  /** 取当前代数（后台任务开始时存下来，完成时回验是否仍是这一轮） */
+  const captureGeneration = useCallback(() => generationRef.current.current, [])
+  /** 代数是否仍是当前代（后台任务完成时回验） */
+  const isGenerationCurrent = useCallback(
+    (generation: number) => generationRef.current.isCurrent(generation),
+    []
   )
 
   const { setIsWebDAVBrowserOpen } = reader
@@ -320,16 +324,19 @@ export function useBookProcessing() {
       void (async () => {
         try {
           const name = baseName(path)
+          // 下载开始时记下代数：下载期间用户可能已经换书，回来时必须丢弃
+          const generation = captureGeneration()
           const r = await webdavService.downloadFileAsFile(path, name)
           if (!r.success || !r.data) return
-          await attachSourceInBackground(r.data)
+          if (!isGenerationCurrent(generation)) return
+          await attachSourceInBackground(r.data, generation)
         } catch (e) {
           logger.warn('后台补原文失败:', e)
         }
       })()
       return true
     },
-    [t, loadCloudCacheByFileName, attachSourceInBackground]
+    [t, loadCloudCacheByFileName, attachSourceInBackground, captureGeneration, isGenerationCurrent]
   )
 
   const cacheFileNames = useCallback(
@@ -461,6 +468,8 @@ export function useBookProcessing() {
     loadFromHistoryWithSource,
     loadCloudCacheByFileName,
     attachSourceInBackground,
+    captureGeneration,
+    isGenerationCurrent,
 
     // 设置器
     setCustomPrompt,

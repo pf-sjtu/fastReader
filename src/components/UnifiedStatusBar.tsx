@@ -67,8 +67,10 @@ export const StatusProgress = memo(function StatusProgress({
   const records = useProcessingHistoryStore((s) => s.records)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [loadingFileName, setLoadingFileName] = useState<string | null>(null)
-  // 「中止」是破坏性操作，要二次确认（从结果视图切回设置的那次确认在 StageNav 里）
+  // 「中止」与「中止并返回配置」都是破坏性操作，要二次确认
+  // （从结果视图点「设置」段的那次确认在 StageNav 里）
   const [abortConfirmOpen, setAbortConfirmOpen] = useState(false)
+  const [abortToConfigConfirmOpen, setAbortToConfigConfirmOpen] = useState(false)
 
   const handleHistorySelect = async (record: ProcessingHistoryRecord) => {
     if (!onLoadFromHistory) return
@@ -151,7 +153,7 @@ export const StatusProgress = memo(function StatusProgress({
                       variant="ghost"
                       size="xs"
                       className="px-2 text-xs hidden sm:inline-flex"
-                      onClick={() => onAbortToConfig?.()}
+                      onClick={() => setAbortToConfigConfirmOpen(true)}
                       title={t('progress.abortAndEditSettings')}
                     >
                       {t('progress.abortAndEditSettingsShort')}
@@ -184,6 +186,26 @@ export const StatusProgress = memo(function StatusProgress({
           </div>
         )}
       </div>
+
+      <AlertDialog open={abortToConfigConfirmOpen} onOpenChange={setAbortToConfigConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('progress.confirmAbortToConfigTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('progress.confirmAbortToConfigDescription')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                onAbortToConfig?.()
+                setAbortToConfigConfirmOpen(false)
+              }}
+            >
+              {t('progress.abortAndEditSettings')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={abortConfirmOpen} onOpenChange={setAbortConfirmOpen}>
         <AlertDialogContent>

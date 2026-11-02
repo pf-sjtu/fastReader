@@ -93,6 +93,31 @@ describe('App 外壳：三阶段切换（书库 · 设置 · 处理），带 Web
     expect(text()).toContain('文件上传与配置')
     expect(document.querySelector('[aria-label="我的书库"]')).toBeNull()
   })
+
+  it('导航只在页面里出现一次（工作台模式下沉到正文列顶部，不在顶栏重复）', async () => {
+    const prevWebdav = useConfigStore.getState().webdavConfig
+    restore = () => useConfigStore.setState({ webdavConfig: prevWebdav })
+    useConfigStore.setState((s) => ({ webdavConfig: { ...s.webdavConfig, enabled: true } }))
+    m = mount(<App />)
+    await flush()
+    // 配置页：导航在页头下方的状态栏里，全页只有一处
+    expect(document.querySelectorAll('[data-slot="status-nav"]').length).toBe(1)
+    // 切到「处理」段（结果视图，工作台模式）：导航仍然只有一处
+    click(tab('处理'))
+    await flush()
+    expect(document.querySelectorAll('[data-slot="status-nav"]').length).toBe(1)
+  })
+
+  it('深度切换只出现一次（右栏速读面板里，正文列顶部不再重复）', async () => {
+    m = mount(<App />)
+    await flush()
+    const depthGroups = () =>
+      Array.from(document.querySelectorAll('[role="group"]')).filter((g) => /全文|要点|一句话/.test(g.textContent ?? ''))
+    // 没有结果时正文列不该有深度切换；右栏速读面板那处在「速读」页签里，未展开时不出现
+    const main = document.querySelector('main')
+    const inMain = depthGroups().filter((g) => main?.contains(g)).length
+    expect(inMain).toBe(0)
+  })
 })
 
 describe('App 外壳', () => {

@@ -25,6 +25,7 @@ const h = vi.hoisted(() => ({
     initialize: vi.fn(async () => ({ success: true })),
     existsStatus: vi.fn(async () => 'missing'),
     getFileContents: vi.fn(),
+    downloadFileAsFile: vi.fn(async () => ({ success: true, data: new File([new TextEncoder().encode('x')], 'late.epub') })),
   },
 }))
 
@@ -111,6 +112,7 @@ const S1_KEYS = [
   'handleChapterSummaryNavigation', 'handleChapterNavigation', 'loadFromHistoryRecord',
   // 本轮新增：按文件名从云缓存恢复结果 / 后台补 epub（先进结果、原文随后可用）
   'loadCloudCacheByFileName', 'loadFromHistoryWithSource', 'attachSourceInBackground',
+  'captureGeneration', 'isGenerationCurrent',
   'setCustomPrompt', 'setSelectedChapters', 'setIsWebDAVBrowserOpen', 'setBookSummary',
   'setBookMindMap', 'setCurrentViewingChapterSummary', 'fullBookData',
 ]
@@ -414,6 +416,55 @@ describe('useBookProcessing 组合入口', () => {
     expect([...api().selectedChapters]).toEqual(['chapter-1'])
     act(() => api().openWebDAVBrowser())
     expect(api().isWebDAVBrowserOpen).toBe(true)
+    m.unmount()
+  })
+
+  it('后台补 epub：换书后迟到的旧文件必须丢弃（不能把 A 书的原文接到 B 书上）', async () => {
+    const m = mount(<Harness />)
+    const fileB = new File([new TextEncoder().encode('epub-B')], 'book-b.epub', { lastModified: 9 })
+    await act(async () => {
+      await api().handleFileSelect(fileB)
+    })
+    await flush()
+
+    // 记下这一轮的代数，随后「换书」（handleFileSelect 会 bump 代数）
+    const generation = api().captureGeneration()
+    const late = new File([new TextEncoder().encode('epub-A')], 'book-a.epub', { lastModified: 1 })
+    await act(async () => {
+      await api().attachSourceInBackground(late, generation)
+    })
+    await flush()
+    // 同代：文件被接上
+    expect(api().file?.name).toBe('book-a.epub')
+
+    // 换书 → 代数作废
+    const fileC = new File([new TextEncoder().encode('epub-C')], 'book-c.epub', { lastModified: 10 })
+    await act(async () => {
+      await api().handleFileSelect(fileC)
+    })
+    await flush()
+    expect(api().file?.name).toBe('book-c.epub')
+
+    // 旧代的迟到文件：必须被丢弃，file 仍是 C
+    const stale = new File([new TextEncoder().encode('epub-STALE')], 'stale.epub', { lastModified: 2 })
+    await act(async () => {
+      await api().attachSourceInBackground(stale, generation)
+    })
+    await flush()
+    expect(api().file?.name).toBe('book-c.epub')
+    m.unmount()
+  })
+
+  it('代际守卫：换书后旧代数不再算数', async () => {
+    const m = mount(<Harness />)
+    const g1 = api().captureGeneration()
+    expect(api().isGenerationCurrent(g1)).toBe(true)
+    await act(async () => {
+      await api().handleFileSelect(new File([new TextEncoder().encode('x')], 'd.epub'))
+    })
+    await flush()
+    expect(api().isGenerationCurrent(g1)).toBe(false)
+    expect(api().isGenerationCurrent(api().captureGeneration())).toBe(true)
     m.unmount()
   })
 })

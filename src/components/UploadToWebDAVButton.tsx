@@ -234,7 +234,8 @@ export const UploadToWebDAVButton: React.FC<UploadToWebDAVButtonProps> = ({
           variant="outline"
           size="sm"
           onClick={() => uploadToWebDAV()}
-          className={`${className} border-success-border hover:border-success-border hover:bg-success-muted`}
+          // hover 用状态色本身（比 --*-border 档更深）：同值等于没有 hover 反馈
+          className={`${className} border-success-border hover:border-success hover:bg-success-muted`}
           title={t('upload.reupload')}
         >
           <Check className="h-4 w-4 mr-1 text-success" />

@@ -152,9 +152,12 @@ function App() {
       void (async () => {
         try {
           const name = baseName(opts.sourcePath)
+          // 下载开始时记下代数：下载期间用户可能已经打开别的书，回来时必须丢弃这一份
+          const generation = book.captureGeneration()
           const r = await webdavService.downloadFileAsFile(opts.sourcePath, name)
           if (!r.success || !r.data) return
-          await book.attachSourceInBackground(r.data)
+          if (!book.isGenerationCurrent(generation)) return
+          await book.attachSourceInBackground(r.data, generation)
         } catch (e) {
           console.warn('[App] 后台补原文失败:', e)
         }

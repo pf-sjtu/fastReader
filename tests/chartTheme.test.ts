@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { FALLBACK_LIGHT, FALLBACK_DARK } from '@/charts/theme'
+import { oklchToHex, rgb } from './__helpers__/color'
 
 /**
  * 图表回退色必须与 index.css 的 token 同源。
@@ -20,33 +21,6 @@ function blockVars(selector: string): Record<string, string> {
   const out: Record<string, string> = {}
   for (const m of body.matchAll(/--([\w-]+):\s*([^;]+);/g)) out[m[1]] = m[2].trim()
   return out
-}
-
-/** OKLCH → sRGB hex（与浏览器解析同公式，尾数取整差 ≤1/255） */
-function oklchToHex(raw: string): string | null {
-  const m = raw.match(/oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)/)
-  if (!m) return null
-  const L = Number(m[1])
-  const C = Number(m[2])
-  const h = (Number(m[3]) * Math.PI) / 180
-  const a = C * Math.cos(h)
-  const b = C * Math.sin(h)
-  const l_ = L + 0.3963377774 * a + 0.2158037573 * b
-  const m_ = L - 0.1055613458 * a - 0.0638541728 * b
-  const s_ = L - 0.0894841775 * a - 1.291485548 * b
-  const l3 = l_ ** 3
-  const m3 = m_ ** 3
-  const s3 = s_ ** 3
-  const lin = [
-    4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
-    -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
-    -0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3,
-  ]
-  const gamma = (x: number) => {
-    const v = x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(x, 0), 1 / 2.4) - 0.055
-    return Math.round(Math.min(1, Math.max(0, v)) * 255)
-  }
-  return '#' + lin.map(gamma).map((v) => v.toString(16).padStart(2, '0')).join('')
 }
 
 const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))

@@ -161,7 +161,9 @@ export const MarkdownCard = memo(function MarkdownCard({
           type="button"
           onClick={handleToggleCollapse}
           aria-expanded={!actualIsCollapsed}
-          aria-label={`${toggleLabel}：${title}`}
+          // 标题按钮的名字就是标题本身（与可见文本一致）。
+          // 原先与右侧折叠箭头共用「折叠：标题」，读屏会听到两个同名的按钮。
+          aria-label={title}
           title={toggleLabel}
           className="flex min-w-0 flex-1 items-start gap-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >

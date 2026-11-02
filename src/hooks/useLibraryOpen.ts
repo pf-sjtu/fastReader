@@ -16,7 +16,7 @@ interface Params {
   file: File | null
   cloudCacheContent: string | null | undefined
   isCheckingCloudCache: boolean
-  handleWebDAVFileSelect: (file: File, opts?: { deferExtract?: boolean }) => Promise<void>
+  handleWebDAVFileSelect: (file: File) => Promise<void>
   /** 加载云端缓存并进入阅读工作台 */
   handleLoadFromCloudCache: () => void
   /**

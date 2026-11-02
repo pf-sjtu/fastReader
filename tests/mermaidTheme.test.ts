@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { oklchToHex, mixOklab, colorsClose } from './__helpers__/color'
 import { resolve } from 'node:path'
 import {
   FALLBACK_TOKENS_DARK,
@@ -87,6 +88,23 @@ describe('mermaid 图内配色', () => {
       expect(FALLBACK_TOKENS_LIGHT[name], `浅色缺 ${name}`).toMatch(/^#[0-9a-f]{6}$/)
       expect(FALLBACK_TOKENS_DARK[name], `深色缺 ${name}`).toMatch(/^#[0-9a-f]{6}$/)
     }
+  })
+
+  it('淡底 token 的兜底值 = 状态色与卡片底按 index.css 的比例混合的结果', () => {
+    // index.css: --primary-muted: color-mix(in oklab, var(--primary) 14%, var(--card))
+    const light = blockVars(':root')
+    const check = (name: string, base: string, pct: number, card = 'card') => {
+      const baseHex = oklchToHex(light[base])!
+      const cardHex = oklchToHex(light[card])!
+      const want = mixOklab(baseHex, cardHex, pct)
+      const got = FALLBACK_TOKENS_LIGHT[name]
+      expect(colorsClose(got, want), `${name}: ${got} vs ${want}`).toBe(true)
+    }
+    check('primary-muted', 'primary', 0.14)
+    check('success-muted', 'success', 0.14)
+    check('warning-muted', 'warning', 0.14)
+    check('info-muted', 'info', 0.14)
+    check('destructive-muted', 'destructive', 0.14)
   })
 
   it('index.css 里每个 token 都有定义（名字对得上）', () => {

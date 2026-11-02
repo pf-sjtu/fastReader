@@ -8,7 +8,6 @@ export function ChapterQualityNote() {
   return (
     <Hint
       tone="warning"
-      role="note"
       className="flex items-center gap-1 text-xs"
       data-testid="chapter-quality-warn"
       title={t('results.qualityWarnHint')}
