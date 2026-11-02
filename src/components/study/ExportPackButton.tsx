@@ -17,7 +17,7 @@ import { useStudyStore } from '@/study/studyStore'
 import type { BookSummary } from '@/types/book'
 import { logger } from '@/lib/logger'
 
-export function ExportPackButton({ bookSummary }: { bookSummary: BookSummary }) {
+export function ExportPackButton({ bookSummary, compact = false }: { bookSummary: BookSummary; compact?: boolean }) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
   const notes = useNotesStore((s) => s.notes)
@@ -58,15 +58,16 @@ export function ExportPackButton({ bookSummary }: { bookSummary: BookSummary }) 
 
   return (
     <Button
-      variant="outline"
-      size="sm"
+      variant={compact ? 'ghost' : 'outline'}
+      size={compact ? 'xs' : 'sm'}
       onClick={run}
       disabled={busy || !hasSummary}
       className="flex items-center gap-1.5 min-h-8 text-xs"
       title={busy ? t('study.pack.building') : t('study.pack.title')}
+      aria-label={busy ? t('study.pack.building') : t('study.pack.title')}
     >
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
-      {t('study.pack.button')}
+      <span className={compact ? 'hidden @[540px]:inline' : ''}>{t('study.pack.button')}</span>
     </Button>
   )
 }

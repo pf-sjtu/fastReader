@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next'
-import { BookOpen, Download, Network } from 'lucide-react'
+import { BookOpen, Download, MoreHorizontal, Network } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FontSizeControl } from '@/components/FontSizeControl'
 import { ExportPackButton } from '@/components/study/ExportPackButton'
 import { UploadToWebDAVButton } from '@/components/UploadToWebDAVButton'
@@ -41,12 +43,9 @@ export function ResultTitle({
   const count = bookSummary?.chapters.length || bookMindMap?.chapters.length || totalChapters
 
   return (
-    // 书名完整优先：title 允许换行，但不压缩（挤压时换行而不是被截断）
     <div className={`flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 ${className}`} data-slot="result-title">
       <Icon className="size-4 shrink-0" aria-hidden="true" />
-      {/* 书名允许换行而不是截断；过长时也不撑破顶栏（父级 min-w-0 + break-words） */}
       <span className="t-title min-w-0 break-words">{title}</span>
-      {/* 作者与章数：不截断（原先 truncate 会把「作者: Tom…」切掉），窄时换行 */}
       <span className="t-note min-w-0 break-words">
         {t('results.author', { author: bookSummary?.author || bookMindMap?.author })} |{' '}
         {t('results.chapterCount', { count })}
@@ -57,19 +56,40 @@ export function ResultTitle({
 
 /** 操作区：字号 / MD / 学习包 / 上传云端 */
 export function ResultActions({
-  processingMode,
-  bookSummary,
-  file,
-  onDownloadAllMarkdown,
-  className = '',
+  processingMode, bookSummary, file, onDownloadAllMarkdown, className = '', workspaceStatus,
 }: {
   processingMode: ProcessingMode
   bookSummary: BookSummary | null
   file: File | null
   onDownloadAllMarkdown: () => void
   className?: string
+  workspaceStatus?: ReactNode
 }) {
   const { t } = useTranslation()
+  if (workspaceStatus !== undefined) return (
+    <div className={`flex shrink-0 items-center gap-1 ${className}`} data-slot="result-actions">
+      {/* 初始化已保存的字号；菜单内容只在打开时挂载。 */}
+      <div className="hidden" aria-hidden="true"><FontSizeControl variant="compact" showLabel={false} /></div>
+      {processingMode === 'summary' && bookSummary && <>
+        <Button variant="ghost" size="xs" onClick={onDownloadAllMarkdown} title={t('download.downloadAllMarkdown')} aria-label={t('download.downloadAllMarkdown')} className="hidden @[390px]:inline-flex">
+          <Download className="size-4" /><span className="hidden @[540px]:inline">MD</span>
+        </Button>
+        <div className="hidden @[430px]:block"><ExportPackButton bookSummary={bookSummary} compact /></div>
+      </>}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={t('workspace.dock.more')} title={t('workspace.dock.more')}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="space-y-2 p-3">
+          <FontSizeControl variant="compact" />
+          {processingMode === 'summary' && bookSummary && <div className="flex flex-wrap items-center gap-1">
+            <Button variant="ghost" size="xs" onClick={onDownloadAllMarkdown}><Download className="size-4" /> MD</Button>
+            <ExportPackButton bookSummary={bookSummary} />
+            <UploadToWebDAVButton bookSummary={bookSummary} file={file} chapterNamingMode="numbered" />
+          </div>}
+          {workspaceStatus}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
   return (
     <div className={`flex flex-wrap items-center gap-1.5 ${className}`} data-slot="result-actions">
       <FontSizeControl variant="compact" showLabel={false} />

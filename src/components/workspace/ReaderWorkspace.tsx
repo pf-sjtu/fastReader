@@ -399,18 +399,21 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       {/* 顶部一行：左边是三阶段导航与处理进度，右边是字号 / MD / 学习包 / 上传云端。
           原来这些挤在结果卡头部，正文列一窄就被截断（书名、作者都显示不全）。
           「全文 / 要点 / 一句话」只留在右侧速读面板——两处控制的是同一个全局档位，重复摆没有意义 */}
-      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-        {topNav}
-        <ResultActions
-          processingMode="summary"
-          bookSummary={bookSummary}
-          file={file}
-          onDownloadAllMarkdown={onDownloadAllMarkdown}
-          className="ml-auto"
-        />
+      <div className="@container mb-2">
+        <div className="flex min-w-0 items-center gap-1">
+          {topNav}
+          <ResultActions
+            processingMode="summary"
+            bookSummary={bookSummary}
+            file={file}
+            onDownloadAllMarkdown={onDownloadAllMarkdown}
+            className="ml-auto"
+            workspaceStatus={processing ? null : topStatus ?? null}
+          />
+        </div>
       </div>
       {/* 处理进度单独一条（紧凑单行）：和导航、操作区挤在一行会把操作区顶到第二行 */}
-      {topStatus && <div className="mb-2">{topStatus}</div>}
+      {processing && topStatus && <div className="mb-2">{topStatus}</div>}
     <Suspense
       fallback={<div className="py-12 text-center text-muted-foreground">{t('progress.loading')}</div>}
     >
