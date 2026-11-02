@@ -29,7 +29,11 @@ export function AppHeader({ compact, children }: { compact: boolean; children?: 
         <h1 className="shrink-0">
           <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" />
         </h1>
-        {children && <div className="order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-0">{children}</div>}
+        {/*
+          children（工作台的书名 + 状态栏）跟在品牌后面同一行；宽度不够时才换行。
+          此前是 `order-last basis-full`：children 会被强制推到**第二行**，顶栏白白多占一行。
+        */}
+        {children && <div className="min-w-0 flex-1 basis-0">{children}</div>}
         <div className="ml-auto sm:ml-0">
           <HeaderTools />
         </div>

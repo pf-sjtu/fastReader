@@ -41,11 +41,13 @@ export function ResultTitle({
   const count = bookSummary?.chapters.length || bookMindMap?.chapters.length || totalChapters
 
   return (
+    // 书名完整优先：title 允许换行，但不压缩（挤压时换行而不是被截断）
     <div className={`flex min-w-0 items-center gap-2 ${className}`} data-slot="result-title">
       <Icon className="size-4 shrink-0" aria-hidden="true" />
       {/* 书名允许换行而不是截断：顶栏有整行的宽度 */}
       <span className="t-title min-w-0 break-words">{title}</span>
-      <span className="t-note shrink-0 truncate">
+      {/* 作者与章数：不截断（原先 truncate 会把「作者: Tom…」切掉），窄时换行 */}
+      <span className="t-note min-w-0">
         {t('results.author', { author: bookSummary?.author || bookMindMap?.author })} |{' '}
         {t('results.chapterCount', { count })}
       </span>

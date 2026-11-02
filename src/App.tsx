@@ -319,9 +319,11 @@ function App() {
         {/* 工作台里页头与状态栏合成一行（单层页头）；其余页面状态栏仍在页头下方 */}
         <AppHeader compact={workspaceMode}>
           {workspaceMode ? (
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
-              {workspaceTitle}
-              {statusBar}
+            /* 书名与状态栏同行：书名在左（三阶段标签之后），状态栏占其余宽度。
+               书名 shrink-0（不压缩，保住完整），状态栏 min-w-0 flex-1（可压缩） */
+            <div className="flex min-w-0 flex-1 items-center gap-x-3 gap-y-1">
+              <div className="shrink-0">{workspaceTitle}</div>
+              <div className="min-w-0 flex-1">{statusBar}</div>
             </div>
           ) : null}
         </AppHeader>
