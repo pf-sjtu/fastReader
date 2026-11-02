@@ -108,6 +108,16 @@ CHAPTERS = [
         "隐性知识里也分两类：认知类（直觉与判断）与技术类（手上的技巧）。这个分类解释了为什么培训能解决一部分问题，"
         "却解决不了员工流动带来的经验断层。"
     ) * 2, "hierarchy"),
+    ("non-fiction", "structured", "第八章 四种销售渠道的取舍", (
+        "作者把四种销售渠道放在四个维度上比较，结论是它们分别适合不同的阶段。直营渠道毛利最高、客户数据掌握在自己手里，"
+        "但开店与人员成本高，覆盖一个新城要半年以上；经销渠道铺得快、当地资源现成，代价是毛利让出去一半，终端价格也难管；"
+        "电商渠道触达最广、库存压力最轻，但流量成本逐年上升，品牌容易被平台雨调；代理渠道进入新市场最快，"
+        "但代理商只推高毛利的品类，厂家的产品结构会被反向塑造。"
+        "他引了两家公司的对照：一家在三年里用经销铺满两百个城市，营收翻了四倍、净利率从 12% 降到 5%；"
+        "另一家只做直营加电商，营收只涨了一倍，净利率反而升到 15%。"
+        "作者的结论是：要规模就用经销与代理，要利润与用户资产就用直营与电商，两者混用时必须分清主次，"
+        "否则渠道之间会互相侵蚀——也正因如此，这个选择没有普适答案。"
+    ) * 2, "compare"),
     ("non-fiction", "linear", "第七章 他的少年时代", (
         "他生在北方的一个小县城，父亲是中学教员，母亲在供销社工作。少年时他体弱多病，常年在家养着，"
         "反倒因此读了许多父亲书架上的旧书。十四岁那年，一位下乡的老医生看他读书入迷，送了他一本医书，"
@@ -181,13 +191,52 @@ def fits(expect: str, blocks: list) -> bool:
     return any(expect in block_tags(b) for b in blocks)
 
 
+def rescore(out: Path) -> None:
+    """对已保存的评测产物重新打分（不再调模型）：改了解析器或措辞后，用旧一轮的 .md 重新算
+    出块率 / 坏块 / 选型合适率，就能分清「模型选错了」与「我们没读对」。
+
+    用法：python tests/tour/eval_rich_guide.py --rescore .tmp/eval-rich8
+    """
+    old = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+    rows = []
+    for r in old["rows"]:
+        f = out / f"{r['kind']}-{r['title'][:4]}-{r['run']}-{'g' if r['guide'] else 'n'}.md"
+        if not f.exists():
+            continue
+        body = re.split(r"<!--juhua:meta-->", f.read_text(encoding="utf-8"))[0]
+        blocks = list_rich_blocks(body)
+        rows.append({"group": f"{r['book_type']}/{r['kind']}", "book_type": r["book_type"], "kind": r["kind"],
+                     "title": r["title"], "expect": r["expect"], "run": r["run"], "guide": r["guide"],
+                     "blocks": len(blocks), "langs": [b.lang for b in blocks],
+                     "types": sorted({t for b in blocks for t in block_tags(b) if t != "other"}),
+                     "fits": fits(r["expect"], blocks), "bad": [diagnose_block(b) for b in blocks if diagnose_block(b)],
+                     "prose": prose_length(body), "mermaid": [b.code for b in blocks if b.lang == "mermaid"]})
+
+    def agg(group: str, g: bool):
+        rs = [r for r in rows if r["group"] == group and r["guide"] == g]
+        n = max(len(rs), 1)
+        return {"n": len(rs), "出块率": sum(1 for r in rs if r["blocks"]) / n,
+                "选型合适率": sum(1 for r in rs if r["fits"]) / n, "块总数": sum(r["blocks"] for r in rs),
+                "坏块": sum(len(r["bad"]) for r in rs), "平均正文字数": round(sum(r["prose"] for r in rs) / n)}
+
+    groups = sorted({r["group"] for r in rows})
+    summary = {f"{k}/{'有说明' if g else '无说明'}": agg(k, g) for k in groups for g in (True, False)}
+    (out / "summary.rescored.json").write_text(json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    print(f"已写入 {out / 'summary.rescored.json'}（原 summary.json 保留原判，便于对比）")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=int, default=2)
     ap.add_argument("--out", default=".tmp/eval-rich")
     ap.add_argument("--model", default=None)
     ap.add_argument("--only", default=None, help="只跑标题包含这些子串的章节（逗号分隔），用于改措辞后的定向复测")
+    ap.add_argument("--rescore", default=None, help="不调模型：对已保存的评测目录（含 summary.json）用当前解析器重新打分")
     args = ap.parse_args()
+    if args.rescore:
+        rescore(Path(args.rescore))
+        return
     only = tuple(s.strip() for s in args.only.split(",") if s.strip()) if args.only else ()
     chapters = [c for c in CHAPTERS if not only or any(s in c[2] for s in only)]
     if not chapters:

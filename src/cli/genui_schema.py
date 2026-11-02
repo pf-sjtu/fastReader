@@ -13,6 +13,10 @@ from typing import Any, Optional
 
 LIMITS = {"nodes": 8, "items": 12, "columns": 6, "options": 6, "text": 300, "label": 60}
 _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+# 与前端 schema.ts 的 KNOWN_TYPES 逐字一致（新增组件时两边一起改）
+_KNOWN_TYPES = {"steps", "compare", "timeline", "hierarchy", "concept", "cards", "callout", "tabs", "quiz"}
+# 单独占一行的类型名（实测里模型会这样写：`compare` 换行再接 JSON）
+_LEADING_TYPE_RE = re.compile(r"^\s*([A-Za-z][A-Za-z-]{2,19})[ \t]*\r?\n")
 
 
 def _text(v: Any, mx: int = LIMITS["text"]) -> str:
@@ -147,12 +151,29 @@ def _lenient_json(code: str) -> Any:
         return json.loads(cleaned)
 
 
+def _split_leading_type(code: str) -> tuple[str, Optional[str]]:
+    """剥掉「单独占一行的类型名」（模型实测写法）；不是已知组件名就不动，宁可报错也不乱猜"""
+    m = _LEADING_TYPE_RE.match(code)
+    word = m.group(1).lower() if m else None
+    if m and word in _KNOWN_TYPES:
+        return code[m.end():], word
+    return code, None
+
+
 def parse_genui(code: str) -> dict:
     """返回 {"ok": True, "nodes": [...]} 或 {"ok": False, "error": "..."}"""
+    rest, leading_type = _split_leading_type(code)
     try:
-        data = _lenient_json(code)
+        data = _lenient_json(rest)
     except ValueError:
         return {"ok": False, "error": "JSON 无法解析"}
+    # 首行写了类型名、JSON 里没写 type：补回去（与前端一致）
+    if leading_type:
+        def _with_type(v: Any) -> Any:
+            o = _obj(v)
+            return v if _text(o.get("type"), 20) else {**o, "type": leading_type}
+
+        data = [_with_type(v) for v in data] if isinstance(data, list) else _with_type(data)
     # 三种写法都认：单个节点 {type:…}、数组 [{…},{…}]、{blocks:[…]}
     if isinstance(data, list):
         raw_nodes = data

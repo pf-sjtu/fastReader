@@ -79,6 +79,10 @@
     { "name": "对比表：没有列", "code": "{\"type\":\"compare\",\"columns\":[],\"rows\":[{\"label\":\"r\",\"cells\":[]}]}", "ok": false, "error": "没有可渲染的组件" },
     { "name": "概念：缺 definition → 整条丢弃", "code": "{\"type\":\"concept\",\"items\":[{\"term\":\"只说术语\"}]}", "ok": false, "error": "没有可渲染的组件" },
     { "name": "层级：level 不是整数 → 当作第 1 层保留", "code": "{\"type\":\"hierarchy\",\"items\":[{\"label\":\"甲\",\"level\":\"x\"},{\"label\":\"乙\",\"level\":2.5}]}", "ok": true, "types": ["hierarchy"] },
+    { "name": "首行单独写类型名 + 下面接带 type 的 JSON", "code": "compare\n{\"type\":\"compare\",\"columns\":[\"甲\",\"乙\"],\"rows\":[{\"label\":\"维度\",\"cells\":[\"1\",\"2\"]}]}", "ok": true, "types": ["compare"] },
+    { "name": "首行单独写类型名 + JSON 里不再写 type（补回去）", "code": "compare\n{\"columns\":[\"甲\",\"乙\"],\"rows\":[{\"label\":\"维度\",\"cells\":[\"1\",\"2\"]}]}", "ok": true, "types": ["compare"] },
+    { "name": "首行单独写类型名 + 数组（逐个补 type）", "code": "timeline\n[{\"items\":[{\"time\":\"1990\",\"label\":\"创立\"}]},{\"type\":\"nope\"}]", "ok": true, "types": ["timeline"] },
+    { "name": "首行是没见过的词 → 不当类型名，JSON 照样解析不了", "code": "whatever\n{\"columns\":[\"甲\"],\"rows\":[{\"label\":\"维度\",\"cells\":[\"1\"]}]}", "ok": false, "error": "JSON 无法解析" },
     { "name": "type 大小写不敏感", "code": "{\"type\":\"CALLOUT\",\"body\":\"x\"}", "ok": true, "types": ["callout"] },
     { "name": "空串", "code": "", "ok": false, "error": "JSON 无法解析" }
   ],

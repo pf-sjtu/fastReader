@@ -9,7 +9,7 @@
 ### 选型（先想「这段在讲什么」，再选最小的那个块）
 - 流程 / 步骤 / 阶段 / 因果 → mermaid `graph LR`（或 genui `steps`）；时序往返 → mermaid `sequenceDiagram`
 - 分类 / 概念层级 → genui `hierarchy`（或 mermaid `mindmap`，至少 3 个分支）；时间线 → genui `timeline`
-- ≥2 方的多维对比 → genui `compare`（**不要用 mermaid 把它画成流程或树**：对比的要点是「同一组维度上并列」）；两个维度上的取舍 → mermaid `quadrantChart`
+- ≥2 方的多维对比 → genui `compare`：**只要出现「在几个维度上比较 A 与 B（或 A/B/C）」这种并列对照，就必须用它**——不要画成 mermaid 流程图或树，也不要因为「画不出关系」就不配块；两个维度上的取舍 → mermaid `quadrantChart`
 - 抽象概念的定义 / 例子 / 反例 → genui `concept`；并列概念 → genui `cards`
 - 分面切换 → genui `tabs`；一句话要点 → genui `callout`
 - 同一对象在几种状态间来回 → mermaid `stateDiagram-v2`；人物 / 势力关系 → mermaid `graph TD` 画关系连线；随堂一题 → genui `quiz`（一章最多一题，不要与章末的三个问题重复）
@@ -70,7 +70,7 @@ quadrantChart
 硬要求：节点 ≤ 12 个；节点文字里出现**半角括号 `(` `)` 或引号 `"` 时必须整体用双引号包住**，如 `A["价格(含税)"]`（不加引号会被解析器拒绝，其余标点如冒号、斜杠、全角括号则能解析，但统一加引号最稳）；箭头写 `-->`，不要写 `->`。另外：**mindmap 至少要有 3 个分支**（只有一条链时渲染器会把它拉成一根竖排长条，此时改用 genui `hierarchy` 或 mermaid `graph TD`）。
 
 ### genui
-围栏内是**一个 JSON 对象**（也可以是对象数组），纯文本：不要注释、不要尾逗号、不要 HTML。**围栏第一行就必须是 `{`**；不要只写类型名或标题（`concept`、`compare` 这类词本身不是内容）。各类型的必填字段：
+围栏内是**一个 JSON 对象**（也可以是对象数组），纯文本：不要注释、不要尾逗号、不要 HTML。**围栏第一行就必须是 `{`**，前面不要加任何一行说明、标题或名称。各类型的必填字段：
 
 流程 / 步骤：
 ```genui
@@ -116,7 +116,7 @@ quadrantChart
 <script>document.getElementById('b').onclick=function(){var t=document.getElementById('t');t.textContent=t.textContent==='甲'?'乙':'甲'}</script>
 ```
 
-### 两段完整示例（先有文字，再附图）
+### 三段完整示例（先有文字，再配块）
 示例一：流程 → mermaid
 ……审批要依次经过部门初审、法务复核、财务确认三道关口，任何一道退回都要回到起草人手里重来。
 ```mermaid
@@ -132,4 +132,10 @@ graph LR
 ……作者在这里区分了两个常被混用的概念：沉没成本是已经付出且无法收回的支出，决策时不该计入；机会成本是为这个选择而放弃的次优选项，恰恰必须计入。
 ```genui
 {"type":"concept","items":[{"term":"沉没成本","definition":"已经付出、无法收回的支出","example":"已投入的研发费用","contrast":"决策时应忽略，却常被用来为继续投入辩护"},{"term":"机会成本","definition":"为当前选择而放弃的次优选项的价值","example":"用这笔钱买债的利息","contrast":"看不见，但必须计入决策"}]}
+```
+
+示例三：多方对比 → genui compare（文字已把对照说完，块只是把同一组维度摆齐）
+……作者把三种定价策略放在一起比较：撇脂定价起量慢但单位利润高，渗透定价抢市场快却难以再涨价，跟随定价最安全却永远拿不到超额收益。
+```genui
+{"type":"compare","columns":["撇脂定价","渗透定价","跟随定价"],"rows":[{"label":"价格水平","cells":["高开","低开","贴着对手"]},{"label":"主要风险","cells":["教育市场成本高","后期难涨价","利润被锁死"]}]}
 ```

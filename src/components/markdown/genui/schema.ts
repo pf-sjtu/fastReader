@@ -7,6 +7,8 @@
  *   concept   术语 + 定义 + 例子 + 反例（讲抽象概念）
  *   hierarchy 概念层级 / 包含关系（level 表示缩进层级）
  * 解析原则同关键图表：模型输出不可信——宽容地读，坏的单项丢弃，一个都读不出来才报错（由调用方回退为源码）。
+ * 宽容清单里有一条专门留给实测出来的写法：模型常把类型名单独写在围栏第一行、JSON 从第二行开始
+ * （`compare` ↵ `{"columns":…}`，且 JSON 里可能就不再写 type）；这种写法按「类型名 + JSON」接受。
  */
 
 export type GenUiNode =
@@ -127,6 +129,21 @@ function parseNode(raw: unknown): GenUiNode | null {
   }
 }
 
+/** 解析器认识的组件名（新增组件时这里与 GENUI_LIMITS 一起看） */
+const KNOWN_TYPES = new Set(['steps', 'compare', 'timeline', 'hierarchy', 'concept', 'cards', 'callout', 'tabs', 'quiz'])
+
+/**
+ * 剥掉「单独占一行的类型名」：模型实测里会写成
+ *   compare
+ *   {"columns":[…],"rows":[…]}   ← JSON 里甚至不再写 type
+ * 把它当作类型声明，JSON 里没有 type 时用这个词补上；不是已知组件名的词不动（宁可报错也不乱猜）。
+ */
+function splitLeadingType(code: string): { rest: string; type?: string } {
+  const m = /^\s*([A-Za-z][A-Za-z-]{2,19})[ \t]*\r?\n/.exec(code)
+  const word = m?.[1].toLowerCase()
+  return m && word && KNOWN_TYPES.has(word) ? { rest: code.slice(m[0].length), type: word } : { rest: code }
+}
+
 /** 去掉模型常加的尾逗号 / 行注释，再尝试解析：宽容但不改变语义 */
 function lenientJson(code: string): unknown {
   try {
@@ -140,11 +157,20 @@ function lenientJson(code: string): unknown {
 }
 
 export function parseGenUi(code: string): GenUiResult {
+  const { rest, type } = splitLeadingType(code)
   let data: unknown
   try {
-    data = lenientJson(code)
+    data = lenientJson(rest)
   } catch {
     return { ok: false, error: 'JSON 无法解析' }
+  }
+  // 首行写了类型名、JSON 里没写 type：补回去（数组则逐个补）
+  if (type) {
+    const withType = (v: unknown): unknown => {
+      const o = obj(v)
+      return text(o.type, 20) ? v : { ...o, type }
+    }
+    data = Array.isArray(data) ? data.map(withType) : withType(data)
   }
   // 三种写法都认：单个节点 {type:…}、数组 [{…},{…}]、{blocks:[…]}
   const rawNodes = Array.isArray(data) ? data : Array.isArray(obj(data).blocks) ? (obj(data).blocks as unknown[]) : [data]
