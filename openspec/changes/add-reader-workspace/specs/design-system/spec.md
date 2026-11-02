@@ -53,7 +53,7 @@
 ### Requirement: 状态徽标与提示各只有一个实现
 表示「状态 / 结果 / 分类」的小标签 SHALL 统一由 `ui/status-badge.tsx` 的 `StatusBadge` 渲染：入参是一个**语义状态**（`pending | processing | completed | skipped | failed | warning | info | success | neutral`，或分类色调 `tone`），而不是直接传颜色类；状态到颜色的映射 SHALL 只有一张表（`statusTone` 工具），业务组件不得各自拼 `bg-*/5|10` + `text-*` + `border-*` 组合。
 
-「一行提示 / 框式警告 / 错误态」SHALL 统一由 `ui/hint.tsx` 的 `Hint` 渲染，`tone` 限定 `info | success | warning | danger`，形状限定「纯文字」与「带框」两种；无框用于旁注，带框用于需要用户注意的提示。`role` SHALL 由语义决定：成功 / 进行中的状态播报用 `status`，需要立刻注意的错误用 `alert`，普通旁注不加 role。业务组件 SHALL NOT 再自拼「`rounded-md border-warning/40 bg-warning/10`」这类一次性样式，也不得随意在 `status` / `note` / 无 role 之间挑选。
+「一行提示 / 框式警告 / 错误态」SHALL 统一由 `ui/hint.tsx` 的 `Hint` 渲染，`tone` 限定 `info | success | warning | danger`，形状限定「纯文字」与「带框」两种；无框用于旁注，带框用于需要用户注意的提示。`role` SHALL 由语义决定：成功 / 进行中的状态播报用 `status`，需要立刻注意的错误用 `alert`，普通旁注不加 role；仅在确需更弱的语义（`note`）时才显式覆盖。业务组件 SHALL NOT 再自拼「`rounded-md border-warning/40 bg-warning/10`」这类一次性样式，也不得随意在 `status` / `note` / 无 role 之间挑选。
 
 #### Scenario: 同一批处理状态在两处显示
 - **WHEN** 同一批量任务的状态同时出现在队列表与队列面板
@@ -76,8 +76,9 @@
 
 #### Scenario: 状态色的浓度只有一档
 - **WHEN** 全仓检索状态色类名
-- **THEN** `bg-{primary,destructive,success,warning,info}/N` 与 `border-{同上}/N` 零出现（守卫 `tinted-surface`）；
-输入框底、遮罩层与 `bg-accent/N`（accent 的透明度本身表达「更淡的 hover」）不在此列
+- **THEN** `bg-{primary,destructive,success,warning,info}/5..70` 与 `border-{同上}/30..60` 零出现（守卫 `tinted-surface`）；
+输入框底、遮罩层与 `bg-accent/N`（accent 的透明度本身表达「更淡的 hover」）不在此列。
+实色 hover（`hover:bg-primary/90`）与深色下的危险按钮实底（`dark:bg-destructive/60`）是另一回事，不归本条管
 
 ### Requirement: 元件属性与命名一致
 同类元件的属性名 SHALL 一致：控制可见性的弹层属性一律为 `open` / `onOpenChange`（不得出现 `isOpen` / `visible` / `show` 并存）；色调一律为 `tone`（`variant` 只用于 shadcn 按钮/徽标的形态变体）；尺寸一律为 `size` 且取值来自既有档位表。轻提示 API SHALL 只用一种（`toast.info` 表示中性提示，`toast.success` / `toast.error` 表达结果），不得 `toast.message` 与 `toast.info` 混用。
