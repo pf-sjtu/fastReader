@@ -217,7 +217,8 @@ export const MarkdownCard = memo(function MarkdownCard({
           aria-expanded={!actualIsCollapsed}
           aria-label={`${toggleLabel}：${title}`}
           title={toggleLabel}
-          className="mt-[0.3em] shrink-0 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          // 热区补到 28px（图标本身 16px）：之前只有 16×16px，鼠标目标过小
+          className="-mr-1 mt-[0.1em] shrink-0 rounded-md p-1.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform', !actualIsCollapsed && 'rotate-180')} aria-hidden="true" />
         </button>

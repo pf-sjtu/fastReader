@@ -320,10 +320,12 @@ function App() {
         <AppHeader compact={workspaceMode}>
           {workspaceMode ? (
             /* 书名与状态栏同行：书名在左（三阶段标签之后），状态栏占其余宽度。
-               书名 shrink-0（不压缩，保住完整），状态栏 min-w-0 flex-1（可压缩） */
+               书名可换行（min-w-0 + break-words）但**不压缩状态栏**：书名再长也只占自己的
+               几行，状态栏至少要有 min-w 能放下「处理 / 进度 / 模型切换 / 工具组」，否则右侧元素
+               会互相重叠、甚至被裁到视口外（b35 的实测回归）。 */
             <div className="flex min-w-0 flex-1 items-center gap-x-3 gap-y-1">
-              <div className="shrink-0">{workspaceTitle}</div>
-              <div className="min-w-0 flex-1">{statusBar}</div>
+              <div className="min-w-0 shrink">{workspaceTitle}</div>
+              <div className="min-w-[22rem] flex-1">{statusBar}</div>
             </div>
           ) : null}
         </AppHeader>
