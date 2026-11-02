@@ -2,6 +2,21 @@
   "_doc": "富内容块的跨端契约：前端 src/lib/richBlocks.ts + genui/schema.ts 与 CLI src/cli/rich_blocks.py + genui_schema.py 必须给出完全相同的结果。mermaid 的语法校验两端不同（前端用真实解析器，CLI 只做结构检查），不在此列。",
   "strip": [
     {
+      "name": "CRLF 长闭栏保留后文",
+      "input": "前\r\n```mermaid\r\ngraph LR\r\n````\r\n后",
+      "prose": "前\r\n\r\n后"
+    },
+    {
+      "name": "闭栏比开栏长时保留后文",
+      "input": "前\n\n```mermaid\ngraph LR\nA-->B\n````\n\n后文必须保留",
+      "prose": "前\n\n后文必须保留"
+    },
+    {
+      "name": "普通代码块里的富块示例不是富块",
+      "input": "前\n\n````markdown\n```genui\n{}\n```\n````\n\n后",
+      "prose": "前\n\n````markdown\n```genui\n{}\n```\n````\n\n后"
+    },
+    {
       "name": "没有块：原样",
       "input": "企业像生命体。\n\n每个阶段有风险。",
       "prose": "企业像生命体。\n\n每个阶段有风险。"
@@ -33,6 +48,11 @@
     }
   ],
   "list": [
+    {
+      "name": "CRLF 长闭栏源码不含回车且不是截断",
+      "input": "```mermaid\r\ngraph LR\r\n````\r\n后",
+      "blocks": [{ "lang": "mermaid", "code": "graph LR", "truncated": false }]
+    },
     {
       "name": "闭合 + 未闭合尾块",
       "input": "前\n\n```mermaid\ngraph LR\nA-->B\n```\n\n中\n\n```genui\n{\"type\":",

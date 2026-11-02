@@ -111,6 +111,7 @@ const testPrompt = getSystemPrompt('testConnection')
 ## 共享说明模块（富内容块 / 速读 / 自测…）
 
 - `rich-blocks-guide.md`：告诉模型「总结里可以用 mermaid / genui / html 三种块」——能力介绍、何时用与何时不用、硬规则（上限、不计字数、不得压缩正文）、选型清单、精确语法与常见错误、每种块的 few-shot（正例 + 反例）。章节总结提示词里写 `{{richBlocksGuide}}` 引用它。
+- 旧自定义章节模板不会自动注入说明；提示词编辑器会提示缺失，并可一键加入占位符。加入后缓存键随实际模板变化；既有云端摘要需要重新生成才会变化。
 - 说明**分两层**（渐进披露）：决策层（能力 / 何时用与不用 / 选型 / 硬规则）在前，参考层（每种块的语法骨架与示例）从标题 `## 各块写法（参考）` 起。`{{richBlocksGuideBrief}}` 只展开决策层（没围栏示例，约省一半输入），适合不想让每章都背语法细节的模板。分界标题是两端共用的常量（`REFERENCE_HEADING` ↔ `RICH_GUIDE_REFERENCE_HEADING`），找不到标题就退回全文（绝不给出半截说明）。
 - 它是**预展开**（`src/services/prompts/richGuide.ts#expandRichGuide`，CLI `PromptTemplates.expand_rich_guide`）而不是 `renderPrompt` 变量：变量规则 4 会把「模板没引用的变量」追加到末尾，用户自定义的旧提示词没有这个占位符，就不该被塞进一大段说明。没有占位符 → 原样返回。提示词预览按真实请求展开，提示词编辑器把两个占位符都列出来了（删掉就不注入）。
 - 词汇表：mermaid 限 `graph LR/TD`、`sequenceDiagram`、`timeline`、`mindmap`、`stateDiagram-v2`、`quadrantChart`；genui 九种组件 `steps / compare / timeline / hierarchy / concept / cards / callout / tabs / quiz`（其中 `concept` 讲抽象概念、`hierarchy` 讲层级，是本轮新增的两种）。**图型范围只是指南收窄**：解析器本身不限（`validateMermaid` 用真解析器，CLI 的结构检查放行 18 种），写别的类型照样渲染，收窄是为了选型准确。

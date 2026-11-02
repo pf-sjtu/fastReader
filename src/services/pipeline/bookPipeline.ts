@@ -176,7 +176,7 @@ export async function runBookPipeline(input: RunBookPipelineInput): Promise<Book
       const split = splitChapterMeta(raw)
       if (split.metaError) logger.warn(`[pipeline] 「${title}」${split.metaError}`)
       // 用户自定义了提示词：输出格式由用户说了算（可能要标题/一句话概括），不清理、不判质量、不重写
-      if (input.customPrompt) return { summary: split.text, meta: split.meta, issues: [] as QualityIssue[] }
+      if (input.customPrompt?.trim()) return { summary: split.text, meta: split.meta, issues: [] as QualityIssue[] }
       const summary = isUsableText(split.text) ? sanitizeSummary(split.text) : split.text
       const issues = isUsableText(summary)
         ? checkSummaryQuality(summary, content.length, { expectMeta: true, hasMeta: !!split.meta })

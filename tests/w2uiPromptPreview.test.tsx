@@ -59,6 +59,16 @@ describe('PromptEditor 预览模式', () => {
     expect(textarea().value).toBe(`${title} / ${title} / ${t('promptEditor.preview.content')}`)
     expect(textarea().disabled).toBe(true)
   })
+
+  it('缺少指南时明确提示并可保留原模板一键加入', () => {
+    stubDomForRadix()
+    usePromptStore.getState().setChapterSummaryPrompt('non-fiction', '旧模板 {{content}}')
+    m = mount(<PromptEditor />)
+    expect(document.body.textContent).toContain(t('promptEditor.richGuideMissing'))
+    click(findButton(t('promptEditor.addRichGuide')))
+    expect(usePromptStore.getState().promptConfig.chapterSummary.nonFiction).toBe('旧模板 {{content}}\n\n{{richBlocksGuide}}')
+    expect(document.body.textContent).not.toContain(t('promptEditor.richGuideMissing'))
+  })
 })
 
 describe('PromptEditor：改用 v2 提示词（v3 评测未完成时的回退出口）', () => {

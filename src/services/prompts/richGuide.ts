@@ -32,6 +32,10 @@ export function briefOf(full: string): string {
 
 export const getRichBlocksGuideBrief = (): string => briefOf(getRichBlocksGuide())
 
+/** 模板显式引用任一指南（允许花括号内空白）。 */
+export const hasRichGuide = (template: string): boolean =>
+  /\{\{\s*richBlocksGuide(?:Brief)?\s*\}\}/.test(template)
+
 /** 把模板里的两个占位符展开成对应正文；用函数做替换，避免正文里的 `$` 被当成替换模式 */
 export const expandRichGuide = (template: string): string =>
   (template || '')

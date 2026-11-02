@@ -26,6 +26,7 @@ import { usePromptStore, type PromptPath } from '../../stores/prompts'
 import { diffPromptOverrides, hasPromptOverrides, isPromptOverridden } from '../../services/prompts/overrides'
 import { DEFAULT_PROMPT_CONFIG, DEFAULT_PROMPT_VERSION, LEGACY_V2_PROMPT_CONFIG } from '../../services/prompts/templates'
 import { buildPromptPreview, type MindmapVariant, type PromptTab } from './promptPreview'
+import { hasRichGuide } from '@/services/prompts/richGuide'
 
 interface PromptEntry {
   /** 稳定 key，也用作 DOM id 后缀 */
@@ -162,6 +163,15 @@ function PromptEntryEditor({ entry, value, overridden, inUse, preview }: PromptE
           </code>
         ))}
       </p>
+      {entry.path.group === 'chapterSummary' && !hasRichGuide(value) && (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-warning" role="status">
+          <span>{t('promptEditor.richGuideMissing')}</span>
+          <Button type="button" variant="outline" size="sm" disabled={preview !== null}
+            onClick={() => writePrompt(entry.path, `${value.trimEnd()}\n\n{{richBlocksGuide}}`)}>
+            {t('promptEditor.addRichGuide')}
+          </Button>
+        </div>
+      )}
       <Textarea
         id={textareaId}
         value={preview ?? value}

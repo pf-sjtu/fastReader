@@ -281,6 +281,8 @@
     "connectionAnalysisPrompt": "章节关联分析提示词",
     "overallSummaryPrompt": "全书总结提示词",
     "placeholder": "请输入提示词内容...",
+    "richGuideMissing": "当前模板未提供富内容块说明，模型无法按应用规范生成图示与互动块。",
+    "addRichGuide": "加入富内容说明",
     "editMode": "编辑模式",
     "previewMode": "预览模式",
     "resetToDefault": "重置为默认",

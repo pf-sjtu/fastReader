@@ -300,7 +300,7 @@ export class AIService {
     for (let i = 0; i < parts.length; i++) {
       const title = `${chapterTitle}（第 ${i + 1}/${parts.length} 部分）`
       const partial = await this.generateContent(renderPrompt(basePrompt, chapterVars(title, parts[i])), outputLanguage, opts)
-      partials.push(splitChapterMeta(partial).text)
+      partials.push(stripRichBlocks(splitChapterMeta(partial).text))
     }
     // 合并：把分段总结当作「章节内容」再走一次同一提示词，保证输出格式与普通章节一致。
     // 分段总结合起来仍超预算（极长章节）时递归再分段，每层都显著变短；最多 3 层
@@ -339,7 +339,7 @@ export class AIService {
         ? promptConfig.chapterSummary.fiction || getFictionChapterSummaryPrompt()
         : promptConfig.chapterSummary.nonFiction || getNonFictionChapterSummaryPrompt()
 
-    const prompt = customPrompt || basePrompt
+    const prompt = customPrompt?.trim() ? customPrompt : basePrompt
     const withHint = opts?.rewriteHint ? `${prompt}\n\n${sharedStrings.rewriteHeader}\n${opts.rewriteHint}` : prompt
     // {{richBlocksGuide}} 在这里预展开：下面按模板长度扣输入预算时要算上它
     return this.generateForLongContent(expandRichGuide(withHint), chapterTitle, chapterContent, outputLanguage, opts)

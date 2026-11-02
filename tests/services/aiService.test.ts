@@ -282,8 +282,9 @@ describe('导图压缩路径不把富内容块喂给导图', () => {
     })
 
     const prompts = providerMock.generateContent.mock.calls.map((c) => (c[0] as { prompt?: string } | undefined)?.prompt ?? '')
-    // 压缩这一步确实拿到了（并会产出）块——否则下面的断言可能只是因为压根没走压缩分支
-    expect(prompts.some((p) => p.includes('```mermaid'))).toBe(true)
+    // 中间分段和合并均不应收到上一轮产出的块
+    expect(prompts.length).toBeGreaterThan(2)
+    expect(prompts.every((p) => !p.includes('```mermaid'))).toBe(true)
     const last = prompts[prompts.length - 1]
     expect(last).toContain('导图：')
     expect(last).not.toContain('```mermaid')

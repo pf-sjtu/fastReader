@@ -13,16 +13,30 @@ from dataclasses import dataclass
 from typing import Callable
 
 RICH_LANGS = ("mermaid", "genui", "html")
-_LANG = "|".join(RICH_LANGS)
-
-_CAP = r"^[ \t]{0,3}(`{3,}|~{3,})[ \t]*(" + _LANG + r")\b([^\n]*)"
-# 已闭合块优先；找不到闭栏时退而求其次吃到文末（8 个捕获组：闭合 1-4 / 未闭合 5-8）
-_BLOCK_SCAN = re.compile(
-    _CAP + r"\n([\s\S]*?)\n[ \t]{0,3}\1[ \t]*$|" + _CAP + r"(?:\n([\s\S]*))?$",
-    re.IGNORECASE | re.MULTILINE,
-)
-# 任意围栏代码块（含普通代码）：只该处理正文的逻辑（加粗上限、标题 / 分割线清理）要避开它们
-_ANY_FENCE_RE = re.compile(r"(^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n[ \t]{0,3}\2[ \t]*$)", re.MULTILINE)
+def _scan_fences(md: str):
+    lines = list(re.finditer(r"[^\n]*(?:\n|$)", md))
+    lines = [m for m in lines if m.group()]
+    i = 0
+    while i < len(lines):
+        m = re.match(r"^[ \t]{0,3}(`{3,}|~{3,})[ \t]*([^\s`~]*)[^\r\n]*\r?\n?$", lines[i].group())
+        if not m:
+            i += 1
+            continue
+        start, content_start = lines[i].start(), lines[i].end()
+        end = code_end = len(md)
+        closed = False
+        for j in range(i + 1, len(lines)):
+            close = re.match(r"^[ \t]{0,3}(`+|~+)[ \t]*\r?(?:\n|$)$", lines[j].group())
+            if close and close.group(1)[0] == m.group(1)[0] and len(close.group(1)) >= len(m.group(1)):
+                code_end = lines[j].start()
+                end = code_end + len(re.sub(r"\r?\n$", "", lines[j].group()))
+                closed = True
+                i = j
+                break
+        yield start, end, m.group(2).lower(), re.sub(r"\r?\n$", "", md[content_start:code_end]), closed
+        if not closed:
+            break
+        i += 1
 
 
 @dataclass
@@ -37,18 +51,13 @@ def map_rich_blocks(md: str, fn: Callable[[RichBlock, int], str]) -> str:
     """逐个富内容块替换：fn 返回新的整块文本（含围栏），返回空串 = 删除该块。正文原样保留"""
     if not md:
         return ""
-    counter = {"i": 0}
-
-    def repl(m: re.Match) -> str:
-        closed = m.group(4) is not None
-        lang = (m.group(2) if closed else m.group(6)).lower()
-        code = (m.group(4) if closed else m.group(8)) or ""
-        block = RichBlock(lang, code, not closed, m.group(0))
-        i = counter["i"]
-        counter["i"] += 1
-        return fn(block, i)
-
-    return _BLOCK_SCAN.sub(repl, md)
+    out, pos, index = [], 0, 0
+    for start, end, lang, code, closed in _scan_fences(md):
+        if lang not in RICH_LANGS:
+            continue
+        out.extend((md[pos:start], fn(RichBlock(lang, code, not closed, md[start:end]), index)))
+        pos, index = end, index + 1
+    return "".join(out) + md[pos:]
 
 
 def list_rich_blocks(md: str) -> list[RichBlock]:
@@ -87,4 +96,11 @@ def rich_block_count(md: str) -> int:
 
 def split_by_fences(md: str) -> list[str]:
     """偶数下标是正文、奇数下标是围栏块；拼回去等于原文"""
-    return [p for i, p in enumerate(_ANY_FENCE_RE.split(md)) if i % 3 != 2]
+    parts, pos = [], 0
+    for start, end, _lang, _code, closed in _scan_fences(md):
+        if not closed:
+            break
+        parts.extend((md[pos:start], md[start:end]))
+        pos = end
+    parts.append(md[pos:])
+    return parts

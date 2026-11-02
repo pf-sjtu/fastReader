@@ -186,6 +186,19 @@ def test_segmented_summary_small_context():
     assert r.input_tokens == 10 * len(c.prompts_seen)
 
 
+def test_segmented_summary_does_not_feed_rich_blocks_to_merge():
+    class WithBlocks(_Scripted):
+        def _call(self, prompt, system, max_tokens, low_reasoning=False):
+            self.prompts_seen.append(prompt)
+            return ("正文摘要\n\n```mermaid\ngraph LR\nUNIQUE-->BLOCK\n````\n\n尾段", 10, 5)
+
+    c = WithBlocks(contextWindow=8192, maxOutputTokens=2048)
+    assert c.summarize_chapter(_chapter(), "non-fiction", "zh").success
+    assert "分段总结合并" in c.prompts_seen[-1]
+    assert "尾段" in c.prompts_seen[-1]
+    assert "UNIQUE-->BLOCK" not in c.prompts_seen[-1]
+
+
 def test_no_split_without_context_meta():
     c = _Scripted()
     assert c.summarize_chapter(_chapter(), "non-fiction", "zh").success

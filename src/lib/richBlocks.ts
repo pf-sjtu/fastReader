@@ -10,19 +10,29 @@
 export const RICH_LANGS = ['mermaid', 'genui', 'html'] as const
 export type RichLang = (typeof RICH_LANGS)[number]
 
-const LANG = RICH_LANGS.join('|')
-// 注意：这里用普通字符串拼正则（反引号在单引号字符串里不需要转义），\\ 是正则里的反斜杠
-const OPEN = '^[ \\t]{0,3}(`{3,}|~{3,})[ \\t]*(?:' + LANG + ')\\b[^\\n]*'
-/** 已闭合的富内容块：开栏行 + 内容 + 同种同长（或更长）的闭栏行 */
-const CLOSED = new RegExp(OPEN + '\\n[\\s\\S]*?\\n[ \\t]{0,3}\\1[ \\t]*$', 'gim')
-/** 开栏之后一直没闭合（被截断）：到文末 */
-const UNCLOSED = new RegExp(OPEN + '(?:\\n[\\s\\S]*)?$', 'im')
-/** 任意围栏代码块（含普通代码）：只该处理正文的逻辑（加粗上限、标题 / 分割线清理）要避开它们 */
-const ANY_FENCE = new RegExp('(^[ \\t]{0,3}(`{3,}|~{3,})[^\\n]*\\n[\\s\\S]*?\\n[ \\t]{0,3}\\2[ \\t]*$)', 'gm')
+interface Fence { start: number; end: number; code: string; lang: string; closed: boolean }
 
-/** 单次扫描：已闭合块优先，找不到闭栏时退而求其次吃到文末（4 个捕获组：围栏 / 语言 / 说明 / 内容；两支各一套） */
-const CAP = '^[ \\t]{0,3}(`{3,}|~{3,})[ \\t]*(' + LANG + ')\\b([^\\n]*)'
-const BLOCK_SCAN = new RegExp(CAP + '\\n([\\s\\S]*?)\\n[ \\t]{0,3}\\1[ \\t]*$|' + CAP + '(?:\\n([\\s\\S]*))?$', 'gim')
+/** 按行扫描所有围栏，避免把普通代码示例里的富块当成真正的块。 */
+function scanFences(md: string): Fence[] {
+  const lines = [...md.matchAll(/[^\n]*(?:\n|$)/g)].filter((m) => m[0].length > 0)
+  const out: Fence[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const open = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*([^\s`~]*)[^\r\n]*\r?\n?$/.exec(lines[i][0])
+    if (!open) continue
+    const start = lines[i].index!, contentStart = start + lines[i][0].length
+    let end = md.length, codeEnd = md.length, closed = false
+    for (let j = i + 1; j < lines.length; j++) {
+      const close = /^[ \t]{0,3}(`+|~+)[ \t]*\r?(?:\n|$)$/.exec(lines[j][0])
+      if (close && close[1][0] === open[1][0] && close[1].length >= open[1].length) {
+        codeEnd = lines[j].index!; end = codeEnd + lines[j][0].replace(/\r?\n$/, '').length
+        closed = true; i = j; break
+      }
+    }
+    out.push({ start, end, code: md.slice(contentStart, codeEnd).replace(/\r?\n$/, ''), lang: open[2].toLowerCase(), closed })
+    if (!closed) break
+  }
+  return out
+}
 
 export interface RichBlockInfo {
   lang: RichLang
@@ -40,14 +50,14 @@ export interface RichBlockInfo {
  */
 export function mapRichBlocks(md: string, fn: (b: RichBlockInfo, index: number) => string): string {
   if (!md) return ''
-  let i = 0
-  return md.replace(BLOCK_SCAN, (...m: unknown[]) => {
-    const g = m as (string | undefined)[]
-    const closed = g[4] !== undefined
-    const lang = (closed ? g[2] : g[6]) as string
-    const code = (closed ? g[4] : g[8]) ?? ''
-    return fn({ lang: lang.toLowerCase() as RichLang, code, truncated: !closed, raw: g[0] as string }, i++)
-  })
+  let out = '', pos = 0, i = 0
+  for (const f of scanFences(md)) {
+    if (!isRichLang(f.lang)) continue
+    const raw = md.slice(f.start, f.end)
+    out += md.slice(pos, f.start) + fn({ lang: f.lang, code: f.code, truncated: !f.closed, raw }, i++)
+    pos = f.end
+  }
+  return out + md.slice(pos)
 }
 
 export function listRichBlocks(md: string): RichBlockInfo[] {
@@ -66,7 +76,7 @@ export function fenceRichBlock(lang: string, code: string): string {
 /** 去掉所有富内容块（含未闭合的尾部），留下纯文字部分 */
 export function stripRichBlocks(md: string): string {
   if (!md) return ''
-  return md.replace(CLOSED, '').replace(UNCLOSED, '').replace(/\n{3,}/g, '\n\n')
+  return mapRichBlocks(md, () => '').replace(/\n{3,}/g, '\n\n')
 }
 
 /** 「字数」：富内容块不计入，首尾空白不计 */
@@ -75,8 +85,7 @@ export const proseLength = (md: string): number => stripRichBlocks(md).trim().le
 /** 文中有几个富内容块（已闭合的 + 未闭合的尾部） */
 export function richBlockCount(md: string): number {
   if (!md) return 0
-  const closed = (md.match(CLOSED) ?? []).length
-  return closed + (UNCLOSED.test(md.replace(CLOSED, '')) ? 1 : 0)
+  return listRichBlocks(md).length
 }
 
 /**
@@ -84,8 +93,14 @@ export function richBlockCount(md: string): number {
  * 加粗上限、标题 / 分割线清理等只该作用于正文，不能误伤代码块、图表源码、HTML 小部件里的 `**` `#` `---`。
  */
 export function splitByFences(md: string): string[] {
-  // split 带两个捕获组：每个围栏会插入 [整块, 围栏符] 两项，保留整块、丢掉围栏符
-  return md.split(ANY_FENCE).filter((_, i) => i % 3 !== 2)
+  const parts: string[] = []
+  let pos = 0
+  for (const f of scanFences(md)) {
+    if (!f.closed) break
+    parts.push(md.slice(pos, f.start), md.slice(f.start, f.end)); pos = f.end
+  }
+  parts.push(md.slice(pos))
+  return parts
 }
 
 export const isRichLang = (lang: string | undefined): lang is RichLang => !!lang && (RICH_LANGS as readonly string[]).includes(lang.toLowerCase())

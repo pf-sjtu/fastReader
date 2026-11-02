@@ -296,6 +296,8 @@
     "connectionAnalysisPrompt": "Connection Analysis Prompt",
     "overallSummaryPrompt": "Overall Summary Prompt",
     "placeholder": "Enter prompt content...",
+    "richGuideMissing": "This template does not provide the rich-block guide, so models lack the app's diagram and interactive-block instructions.",
+    "addRichGuide": "Add rich-block guide",
     "editMode": "Edit Mode",
     "previewMode": "Preview Mode",
     "resetToDefault": "Reset to Default",
