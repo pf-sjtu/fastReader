@@ -41,7 +41,6 @@ import { GraphOptions } from './GraphOptions'
 import { ResizeHandle } from './ResizeHandle'
 import { NavRail } from './NavRail'
 import { AskPanel } from '@/components/study/AskPanel'
-import { DepthSwitch } from '@/components/study/DepthSwitch'
 import { ResultActions } from '@/components/sections/ResultTopBar'
 import { QuizPanel } from '@/components/study/QuizPanel'
 import { StudyKitPanel } from '@/components/study/StudyKitPanel'
@@ -89,6 +88,10 @@ export interface ReaderWorkspaceProps {
   onCancelKeyCharts?: () => void
   onRetryStep?: (kind: BookStepKind) => void
   stepRunning?: BookStepKind | null
+  /** 正文列顶部左侧：三阶段导航（书库 / 设置 / 处理） */
+  topNav?: ReactNode
+  /** 正文列顶部中间：处理进度 */
+  topStatus?: ReactNode
 }
 
 /** 键盘快捷键不应在输入框里触发 */
@@ -123,6 +126,8 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     onCancelKeyCharts,
     onRetryStep,
     stepRunning = null,
+    topNav,
+    topStatus,
   } = props
   const { t } = useTranslation()
   // 窄于约 1000px 的窗口（小平板、缩小的桌面窗口）硬挤三栏会把正文压成窄条：改用紧凑布局（抽屉）
@@ -391,10 +396,11 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
 
   const body = (
     <>
-      {/* 顶部一行：左边「全文 / 要点 / 一句话」，右边是字号 / MD / 学习包 / 上传云端。
-          原来这些挤在结果卡头部，正文列一窄就被截断（书名、作者都显示不全） */}
+      {/* 顶部一行：左边是三阶段导航与处理进度，右边是字号 / MD / 学习包 / 上传云端。
+          原来这些挤在结果卡头部，正文列一窄就被截断（书名、作者都显示不全）。
+          「全文 / 要点 / 一句话」只留在右侧速读面板——两处控制的是同一个全局档位，重复摆没有意义 */}
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-        {kit && <DepthSwitch chapters={chapters} />}
+        {topNav}
         <ResultActions
           processingMode="summary"
           bookSummary={bookSummary}
@@ -403,6 +409,8 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
           className="ml-auto"
         />
       </div>
+      {/* 处理进度单独一条（紧凑单行）：和导航、操作区挤在一行会把操作区顶到第二行 */}
+      {topStatus && <div className="mb-2">{topStatus}</div>}
     <Suspense
       fallback={<div className="py-12 text-center text-muted-foreground">{t('progress.loading')}</div>}
     >

@@ -22,10 +22,11 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import type { ProcessingHistoryRecord } from '@/stores/processingHistory'
 
 import { BUILD_VERSION } from '@/buildInfo'
-import { UnifiedStatusBar } from '@/components/UnifiedStatusBar'
+import { UnifiedStatusBar, StatusProgress } from '@/components/UnifiedStatusBar'
 import { ReaderWorkspace } from '@/components/workspace/ReaderWorkspace'
 import { PreviewPanel } from '@/components/sections/PreviewPanel'
 import { AppHeader } from '@/components/app/AppHeader'
+import { StageNav } from '@/components/app/StageNav'
 import { ResultTitle } from '@/components/sections/ResultTopBar'
 import { ConfigStep } from '@/components/app/ConfigStep'
 import { ClassicResults } from '@/components/app/ClassicResults'
@@ -272,21 +273,53 @@ function App() {
       />
     ) : null
 
-  const statusBar = (
-    <UnifiedStatusBar
-      currentView={currentStepIndex === 1 ? 'config' : 'processing'}
+  const statusBarProps = {
+    currentView: (currentStepIndex === 1 ? 'config' : 'processing') as 'config' | 'processing',
+    processing,
+    progress,
+    currentStep,
+    processingMode,
+    onToggleView: handleToggleView,
+    onLoadFromHistory: handleLoadFromHistory,
+    onCancelProcessing: cancelProcessing,
+    onRestartProcessing:
+      file && extractedChapters && selectedChapters.size > 0 ? handleRestartProcessing : undefined,
+    onAbortToConfig: handleAbortToConfig,
+    configSections: webdavConfig.enabled,
+    configSection,
+    onSelectConfigSection: setConfigSection,
+  }
+
+  // 经典布局：整条状态栏都在页头下方
+  const statusBar = <UnifiedStatusBar {...statusBarProps} />
+
+  // 工作台：顶栏只留「总结 / 模型」，三阶段导航与处理进度下沉到正文列顶部
+  const workspaceStatusMeta = (
+    <UnifiedStatusBar {...statusBarProps} variant="meta" className="justify-end" />
+  )
+  const workspaceTopNav = (
+    <StageNav
+      currentView={statusBarProps.currentView}
       processing={processing}
-      progress={progress}
-      currentStep={currentStep}
-      processingMode={processingMode}
-      onToggleView={handleToggleView}
-      onLoadFromHistory={handleLoadFromHistory}
-      onCancelProcessing={cancelProcessing}
-      onRestartProcessing={file && extractedChapters && selectedChapters.size > 0 ? handleRestartProcessing : undefined}
-      onAbortToConfig={handleAbortToConfig}
       configSections={webdavConfig.enabled}
       configSection={configSection}
       onSelectConfigSection={setConfigSection}
+      onToggleView={handleToggleView}
+      onAbortToConfig={handleAbortToConfig}
+      className="shrink-0"
+    />
+  )
+  const workspaceTopStatus = (
+    <StatusProgress
+      currentView={statusBarProps.currentView}
+      processing={processing}
+      progress={progress}
+      currentStep={currentStep}
+      onCancelProcessing={cancelProcessing}
+      onRestartProcessing={statusBarProps.onRestartProcessing}
+      onAbortToConfig={handleAbortToConfig}
+      onLoadFromHistory={handleLoadFromHistory}
+      compact
     />
   )
 
@@ -319,13 +352,11 @@ function App() {
         {/* 工作台里页头与状态栏合成一行（单层页头）；其余页面状态栏仍在页头下方 */}
         <AppHeader compact={workspaceMode}>
           {workspaceMode ? (
-            /* 书名与状态栏同行：书名在左（三阶段标签之后），状态栏占其余宽度。
-               书名可换行（min-w-0 + break-words）但**不压缩状态栏**：书名再长也只占自己的
-               几行，状态栏至少要有 min-w 能放下「处理 / 进度 / 模型切换 / 工具组」，否则右侧元素
-               会互相重叠、甚至被裁到视口外（b35 的实测回归）。 */
+            /* 顶栏只留品牌、书名与「总结 / 模型」+ 工具组；三阶段导航与处理进度下沉到正文列顶部。
+               书名可换行（min-w-0 + break-words），右侧的模型/工具组不参与压缩。 */
             <div className="flex min-w-0 flex-1 items-center gap-x-3 gap-y-1">
               <div className="min-w-0 shrink">{workspaceTitle}</div>
-              <div className="min-w-[22rem] flex-1">{statusBar}</div>
+              <div className="ml-auto shrink-0">{workspaceStatusMeta}</div>
             </div>
           ) : null}
         </AppHeader>
@@ -391,6 +422,8 @@ function App() {
                 chartsGenerating={chartsGenerating}
                 source={dockPreview}
                 sourceKey={rightPanelContent?.chapter.id}
+                topNav={workspaceTopNav}
+                topStatus={workspaceTopStatus}
                 onNavigateChapter={book.handleChapterSummaryNavigation}
                 onViewingChapterChange={book.setCurrentViewingChapterSummary}
                 onClearChapterCache={book.clearChapterCache}
