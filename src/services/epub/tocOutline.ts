@@ -194,7 +194,9 @@ export function buildOutlineTree(toc: readonly NavItem[], levels: readonly numbe
     const level = levels[i]
     const node: NavItem = { ...toc[i], subitems: [] }
     if (level <= 0) {
-      boundaryNodes.add(node)
+      // 篇 / 部下面一个章都没有（紧跟另一篇或到了末尾）：它自己就是一整篇正文，当章处理，不能只当边界丢掉
+      const next = levels[i + 1]
+      if (next !== undefined && next > 0) boundaryNodes.add(node)
       roots.push(node)
       stack.length = 0 // 新的一部开始，上一章的嵌套到此为止
       continue

@@ -167,6 +167,17 @@ describe('buildOutlineTree', () => {
     expect(toc[1].subitems).toBeUndefined()
   })
 
+  it('下面没有章的篇 / 部自己就是正文：不当边界，作为章保留（人性的弱点「第五篇 创造奇迹的信件」）', () => {
+    // 上篇(有章) / 第五篇(无章，紧跟另一篇) / 第六篇(有章) / 末篇(无章，到了末尾)
+    const toc = nav(['篇A', '章1', '章2', '篇B', '篇C', '章3', '章4', '篇D'])
+    const levels = [0, 1, 1, 0, 0, 1, 1, 0]
+    const tree = buildOutlineTree(toc, levels)!
+    const boundary = tree.filter(isBoundaryNode).map((n) => n.label)
+    expect(boundary).toEqual(['篇A', '篇C'])
+    const emitted = tree.filter((n) => !isBoundaryNode(n)).map((n) => n.label)
+    expect(emitted).toEqual(['章1', '章2', '篇B', '章3', '章4', '篇D'])
+  })
+
   it('层级数组与目录长度不一致 / 章级不足 → null', () => {
     const toc = nav(['a', 'b', 'c'])
     expect(buildOutlineTree(toc, [1, 2])).toBeNull()
