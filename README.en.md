@@ -43,6 +43,7 @@ with configuration and reading history shared by the whole team.
 - **Real-time Progress**: Visualized processing with real-time step display
 - **Interactive Mind Maps**: Support zooming, dragging, node expand/collapse
 - **Content Preview**: Support viewing original chapter content
+- **Rich content blocks**: Summaries may contain mermaid diagrams, GenUI components and HTML fragments; figures share the body font size and follow the brand palette (rice paper / pine-soot ink / cinnabar), with one set per theme
 - **Reading Controls**: Font size adjustment and fullscreen mode for better reading experience
 - **Theme Support**: Complete dark/light theme support with automatic system theme detection
 

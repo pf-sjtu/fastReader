@@ -56,6 +56,7 @@
 - **内容预览**：支持查看原始章节内容
 - **阅读控制**：字体大小调节和全屏模式，提供更好的阅读体验
 - **主题支持**：完整的深色/浅色主题支持，自动跟随系统主题
+- **富内容块**：总结里可直接出现 mermaid 图、GenUI 组件与 HTML 片段；图与正文同字体同字号，配色跟随品牌（宣纸 / 松烟墨 / 朱砂），深浅主题各一套
 
 ### 🌐 增强阅读体验
 
@@ -194,11 +195,8 @@ ebook-to-mindmap/
 │   │   ├── 📁 ui/               # 基础 UI 组件
 │   │   ├── 📁 project/          # 项目相关组件
 │   │   └── 📄 *.tsx              # 其他功能组件
-│   ├── 📁 services/             # 服务层
-│   │   ├── 📄 ai/               # AI provider 实现与共享任务编排
-│   │   ├── 📄 pdfProcessor.ts   # PDF 处理
-│   │   └── 📄 *.ts              # 其他服务
-│   ├── 📁 stores/               # 状态管理
+│   ├── 📁 services/             # 服务层（AI / 书籍 / 学习包 / WebDAV…）
+│   ├── 📁 stores/               # 状态管理（zustand）
 │   ├── 📁 hooks/                # 自定义 Hooks
 │   ├── 📁 i18n/                 # 国际化配置
 │   ├── 📁 lib/                  # 工具库
@@ -218,18 +216,9 @@ ebook-to-mindmap/
 │   ├── 📄 eslint.config.js      # ESLint 代码检查配置
 │   ├── 📄 tsconfig*.json        # TypeScript 配置
 │   └── 📄 components.json       # shadcn/ui 组件配置
-├── 📁 docs/                      # 文档目录
-│   ├── 📄 README.md              # 项目说明文档
-│   ├── 📄 README.en.md           # 英文说明文档
-│   ├── 📄 TODO.md                # 待办事项
-│   ├── 📄 LICENSE                # 许可证
-│   ├── 📄 CLAUDE.md              # Claude AI 使用说明
-│   ├── 📄 EPUB结构说明.md        # EPUB 格式说明
-│   ├── 📄 PDF处理流程文档.md     # PDF 处理说明
-│   └── 📄 webdav-proxy.md         # WebDAV 同源代理指南
-
-├── 📁 test/                      # 测试文件目录
-├── 📁 node_modules/              # 依赖包
+├── 📁 docs/                      # 文档目录（部署 / 封面 KV / 学习包 / 离线存档…）
+├── 📁 tests/                     # 测试目录（vitest + pytest）
+├── 📁 functions/                 # Cloudflare Pages Functions（服务端代理与共享状态）
 └── 📁 dist/                      # 构建输出目录
 ```
 
