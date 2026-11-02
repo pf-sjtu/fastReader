@@ -155,13 +155,13 @@
   - **守卫加固**（`tests/designSystem.test.ts` 16 → 17 项）：`title-size` 覆盖 `AlertDialogTitle`；`button-height` 改为「先切 `<Button …>` 段再看 className」（`=>` 当整体消费，能跨行，此前多行 JSX 全部逃逸）；`raw-color-fn` 补 `shadow-[…rgba()]`；新增 `theme-locked-color`（写死 `white/black` 必须配 `dark:` 变体或登记豁免，遮罩/封面白字 5 处已登记理由）
   - **记录为后续项（本轮不做）**：状态徽标 4 套实现（建议抽 `ui/status-badge.tsx`）、一行提示/错误态 4 种形状（建议 `ui/hint.tsx`）、胶囊 4 套类串、空状态 8 处手写、`toast.message` 与 `toast.info` 两种 API、`--*-muted` token 全站零引用（淡底仍在用 `bg-*/5|10` 等 8 种浓度）、`charts/theme.ts` 的 FALLBACK 色仍是旧暖灰
 ## 10.23 元件与 CSS 的进一步标准化（规格见 `specs/design-system/spec.md` 新增的四条 Requirement）
-- [ ] 10.23.1 **淡底与描边归一**：`bg-{success,warning,info,destructive}/{5,10,20}` 与 `border-*/{30,40,50,60}` 统一到 `--*-muted` token 与一个固定描边档（现状：淡底 8 种浓度、描边 6 种浓度）
-- [ ] 10.23.2 **`ui/status-badge.tsx`**：语义状态 → 颜色/图标只有一张映射表（`statusTone`）；替换 `BatchStatusBadge` / `BatchQueueTab` / `BatchQueuePanel` / `BatchFileTab` 的批量状态、`BookInfo` 的分类色、`BookCard` 的分类胶囊、`FontSettings` 的检测结果
-- [ ] 10.23.3 **`ui/hint.tsx`**：`tone`（info/success/warning/danger）× 形状（无框旁注 / 带框提示），`role` 由语义决定；替换 11 处一行提示/框式警告/错误态（`SyncNote`、`CloudCacheSection`、`NotesPanel`、`EntityCard`、`FontSettings`、`ConfigExportImport`、`InitWizard`、`WizardCredentialsStep`、`MissingBookDialogs`、`ErrorBoundary`、`ChapterQualityNote`）
-- [ ] 10.23.4 **图表回退色**：`charts/theme.ts` 的 `FALLBACK_LIGHT / FALLBACK_DARK` 与现行 token 对齐（当前 primary 仍是旧暖灰 `#4a433c`，而 `--primary` 已是朱砂），并加守卫断言同源
-- [ ] 10.23.5 **零碎统一**：`toast.message` → `toast.info`（中性提示只有一种 API）；8 处手写空状态收进 `EmptyState`；`WebDAVFileBrowser` 的 `isOpen` → `open`
-- [ ] 10.23.6 守卫补强：断言 `--*-muted` 不再零引用、`toast.message` 不再出现、空状态不再手拼容器
-- [ ] 10.23.7 全量测试 + 真机（明暗双主题）验收 + 提交推送
+- [x] 10.23.1 **淡底与描边归一**：全仓 32 个文件的状态色淡底（`bg-{primary,destructive,success,warning,info}/{5,10,20}`）→ `bg-*-muted`，语义描边（`border-*/{30,40,50,60}`）→ 新增的 `border-*-border` token（明暗各一份，深色提到 55% 才看得见），中性淡底 `bg-muted/N` → `bg-muted`。有意保留：输入框底、遮罩层、`bg-accent/N`（accent 的透明度本身在表达「更淡的 hover」，压成实心会改手感）、ResizeHandle 高亮把手、深色下危险按钮实底。常态底与 hover 底被压平时（`bg-muted` + `hover:bg-muted`）把 hover 改回 accent，保住反馈
+- [x] 10.23.2 **`ui/status-badge.tsx`**：语义状态 → 颜色/图标只有一张映射表（`statusTone`）；已替换 `BatchStatusBadge` / `BatchQueueTab` / `BatchQueuePanel` / `BatchFileTab` 的批量状态、`BookInfo` 的分类色、`BookCard` 的分类胶囊与「已读」徽标（新增 `solid` 外观：实心主色，只有主色有实心版）、`FontSettings` 的检测结果与「当前生效」
+- [x] 10.23.3 **`ui/hint.tsx`**：`tone`（info/success/warning/danger/neutral）× 形状（无框旁注 / 带框提示），`role` 由语义决定（danger→`alert`，其余→`status`，中性不加 role）；已替换 13 处：`ErrorBoundary` / `ArtifactCleanup` / `LibraryView`（2 处）/ `QuizPanel` / `StudyKitPanel` / `CloudCacheSection` / `MissingBookDialogs` / `WizardCredentialsStep` / `LoginPage` / `SyncNote`（3 处）/ `ChapterQualityNote` / `StepRetryNote` / `AIProviderConfig`
+- [x] 10.23.4 **图表回退色**：`charts/theme.ts` 的 `FALLBACK_LIGHT / FALLBACK_DARK` 原本还是旧的暖灰褐体系（`primary: #4a433c`），改为浏览器实测解析出的 index.css token 真实值（朱砂 `#b4341f` / 深色 `#e4694b` 等，实体色板同步）；新增 `tests/chartTheme.test.ts`（6 条）：在 Node 里把 index.css 的 oklch token 换算成 sRGB hex 逐一核对两套回退值
+- [x] 10.23.5 **零碎统一**：`toast.message` → `toast.info`（**sonner 根本没有 `toast.message`**，那是 vitest 的 API——原先 5 处是潜在的运行时崩溃，测试 mock 同步改掉）；空状态此前已由 `empty-state` 守卫收敛进 `EmptyState`（无需再动）；`WebDAVFileBrowser` 的 `isOpen` prop → `open`（其余 `isOpen` 是局部 state 变量名，保留）
+- [x] 10.23.6 守卫补强：新增 `tinted-surface`（状态色不再出现透明度叠色）；`statusTone.test.ts` 的描边断言改为「语义描边 token 一档」；`chartTheme.test.ts` 核对回退色同源
+- [x] 10.23.7 全量测试 + 真机（明暗双主题）验收 + 提交推送：vitest 2385 passed / 25 skipped，typecheck / lint / lint:css / 生产构建通过，生产构建 + API 桩在真实 Chromium 验证明暗两套主题
 
 - [x] 10.24 结果页布局重排 + 打开已精读书的体验优化（用户反馈三处布局 + 一处体验）：
   - **书名/作者上顶栏**：工作台三栏，正文列窄，卡片头部的书名与作者被 `truncate` 截掉（「作者: Tom…」）。抽出 `sections/ResultTopBar.tsx` 的 `ResultTitle` / `ResultActions`——书名与作者移到顶栏（AppHeader 那一行），字号/MD/学习包/上传云端移到正文列顶部、与「全文/要点/一句话」同一行；经典布局（导图模式）仍在卡片头部

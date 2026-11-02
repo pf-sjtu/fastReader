@@ -64,7 +64,7 @@
 - **THEN** 使用 `<Hint tone="danger">`，其 `role` 为 `alert`；旁注类提示不得用 `alert`
 
 ### Requirement: 淡底只用 -muted token
-状态的淡色背景 SHALL 使用对应的 `--*-muted` token（`--success-muted / --warning-muted / --info-muted / --destructive-muted`，由 `color-mix` 与卡片底色混合而来、随主题变化），SHALL NOT 用 `bg-success/5`、`bg-warning/10`、`bg-info/10`、`bg-destructive/5` 这类任意透明度叠色——透明度与卡片底色叠加后，同一语义在不同页面的浓淡不一致，也无法随主题自动调整。同理，带框提示的描边 SHALL 取自 `--*-muted` 或状态色本身的一个固定档，不得出现 `border-*/30|40|50|60` 四种不同浓度混用。
+状态的淡色背景 SHALL 使用对应的 `--*-muted` token（`--success-muted / --warning-muted / --info-muted / --destructive-muted`，由 `color-mix` 与卡片底色混合而来、随主题变化），SHALL NOT 用 `bg-success/5`、`bg-warning/10`、`bg-info/10`、`bg-destructive/5` 这类任意透明度叠色——透明度与卡片底色叠加后，同一语义在不同页面的浓淡不一致，也无法随主题自动调整。同理，带框提示的描边 SHALL 取自语义描边 token（`--primary-border` / `--success-border` / `--warning-border` / `--info-border` / `--destructive-border`，随主题给出可见的浓度），不得出现 `border-*/30|40|50|60` 四种不同浓度混用，也不得直接用状态色的透明度叠色。
 
 #### Scenario: 同一语义的两种提示
 - **WHEN** 比较书库的「缓存缺失」提示与设置页的「WebDAV 未配置」提示
@@ -73,6 +73,11 @@
 #### Scenario: token 不再无人使用
 - **WHEN** 检查 `index.css` 里定义的状态 token
 - **THEN** `--*-muted` 至少在一个共享组件（`StatusBadge` / `Hint`）里被使用，守卫断言其不是死 token
+
+#### Scenario: 状态色的浓度只有一档
+- **WHEN** 全仓检索状态色类名
+- **THEN** `bg-{primary,destructive,success,warning,info}/N` 与 `border-{同上}/N` 零出现（守卫 `tinted-surface`）；
+输入框底、遮罩层与 `bg-accent/N`（accent 的透明度本身表达「更淡的 hover」）不在此列
 
 ### Requirement: 元件属性与命名一致
 同类元件的属性名 SHALL 一致：控制可见性的弹层属性一律为 `open` / `onOpenChange`（不得出现 `isOpen` / `visible` / `show` 并存）；色调一律为 `tone`（`variant` 只用于 shadcn 按钮/徽标的形态变体）；尺寸一律为 `size` 且取值来自既有档位表。轻提示 API SHALL 只用一种（`toast.info` 表示中性提示，`toast.success` / `toast.error` 表达结果），不得 `toast.message` 与 `toast.info` 混用。
