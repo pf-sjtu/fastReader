@@ -159,12 +159,14 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
                 else itemRefs.current.delete(chapter.id)
               }}
               data-chapter-id={chapter.id}
+              data-processing={isProcessing || undefined}
+              aria-busy={isProcessing || undefined}
             >
               {/* 节点 + 文字同行，垂直居中对齐 */}
               <div className="flex items-center">
                 {isProcessing ? (
-                  <div className="w-3.5 h-3.5 rounded-full border-2 border-primary-border flex items-center justify-center shrink-0">
-                    <Loader2 className="h-2 w-2 text-primary animate-spin" />
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-info-border flex items-center justify-center shrink-0">
+                    <Loader2 className="h-2 w-2 text-info animate-spin" />
                   </div>
                 ) : chapter.processed ? (
                   <button
@@ -183,25 +185,38 @@ export const ChapterSummaryNavigation = memo(function ChapterSummaryNavigation({
                 ) : (
                   <div className="w-3.5 h-3.5 rounded-full border-2 border-border shrink-0" />
                 )}
-                <button
-                  type="button"
-                  onClick={() => chapter.processed && onChapterClick(chapter.id)}
-                  disabled={!chapter.processed}
-                  aria-current={isViewing ? 'true' : undefined}
-                  title={chapter.title}
-                  className={cn(
-                    'ml-2.5 min-h-8 min-w-0 flex-1 py-1 text-left text-sm leading-snug line-clamp-2 transition-colors',
-                    isViewing && 'text-primary font-semibold',
-                    // 已读：更浅
-                    isRead && !isViewing && 'text-muted-foreground/45 hover:text-muted-foreground/70',
-                    // 未读：稍深
-                    isUnread && 'text-foreground/75 hover:text-foreground',
-                    !chapter.processed && 'text-muted-foreground/35',
-                    chapter.processed && !isViewing && !isRead && !isUnread && 'text-muted-foreground hover:text-foreground'
+                <div className="ml-2.5 min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => chapter.processed && onChapterClick(chapter.id)}
+                    disabled={!chapter.processed}
+                    aria-current={isViewing ? 'true' : undefined}
+                    title={chapter.title}
+                    className={cn(
+                      'min-h-8 w-full min-w-0 py-1 text-left text-sm leading-snug line-clamp-2 transition-colors',
+                      isViewing && 'text-primary font-semibold',
+                      // 已读：更浅
+                      isRead && !isViewing && 'text-muted-foreground/45 hover:text-muted-foreground/70',
+                      // 未读：稍深
+                      isUnread && 'text-foreground/75 hover:text-foreground',
+                      !chapter.processed && !isProcessing && 'text-muted-foreground/35',
+                      // 处理中：比未处理更淡的中性灰，活动感由节点与下面的扫动条承担
+                      isProcessing && 'text-muted-foreground/25',
+                      chapter.processed && !isViewing && !isRead && !isUnread && 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <ChapterTitle title={chapter.title} />
+                  </button>
+                  {/* 处理中：细扫动条（reduced-motion 下只剩静态淡条） */}
+                  {isProcessing && (
+                    <span
+                      className="relative mb-1.5 mt-0.5 block h-0.5 w-16 overflow-hidden rounded-full chapter-processing-track"
+                      aria-hidden="true"
+                    >
+                      <span className="chapter-processing-sweep absolute inset-y-0 left-0 block w-1/3 rounded-full" />
+                    </span>
                   )}
-                >
-                  <ChapterTitle title={chapter.title} />
-                </button>
+                </div>
               </div>
               {/* 连接线独立于节点下方 */}
               {!isLast && (

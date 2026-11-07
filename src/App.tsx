@@ -419,6 +419,7 @@ function App() {
                 processing={processing}
                 isMobile={isMobile}
                 totalChapters={extractedChapters?.length || 0}
+                extractedChapters={extractedChapters ?? undefined}
                 currentProcessingChapter={currentProcessingChapter}
                 currentViewingChapter={currentViewingChapterSummary}
                 expandedChapters={expandedChapters}

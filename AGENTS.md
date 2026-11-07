@@ -92,6 +92,7 @@ git push -u origin HEAD
 `CardHeader` 也**保留 `grid-cols-1`**：卡片是固定宽度（`w-80/w-96`），隐式 auto 轨道会被「长标题 + `shrink-0` 控件」的 max-content 撑破，按钮直接溢到卡外。
 顶栏（`src/components/app/AppHeader.tsx` 的 `compact` 分支）是 `@container`：内部降级一律按**顶栏自身宽度**判断，不要用视口断点——窗口宽但工具组占得多时照样会挤。
 降级顺序是硬约定（用户定）：品牌字标（<512px 只留印章）→ 模型选择器 icon 化（<992px 只留图标，靠 `title`/`aria-label` 说明）→ 其它控件 icon 化（<736px）→ 收进「更多操作」菜单（<512px）→ 书名最后才隐藏（<288px），且书名单行截断、不换行。守卫 `tests/components/workspaceHeaderAdaptive.test.tsx`。
+阅读工作台的目录（`ChapterSummaryNavigation` / 折叠态 `NavRail`）**数据源按阶段切换**：处理中用 `extractedChapters`（整本书的目录）+ 结果里的 `processed` 按 id 合并，处理结束才回 `bookSummary.chapters`（标题以结果为准）。不要把「结果里还没有章节」当成「目录应该消失」——那会让处理一开始左栏整块消失，只剩已完成章。处理中的视觉：标题比未处理更淡（`/25` vs `/35`）、节点保留旋转 + 行内扫动条、折叠竖条上处理段用 `bg-info` 呼吸；守卫 `tests/components/workspaceChapterNavProcessing.test.tsx`。骨架类呼吸动画（`rail-processing-pulse*`）写在 `index.css`，组件里不要手写 `animate-pulse`，`designSystem` 守卫会拦。
 **图（mermaid / html 沙箱 / 离线包 / 自绘 SVG）另有一套守卫**：它们脱离宿主 CSS、读不到变量，所以字体栈与字号只能写具体值——
 具体值唯一来源是 `src/lib/figureType.ts` 的 `FIGURE_FONT_STACK`（与 `--font-sans` 逐字一致）与 `readFigureType()`（`--base-font-size` × `--font-scale`）；
 缩放策略用 `figureFit()`：**不放大**、缩到不低于 11px、再宽就横滚（mermaid 必须 `useMaxWidth: false`，它默认会把小图拉满容器，实测文字会从 15px 变 54px）；

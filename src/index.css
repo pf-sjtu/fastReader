@@ -633,6 +633,72 @@
       outline-offset: 2px;
     }
   }
+
+  /* 目录里「正在处理」那一章的扫动条：轨道常驻（中性灰），高光在轨道里扫过表示还在生成。
+     用固定色调而不是主色——主色在这个界面里代表「当前阅读 / 已完成」，混用会让处理中的章节
+     看起来像已经读过的章。reduced-motion 下停掉扫动，只留一条静态淡条。 */
+  .chapter-processing-track {
+    background: color-mix(in oklab, var(--muted-foreground) 12%, transparent);
+  }
+  .chapter-processing-sweep {
+    background: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+    animation: chapter-processing-sweep 1.8s ease-in-out infinite;
+  }
+  @keyframes chapter-processing-sweep {
+    0% {
+      transform: translateX(-110%);
+    }
+    100% {
+      transform: translateX(360%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .chapter-processing-sweep {
+      animation: none;
+      transform: none;
+      width: 100%;
+      opacity: 0.5;
+    }
+  }
+  /* 折叠目录里的处理进度：竖条上正在处理的那一章是一段 info 色呼吸段，
+     圆点也轻微呼吸。不用 animate-pulse——designSystem 守卫禁止组件里手写骨架动画。 */
+  .rail-processing-pulse {
+    animation: rail-processing-pulse 1.6s ease-in-out infinite;
+  }
+  .rail-processing-pulse-dot {
+    animation: rail-processing-pulse-dot 1.6s ease-in-out infinite;
+  }
+  @keyframes rail-processing-pulse {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @keyframes rail-processing-pulse-dot {
+    0%,
+    100% {
+      opacity: 0.6;
+      transform: scale(0.86);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.08);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rail-processing-pulse {
+      animation: none;
+      opacity: 1;
+    }
+    .rail-processing-pulse-dot {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+  }
 }
 
 /*

@@ -92,6 +92,8 @@ export interface ReaderWorkspaceProps {
   topNav?: ReactNode
   /** 正文列顶部中间：处理进度 */
   topStatus?: ReactNode
+  /** 提取出的完整章节清单（书目录）：处理中目录按它渲染，未开始的章节也能看到 */
+  extractedChapters?: ReadonlyArray<{ id: string; title: string }>
 }
 
 /** 键盘快捷键不应在输入框里触发 */
@@ -128,6 +130,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     stepRunning = null,
     topNav,
     topStatus,
+    extractedChapters,
   } = props
   const { t } = useTranslation()
   // 窄于约 1000px 的窗口（小平板、缩小的桌面窗口）硬挤三栏会把正文压成窄条：改用紧凑布局（抽屉）
@@ -187,6 +190,23 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
 
   const chapters = bookSummary.chapters
   const chapterIds = useMemo(() => chapters.map((c) => c.id), [chapters])
+
+  // 目录章节清单：处理中结果是一章一章追加的（首章完成前甚至是空数组），直接拿结果当目录
+  // 会让左侧目录消失或只显示已完成的章。所以处理中改用提取出的书目录 + 结果里的 processed 映射；
+  // 处理结束后回到结果（章节命名模式会改写标题，最终结果才是权威）。
+  const processedById = useMemo(() => new Map(chapters.map((c) => [c.id, c.processed === true])), [chapters])
+  const navChapters = useMemo(() => {
+    if (!processing && chapters.length > 0) return chapters
+    if (!extractedChapters?.length) return chapters
+    // 结果里出现了目录之外的 id（极端情况：命名模式重排过 id）时映射对不上，退回结果列表
+    if (processedById.size > 0 && !extractedChapters.some((c) => processedById.has(c.id))) return chapters
+    return extractedChapters.map((c) => ({
+      id: c.id,
+      title: c.title,
+      processed: processedById.get(c.id) === true,
+    }))
+  }, [processing, chapters, extractedChapters, processedById])
+  const processedCount = useMemo(() => navChapters.filter((c) => c.processed).length, [navChapters])
 
   // 学习数据按书的内容指纹绑定；处理中章节还在变，等结果稳定再绑定
   const studyKey = studyKeyOf(bookSummary)
@@ -453,7 +473,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
 
   const nav = (variant: 'sidebar' | 'sheet', headerAction?: ReactNode) => (
     <ChapterSummaryNavigation
-      chapters={chapters}
+      chapters={navChapters}
       totalChapters={totalChapters}
       currentStepIndex={2}
       processingMode="summary"
@@ -532,7 +552,16 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
             className={`hidden shrink-0 md:flex md:flex-col ${navCollapsed ? 'mr-3' : ''}`}
             style={{ width: navCollapsed ? 14 : fitted.nav }}
           >
-            {navCollapsed && <NavRail chapters={chapters} current={viewingIndex} onExpand={() => setNavCollapsed(false)} />}
+            {navCollapsed && (
+              <NavRail
+                chapters={navChapters}
+                current={viewingIndex}
+                processing={processing}
+                processedCount={processedCount}
+                processingChapterId={currentProcessingChapter}
+                onExpand={() => setNavCollapsed(false)}
+              />
+            )}
             <div className={navCollapsed ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}>
               <div className="min-h-0 flex-1">
                 {nav(
@@ -571,7 +600,6 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
 
       {link.floating}
       {selectionToolbar}
-      {commandLayer.overlay}
       {commandLayer.overlay}
       {backChip}
 
