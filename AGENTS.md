@@ -89,6 +89,9 @@ git push -u origin HEAD
 弹窗用 `DialogContent` / `AlertDialogContent` 基础组件时**保留 `grid-cols-1` 单列轨道**：隐式 auto 轨道按子项 max-content 定宽，页签条/长模型 id/长 URL 会把整卡撑出视口（390px 实测 371 → 653）。
 页签条允许换行时，触发器高度必须写死（基类 `h-[calc(100%-1px)]` 在折行容器里按整条高度算，第二行会压住内容区、吞掉点击）；长内容的页签条放在滚动区外，否则滚到底部就没法切页签。
 新增或大改弹窗在 390px 过一遍：`dialog.scrollWidth === clientWidth`、没有子元素 `right > 视口宽`。
+`CardHeader` 也**保留 `grid-cols-1`**：卡片是固定宽度（`w-80/w-96`），隐式 auto 轨道会被「长标题 + `shrink-0` 控件」的 max-content 撑破，按钮直接溢到卡外。
+顶栏（`src/components/app/AppHeader.tsx` 的 `compact` 分支）是 `@container`：内部降级一律按**顶栏自身宽度**判断，不要用视口断点——窗口宽但工具组占得多时照样会挤。
+降级顺序是硬约定（用户定）：品牌字标（<512px 只留印章）→ 模型选择器 icon 化（<992px 只留图标，靠 `title`/`aria-label` 说明）→ 其它控件 icon 化（<736px）→ 收进「更多操作」菜单（<512px）→ 书名最后才隐藏（<288px），且书名单行截断、不换行。守卫 `tests/components/workspaceHeaderAdaptive.test.tsx`。
 **图（mermaid / html 沙箱 / 离线包 / 自绘 SVG）另有一套守卫**：它们脱离宿主 CSS、读不到变量，所以字体栈与字号只能写具体值——
 具体值唯一来源是 `src/lib/figureType.ts` 的 `FIGURE_FONT_STACK`（与 `--font-sans` 逐字一致）与 `readFigureType()`（`--base-font-size` × `--font-scale`）；
 缩放策略用 `figureFit()`：**不放大**、缩到不低于 11px、再宽就横滚（mermaid 必须 `useMaxWidth: false`，它默认会把小图拉满容器，实测文字会从 15px 变 54px）；

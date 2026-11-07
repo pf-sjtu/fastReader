@@ -39,11 +39,16 @@ interface BrandMarkProps {
   latin?: string
   size?: 'sm' | 'lg'
   className?: string
+  /** 只显示印章、不渲染字标（窄屏顶栏：应用名先于书名隐藏） */
+  sealOnly?: boolean
 }
 
 /** 印章 + 字标；lg 用于首页大标题，sm 用于移动端顶栏 */
-export function BrandMark({ name, latin, size = 'lg', className }: BrandMarkProps) {
+export function BrandMark({ name, latin, size = 'lg', className, sealOnly = false }: BrandMarkProps) {
   const lg = size === 'lg'
+  if (sealOnly) {
+    return <SealIcon className={cn(lg ? 'h-11 w-11' : 'h-7 w-7', className)} title={name} />
+  }
   return (
     <span className={cn('inline-flex items-center', lg ? 'gap-3' : 'gap-2', className)}>
       <SealIcon className={lg ? 'h-11 w-11' : 'h-7 w-7'} />

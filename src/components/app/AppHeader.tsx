@@ -4,14 +4,36 @@ import { BrandMark } from '@/components/BrandMark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator'
+import { HeaderCollapseMenu } from '@/components/app/HeaderCollapseMenu'
 
-/** 右上角工具组：同步状态 + 语言 + 明暗 */
-function HeaderTools() {
+/**
+ * 右上角工具组：同步状态 + 语言 + 明暗。
+ *
+ * compact（阅读工作台）时按顶栏容器宽度分两档：
+ * - ≥512px：三个控件各自就位（文字在 <736px 已退成国旗/图标）；
+ * - <512px：全部收进「更多操作」菜单，把宽度让给书名。
+ * 经典页头没有 @container，继续用原来的视口断点。
+ */
+function HeaderTools({ compact }: { compact: boolean }) {
+  if (!compact) {
+    return (
+      <div className="flex items-center gap-1.5 shrink-0">
+        <SyncStatusIndicator />
+        <LanguageSwitcher />
+        <DarkModeToggle />
+      </div>
+    )
+  }
   return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <SyncStatusIndicator />
-      <LanguageSwitcher />
-      <DarkModeToggle />
+    <div className="flex shrink-0 items-center gap-1.5">
+      <div className="hidden items-center gap-1.5 @[512px]:flex">
+        <SyncStatusIndicator />
+        <LanguageSwitcher compact />
+        <DarkModeToggle compact />
+      </div>
+      <div className="@[512px]:hidden">
+        <HeaderCollapseMenu />
+      </div>
     </div>
   )
 }
@@ -19,15 +41,24 @@ function HeaderTools() {
 /**
  * 页头。compact（阅读工作台）压成单行：品牌 + 状态栏（children）+ 工具，把高度让给阅读；
  * 窄屏时 children 另起一行。否则是带副标题的完整页头（桌面居中、手机左对齐），children 不在这里渲染。
+ *
+ * compact 根节点是 @container：顶栏内部的所有降级（模型 icon 化、控件 icon 化、折叠、藏书名）
+ * 都按「顶栏自身宽度」判断，而不是视口宽度——窗口宽但工具组占得多时照样会挤。
  */
 export function AppHeader({ compact, children }: { compact: boolean; children?: ReactNode }) {
   const { t } = useTranslation()
 
   if (compact) {
     return (
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
+      <div className="@container flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
         <h1 className="shrink-0">
-          <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" />
+          {/* 应用名先于书名隐藏：<512px 只留印章 */}
+          <span className="@[512px]:hidden inline-flex">
+            <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" sealOnly />
+          </span>
+          <span className="hidden @[512px]:inline-flex">
+            <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" />
+          </span>
         </h1>
         {/*
           children（工作台的书名 + 状态栏）跟在品牌后面同一行；宽度不够时才换行。
@@ -35,7 +66,7 @@ export function AppHeader({ compact, children }: { compact: boolean; children?: 
         */}
         {children && <div className="min-w-0 flex-1 basis-0">{children}</div>}
         <div className="ml-auto sm:ml-0">
-          <HeaderTools />
+          <HeaderTools compact />
         </div>
       </div>
     )
@@ -49,7 +80,7 @@ export function AppHeader({ compact, children }: { compact: boolean; children?: 
             <BrandMark name={t('app.title')} latin={t('app.latin')} size="sm" />
           </h1>
         </div>
-        <HeaderTools />
+        <HeaderTools compact={false} />
       </div>
       <div className="hidden sm:flex flex-col items-center gap-3 pt-1">
         <h1>

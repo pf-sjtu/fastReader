@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LibraryView } from '@/components/library/LibraryView'
 import { FileUploadCard } from '@/components/sections/FileUploadCard'
@@ -20,7 +19,6 @@ interface ConfigStepProps {
   autoOpening?: boolean
   /** 配置页内的两段：书库 / 处理（WebDAV 未启用时只有处理段） */
   section?: 'library' | 'process'
-  onSelectSection?: (section: 'library' | 'process') => void
   onLoadFromCloudCache: () => void
   onStartProcessing: () => void
   onSetSelection: (chapterIds: string[]) => void
@@ -49,8 +47,7 @@ function OpeningSkeleton({ name }: { name: string }) {
   )
 }
 
-export function ConfigStep({ book, webdavEnabled, onOpenBook, openingPath, autoOpening = false, section = 'process', onSelectSection, onLoadFromCloudCache, onStartProcessing, onSetSelection, preview }: ConfigStepProps) {
-  const { t } = useTranslation()
+export function ConfigStep({ book, webdavEnabled, onOpenBook, openingPath, autoOpening = false, section = 'process', onLoadFromCloudCache, onStartProcessing, onSetSelection, preview }: ConfigStepProps) {
   const { file, extractedChapters, bookData } = book
   if (autoOpening && file) {
     return (
@@ -71,14 +68,6 @@ export function ConfigStep({ book, webdavEnabled, onOpenBook, openingPath, autoO
   return (
     <div className="flex flex-col md:flex-row gap-3 md:gap-4 min-w-0">
       <div className="flex-1 space-y-4 min-w-0">
-        {webdavEnabled && onSelectSection && (
-          <div className="flex items-center justify-end">
-            <Button variant="ghost" size="xs" onClick={() => onSelectSection('library')}>
-              <ArrowLeft className="h-3.5 w-3.5" />
-              {t('library.backToLibrary')}
-            </Button>
-          </div>
-        )}
         <FileUploadCard
           file={file}
           processing={book.processing}

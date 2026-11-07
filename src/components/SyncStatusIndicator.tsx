@@ -17,6 +17,28 @@ function formatTime(iso: string | null): string {
   }
 }
 
+/** 同步状态的图标 / 颜色 / 文案映射；折叠菜单与顶栏指示器共用同一份，避免文案漂移 */
+export function useSyncStatusView() {
+  const { t } = useTranslation()
+  const { status } = useSyncStatusStore()
+  return (() => {
+    switch (status) {
+      case 'loading':
+        return { Icon: RefreshCw, className: 'text-muted-foreground animate-spin', label: t('sync.loading') }
+      case 'syncing':
+        return { Icon: RefreshCw, className: 'text-muted-foreground animate-spin', label: t('sync.syncing') }
+      case 'conflict':
+        return { Icon: AlertTriangle, className: 'text-warning', label: t('sync.conflict') }
+      case 'offline':
+        return { Icon: CloudOff, className: 'text-destructive', label: t('sync.offline') }
+      case 'error':
+        return { Icon: CloudOff, className: 'text-destructive', label: t('sync.error') }
+      default:
+        return { Icon: Cloud, className: 'text-muted-foreground', label: t('sync.synced') }
+    }
+  })()
+}
+
 export function SyncStatusIndicator() {
   const { t } = useTranslation()
   const { status, lastSyncedAt, conflicts } = useSyncStatusStore()
@@ -33,24 +55,7 @@ export function SyncStatusIndicator() {
     })
   }, [conflicts, t])
 
-  const view = (() => {
-    switch (status) {
-      case 'loading':
-        return { Icon: RefreshCw, className: 'text-muted-foreground animate-spin', label: t('sync.loading') }
-      case 'syncing':
-        return { Icon: RefreshCw, className: 'text-muted-foreground animate-spin', label: t('sync.syncing') }
-      case 'conflict':
-        return { Icon: AlertTriangle, className: 'text-warning', label: t('sync.conflict') }
-      case 'offline':
-        return { Icon: CloudOff, className: 'text-destructive', label: t('sync.offline') }
-      case 'error':
-        return { Icon: CloudOff, className: 'text-destructive', label: t('sync.error') }
-      default:
-        return { Icon: Cloud, className: 'text-muted-foreground', label: t('sync.synced') }
-    }
-  })()
-
-  const { Icon, className, label } = view
+  const { Icon, className, label } = useSyncStatusView()
 
   const handleLogout = async () => {
     try {

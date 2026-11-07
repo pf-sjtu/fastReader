@@ -4,7 +4,7 @@ import { useTheme, useIsDarkMode } from './useTheme';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 
-export const DarkModeToggle: React.FC = () => {
+export const DarkModeToggle: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
   const { t } = useTranslation();
   const { setTheme } = useTheme();
   // 基于实际生效主题取反：theme 为 system 时也要让首次点击有可见变化
@@ -31,7 +31,8 @@ export const DarkModeToggle: React.FC = () => {
       ) : (
         <Moon className="h-4 w-4" />
       )}
-      <span className="hidden sm:inline">
+      {/* 紧凑顶栏按容器宽度退成纯图标；经典页头仍按视口断点 */}
+      <span className={compact ? 'hidden @[736px]:inline' : 'hidden sm:inline'}>
         {isDark ? t('theme.light') : t('theme.dark')}
       </span>
     </Button>

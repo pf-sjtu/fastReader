@@ -6,14 +6,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Languages } from 'lucide-react'
+import { Check, Languages } from 'lucide-react'
 
-const languages = [
+/** 与折叠菜单共享同一份语言清单，避免两处选项漂移 */
+export const languages = [
   { code: 'zh', name: '中文', flag: '🇨🇳' },
   { code: 'en', name: 'English', flag: '🇺🇸' }
 ]
 
-export function LanguageSwitcher() {
+export function currentLanguageName(language: string): { flag: string; name: string } {
+  const found = languages.find((lang) => lang.code === language) || languages[0]
+  return { flag: found.flag, name: found.name }
+}
+
+export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   const { i18n } = useTranslation()
 
   const currentLanguage = languages.find(lang => lang.code === i18n.language) || languages[0]
@@ -27,8 +33,18 @@ export function LanguageSwitcher() {
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="flex items-center gap-2">
           <Languages className="h-4 w-4" />
-          <span className="hidden sm:inline">{currentLanguage.flag} {currentLanguage.name}</span>
-          <span className="sm:hidden">{currentLanguage.flag}</span>
+          {compact ? (
+            <>
+              {/* 紧凑顶栏：文字 <736px 隐藏，只留国旗 */}
+              <span className="hidden @[736px]:inline">{currentLanguage.flag} {currentLanguage.name}</span>
+              <span className="@[736px]:hidden">{currentLanguage.flag}</span>
+            </>
+          ) : (
+            <>
+              <span className="hidden sm:inline">{currentLanguage.flag} {currentLanguage.name}</span>
+              <span className="sm:hidden">{currentLanguage.flag}</span>
+            </>
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -36,12 +52,11 @@ export function LanguageSwitcher() {
           <DropdownMenuItem
             key={language.code}
             onClick={() => changeLanguage(language.code)}
-            className={`flex items-center gap-2 cursor-pointer ${
-              i18n.language === language.code ? 'bg-accent' : ''
-            }`}
+            className="flex items-center gap-2 cursor-pointer"
           >
             <span>{language.flag}</span>
-            <span>{language.name}</span>
+            <span className="flex-1">{language.name}</span>
+            {i18n.language === language.code && <Check className="h-4 w-4" />}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

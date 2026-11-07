@@ -60,16 +60,18 @@ export function ModelSwitcher({ disabled, tokenUsage = 0, className }: ModelSwit
         <Button
           variant="outline"
           size="sm"
+          title={label}
           className={cn('max-w-[18rem] gap-1.5 px-2.5 font-normal', missingKey && 'border-destructive-border text-destructive', className)}
           aria-label={t('modelSwitcher.trigger', { model: label })}
         >
           {missingKey ? <KeyRound className="h-3.5 w-3.5 shrink-0" /> : <Brain className="h-3.5 w-3.5 shrink-0" />}
-          <span className="truncate text-xs">{missingKey ? t('statusBar.noApiKey') : label}</span>
+          {/* 窄容器（顶栏 <992px）只留图标：模型名是顶栏第一大头，先于其它控件退让 */}
+          <span className="hidden min-w-0 truncate text-xs @[992px]:block">{missingKey ? t('statusBar.noApiKey') : label}</span>
           {effort !== 'auto' && !missingKey && (
-            <span className="shrink-0 rounded-md bg-primary-muted px-1 text-xs text-primary">{t(`modelSwitcher.effort.${effort}`)}</span>
+            <span className="hidden shrink-0 rounded-md bg-primary-muted px-1 text-xs text-primary @[1080px]:inline-flex">{t(`modelSwitcher.effort.${effort}`)}</span>
           )}
-          {tokenUsage > 0 && <span className="shrink-0 text-xs text-muted-foreground">{formatTokens(tokenUsage)}</span>}
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
+          {tokenUsage > 0 && <span className="hidden shrink-0 text-xs text-muted-foreground @[1180px]:inline-flex">{formatTokens(tokenUsage)}</span>}
+          <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 opacity-60 @[992px]:block" />
         </Button>
       </DropdownMenuTrigger>
 

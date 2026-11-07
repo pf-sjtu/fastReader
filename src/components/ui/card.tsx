@@ -21,7 +21,9 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-2.5 sm:px-4 has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-4",
+        // 隐式单列是 minmax(auto, max-content)：长标题 + 右侧控件会把轨道撑到内容宽度，
+        // 固定宽度卡片（w-80/w-96）的表头就会溢出到卡外。显式单列（minmax(0,1fr)）才能让 truncate 生效。
+        "@container/card-header grid auto-rows-min grid-cols-1 grid-rows-[auto_auto] items-start gap-1.5 px-2.5 sm:px-4 has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-4",
         className
       )}
       {...props}

@@ -300,9 +300,12 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
     return (
       <div data-slot="status-bar" className={cn('flex min-w-0 items-center gap-2', className)}>
         {processingMode && (
-          <Badge variant="outline" className="text-xs font-normal">
-            {MODE_LABEL_KEY[processingMode] ? t(MODE_LABEL_KEY[processingMode]) : processingMode}
-          </Badge>
+          // 折叠态（<512px）把模式徽章收掉：工作台本身就是总结模式，把宽度让给书名
+          <div className="hidden @[512px]:block">
+            <Badge variant="outline" className="text-xs font-normal">
+              {MODE_LABEL_KEY[processingMode] ? t(MODE_LABEL_KEY[processingMode]) : processingMode}
+            </Badge>
+          </div>
         )}
         {/* 未配置密钥时切换器本身会标红并显示提示，不再单独放一个红色徽章 */}
         <ModelSwitcher disabled={processing} tokenUsage={tokenUsage} />
@@ -314,7 +317,8 @@ export const UnifiedStatusBar = memo(function UnifiedStatusBar({
   return (
     <>
       {/* 无卡片外框：它只是一条工具行，框起来会和下面真正的内容卡片（书库、上传）抢层级 */}
-      <div data-slot="status-bar" className={cn('w-full min-w-0 px-0.5 py-1 sm:px-1', className)}>
+      {/* @container：模型切换器的 icon 化按这条状态栏自身宽度判断（没有容器祖先时 @[...] 永远不会匹配） */}
+      <div data-slot="status-bar" className={cn('@container w-full min-w-0 px-0.5 py-1 sm:px-1', className)}>
         {/* sm–lg：左右两组占第一行，进度区（中间）整行落到第二行；≥lg 才三栏并排——768 宽三栏会把进度区挤到 0 宽，与模型选择器叠在一起 */}
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 lg:flex-nowrap">
           {/* 切换按钮 + 模型信息（移动端同一行） */}

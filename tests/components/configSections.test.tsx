@@ -51,30 +51,17 @@ describe('配置页的「书库 / 处理」两段', () => {
     expect(m.container.textContent).not.toContain('文件上传与配置')
   })
 
-  it('处理段：渲染上传与配置卡，并留一个「返回书库」入口', () => {
-    const onSelectSection = vi.fn()
-    m = mount(
-      <ConfigStep {...props} book={emptyBook} section="process" onSelectSection={onSelectSection} />
-    )
+  it('处理段：只渲染上传与配置卡（书库入口由顶栏三阶段导航承担）', () => {
+    m = mount(<ConfigStep {...props} book={emptyBook} section="process" />)
     expect(m.container.querySelector('[aria-label="我的书库"]')).toBeNull()
     expect(m.container.textContent).toContain('文件上传与配置')
 
-    const back = findButton(/返回书库/)
-    expect(back).toBeTruthy()
-    click(back)
-    expect(onSelectSection).toHaveBeenCalledWith('library')
+    // 顶栏的「书库」页签已经能回书库，处理段不再重复放一个返回按钮
+    expect(findButton(/返回书库/)).toBeFalsy()
   })
 
   it('WebDAV 未启用：没有书库段，处理段也不显示「返回书库」', () => {
-    m = mount(
-      <ConfigStep
-        {...props}
-        book={emptyBook}
-        webdavEnabled={false}
-        section="library"
-        onSelectSection={noop}
-      />
-    )
+    m = mount(<ConfigStep {...props} book={emptyBook} webdavEnabled={false} section="library" />)
     expect(m.container.textContent).toContain('文件上传与配置')
     expect(findButton(/返回书库/)).toBeFalsy()
   })

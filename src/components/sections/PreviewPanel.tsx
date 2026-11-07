@@ -61,7 +61,7 @@ export function PreviewPanel({
       )}
     >
       <CardHeader className={cn('pb-3', isFlush && 'px-4 pt-4 shrink-0', isSheet && 'pr-12')}>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center justify-between gap-2">
           <CardTitle className="truncate flex-1 min-w-0">
             {title}
           </CardTitle>

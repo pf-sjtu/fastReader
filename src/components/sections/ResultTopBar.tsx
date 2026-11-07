@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { BookOpen, Download, MoreHorizontal, Network } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FontSizeControl } from '@/components/FontSizeControl'
@@ -25,12 +26,15 @@ export function ResultTitle({
   bookMindMap,
   totalChapters = 0,
   className = '',
+  singleLine = false,
 }: {
   processingMode: ProcessingMode
   bookSummary: BookSummary | null
   bookMindMap: BookMindMap | null
   totalChapters?: number
   className?: string
+  /** 顶栏用：单行 + 省略号；作者与章数是次要信息，<640px 先隐藏 */
+  singleLine?: boolean
 }) {
   const { t } = useTranslation()
   const title =
@@ -43,10 +47,17 @@ export function ResultTitle({
   const count = bookSummary?.chapters.length || bookMindMap?.chapters.length || totalChapters
 
   return (
-    <div className={`flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 ${className}`} data-slot="result-title">
+    <div
+      className={cn(
+        'flex min-w-0 items-center gap-x-2 gap-y-0.5',
+        singleLine ? 'flex-nowrap' : 'flex-wrap',
+        className
+      )}
+      data-slot="result-title"
+    >
       <Icon className="size-4 shrink-0" aria-hidden="true" />
-      <span className="t-title min-w-0 break-words">{title}</span>
-      <span className="t-note min-w-0 break-words">
+      <span className={cn('t-title min-w-0', singleLine ? 'truncate' : 'break-words')}>{title}</span>
+      <span className={cn('t-note min-w-0', singleLine ? 'hidden truncate @[640px]:inline' : 'break-words')}>
         {t('results.author', { author: bookSummary?.author || bookMindMap?.author })} |{' '}
         {t('results.chapterCount', { count })}
       </span>

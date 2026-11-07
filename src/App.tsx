@@ -264,7 +264,7 @@ function App() {
   const desktopPreview = !isMobile && !workspaceMode ? previewPanel('sidebar') : null
   const dockPreview = !isMobile && workspaceMode ? previewPanel('dock') : null
 
-  // 工作台顶栏的书名 + 作者：结果卡头部太窄会截断（「作者: Tom…」），这里给它整行的宽度
+  // 工作台顶栏的书名 + 作者：压成单行 + 省略号，宽度不够时先藏作者/章数，书名最后才让位
   const workspaceTitle =
     workspaceMode && bookSummary ? (
       <ResultTitle
@@ -272,7 +272,8 @@ function App() {
         bookSummary={bookSummary}
         bookMindMap={null}
         totalChapters={extractedChapters?.length || 0}
-        className="min-w-0 flex-1"
+        className="min-w-0"
+        singleLine
       />
     ) : null
 
@@ -356,9 +357,9 @@ function App() {
         <AppHeader compact={workspaceMode}>
           {workspaceMode ? (
             /* 顶栏只留品牌、书名与「总结 / 模型」+ 工具组；三阶段导航与处理进度下沉到正文列顶部。
-               书名可换行（min-w-0 + break-words），右侧的模型/工具组不参与压缩。 */
-            <div className="flex min-w-0 flex-1 items-center gap-x-3 gap-y-1">
-              <div className="min-w-0 shrink">{workspaceTitle}</div>
+               书名单行省略，<288px 让位给状态栏（品牌/作者都比书名先消失）。 */
+            <div className="flex min-w-0 items-center gap-x-3 gap-y-1">
+              <div className="hidden min-w-0 flex-1 @[288px]:block">{workspaceTitle}</div>
               <div className="ml-auto shrink-0">{workspaceStatusMeta}</div>
             </div>
           ) : null}
@@ -403,7 +404,6 @@ function App() {
             openingPath={openingPath}
             autoOpening={autoOpening}
             section={webdavConfig.enabled ? configSection : 'process'}
-            onSelectSection={setConfigSection}
             onLoadFromCloudCache={handleLoadFromCloudCache}
             onStartProcessing={handleStartProcessing}
             onSetSelection={handleSetSelection}
