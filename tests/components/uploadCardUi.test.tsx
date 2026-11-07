@@ -5,10 +5,11 @@
 import i18n from '../../src/i18n'
 import { describe, it, expect, afterEach, beforeAll, afterAll, vi } from 'vitest'
 import { act } from 'react'
-import { mount, click, stubDomForRadix, type Mounted } from '../uiTestUtils'
+import { mount, click, findButton, stubDomForRadix, type Mounted } from '../uiTestUtils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ProcessingModePicker } from '@/components/sections/ProcessingModePicker'
 import { FileDropZone } from '@/components/sections/FileDropZone'
+import { FileUploadCard } from '@/components/sections/FileUploadCard'
 import { BookTooltipBody } from '@/components/library/BookInfo'
 import type { LibraryEntry } from '@/services/library/types'
 
@@ -104,6 +105,43 @@ describe('落笔区', () => {
     Object.defineProperty(text, 'dataTransfer', { value: { types: ['text/plain'], files: [] } })
     act(() => void zone().dispatchEvent(text))
     expect(zone().dataset.dragging).toBeUndefined()
+  })
+})
+
+describe('「获取章节」按钮', () => {
+  const props = () => ({
+    file: new File(['x'], 'a.epub') as File | null,
+    processing: false,
+    extractingChapters: false,
+    isCheckingCloudCache: false,
+    cloudCacheMetadata: null,
+    cloudCacheContent: null,
+    webdavEnabled: false,
+    webdavInitialized: false,
+    onFileSelect: vi.fn(),
+    onExtractChapters: vi.fn(),
+    onClearCache: vi.fn(),
+    onOpenWebDAVBrowser: vi.fn(),
+    onLoadFromCloudCache: vi.fn(),
+  })
+
+  it('点击时以无参调用交给上层：点击事件对象不得进入文件参数（否则会被当成「不支持的文件」）', () => {
+    const p = props()
+    m = mount(<FileUploadCard {...p} />)
+    click(findButton(i18n.t('upload.extractChapters')))
+    expect(p.onExtractChapters).toHaveBeenCalledTimes(1)
+    // 直接把处理函数挂在 onClick 上时，这里会是 SyntheticEvent（长度为 1）
+    expect(p.onExtractChapters.mock.calls[0]).toHaveLength(0)
+  })
+
+  it('没有文件时按钮禁用，点击不触发提取', () => {
+    const p = props()
+    p.file = null
+    m = mount(<FileUploadCard {...p} />)
+    const btn = findButton(i18n.t('upload.extractChapters')) as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+    click(btn)
+    expect(p.onExtractChapters).not.toHaveBeenCalled()
   })
 })
 

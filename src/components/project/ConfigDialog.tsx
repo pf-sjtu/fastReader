@@ -54,16 +54,21 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
           </DialogTitle>
           <DialogDescription className="text-wrap break-words">{t('config.description')}</DialogDescription>
         </DialogHeader>
-        <ScrollArea className="max-h-[60vh] pr-4">
-          <Tabs value={tab} onValueChange={(v) => setTab(v as ConfigTab)} className="w-full">
-            <TabsList className="flex flex-wrap w-full h-auto gap-1 p-1">
-              <TabsTrigger value="ai-providers" className="flex-1 min-w-fit">{t('config.tabs.providers')}</TabsTrigger>
-              <TabsTrigger value="processing" className="flex-1 min-w-fit">{t('config.tabs.processing')}</TabsTrigger>
-              <TabsTrigger value="prompts" className="flex-1 min-w-fit">{t('promptEditor.title')}</TabsTrigger>
-              <TabsTrigger value="webdav" className="flex-1 min-w-fit">{t('config.tabs.webdav')}</TabsTrigger>
-              <TabsTrigger value="fonts" className="flex-1 min-w-fit">{t('config.tabs.fonts')}</TabsTrigger>
-              <TabsTrigger value="export-import" className="flex-1 min-w-fit">{t('config.tabs.exportImport')}</TabsTrigger>
-            </TabsList>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as ConfigTab)} className="flex min-h-0 w-full min-w-0 flex-col gap-2">
+          {/* 页签条留在滚动区外：模型列表很长时页签仍常驻，不必先滚回顶部才能切页签 */}
+          {/* 页签条允许换行：窄屏下 6 个中文标签的 min-content 合计约 621px，单行会把弹窗撑宽 */}
+          {/* 触发器高度必须写死 h-9：基类是 h-[calc(100%-1px)]，折行后按整条高度算，第二行会压到下方滚动区 */}
+          <TabsList className="flex flex-wrap w-full h-auto min-w-0 gap-1 p-1">
+            <TabsTrigger value="ai-providers" className="h-9 flex-1 min-w-fit">{t('config.tabs.providers')}</TabsTrigger>
+            <TabsTrigger value="processing" className="h-9 flex-1 min-w-fit">{t('config.tabs.processing')}</TabsTrigger>
+            <TabsTrigger value="prompts" className="h-9 flex-1 min-w-fit">{t('promptEditor.title')}</TabsTrigger>
+            <TabsTrigger value="webdav" className="h-9 flex-1 min-w-fit">{t('config.tabs.webdav')}</TabsTrigger>
+            <TabsTrigger value="fonts" className="h-9 flex-1 min-w-fit">{t('config.tabs.fonts')}</TabsTrigger>
+            <TabsTrigger value="export-import" className="h-9 flex-1 min-w-fit">{t('config.tabs.exportImport')}</TabsTrigger>
+          </TabsList>
+
+          {/* key=当前页签：切换页签时重置滚动位置，新页签从顶部开始 */}
+          <ScrollArea key={tab} className="max-h-[60vh] w-full min-w-0 pr-4">
 
             {/* 服务商面板只在页签激活时挂载：目录（models.dev）随之懒加载 */}
             <TabsContent value="ai-providers" className="mt-4">
@@ -92,8 +97,8 @@ export function ConfigDialog({ processing, file }: ConfigDialogProps) {
             <TabsContent value="export-import" className="mt-4">
               <ConfigExportImport />
             </TabsContent>
-          </Tabs>
-        </ScrollArea>
+          </ScrollArea>
+        </Tabs>
       </DialogContent>
     </Dialog>
   )

@@ -39,6 +39,8 @@ import { DarkModeToggle } from '../src/components/DarkModeToggle'
 import { ThemeProvider } from '../src/components/ThemeProvider'
 import { ConfigDialog } from '../src/components/project/ConfigDialog'
 import { PromptEditor } from '../src/components/project/PromptEditor'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../src/components/ui/dialog'
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle } from '../src/components/ui/alert-dialog'
 
 const t = (k: string, o?: Record<string, unknown>) => i18n.t(k, o)
 let m: Mounted | null = null
@@ -284,6 +286,50 @@ describe('3. 移动端布局（jsdom 无布局引擎，断言防溢出的结构�
     expect(html).toContain('flex-wrap')
     expect(m.container.querySelector('[role="tablist"]')?.className).toContain('grid-cols-2')
     expect(m.container.querySelector('[role="tablist"]')?.className).toContain('sm:grid-cols-4')
+  })
+
+  it('DialogContent 基础类带单列 minmax(0,1fr) 轨道：子项不能按 min-content 把弹窗撑宽', () => {
+    stubDomForRadix()
+    m = mount(
+      <Dialog open>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>标题</DialogTitle>
+          </DialogHeader>
+          <div>正文</div>
+        </DialogContent>
+      </Dialog>
+    )
+    // 只写 grid 时隐式单列是 auto 轨道，长页签条/模型行会把窄屏弹窗撑出视口（实测 371 → 653）
+    expect(document.querySelector('[role="dialog"]')?.className).toContain('grid-cols-1')
+  })
+
+  it('设置页签条允许换行、触发器高度不按整条算，且留在滚动区之外', async () => {
+    m = mount(<ConfigDialog processing={false} file={null} />)
+    click(findButton(t('config.title')))
+    await flush()
+    const list = document.querySelector('[role="tablist"]')!
+    const triggers = Array.from(list.querySelectorAll<HTMLElement>('[role="tab"]'))
+    expect(list.className).toContain('flex-wrap')
+    expect(triggers).toHaveLength(6)
+    // 触发器基类是 h-[calc(100%-1px)]：折行容器里百分比会按整条高度算，第二行会压住下方滚动区（实测重叠 60px）
+    expect(triggers.every((el) => el.className.includes('h-9'))).toBe(true)
+    // 页签条不能放进滚动区：模型列表滚到底部后仍要能切页签
+    expect(list.closest('[data-slot="scroll-area"]')).toBeNull()
+    expect(document.querySelector('[data-slot="scroll-area"] [data-slot="tabs-content"]')).toBeTruthy()
+  })
+
+  it('AlertDialogContent 同样使用单列轨道：长文件名/URL 不能把确认框撑出视口', () => {
+    m = mount(
+      <AlertDialog open>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>标题</AlertDialogTitle>
+          </AlertDialogHeader>
+        </AlertDialogContent>
+      </AlertDialog>
+    )
+    expect(document.querySelector('[data-slot="alert-dialog-content"]')?.className).toContain('grid-cols-1')
   })
 })
 

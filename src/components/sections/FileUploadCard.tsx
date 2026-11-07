@@ -109,7 +109,9 @@ export function FileUploadCard({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <Button
-              onClick={onExtractChapters}
+              // 必须包一层无参箭头：直接把处理函数挂在 onClick 上，React 会把点击事件当作
+              // overrideFile 传进 extractChapters，被格式探测当成「不支持的文件」而报错
+              onClick={() => onExtractChapters()}
               disabled={!file || extractingChapters || processing}
               variant="outline"
               size="sm"

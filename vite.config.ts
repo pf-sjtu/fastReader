@@ -69,4 +69,18 @@ export default defineConfig({
   // 本地开发统一用 `wrangler pages dev`（见 docs/deploy.md）：
   // 共享状态、登录与代理都在 Pages Functions 里，只跑 `vite` 无法工作。
   publicDir: 'public',
+  server: {
+    watch: {
+      // 只看源码：tmp/（几百本测试书）、output/、log/、openspec/ 都是几个 GB 的无关内容，
+      // 编辑器/代理写文件时常留下 .<name>.tmpdir 原子写临时目录，chokidar 去看它们会 EBUSY 直接崩掉 dev server
+      ignored: [
+        '**/tmp/**',
+        '**/.tmp/**',
+        '**/output/**',
+        '**/log/**',
+        '**/openspec/**',
+        '**/*.tmpdir/**',
+      ],
+    },
+  },
 })

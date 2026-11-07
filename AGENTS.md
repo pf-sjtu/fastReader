@@ -86,6 +86,9 @@ git push -u origin HEAD
 标题只用文字角色类 `t-display/t-title/t-section/t-label/t-caption`（`index.css`），圆角只用 `rounded-md|lg|full`；
 正文里的说明小字用 `t-note`（**相对正文**的 0.875em，跟随「字体大小」缩放），不要写 `text-[0.8em]` 这类零散值；
 `tests/designSystem.test.ts` 会拦截违规（例外要登记理由）。字体全是系统字体栈（`--font-sans/serif/mono`），不下载字体，设置→「字体」可检测是否已安装。
+弹窗用 `DialogContent` / `AlertDialogContent` 基础组件时**保留 `grid-cols-1` 单列轨道**：隐式 auto 轨道按子项 max-content 定宽，页签条/长模型 id/长 URL 会把整卡撑出视口（390px 实测 371 → 653）。
+页签条允许换行时，触发器高度必须写死（基类 `h-[calc(100%-1px)]` 在折行容器里按整条高度算，第二行会压住内容区、吞掉点击）；长内容的页签条放在滚动区外，否则滚到底部就没法切页签。
+新增或大改弹窗在 390px 过一遍：`dialog.scrollWidth === clientWidth`、没有子元素 `right > 视口宽`。
 **图（mermaid / html 沙箱 / 离线包 / 自绘 SVG）另有一套守卫**：它们脱离宿主 CSS、读不到变量，所以字体栈与字号只能写具体值——
 具体值唯一来源是 `src/lib/figureType.ts` 的 `FIGURE_FONT_STACK`（与 `--font-sans` 逐字一致）与 `readFigureType()`（`--base-font-size` × `--font-scale`）；
 缩放策略用 `figureFit()`：**不放大**、缩到不低于 11px、再宽就横滚（mermaid 必须 `useMaxWidth: false`，它默认会把小图拉满容器，实测文字会从 15px 变 54px）；
