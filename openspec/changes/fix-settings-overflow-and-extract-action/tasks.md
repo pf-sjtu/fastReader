@@ -39,5 +39,5 @@
 
 ## 6. 提交
 
-- [ ] 6.1 `git add` 相关文件（不含 tmp/qa、output/），提交信息写动机与根因
-- [ ] 6.2 `git push -u origin HEAD`
+- [x] 6.1 `git add` 相关文件（不含 tmp/qa、output/），提交信息写动机与根因 → `0f5e2d7`
+- [x] 6.2 `git push -u origin HEAD` → `025a965..0f5e2d7`
